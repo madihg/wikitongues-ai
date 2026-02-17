@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ANNOTATOR
+  RESEARCHER
+}
+
+enum DifficultyLevel {
+  basic
+  intermediate
+  advanced
+}
+
+enum PromptCategory {
+  real_world_use
+  words_concepts
+  frontier_aspirations
+  abstract_vs_everyday
+}
+
+enum HandoffStatus {
+  pending
+  in_review
+  approved
+  corrected
+  rejected
+}
+
+enum GapCategory {
+  missing_vocabulary
+  missing_cultural_context
+  missing_dialect_knowledge
+  missing_translation_pair
+}
+
+enum VerificationStatus {
+  seed
+  single_annotator
+  multi_annotator_verified
+  expert_reviewed
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         UserRole @default(ANNOTATOR)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  languages           AnnotatorLanguage[]
+  pairwiseComparisons PairwiseComparison[]
+  rubricScores        RubricScore[]
+  handoffReviews      HandoffItem[]        @relation("ReviewedBy")
+  promptsCreated      Prompt[]             @relation("CreatedBy")
+  promptsEdited       PromptEdit[]
+}
+
+model AnnotatorLanguage {
+  id             String @id @default(cuid())
+  userId         String
+  language       String
+  expertiseLevel String // native, fluent, conversational
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, language])
+}
+
+model Prompt {
+  id                     String          @id @default(cuid())
+  promptId               String          @unique // e.g. ig_rw_001
+  category               PromptCategory
+  language               String
+  text                   String
+  sourceLanguage         String?
+  targetCulture          String?
+  expectedCulturalContext String?
+  difficultyLevel        DifficultyLevel @default(intermediate)
+  createdById            String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  createdBy    User?         @relation("CreatedBy", fields: [createdById], references: [id])
+  edits        PromptEdit[]
+  modelOutputs ModelOutput[]
+}
+
+model PromptEdit {
+  id        String   @id @default(cuid())
+  promptId  String
+  userId    String
+  fieldName String
+  oldValue  String?
+  newValue  String
+  createdAt DateTime @default(now())
+
+  prompt Prompt @relation(fields: [promptId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model ModelOutput {
+  id            String   @id @default(cuid())
+  promptId      String
+  model         String   // claude, chatgpt, gemini, gemma
+  modelId       String   // full model ID e.g. claude-sonnet-4-5-20250929
+  outputText    String
+  tokenCountIn  Int?
+  tokenCountOut Int?
+  latencyMs     Int?
+  epochId       String?
+  runId         String?
+  createdAt     DateTime @default(now())
+
+  prompt       Prompt               @relation(fields: [promptId], references: [id])
+  epoch        Epoch?               @relation(fields: [epochId], references: [id])
+  pairwiseAsA  PairwiseComparison[] @relation("ModelA")
+  pairwiseAsB  PairwiseComparison[] @relation("ModelB")
+  rubricScores RubricScore[]
+}
+
+model PairwiseComparison {
+  id             String   @id @default(cuid())
+  promptId       String   // references Prompt.promptId for easy lookup
+  modelOutputAId String
+  modelOutputBId String
+  winner         String   // "a" or "b"
+  explanation    String
+  annotatorId    String
+  epochId        String?
+  createdAt      DateTime @default(now())
+
+  modelOutputA ModelOutput @relation("ModelA", fields: [modelOutputAId], references: [id])
+  modelOutputB ModelOutput @relation("ModelB", fields: [modelOutputBId], references: [id])
+  annotator    User        @relation(fields: [annotatorId], references: [id])
+  epoch        Epoch?      @relation(fields: [epochId], references: [id])
+}
+
+model RubricScore {
+  id                          String   @id @default(cuid())
+  promptId                    String
+  modelOutputId               String
+  culturalAccuracy            Int      // 1-5
+  linguisticAuthenticity      Int      // 1-5
+  creativeDepth               Int      // 1-5
+  factualCorrectness          Int      // 1-5
+  notesCulturalAccuracy       String?
+  notesLinguisticAuthenticity String?
+  notesCreativeDepth          String?
+  notesFactualCorrectness     String?
+  annotatorId                 String
+  epochId                     String?
+  createdAt                   DateTime @default(now())
+
+  modelOutput ModelOutput @relation(fields: [modelOutputId], references: [id])
+  annotator   User        @relation(fields: [annotatorId], references: [id])
+  epoch       Epoch?      @relation(fields: [epochId], references: [id])
+}
+
+model HandoffItem {
+  id                 String             @id @default(cuid())
+  learnerRequest     String
+  modelAnswer        String
+  confidenceScore    Float
+  reviewerReasoning  String?
+  gapCategory        GapCategory?
+  status             HandoffStatus      @default(pending)
+  correctedAnswer    String?
+  reviewerId         String?
+  verificationStatus VerificationStatus @default(seed)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  reviewedAt         DateTime?
+
+  reviewer User? @relation("ReviewedBy", fields: [reviewerId], references: [id])
+}
+
+model Epoch {
+  id                     String    @id @default(cuid())
+  epochNumber            Int
+  language               String
+  trigger                String    // manual, correction_threshold, scheduled
+  ragSnapshotId          String?
+  promptCatalogueVersion String?
+  startedAt              DateTime  @default(now())
+  completedAt            DateTime?
+  notes                  String?
+
+  modelOutputs        ModelOutput[]
+  pairwiseComparisons PairwiseComparison[]
+  rubricScores        RubricScore[]
+
+  @@unique([epochNumber, language])
+}
