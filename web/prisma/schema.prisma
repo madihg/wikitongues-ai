@@ -1,10 +1,15 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
+// pgvector extension for embedding similarity search
+// If not available, RAG falls back to keyword search
+
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 enum UserRole {
@@ -180,7 +185,9 @@ model HandoffItem {
   updatedAt          DateTime           @updatedAt
   reviewedAt         DateTime?
 
-  reviewer User? @relation("ReviewedBy", fields: [reviewerId], references: [id])
+  pipelineRunId String?      @unique
+  reviewer      User?        @relation("ReviewedBy", fields: [reviewerId], references: [id])
+  pipelineRun   PipelineRun? @relation(fields: [pipelineRunId], references: [id])
 }
 
 model Epoch {
@@ -199,4 +206,76 @@ model Epoch {
   rubricScores        RubricScore[]
 
   @@unique([epochNumber, language])
+}
+
+// ─── Phase C: Conversational AI ──────────────────────────────
+
+model Conversation {
+  id        String   @id @default(cuid())
+  learnerId String?
+  language  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+}
+
+model Message {
+  id              String   @id @default(cuid())
+  conversationId  String
+  role            String
+  content         String
+  source          String
+  confidenceScore Float?
+  pipelineRunId   String?  @unique
+  createdAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  pipelineRun  PipelineRun? @relation
+}
+
+model PipelineRun {
+  id                  String   @id @default(cuid())
+  messageId           String   @unique
+  translatorModel     String
+  translatorOutput    String
+  translatorLatencyMs Int?
+  reviewerOutput      String?
+  reviewerConfidence  Float?
+  reviewerReasoning   String?
+  ragContextIds       String[]
+  retryCount          Int      @default(0)
+  finalDisposition    String
+  gapCategory         String?
+  createdAt           DateTime @default(now())
+
+  message     Message      @relation(fields: [messageId], references: [id])
+  handoffItem HandoffItem?
+}
+
+model RagEntry {
+  id                 String                         @id @default(cuid())
+  language           String
+  chunkType          String
+  topic              String
+  content            String
+  source             String
+  verificationStatus String                         @default("seed")
+  annotatorId        String?
+  embedding          Unsupported("vector(1536)")?
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+
+  history RagEntryHistory[]
+}
+
+model RagEntryHistory {
+  id         String   @id @default(cuid())
+  ragEntryId String
+  content    String
+  editedById String?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  ragEntry RagEntry @relation(fields: [ragEntryId], references: [id])
 }

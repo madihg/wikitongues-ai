@@ -8,17 +8,24 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "migrate:phase-a": "tsx scripts/migrate-phase-a.ts",
+    "seed:outputs": "tsx prisma/seed-model-outputs.ts",
+    "seed:rag": "tsx prisma/seed-rag.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.45",
+    "@ai-sdk/openai": "^3.0.29",
     "@auth/prisma-adapter": "^2.11.1",
     "@prisma/client": "^6.19.2",
+    "ai": "^6.0.89",
     "bcryptjs": "^3.0.3",
     "next": "16.1.6",
     "next-auth": "^4.24.13",
+    "openai": "^6.22.0",
     "prisma": "^6.19.2",
     "react": "19.2.3",
     "react-dom": "19.2.3"

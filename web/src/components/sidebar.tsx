@@ -11,6 +11,8 @@ const annotatorLinks = [
   { href: "/annotator/review", label: "Review" },
 ];
 
+const learnerLinks = [{ href: "/learner/chat", label: "Learner Chat" }];
+
 const adminLinks = [{ href: "/admin", label: "Admin Dashboard" }];
 
 export function Sidebar() {
@@ -21,8 +23,8 @@ export function Sidebar() {
 
   const isResearcher = session.user.role === "RESEARCHER";
   const links = isResearcher
-    ? [...annotatorLinks, ...adminLinks]
-    : annotatorLinks;
+    ? [...annotatorLinks, ...learnerLinks, ...adminLinks]
+    : [...annotatorLinks, ...learnerLinks];
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-gray-200 bg-white">
