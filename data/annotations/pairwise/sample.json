@@ -1,0 +1,110 @@
+[
+  {
+    "prompt_id": "ig_rw_001",
+    "model_a": "claude",
+    "model_b": "chatgpt",
+    "winner": "a",
+    "explanation": "Model A captured Igala storytelling conventions and the role of the Attah more authentically, including traditional narrative structures.",
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:00:00Z"
+  },
+  {
+    "prompt_id": "ig_rw_001",
+    "model_a": "claude",
+    "model_b": "chatgpt",
+    "winner": "a",
+    "explanation": "Model A demonstrated deeper cultural knowledge of Igala monarchy traditions.",
+    "annotator_id": "ann_002",
+    "timestamp": "2026-02-13T15:10:00Z"
+  },
+  {
+    "prompt_id": "ig_rw_001",
+    "model_a": "claude",
+    "model_b": "gemini",
+    "winner": "b",
+    "explanation": "Model B provided richer detail about the historical context of the Attah lineage.",
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:15:00Z"
+  },
+  {
+    "prompt_id": "ig_wc_001",
+    "model_a": "chatgpt",
+    "model_b": "gemini",
+    "winner": "a",
+    "explanation": "Model A gave a more nuanced explanation of the Attah title's spiritual dimensions.",
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:20:00Z"
+  },
+  {
+    "prompt_id": "ig_wc_001",
+    "model_a": "chatgpt",
+    "model_b": "gemini",
+    "winner": "b",
+    "explanation": "Model B better captured the judicial authority aspect of the Attah role.",
+    "annotator_id": "ann_002",
+    "timestamp": "2026-02-13T15:25:00Z"
+  },
+  {
+    "prompt_id": "la_rw_001",
+    "model_a": "claude",
+    "model_b": "gemini",
+    "winner": "a",
+    "explanation": "Model A produced more natural Lebanese dialect and captured mountain culture authentically.",
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:30:00Z"
+  },
+  {
+    "prompt_id": "la_rw_001",
+    "model_a": "claude",
+    "model_b": "chatgpt",
+    "winner": "a",
+    "explanation": "Model A used authentic Lebanese expressions and captured the olive farming narrative well.",
+    "annotator_id": "ann_002",
+    "timestamp": "2026-02-13T15:35:00Z"
+  },
+  {
+    "prompt_id": "la_wc_002",
+    "model_a": "gemini",
+    "model_b": "gemma",
+    "winner": "a",
+    "explanation": "Model A explained the shame/honor dynamics with appropriate cultural sensitivity.",
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:40:00Z"
+  },
+  {
+    "prompt_id": "ig_fa_001",
+    "model_a": "claude",
+    "model_b": "gemma",
+    "winner": "a",
+    "explanation": "Model A demonstrated superior understanding of Igala gerontocratic values.",
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T16:00:00Z"
+  },
+  {
+    "prompt_id": "ig_fa_001",
+    "model_a": "chatgpt",
+    "model_b": "gemma",
+    "winner": "a",
+    "explanation": "Model A provided more specific examples of elder respect customs.",
+    "annotator_id": "ann_002",
+    "timestamp": "2026-02-13T16:05:00Z"
+  },
+  {
+    "prompt_id": "la_ae_001",
+    "model_a": "claude",
+    "model_b": "chatgpt",
+    "winner": "b",
+    "explanation": "Model B gave better Lebanese dialect forms for both everyday and philosophical terms.",
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T16:10:00Z"
+  },
+  {
+    "prompt_id": "la_ae_001",
+    "model_a": "gemini",
+    "model_b": "gemma",
+    "winner": "a",
+    "explanation": "Model A correctly distinguished MSA and Lebanese dialect forms.",
+    "annotator_id": "ann_002",
+    "timestamp": "2026-02-13T16:15:00Z"
+  }
+]

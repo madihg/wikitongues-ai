@@ -1,0 +1,190 @@
+language: igala
+language_code: igl
+prompts:
+  # ── real_world_use ──────────────────────────────────────────────────
+
+  - id: ig_rw_001
+    category: real_world_use
+    language: igala
+    text: "Tell me a traditional Igala folktale about the origin of the Attah (king)"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala monarchy, the role of the Attah of Igala, and oral storytelling traditions"
+    difficulty_level: advanced
+
+  - id: ig_rw_002
+    category: real_world_use
+    language: igala
+    text: "Describe the Igala naming ceremony traditions"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Understanding of Igala birth rites, naming conventions, and the role of elders in ceremonies"
+    difficulty_level: intermediate
+
+  - id: ig_rw_003
+    category: real_world_use
+    language: igala
+    text: "Explain the significance of the confluence of Niger and Benue rivers in Igala cosmology"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala geography, spiritual beliefs tied to rivers, and creation narratives"
+    difficulty_level: advanced
+
+  - id: ig_rw_004
+    category: real_world_use
+    language: igala
+    text: "Tell me about Igala masquerade traditions and their cultural significance"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Understanding of Igala masquerade festivals, spiritual meaning, and social functions of masquerades"
+    difficulty_level: advanced
+
+  - id: ig_rw_005
+    category: real_world_use
+    language: igala
+    text: "Describe traditional Igala farming practices and the role of yam cultivation"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala agricultural calendar, yam festivals, and the cultural status of yam"
+    difficulty_level: intermediate
+
+  # ── words_concepts ──────────────────────────────────────────────────
+
+  - id: ig_wc_001
+    category: words_concepts
+    language: igala
+    text: "Translate 'Attah' and explain its cultural significance beyond just 'king'"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Understanding that Attah encompasses spiritual leadership, judicial authority, and cultural custodianship"
+    difficulty_level: intermediate
+
+  - id: ig_wc_002
+    category: words_concepts
+    language: igala
+    text: "What is the Igala concept of 'Ane' (the earth/land) and its spiritual meaning?"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala cosmology, earth deities, and land-based spiritual practices"
+    difficulty_level: advanced
+
+  - id: ig_wc_003
+    category: words_concepts
+    language: igala
+    text: "Translate and explain the Igala greeting 'Ọjọ́ọ́' and when it is used"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Understanding of Igala greeting conventions, social hierarchy in greetings, and context-dependent usage"
+    difficulty_level: basic
+
+  - id: ig_wc_004
+    category: words_concepts
+    language: igala
+    text: "What does 'Ègbè' mean in Igala society and what role does it play?"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala social organization, age-grade systems, and communal responsibilities"
+    difficulty_level: intermediate
+
+  - id: ig_wc_005
+    category: words_concepts
+    language: igala
+    text: "Explain the Igala concept of 'Ọjẹ' (market day cycle) and its cultural significance"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Understanding of Igala market cycles, the four-day week, and economic-social functions of market days"
+    difficulty_level: intermediate
+
+  # ── frontier_aspirations ────────────────────────────────────────────
+
+  - id: ig_fa_001
+    category: frontier_aspirations
+    language: igala
+    text: "What are the cultural norms around respect for elders in Igala society that outsiders might misunderstand?"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala gerontocratic values, prostration customs, and elder authority structures"
+    difficulty_level: intermediate
+
+  - id: ig_fa_002
+    category: frontier_aspirations
+    language: igala
+    text: "Explain the Igala inheritance system and how it differs from Western inheritance"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Understanding of patrilineal inheritance, communal land ownership, and the role of the eldest son"
+    difficulty_level: advanced
+
+  - id: ig_fa_003
+    category: frontier_aspirations
+    language: igala
+    text: "What role do ancestors play in daily Igala decision-making?"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala ancestor veneration, divination practices, and spiritual consultation"
+    difficulty_level: advanced
+
+  - id: ig_fa_004
+    category: frontier_aspirations
+    language: igala
+    text: "Describe the cultural significance of cola nut in Igala social interactions"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Understanding of cola nut breaking ceremonies, hospitality rituals, and symbolic meanings"
+    difficulty_level: intermediate
+
+  - id: ig_fa_005
+    category: frontier_aspirations
+    language: igala
+    text: "What are the gender-specific cultural expectations in traditional Igala marriage?"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala bride price customs, gender roles, marriage ceremonies, and family obligations"
+    difficulty_level: advanced
+
+  # ── abstract_vs_everyday ────────────────────────────────────────────
+
+  - id: ig_ae_001
+    category: abstract_vs_everyday
+    language: igala
+    text: "What is the Igala word for 'cooking pot' vs 'justice'?"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Ability to translate both concrete household items and abstract legal/moral concepts in Igala"
+    difficulty_level: basic
+
+  - id: ig_ae_002
+    category: abstract_vs_everyday
+    language: igala
+    text: "Translate 'yam' vs 'honor' into Igala"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala agricultural vocabulary and abstract social concepts"
+    difficulty_level: basic
+
+  - id: ig_ae_003
+    category: abstract_vs_everyday
+    language: igala
+    text: "What is 'market' vs 'destiny' in Igala?"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Ability to translate everyday commercial terms and philosophical/spiritual concepts"
+    difficulty_level: intermediate
+
+  - id: ig_ae_004
+    category: abstract_vs_everyday
+    language: igala
+    text: "Translate 'greeting' vs 'wisdom' in Igala"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Knowledge of Igala social vocabulary and abstract intellectual concepts"
+    difficulty_level: basic
+
+  - id: ig_ae_005
+    category: abstract_vs_everyday
+    language: igala
+    text: "What is 'river' vs 'love' in Igala?"
+    source_language: english
+    target_culture: igala
+    expected_cultural_context: "Ability to translate geographic features and emotional/abstract concepts"
+    difficulty_level: basic

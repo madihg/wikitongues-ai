@@ -1,0 +1,11 @@
+schema:
+  version: "1.0"
+  fields:
+    id: string # e.g. ig_rw_001 (language_category_number)
+    category: enum # real_world_use | words_concepts | frontier_aspirations | abstract_vs_everyday
+    language: string # Target language code
+    text: string # The actual prompt text
+    source_language: string # Language the prompt is written in (if different from target)
+    target_culture: string # Culture being tested (can differ from language)
+    expected_cultural_context: string # What cultural knowledge is needed
+    difficulty_level: enum # basic | intermediate | advanced

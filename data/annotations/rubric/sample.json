@@ -1,0 +1,264 @@
+[
+  {
+    "prompt_id": "ig_rw_001",
+    "model": "claude",
+    "scores": {
+      "cultural_accuracy": 4,
+      "linguistic_authenticity": 3,
+      "creative_depth": 5,
+      "factual_correctness": 4
+    },
+    "notes": {
+      "cultural_accuracy": "Good representation of Igala monarchy but missed the significance of the Attah selection process."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:05:00Z"
+  },
+  {
+    "prompt_id": "ig_rw_001",
+    "model": "claude",
+    "scores": {
+      "cultural_accuracy": 5,
+      "linguistic_authenticity": 4,
+      "creative_depth": 4,
+      "factual_correctness": 5
+    },
+    "notes": {
+      "cultural_accuracy": "Excellent depiction of the Attah's spiritual and political roles."
+    },
+    "annotator_id": "ann_002",
+    "timestamp": "2026-02-13T15:08:00Z"
+  },
+  {
+    "prompt_id": "ig_rw_001",
+    "model": "chatgpt",
+    "scores": {
+      "cultural_accuracy": 3,
+      "linguistic_authenticity": 2,
+      "creative_depth": 4,
+      "factual_correctness": 3
+    },
+    "notes": {
+      "cultural_accuracy": "Generic representation, lacked specific Igala cultural markers."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:12:00Z"
+  },
+  {
+    "prompt_id": "ig_rw_001",
+    "model": "chatgpt",
+    "scores": {
+      "cultural_accuracy": 3,
+      "linguistic_authenticity": 3,
+      "creative_depth": 3,
+      "factual_correctness": 4
+    },
+    "notes": {
+      "linguistic_authenticity": "Tone was too formal and Western-academic rather than oral tradition style."
+    },
+    "annotator_id": "ann_002",
+    "timestamp": "2026-02-13T15:14:00Z"
+  },
+  {
+    "prompt_id": "ig_rw_001",
+    "model": "gemini",
+    "scores": {
+      "cultural_accuracy": 4,
+      "linguistic_authenticity": 3,
+      "creative_depth": 3,
+      "factual_correctness": 4
+    },
+    "notes": {
+      "factual_correctness": "Accurate historical details but shallow cultural engagement."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:16:00Z"
+  },
+  {
+    "prompt_id": "ig_rw_001",
+    "model": "gemma",
+    "scores": {
+      "cultural_accuracy": 2,
+      "linguistic_authenticity": 2,
+      "creative_depth": 2,
+      "factual_correctness": 3
+    },
+    "notes": {
+      "cultural_accuracy": "Very generic response with limited Igala-specific knowledge."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:18:00Z"
+  },
+  {
+    "prompt_id": "ig_wc_001",
+    "model": "claude",
+    "scores": {
+      "cultural_accuracy": 5,
+      "linguistic_authenticity": 4,
+      "creative_depth": 4,
+      "factual_correctness": 5
+    },
+    "notes": {
+      "cultural_accuracy": "Excellent explanation of the Attah's multifaceted cultural role."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:22:00Z"
+  },
+  {
+    "prompt_id": "ig_wc_001",
+    "model": "chatgpt",
+    "scores": {
+      "cultural_accuracy": 3,
+      "linguistic_authenticity": 3,
+      "creative_depth": 3,
+      "factual_correctness": 4
+    },
+    "notes": {},
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:24:00Z"
+  },
+  {
+    "prompt_id": "la_rw_001",
+    "model": "claude",
+    "scores": {
+      "cultural_accuracy": 4,
+      "linguistic_authenticity": 5,
+      "creative_depth": 4,
+      "factual_correctness": 4
+    },
+    "notes": {
+      "linguistic_authenticity": "Natural Lebanese dialect with authentic mountain vocabulary."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:32:00Z"
+  },
+  {
+    "prompt_id": "la_rw_001",
+    "model": "claude",
+    "scores": {
+      "cultural_accuracy": 5,
+      "linguistic_authenticity": 4,
+      "creative_depth": 5,
+      "factual_correctness": 4
+    },
+    "notes": {
+      "creative_depth": "Beautiful narrative structure capturing the oral storytelling tradition."
+    },
+    "annotator_id": "ann_002",
+    "timestamp": "2026-02-13T15:34:00Z"
+  },
+  {
+    "prompt_id": "la_rw_001",
+    "model": "chatgpt",
+    "scores": {
+      "cultural_accuracy": 3,
+      "linguistic_authenticity": 3,
+      "creative_depth": 3,
+      "factual_correctness": 4
+    },
+    "notes": {
+      "linguistic_authenticity": "Mixed MSA and Lebanese forms, not consistently dialectal."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:36:00Z"
+  },
+  {
+    "prompt_id": "la_wc_002",
+    "model": "gemini",
+    "scores": {
+      "cultural_accuracy": 4,
+      "linguistic_authenticity": 3,
+      "creative_depth": 4,
+      "factual_correctness": 4
+    },
+    "notes": {
+      "cultural_accuracy": "Good explanation of eib but missed some everyday usage examples."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:42:00Z"
+  },
+  {
+    "prompt_id": "la_wc_002",
+    "model": "gemma",
+    "scores": {
+      "cultural_accuracy": 2,
+      "linguistic_authenticity": 2,
+      "creative_depth": 2,
+      "factual_correctness": 3
+    },
+    "notes": {
+      "cultural_accuracy": "Superficial treatment of shame culture."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T15:44:00Z"
+  },
+  {
+    "prompt_id": "ig_fa_001",
+    "model": "claude",
+    "scores": {
+      "cultural_accuracy": 5,
+      "linguistic_authenticity": 4,
+      "creative_depth": 4,
+      "factual_correctness": 5
+    },
+    "notes": {},
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T16:02:00Z"
+  },
+  {
+    "prompt_id": "ig_fa_001",
+    "model": "gemma",
+    "scores": {
+      "cultural_accuracy": 2,
+      "linguistic_authenticity": 1,
+      "creative_depth": 2,
+      "factual_correctness": 2
+    },
+    "notes": {
+      "linguistic_authenticity": "Response was generic with no Igala-specific content."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T16:04:00Z"
+  },
+  {
+    "prompt_id": "la_ae_001",
+    "model": "claude",
+    "scores": {
+      "cultural_accuracy": 4,
+      "linguistic_authenticity": 4,
+      "creative_depth": 3,
+      "factual_correctness": 4
+    },
+    "notes": {},
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T16:12:00Z"
+  },
+  {
+    "prompt_id": "la_ae_001",
+    "model": "chatgpt",
+    "scores": {
+      "cultural_accuracy": 4,
+      "linguistic_authenticity": 4,
+      "creative_depth": 4,
+      "factual_correctness": 5
+    },
+    "notes": {
+      "factual_correctness": "Accurate translations with good dialectal forms."
+    },
+    "annotator_id": "ann_001",
+    "timestamp": "2026-02-13T16:14:00Z"
+  },
+  {
+    "prompt_id": "la_ae_001",
+    "model": "gemini",
+    "scores": {
+      "cultural_accuracy": 3,
+      "linguistic_authenticity": 4,
+      "creative_depth": 3,
+      "factual_correctness": 4
+    },
+    "notes": {},
+    "annotator_id": "ann_002",
+    "timestamp": "2026-02-13T16:16:00Z"
+  }
+]

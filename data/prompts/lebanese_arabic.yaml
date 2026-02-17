@@ -1,0 +1,190 @@
+language: lebanese_arabic
+language_code: apc
+prompts:
+  # ── real_world_use ──────────────────────────────────────────────────
+
+  - id: la_rw_001
+    category: real_world_use
+    language: lebanese_arabic
+    text: "احكيلي قصة عن رجال عجوز من الجبل بيحب يزرع زيتون"
+    source_language: lebanese_arabic
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of Lebanese mountain culture, olive farming traditions, and rural storytelling"
+    difficulty_level: intermediate
+
+  - id: la_rw_002
+    category: real_world_use
+    language: lebanese_arabic
+    text: "وصفلي كيف بتتحضر القهوة العربية عالأصول"
+    source_language: lebanese_arabic
+    target_culture: lebanese
+    expected_cultural_context: "Understanding of Arabic coffee preparation rituals, hospitality customs, and serving etiquette"
+    difficulty_level: basic
+
+  - id: la_rw_003
+    category: real_world_use
+    language: lebanese_arabic
+    text: "احكيلي عن تقاليد العزومة والضيافة اللبنانية"
+    source_language: lebanese_arabic
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of Lebanese hospitality norms, invitation customs, and social expectations around hosting"
+    difficulty_level: intermediate
+
+  - id: la_rw_004
+    category: real_world_use
+    language: lebanese_arabic
+    text: "شو هي أهمية الدبكة بالثقافة اللبنانية؟"
+    source_language: lebanese_arabic
+    target_culture: lebanese
+    expected_cultural_context: "Understanding of dabke dance traditions, regional variations, and its role in celebrations"
+    difficulty_level: basic
+
+  - id: la_rw_005
+    category: real_world_use
+    language: lebanese_arabic
+    text: "احكيلي عن عادات رمضان بلبنان"
+    source_language: lebanese_arabic
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of Lebanese Ramadan traditions, iftar customs, and the multi-confessional context"
+    difficulty_level: intermediate
+
+  # ── words_concepts ──────────────────────────────────────────────────
+
+  - id: la_wc_001
+    category: words_concepts
+    language: lebanese_arabic
+    text: "Translate and explain 'غرام' (gharaam) - what makes it different from simple 'love'?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Understanding of Arabic love vocabulary hierarchy, poetic traditions, and emotional nuance"
+    difficulty_level: intermediate
+
+  - id: la_wc_002
+    category: words_concepts
+    language: lebanese_arabic
+    text: "What does 'عيب' (eib) mean and how does it govern social behavior?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of Lebanese shame/honor culture, social regulation, and behavioral expectations"
+    difficulty_level: intermediate
+
+  - id: la_wc_003
+    category: words_concepts
+    language: lebanese_arabic
+    text: "Explain 'قضاء ونصيب' (qada w nasib) and its role in Lebanese worldview"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Understanding of fatalism in Lebanese culture, religious influences, and everyday usage"
+    difficulty_level: advanced
+
+  - id: la_wc_004
+    category: words_concepts
+    language: lebanese_arabic
+    text: "Translate 'كيفك' (kifak) - why is it more than just 'how are you'?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of Lebanese greeting rituals, gendered forms, and social bonding through greetings"
+    difficulty_level: basic
+
+  - id: la_wc_005
+    category: words_concepts
+    language: lebanese_arabic
+    text: "What is 'سهرة' (sahra) and what cultural expectations come with it?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Understanding of Lebanese evening social gatherings, hosting norms, and communal entertainment"
+    difficulty_level: intermediate
+
+  # ── frontier_aspirations ────────────────────────────────────────────
+
+  - id: la_fa_001
+    category: frontier_aspirations
+    language: lebanese_arabic
+    text: "What cultural norms around alcohol in Lebanon might surprise someone from a neighboring Arab country?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of Lebanon's multi-confessional society, wine culture, arak traditions, and regional contrasts"
+    difficulty_level: advanced
+
+  - id: la_fa_002
+    category: frontier_aspirations
+    language: lebanese_arabic
+    text: "Explain the concept of 'وجه' (wejeh/face) in Lebanese business relationships"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Understanding of face-saving culture, wasta (connections), and reputation in Lebanese commerce"
+    difficulty_level: advanced
+
+  - id: la_fa_003
+    category: frontier_aspirations
+    language: lebanese_arabic
+    text: "What are the unspoken rules about discussing politics at a Lebanese family dinner?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of Lebanese sectarian politics, family political affiliations, and social taboos"
+    difficulty_level: advanced
+
+  - id: la_fa_004
+    category: frontier_aspirations
+    language: lebanese_arabic
+    text: "How does code-switching between Arabic, French, and English reflect Lebanese identity?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Understanding of Lebanese multilingualism, colonial history, class signaling, and identity politics"
+    difficulty_level: advanced
+
+  - id: la_fa_005
+    category: frontier_aspirations
+    language: lebanese_arabic
+    text: "What cultural subtleties exist around gift-giving in Lebanese society?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of Lebanese reciprocity norms, appropriate gifts, and social obligations"
+    difficulty_level: intermediate
+
+  # ── abstract_vs_everyday ────────────────────────────────────────────
+
+  - id: la_ae_001
+    category: abstract_vs_everyday
+    language: lebanese_arabic
+    text: "What is the Lebanese word for 'spoon' (ملعقة/mal'a'a) vs 'destiny' (قدر/adar)?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Ability to provide Lebanese dialect forms for both everyday utensils and philosophical concepts"
+    difficulty_level: basic
+
+  - id: la_ae_002
+    category: abstract_vs_everyday
+    language: lebanese_arabic
+    text: "Translate 'taxi' vs 'nostalgia' in Lebanese dialect"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of Lebanese loanwords for modern items and Arabic-origin words for abstract emotions"
+    difficulty_level: basic
+
+  - id: la_ae_003
+    category: abstract_vs_everyday
+    language: lebanese_arabic
+    text: "What is 'balcony' (بلكون/balcon) vs 'honor' (شرف/sharaf) in Lebanese?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Understanding of French loanwords in Lebanese dialect and Arabic concepts of honor"
+    difficulty_level: intermediate
+
+  - id: la_ae_004
+    category: abstract_vs_everyday
+    language: lebanese_arabic
+    text: "Translate 'sandwich' vs 'longing' in Lebanese Arabic"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Knowledge of food-related loanwords and Arabic emotional vocabulary in Lebanese dialect"
+    difficulty_level: basic
+
+  - id: la_ae_005
+    category: abstract_vs_everyday
+    language: lebanese_arabic
+    text: "What is 'remote control' (تلكم/telecommande) vs 'patience' (صبر/sabr) in Lebanese?"
+    source_language: english
+    target_culture: lebanese
+    expected_cultural_context: "Understanding of French-origin technology terms and Arabic virtue concepts in Lebanese dialect"
+    difficulty_level: intermediate

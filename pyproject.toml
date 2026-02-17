@@ -1,0 +1,22 @@
+[project]
+name = "wikitongues-ai"
+version = "0.1.0"
+requires-python = ">= 3.11"
+dependencies = [
+    "anthropic",
+    "openai",
+    "google-generativeai",
+    "pyyaml",
+    "click",
+    "numpy",
+    "pandas",
+    "krippendorff",
+    "python-dotenv",
+]
+
+[tool.setuptools.packages.find]
+include = ["scripts*"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
