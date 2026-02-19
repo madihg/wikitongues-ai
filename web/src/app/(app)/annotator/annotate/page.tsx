@@ -1,4 +1,5 @@
 import { AnnotationInterface } from "@/components/annotation-interface";
+import { HelpButton } from "@/components/help-button";
 
 export default function AnnotatePage() {
   return (
@@ -11,6 +12,10 @@ export default function AnnotatePage() {
       <div className="mt-6">
         <AnnotationInterface />
       </div>
+      <HelpButton
+        title="Annotate"
+        description="This screen presents pairs of AI-generated responses to the same prompt. Your job is to compare them side-by-side and score each on four dimensions: cultural accuracy, linguistic authenticity, creative depth, and factual correctness. Your annotations help train and evaluate language models on underrepresented languages."
+      />
     </div>
   );
 }

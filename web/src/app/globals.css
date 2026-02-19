@@ -1,26 +1,137 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ─── Oulipo Design System ────────────────────────────────── */
+
+/* Font Definitions */
+@font-face {
+  font-family: "Standard";
+  src: url("https://type.cargo.site/files/Standard-Book.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
 }
 
+@font-face {
+  font-family: "Terminal Grotesque";
+  src: url("https://type.cargo.site/files/TerminalGrotesque.woff2")
+    format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Diatype";
+  src: url("https://type.cargo.site/files/Diatype-Regular.woff2")
+    format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Design tokens */
+:root {
+  --background: #ffffff;
+  --foreground: rgba(0, 0, 0, 0.85);
+  --bg-secondary: #fafafa;
+  --text-primary: rgba(0, 0, 0, 0.85);
+  --text-secondary: rgba(0, 0, 0, 0.7);
+  --text-tertiary: rgba(0, 0, 0, 0.6);
+  --text-muted: rgba(0, 0, 0, 0.55);
+  --text-subtle: rgba(0, 0, 0, 0.45);
+  --transition-default: 0.3s ease;
+}
+
+/* Tailwind theme overrides */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  /* Fonts */
+  --font-sans: "Standard", sans-serif;
+  --font-mono: "Diatype", monospace;
+
+  /* Opacity-based gray scale */
+  --color-gray-50: #fafafa;
+  --color-gray-100: rgba(0, 0, 0, 0.04);
+  --color-gray-200: rgba(0, 0, 0, 0.1);
+  --color-gray-300: rgba(0, 0, 0, 0.2);
+  --color-gray-400: rgba(0, 0, 0, 0.45);
+  --color-gray-500: rgba(0, 0, 0, 0.55);
+  --color-gray-600: rgba(0, 0, 0, 0.6);
+  --color-gray-700: rgba(0, 0, 0, 0.7);
+  --color-gray-800: rgba(0, 0, 0, 0.8);
+  --color-gray-900: rgba(0, 0, 0, 0.85);
+  --color-gray-950: rgba(0, 0, 0, 0.9);
+
+  /* Zero out border radii */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
+
+  /* Zero out shadows */
+  --shadow-2xs: 0 0 0 transparent;
+  --shadow-xs: 0 0 0 transparent;
+  --shadow-sm: 0 0 0 transparent;
+  --shadow: 0 0 0 transparent;
+  --shadow-md: 0 0 0 transparent;
+  --shadow-lg: 0 0 0 transparent;
+  --shadow-xl: 0 0 0 transparent;
+  --shadow-2xl: 0 0 0 transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Base typography */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Standard", sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Terminal Grotesque", sans-serif;
+  font-weight: normal;
+}
+
+button,
+input,
+select,
+textarea,
+label {
+  font-family: "Diatype", sans-serif;
+}
+
+/* Kill rounded-full (not controllable via theme) */
+.rounded-full {
+  border-radius: 0 !important;
+}
+
+/* Links */
+a {
+  transition: opacity var(--transition-default);
+}
+a:hover {
+  opacity: 0.7;
+}
+
+/* Focus management */
+*:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+*:focus:not(:focus-visible) {
+  outline: none;
 }

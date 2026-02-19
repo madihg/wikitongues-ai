@@ -1,11 +1,14 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const roleParam = searchParams.get("role");
+  const isLearner = roleParam === "learner";
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -23,6 +26,7 @@ export default function RegisterPage() {
         email: formData.get("email"),
         name: formData.get("name"),
         password: formData.get("password"),
+        role: isLearner ? "LEARNER" : "ANNOTATOR",
       }),
     });
 
@@ -31,7 +35,7 @@ export default function RegisterPage() {
       setError(data.error || "Registration failed");
       setLoading(false);
     } else {
-      router.push("/login");
+      router.push(isLearner ? "/login?role=learner" : "/login");
     }
   }
 
@@ -42,7 +46,11 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-semibold text-gray-900">
             Wikitongues AI
           </h1>
-          <p className="mt-2 text-sm text-gray-500">Create your account</p>
+          <p className="mt-2 text-sm text-gray-500">
+            {isLearner
+              ? "Create a learner account"
+              : "Create an annotator account"}
+          </p>
         </div>
 
         <form
@@ -121,5 +129,19 @@ export default function RegisterPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-gray-500">Loading...</div>
+        </div>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }

@@ -11,8 +11,6 @@ const annotatorLinks = [
   { href: "/annotator/review", label: "Review" },
 ];
 
-const learnerLinks = [{ href: "/learner/chat", label: "Learner Chat" }];
-
 const adminLinks = [{ href: "/admin", label: "Admin Dashboard" }];
 
 export function Sidebar() {
@@ -23,8 +21,8 @@ export function Sidebar() {
 
   const isResearcher = session.user.role === "RESEARCHER";
   const links = isResearcher
-    ? [...annotatorLinks, ...learnerLinks, ...adminLinks]
-    : [...annotatorLinks, ...learnerLinks];
+    ? [...annotatorLinks, ...adminLinks]
+    : annotatorLinks;
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-gray-200 bg-white">
@@ -60,10 +58,13 @@ export function Sidebar() {
         <div className="text-sm font-medium text-gray-900">
           {session.user.name || session.user.email}
         </div>
-        <div className="text-xs text-gray-500">{session.user.role}</div>
+        <div className="text-xs text-gray-500 capitalize">
+          {session.user.role.charAt(0) +
+            session.user.role.slice(1).toLowerCase()}
+        </div>
         <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          className="mt-3 text-sm text-gray-500 hover:text-gray-700"
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="mt-3 cursor-pointer text-sm text-gray-500 hover:text-gray-700"
         >
           Sign out
         </button>
