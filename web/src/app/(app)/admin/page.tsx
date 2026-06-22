@@ -10,10 +10,10 @@ export default function AdminDashboard() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">
+        <h1 className="text-2xl font-semibold text-text-primary">
           Researcher Dashboard
         </h1>
-        <p className="mt-2 text-sm text-gray-500">
+        <p className="mt-2 text-sm text-text-tertiary">
           Cross-model comparisons, annotation progress, and benchmark results.
           All data is read-only.
         </p>

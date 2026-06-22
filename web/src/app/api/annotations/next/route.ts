@@ -94,7 +94,7 @@ export async function GET() {
               prompt: {
                 id: prompt.id,
                 promptId: prompt.promptId,
-                category: prompt.category,
+                bucket: prompt.bucket,
                 language: prompt.language,
                 text: prompt.text,
                 targetCulture: prompt.targetCulture,

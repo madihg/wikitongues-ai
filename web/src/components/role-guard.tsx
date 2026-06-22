@@ -30,7 +30,7 @@ export function RoleGuard({
   if (status === "loading") {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-text-tertiary">Loading...</div>
       </div>
     );
   }

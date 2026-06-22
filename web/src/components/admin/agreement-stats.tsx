@@ -12,22 +12,22 @@ interface AgreementDimension {
 const DIMENSION_LABELS: Record<string, string> = {
   culturalAccuracy: "Cultural Accuracy",
   linguisticAuthenticity: "Linguistic Authenticity",
-  creativeDepth: "Creative Depth",
+  culturalNormAdherence: "Cultural-norm adherence",
   factualCorrectness: "Factual Correctness",
 };
 
 const INTERPRETATION_COLORS: Record<string, string> = {
-  Good: "bg-green-500",
-  Tentative: "bg-yellow-500",
-  Moderate: "bg-orange-500",
-  Low: "bg-red-500",
+  Good: "bg-success",
+  Tentative: "bg-warning",
+  Moderate: "bg-warning",
+  Low: "bg-danger",
 };
 
 const INTERPRETATION_TEXT_COLORS: Record<string, string> = {
-  Good: "text-green-700",
-  Tentative: "text-yellow-700",
-  Moderate: "text-orange-700",
-  Low: "text-red-700",
+  Good: "text-success",
+  Tentative: "text-warning",
+  Moderate: "text-warning",
+  Low: "text-danger",
 };
 
 export function AgreementStats() {
@@ -47,8 +47,8 @@ export function AgreementStats() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="text-sm text-gray-400">Loading agreement data...</div>
+      <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+        <div className="text-sm text-text-muted">Loading agreement data...</div>
       </div>
     );
   }
@@ -56,13 +56,13 @@ export function AgreementStats() {
   const hasData = data.some((d) => d.alpha !== null);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-gray-900">
+    <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+      <h2 className="text-lg font-semibold text-text-primary">
         Inter-Annotator Agreement
       </h2>
 
       {!hasData ? (
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="mt-4 text-sm text-text-tertiary">
           No multi-annotator data available yet. Agreement metrics require at
           least two annotators scoring the same items.
         </p>
@@ -71,7 +71,7 @@ export function AgreementStats() {
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-xs font-medium uppercase tracking-wider text-gray-500">
+                <tr className="border-b border-border text-xs font-medium uppercase tracking-wider text-text-tertiary">
                   <th className="py-3 pr-4">Dimension</th>
                   <th className="py-3 pr-4 text-right">
                     Krippendorff&apos;s alpha
@@ -82,8 +82,8 @@ export function AgreementStats() {
               </thead>
               <tbody>
                 {data.map((dim) => (
-                  <tr key={dim.dimension} className="border-b border-gray-50">
-                    <td className="py-3 pr-4 font-medium text-gray-900">
+                  <tr key={dim.dimension} className="border-b border-border">
+                    <td className="py-3 pr-4 font-medium text-text-primary">
                       {DIMENSION_LABELS[dim.dimension] ?? dim.dimension}
                     </td>
                     <td className="py-3 pr-4 text-right tabular-nums">
@@ -94,20 +94,20 @@ export function AgreementStats() {
                         <span
                           className={`inline-block h-2.5 w-2.5 rounded-full ${
                             INTERPRETATION_COLORS[dim.interpretation] ??
-                            "bg-gray-400"
+                            "bg-text-muted"
                           }`}
                         />
                         <span
                           className={`text-sm font-medium ${
                             INTERPRETATION_TEXT_COLORS[dim.interpretation] ??
-                            "text-gray-600"
+                            "text-text-secondary"
                           }`}
                         >
                           {dim.interpretation}
                         </span>
                       </span>
                     </td>
-                    <td className="py-3 text-right tabular-nums text-gray-600">
+                    <td className="py-3 text-right tabular-nums text-text-secondary">
                       {dim.itemCount}
                     </td>
                   </tr>
@@ -116,7 +116,7 @@ export function AgreementStats() {
             </table>
           </div>
 
-          {note && <p className="mt-3 text-xs text-gray-400">{note}</p>}
+          {note && <p className="mt-3 text-xs text-text-muted">{note}</p>}
         </>
       )}
     </div>

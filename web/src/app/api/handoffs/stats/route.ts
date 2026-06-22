@@ -24,8 +24,8 @@ export async function GET() {
     prisma.handoffItem.count({ where: { status: "corrected" } }),
     prisma.handoffItem.count({ where: { status: "rejected" } }),
     prisma.handoffItem.groupBy({
-      by: ["gapCategory"],
-      _count: { id: true },
+      by: ["gapBucket"],
+      _count: { _all: true },
     }),
     prisma.$queryRaw<{ avg_hours: number | null }[]>`
         SELECT AVG(EXTRACT(EPOCH FROM ("reviewedAt" - "createdAt")) / 3600) as avg_hours
@@ -39,8 +39,8 @@ export async function GET() {
 
   const gaps: Record<string, number> = {};
   for (const row of gapBreakdown) {
-    const key = row.gapCategory ?? "uncategorized";
-    gaps[key] = row._count.id;
+    const key = row.gapBucket ?? "uncategorized";
+    gaps[key] = row._count._all;
   }
 
   return NextResponse.json({

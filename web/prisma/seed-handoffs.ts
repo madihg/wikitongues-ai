@@ -1,22 +1,21 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, EvalBucket } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function seedHandoffs() {
   console.log("Seeding handoff items...");
 
-  const handoffs = [
-    {
-      learnerRequest:
-        "How do I say 'I miss you' in Lebanese Arabic? Is there a difference between saying it to a friend vs. a romantic partner?",
-      modelAnswer:
-        "In Lebanese Arabic, you can say 'إشتقتلك' (ishtaqtelak) for male or 'إشتقتلِك' (ishtaqtelik) for female. This is commonly used for both friends and romantic partners. The tone and context typically convey the intended meaning rather than the words themselves.",
-      confidenceScore: 0.32,
-      reviewerReasoning:
-        "Low confidence due to nuanced social context around expressing longing in Lebanese culture. The model may be oversimplifying the distinction between platonic and romantic expressions.",
-      gapCategory: "missing_cultural_context" as const,
-      status: "pending" as const,
-    },
+  const handoffs: Array<{
+    learnerRequest: string;
+    modelAnswer: string;
+    confidenceScore: number;
+    reviewerReasoning: string;
+    gapBucket: EvalBucket;
+    status: "pending" | "approved" | "corrected";
+    correctedAnswer?: string;
+    verificationStatus?: "single_annotator";
+    reviewedAt?: Date;
+  }> = [
     {
       learnerRequest:
         "What is the Igala word for 'electricity'? Is it a borrowed word?",
@@ -25,8 +24,8 @@ async function seedHandoffs() {
       confidenceScore: 0.25,
       reviewerReasoning:
         "Very low confidence. The model appears to be guessing at compound word formation. Igala vocabulary for modern technology concepts needs expert verification.",
-      gapCategory: "missing_vocabulary" as const,
-      status: "pending" as const,
+      gapBucket: "lexicon_disambig",
+      status: "pending",
     },
     {
       learnerRequest:
@@ -36,19 +35,19 @@ async function seedHandoffs() {
       confidenceScore: 0.45,
       reviewerReasoning:
         "Moderate-low confidence. The sentence structure seems plausible but specific vocabulary choices for 'community' and 'celebrate' in Igala need verification. The model may be drawing from related Yoruba patterns.",
-      gapCategory: "missing_translation_pair" as const,
-      status: "pending" as const,
+      gapBucket: "authenticity",
+      status: "pending",
     },
     {
       learnerRequest:
-        "What are the different dialects of Lebanese Arabic and how do they differ?",
+        "What are the different dialects of Igala and how do they differ?",
       modelAnswer:
-        "Lebanese Arabic has several regional dialects including Beiruti (the prestige urban dialect), Mount Lebanon (Druze and Maronite variations), Northern (Tripoli/Akkar), Southern (Sidon/Tyre), and Bekaa Valley. Key differences include vowel shifts, vocabulary, and intonation patterns. For example, Beiruti dialect tends to soften certain consonants compared to Northern Lebanese.",
+        "Igala has several regional varieties across Kogi State. Differences include vowel quality, vocabulary, and intonation. There is no single official standard, and community variants are all valid.",
       confidenceScore: 0.58,
       reviewerReasoning:
         "Moderate confidence. The dialect categories are broadly correct but the specific linguistic differences need expert review for accuracy and completeness.",
-      gapCategory: "missing_dialect_knowledge" as const,
-      status: "pending" as const,
+      gapBucket: "dialectal_fidelity",
+      status: "pending",
     },
     {
       learnerRequest: "How do I express gratitude formally in Igala?",
@@ -57,22 +56,23 @@ async function seedHandoffs() {
       confidenceScore: 0.68,
       reviewerReasoning:
         "Moderate confidence. Basic gratitude expression seems reasonable but the formal/emphatic variants need verification from native speakers.",
-      gapCategory: "missing_vocabulary" as const,
-      status: "approved" as const,
+      gapBucket: "lexicon_disambig",
+      status: "approved",
       reviewedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
     },
     {
-      learnerRequest: "ما هو الفرق بين 'كيفك' و'شلونك' في اللهجة اللبنانية؟",
+      learnerRequest:
+        "What is the cultural significance of kola nuts in Igala ceremonies?",
       modelAnswer:
-        "في اللهجة اللبنانية، 'كيفك' (kifak) هي الطريقة الأكثر شيوعاً للسؤال عن الحال. أما 'شلونك' (shlonak) فهي أكثر استخداماً في اللهجات العراقية والخليجية. في لبنان، قد يُستخدم 'شلونك' أحياناً ولكن 'كيفك' هي السائدة.",
+        "Kola nuts (oji) are shared during important Igala ceremonies such as naming ceremonies and the welcoming of guests. They symbolize hospitality, blessing, and communal bonds.",
       confidenceScore: 0.35,
       reviewerReasoning:
-        "Low confidence. The model correctly identifies that kifak is the Lebanese norm, but the claim about shlonak usage in Lebanon needs verification. The answer is in Arabic which is appropriate for the Arabic-language query.",
-      gapCategory: "missing_dialect_knowledge" as const,
-      status: "corrected" as const,
+        "Low confidence. The general role of kola nuts is plausible, but the specific Igala cultural protocols and taboos around their use need expert verification.",
+      gapBucket: "cultural_values",
+      status: "corrected",
       correctedAnswer:
-        "في اللهجة اللبنانية، 'كيفك' (kifak للذكر / kifik للأنثى) هي الطريقة الأساسية والأكثر شيوعاً للسؤال عن الحال. 'شلونك' (shlonak) ليست مستخدمة في اللهجة اللبنانية وهي خاصة باللهجات العراقية والخليجية. اللبنانيون لا يستخدمون 'شلونك' في حديثهم اليومي.",
-      verificationStatus: "single_annotator" as const,
+        "Kola nuts (oji) are central to Igala hospitality and ritual. They are presented to guests and elders, broken and shared to seal agreements, and offered during naming ceremonies and prayers. The manner of presentation and who breaks the kola follows strict seniority protocols.",
+      verificationStatus: "single_annotator",
       reviewedAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
     },
   ];

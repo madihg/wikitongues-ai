@@ -1,97 +1,173 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 
-/* ─── Oulipo Design System ────────────────────────────────── */
+/* ─── Wikitongues AI Design System ─────────────────────────────
+   Warm, humanist, community-first. Ochre accent on warm ink.
+   Replaces the Oulipo brutalist system. Light + dark.
+   ───────────────────────────────────────────────────────────── */
 
-/* Font Definitions */
-@font-face {
-  font-family: "Standard";
-  src: url("https://type.cargo.site/files/Standard-Book.woff2") format("woff2");
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Terminal Grotesque";
-  src: url("https://type.cargo.site/files/TerminalGrotesque.woff2")
-    format("woff2");
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Diatype";
-  src: url("https://type.cargo.site/files/Diatype-Regular.woff2")
-    format("woff2");
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Design tokens */
 :root {
-  --background: #ffffff;
-  --foreground: rgba(0, 0, 0, 0.85);
-  --bg-secondary: #fafafa;
-  --text-primary: rgba(0, 0, 0, 0.85);
-  --text-secondary: rgba(0, 0, 0, 0.7);
-  --text-tertiary: rgba(0, 0, 0, 0.6);
-  --text-muted: rgba(0, 0, 0, 0.55);
-  --text-subtle: rgba(0, 0, 0, 0.45);
-  --transition-default: 0.3s ease;
+  /* Brand: warm ochre */
+  --wt-ochre-50: #fdf6e9;
+  --wt-ochre-100: #f9e7c2;
+  --wt-ochre-200: #f2cf86;
+  --wt-ochre-300: #ebb84e;
+  --wt-ochre-400: #e0a21f; /* signature accent — confirm vs brand kit */
+  --wt-ochre-500: #c4881a;
+  --wt-ochre-600: #9c6a13; /* accessible accent-as-text on white (AA) */
+  --wt-ochre-700: #744f10;
+
+  /* Ink (warm neutral, not pure black) */
+  --wt-ink-950: #1a1714;
+  --wt-ink-900: #26211c;
+  --wt-ink-800: #3a332c;
+  --wt-ink-700: #544a40;
+  --wt-ink-500: #7d7064;
+  --wt-ink-300: #b6aa9c;
+  --wt-ink-200: #d8cfc4;
+  --wt-ink-100: #ece6dd;
+  --wt-ink-50: #f7f3ec;
+
+  /* Supporting hues (data viz / A-B) */
+  --wt-clay-500: #b5512f;
+  --wt-sage-500: #4f7a5e;
+  --wt-indigo-500: #3f5a8a;
+
+  /* Semantic surfaces / text (light = default) */
+  --background: #fbf8f2;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: var(--wt-ink-50);
+  --foreground: var(--wt-ink-900);
+  --text-primary: var(--wt-ink-900);
+  --text-secondary: var(--wt-ink-700);
+  --text-tertiary: var(--wt-ink-500);
+  --text-muted: var(--wt-ink-300);
+  --border: var(--wt-ink-100);
+  --border-strong: var(--wt-ink-200);
+
+  --accent: var(--wt-ochre-400);
+  --accent-hover: var(--wt-ochre-500);
+  --accent-text: var(--wt-ochre-600);
+  --accent-contrast: var(--wt-ink-950);
+  --accent-subtle: var(--wt-ochre-50);
+
+  /* Semantic state */
+  --success: #2f7d54;
+  --success-subtle: #e7f3ec;
+  --warning: #b5790f;
+  --warning-subtle: #fdf2dc;
+  --danger: #b23b32;
+  --danger-subtle: #fbeae8;
+  --info: #3f5a8a;
+  --info-subtle: #eaeff6;
+
+  /* Pairwise A/B + rubric ramp (colorblind-safe pairing) */
+  --pick-a: #3f5a8a;
+  --pick-b: #b5512f;
+  --pick-tie: var(--wt-ink-500);
+  --score-lo: #b23b32;
+  --score-mid: #b5790f;
+  --score-hi: #2f7d54;
+
+  /* Radius / shadow / motion */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(26, 23, 20, 0.06);
+  --shadow: 0 1px 3px rgba(26, 23, 20, 0.08), 0 1px 2px rgba(26, 23, 20, 0.04);
+  --shadow-md: 0 4px 12px rgba(26, 23, 20, 0.08);
+  --shadow-lg: 0 12px 32px rgba(26, 23, 20, 0.12);
+  --ring: 0 0 0 3px var(--wt-ochre-200);
+  --transition-default: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Tailwind theme overrides */
+[data-theme="dark"] {
+  --background: #16130f;
+  --surface: #1f1b16;
+  --surface-raised: #262019;
+  --surface-sunken: #120f0c;
+  --foreground: #f1ebe1;
+  --text-primary: #f1ebe1;
+  --text-secondary: #c8bdac;
+  --text-tertiary: #8f8472;
+  --text-muted: #5c5446;
+  --border: #2f281f;
+  --border-strong: #423a2e;
+  --accent: var(--wt-ochre-300);
+  --accent-hover: var(--wt-ochre-200);
+  --accent-text: var(--wt-ochre-200);
+  --accent-contrast: #1a1714;
+  --accent-subtle: #2a2113;
+  --success-subtle: #16271d;
+  --warning-subtle: #2c2110;
+  --danger-subtle: #2a1714;
+  --info-subtle: #161d2b;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* Tailwind v4 theme bridge */
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
   --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-pick-a: var(--pick-a);
+  --color-pick-b: var(--pick-b);
+  --color-score-lo: var(--score-lo);
+  --color-score-mid: var(--score-mid);
+  --color-score-hi: var(--score-hi);
 
-  /* Fonts */
-  --font-sans: "Standard", sans-serif;
-  --font-mono: "Diatype", monospace;
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-muted: var(--text-muted);
 
-  /* Opacity-based gray scale */
-  --color-gray-50: #fafafa;
-  --color-gray-100: rgba(0, 0, 0, 0.04);
-  --color-gray-200: rgba(0, 0, 0, 0.1);
-  --color-gray-300: rgba(0, 0, 0, 0.2);
-  --color-gray-400: rgba(0, 0, 0, 0.45);
-  --color-gray-500: rgba(0, 0, 0, 0.55);
-  --color-gray-600: rgba(0, 0, 0, 0.6);
-  --color-gray-700: rgba(0, 0, 0, 0.7);
-  --color-gray-800: rgba(0, 0, 0, 0.8);
-  --color-gray-900: rgba(0, 0, 0, 0.85);
-  --color-gray-950: rgba(0, 0, 0, 0.9);
+  /* Typography */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* Zero out border radii */
-  --radius-xs: 0px;
-  --radius-sm: 0px;
-  --radius: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --radius-2xl: 0px;
-  --radius-3xl: 0px;
-  --radius-4xl: 0px;
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 16px;
 
-  /* Zero out shadows */
-  --shadow-2xs: 0 0 0 transparent;
-  --shadow-xs: 0 0 0 transparent;
-  --shadow-sm: 0 0 0 transparent;
-  --shadow: 0 0 0 transparent;
-  --shadow-md: 0 0 0 transparent;
-  --shadow-lg: 0 0 0 transparent;
-  --shadow-xl: 0 0 0 transparent;
-  --shadow-2xl: 0 0 0 transparent;
+  --shadow-xs: var(--shadow-sm);
+  --shadow-sm: var(--shadow-sm);
+  --shadow: var(--shadow);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
 }
 
 /* Base typography */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: "Standard", sans-serif;
-  line-height: 1.5;
+  font-family: var(--font-sans);
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -102,36 +178,49 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: "Terminal Grotesque", sans-serif;
-  font-weight: normal;
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 
-button,
-input,
-select,
-textarea,
-label {
-  font-family: "Diatype", sans-serif;
+/* Igala tone diacritics render in the mono slot */
+code,
+kbd,
+samp,
+.font-mono,
+.igala {
+  font-family: var(--font-mono);
+  font-feature-settings: "ss01";
 }
 
-/* Kill rounded-full (not controllable via theme) */
-.rounded-full {
-  border-radius: 0 !important;
-}
-
-/* Links */
 a {
-  transition: opacity var(--transition-default);
+  color: inherit;
+  transition:
+    color var(--transition-default),
+    opacity var(--transition-default);
 }
 a:hover {
-  opacity: 0.7;
+  color: var(--accent-text);
 }
 
 /* Focus management */
 *:focus-visible {
-  outline: 2px solid var(--text-primary);
-  outline-offset: 2px;
-}
-*:focus:not(:focus-visible) {
   outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: var(--wt-ochre-200);
+  color: var(--wt-ink-950);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

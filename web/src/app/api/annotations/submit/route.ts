@@ -2,17 +2,24 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 interface RubricInput {
   modelOutputId: string;
   culturalAccuracy: number;
   linguisticAuthenticity: number;
-  creativeDepth: number;
+  culturalNormAdherence: number;
   factualCorrectness: number;
   notesCulturalAccuracy?: string;
   notesLinguisticAuthenticity?: string;
-  notesCreativeDepth?: string;
+  notesCulturalNormAdherence?: string;
   notesFactualCorrectness?: string;
+}
+
+interface EditInput {
+  modelOutputId: string;
+  correctedText: string;
+  rationale?: string;
 }
 
 function validateScore(value: unknown): value is number {
@@ -31,9 +38,30 @@ function validateRubric(rubric: unknown): rubric is RubricInput {
     typeof r.modelOutputId === "string" &&
     validateScore(r.culturalAccuracy) &&
     validateScore(r.linguisticAuthenticity) &&
-    validateScore(r.creativeDepth) &&
+    validateScore(r.culturalNormAdherence) &&
     validateScore(r.factualCorrectness)
   );
+}
+
+function parseEdits(raw: unknown): EditInput[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((e) => {
+    if (!e || typeof e !== "object") return [];
+    const r = e as Record<string, unknown>;
+    if (typeof r.modelOutputId !== "string") return [];
+    if (
+      typeof r.correctedText !== "string" ||
+      r.correctedText.trim().length === 0
+    )
+      return [];
+    return [
+      {
+        modelOutputId: r.modelOutputId,
+        correctedText: r.correctedText.trim(),
+        rationale: typeof r.rationale === "string" ? r.rationale : undefined,
+      },
+    ];
+  });
 }
 
 export async function POST(req: Request) {
@@ -54,8 +82,8 @@ export async function POST(req: Request) {
     rubricA,
     rubricB,
   } = body;
+  const edits = parseEdits(body.edits);
 
-  // Validate required fields
   if (!promptId || !modelOutputAId || !modelOutputBId) {
     return NextResponse.json(
       {
@@ -94,7 +122,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // Verify model outputs exist
   const [outputA, outputB] = await Promise.all([
     prisma.modelOutput.findUnique({ where: { id: modelOutputAId } }),
     prisma.modelOutput.findUnique({ where: { id: modelOutputBId } }),
@@ -107,7 +134,13 @@ export async function POST(req: Request) {
     );
   }
 
-  // Check for duplicate submission
+  // Resolve the bucket once, so pairwise / rubric / edits all carry it.
+  const prompt = await prisma.prompt.findUnique({
+    where: { id: outputA.promptId },
+    select: { bucket: true },
+  });
+  const bucket = outputA.bucket ?? prompt?.bucket ?? null;
+
   const existing = await prisma.pairwiseComparison.findFirst({
     where: {
       annotatorId,
@@ -126,11 +159,16 @@ export async function POST(req: Request) {
     );
   }
 
-  // Save everything in a transaction
-  await prisma.$transaction([
+  const outputById = new Map([
+    [outputA.id, outputA],
+    [outputB.id, outputB],
+  ]);
+
+  const ops: Prisma.PrismaPromise<unknown>[] = [
     prisma.pairwiseComparison.create({
       data: {
         promptId,
+        bucket,
         modelOutputAId,
         modelOutputBId,
         winner,
@@ -142,14 +180,15 @@ export async function POST(req: Request) {
       data: {
         promptId,
         modelOutputId: rubricA.modelOutputId,
+        bucket,
         culturalAccuracy: rubricA.culturalAccuracy,
         linguisticAuthenticity: rubricA.linguisticAuthenticity,
-        creativeDepth: rubricA.creativeDepth,
+        culturalNormAdherence: rubricA.culturalNormAdherence,
         factualCorrectness: rubricA.factualCorrectness,
         notesCulturalAccuracy: rubricA.notesCulturalAccuracy || null,
         notesLinguisticAuthenticity:
           rubricA.notesLinguisticAuthenticity || null,
-        notesCreativeDepth: rubricA.notesCreativeDepth || null,
+        notesCulturalNormAdherence: rubricA.notesCulturalNormAdherence || null,
         notesFactualCorrectness: rubricA.notesFactualCorrectness || null,
         annotatorId,
       },
@@ -158,19 +197,41 @@ export async function POST(req: Request) {
       data: {
         promptId,
         modelOutputId: rubricB.modelOutputId,
+        bucket,
         culturalAccuracy: rubricB.culturalAccuracy,
         linguisticAuthenticity: rubricB.linguisticAuthenticity,
-        creativeDepth: rubricB.creativeDepth,
+        culturalNormAdherence: rubricB.culturalNormAdherence,
         factualCorrectness: rubricB.factualCorrectness,
         notesCulturalAccuracy: rubricB.notesCulturalAccuracy || null,
         notesLinguisticAuthenticity:
           rubricB.notesLinguisticAuthenticity || null,
-        notesCreativeDepth: rubricB.notesCreativeDepth || null,
+        notesCulturalNormAdherence: rubricB.notesCulturalNormAdherence || null,
         notesFactualCorrectness: rubricB.notesFactualCorrectness || null,
         annotatorId,
       },
     }),
-  ]);
+  ];
 
-  return NextResponse.json({ success: true });
+  // Agnes's direct-edit field -> gold SFT targets.
+  for (const edit of edits) {
+    const src = outputById.get(edit.modelOutputId);
+    if (!src) continue;
+    ops.push(
+      prisma.outputEdit.create({
+        data: {
+          modelOutputId: edit.modelOutputId,
+          promptId: src.promptId,
+          bucket,
+          originalText: src.outputText,
+          correctedText: edit.correctedText,
+          rationale: edit.rationale || null,
+          annotatorId,
+        },
+      }),
+    );
+  }
+
+  await prisma.$transaction(ops);
+
+  return NextResponse.json({ success: true, editsSaved: edits.length });
 }

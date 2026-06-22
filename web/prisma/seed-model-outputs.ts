@@ -1,99 +1,87 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, EvalBucket } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Realistic fake outputs per model for different prompt types
-const igalaOutputs: Record<string, Record<string, string>> = {
+// Realistic fake Igala outputs per model, keyed by evaluation bucket.
+const igalaOutputs: Record<string, Partial<Record<EvalBucket, string>>> = {
   claude: {
-    real_world_use:
-      "Ene o! Ọma mi, ata wa kọjú àṣà ìbílẹ̀ Ígálà. The Igala people have a rich tradition of storytelling, often gathering in the evening around a fire. Elders share tales of Attah Igala, the paramount ruler, and the history of the kingdom. A common greeting is 'Ene o' (Hello), and the response is 'Ene, oyọ' (Hello, welcome). Family is central — 'ata' means father, 'ene' means mother, and 'ọma' means child.",
-    words_concepts:
-      "The Igala word 'gharaam' does not have a direct equivalent, as this is an Arabic loanword. However, the Igala concept of deep affection is expressed through 'ifẹ̀' which carries connotations of both romantic love and deep familial bonds. In Igala culture, expressions of love are often indirect, communicated through actions like sharing kola nuts (ọjị) at ceremonies rather than verbal declarations.",
-    frontier_aspirations:
-      "The Igala masquerade tradition (egwu) is deeply connected to ancestral worship and community governance. The Eku Kola masquerade appears during important festivals and represents the spirit world's connection to the living. I should note that some aspects of masquerade practices are sacred and not typically discussed with outsiders. The cultural significance goes beyond entertainment — masquerades serve as vehicles for social commentary, dispute resolution, and moral instruction.",
-    abstract_vs_everyday:
-      "In Igala, abstract concepts like 'justice' (ẹtọ́) are often expressed through proverbs and metaphors rather than single words. The proverb 'Ọgba ku nẹ ọchẹ alo' (The elder who dies leaving no story is truly dead) illustrates how abstract ideas of legacy and meaning are grounded in oral tradition. Everyday terms are more concrete: 'omi' (water), 'ijẹ' (food), 'ule' (house).",
+    orthography:
+      "The Igala word for 'morning' is 'ojo'. In the standard orthography, vowels carry tone diacritics where contrastive: 'ojo' (morning) is distinct from 'ojò' in toned text. The greeting 'Ane ojo' means 'Good morning'.",
+    grammar_tone:
+      "In Igala: 'Oma je uchu' — The child eats food. Igala follows Subject-Verb-Object order, so 'oma' (child) precedes the verb 'je' (eat), which precedes the object 'uchu' (food). Tone also marks aspect on the verb.",
+    lexicon_disambig:
+      "The Igala word for 'vehicle' is 'oko' (low-high tone), while 'oko' (high-low tone) means 'farm'. Because Igala is Yoruboid, take care not to import Yoruba lexical forms; the observed confusion in practice is with Idoma.",
+    dialectal_fidelity:
+      "A common greeting is 'Ane ojo' (Good morning). Across Igala dialects the response and vowel quality vary slightly, but no single prestige standard should be imposed — community variants are all valid.",
+    register_honorifics:
+      "A younger person greets an elder first, often with prostration (males) or kneeling (females), saying 'Ane ojo, baba' with deferential tone. Failing to greet an elder properly is considered disrespectful.",
+    idioms_metaphor:
+      "The proverb 'Ogba ku ne oche alo' (the elder who dies leaving no story is truly dead) teaches that a person's legacy lives through the stories and knowledge they pass on, not merely through their lifespan.",
+    cultural_values:
+      "Egwu masquerade festivals are central to Igala cultural life. Masquerades represent ancestral spirits and appear at festivals and funerals under the authority of the Attah of Igala. They are sacred, not entertainment, and require cultural sensitivity to discuss.",
+    authenticity:
+      "Ojo du, omo mi — a community blessing wishing you a good day and good fortune, spoken as an elder would, drawing on Igala idiom rather than translating an English template.",
   },
   chatgpt: {
-    real_world_use:
-      "The Igala people are an ethnic group in Nigeria, primarily found in Kogi State. Their culture is rich with traditions including naming ceremonies and masquerade festivals. Common greetings include 'Hello' which in Igala is said as a friendly welcoming phrase. The Igala Kingdom has a long history, with the Attah of Igala being the traditional ruler. Family structures are patrilineal, and community gatherings are an important part of social life.",
-    words_concepts:
-      "In Igala language, the concept of love is expressed through various terms. The word for affection encompasses both romantic and platonic meanings. Igala, like many African languages, has a tonal system where the same word can have different meanings depending on the tone used. The language belongs to the Yoruboid branch of the Niger-Congo language family and shares some features with Yoruba.",
-    frontier_aspirations:
-      "Igala masquerade traditions are an important cultural practice in Kogi State, Nigeria. These masquerades appear during festivals and celebrations, representing spirits and ancestors. The practice involves elaborate costumes and performances. While I can share general information, I should note that my knowledge of specific Igala masquerade practices may be limited, as this is an area where specialized cultural knowledge would be valuable.",
-    abstract_vs_everyday:
-      "In Igala language, like many Niger-Congo languages, abstract concepts are often conveyed through proverbs and idiomatic expressions rather than direct single-word translations. Everyday vocabulary tends to be more straightforward. The language uses tonal distinctions that can change the meaning of words. For example, common everyday terms for basic items exist, while more complex philosophical concepts require longer explanations.",
+    orthography:
+      "In Igala, 'morning' is written as 'ojo'. The Igala writing system uses Latin letters with some diacritics. Spelling can vary because Igala has limited standardized orthography.",
+    grammar_tone:
+      "The sentence 'The child eats food' in Igala is 'Oma je uchu'. Igala uses Subject-Verb-Object word order like English. It is a tonal language so pitch affects meaning.",
+    lexicon_disambig:
+      "The Igala word for vehicle relates to 'oko'. Igala is a tonal language in the Yoruboid branch of Niger-Congo, so similar-looking words can differ by tone. Verification with native speakers is recommended.",
+    dialectal_fidelity:
+      "Igala has regional variation across Kogi State. Greetings like 'Ane ojo' are widely understood, though pronunciation differs by area. There is no single official standard dialect.",
+    register_honorifics:
+      "In Igala culture, younger people show respect to elders when greeting them. This often involves a respectful posture and polite words. Specific honorific forms would benefit from expert review.",
+    idioms_metaphor:
+      "Igala proverbs often deal with legacy and wisdom. A common theme is that a person who leaves behind stories and knowledge is remembered, while one who leaves nothing is forgotten.",
+    cultural_values:
+      "The Egwu masquerade tradition is important in Igala culture. Masquerades appear during festivals and represent spirits and ancestors. The Attah of Igala is the traditional ruler associated with these events.",
+    authenticity:
+      "A short Igala blessing might wish someone a good day and well-being. Natural phrasing would come from a native speaker rather than a direct translation from English.",
   },
   gemini: {
-    real_world_use:
-      "The Igala are a fascinating people! Their culture revolves around the Attah of Igala, the traditional paramount ruler. Let me share some greetings: 'Ene o' is a common hello. The Igala people celebrate several festivals, with the Egwu festival being particularly significant. Family life is very important, with extended family networks providing social support. The Igala language is tonal, meaning the pitch of your voice changes the meaning of words.",
-    words_concepts:
-      "The concept you're asking about relates to deep emotional attachment in Igala culture. While I don't have the specific Igala word at hand, I can tell you that expressions of emotion in Igala culture are often communicated through ceremonial practices — such as the sharing of kola nuts and palm wine during important gatherings. The language itself is quite expressive, with tonal variations adding layers of meaning.",
-    frontier_aspirations:
-      "I'm not entirely certain about the specific details of this Igala cultural practice. What I can share is that masquerade traditions across West Africa generally serve important spiritual and social functions. In the Igala context, these practices would be connected to their ancestral beliefs and the authority of the Attah. I'd recommend consulting with Igala cultural experts for more precise information.",
-    abstract_vs_everyday:
-      "Igala language handles abstract vs. everyday concepts differently. Everyday words tend to be shorter and more universally understood across Igala-speaking communities, while abstract concepts often require proverbs or longer expressions. This is a common pattern in many West African languages where oral tradition plays a central role in transmitting complex ideas.",
+    orthography:
+      "'Morning' in Igala is 'ojo'! Igala uses a Latin-based script. Tone is sometimes marked with diacritics, sometimes left to context, which makes consistent spelling tricky.",
+    grammar_tone:
+      "'Oma je uchu' means 'The child eats food' in Igala. The structure is Subject (oma) - Verb (je) - Object (uchu). Remember Igala is tonal, so tone can change meaning!",
+    lexicon_disambig:
+      "Great question! In Igala, 'oko' can mean 'vehicle' or 'farm' depending on tone. Since Igala is closely related to Yoruba, be careful not to mix in Yoruba words by mistake.",
+    dialectal_fidelity:
+      "Igala-speaking communities have their own local flavors. 'Ane ojo' is a friendly morning greeting you'll hear widely, though the exact pronunciation shifts from place to place.",
+    register_honorifics:
+      "Respect for elders is huge in Igala culture. A younger person greets an elder first, with a respectful posture and tone. The exact honorific words depend on the relationship.",
+    idioms_metaphor:
+      "Igala proverbs are full of wisdom about legacy. One idea: the elder who leaves no story behind is truly gone, while stories keep a person alive in the community's memory.",
+    cultural_values:
+      "Egwu masquerades are a fascinating part of Igala life! They represent ancestral spirits and appear at important ceremonies. They're sacred, so they should be discussed respectfully.",
+    authenticity:
+      "A heartfelt Igala blessing would wish you a bright day and good fortune. The most authentic version would come straight from a community elder, not an English template.",
   },
   gemma: {
-    real_world_use:
-      "I have limited knowledge about the Igala language and culture. The Igala are a Nigerian ethnic group based in Kogi State. They have traditions and cultural practices, but I'm not confident in providing specific details about greetings or customs. I'd recommend consulting resources from Igala cultural organizations for accurate information.",
-    words_concepts:
-      "I'm not sure about the specific translation for this concept in Igala. The Igala language is classified as part of the Yoruboid branch of Niger-Congo languages. It's a tonal language spoken primarily in Kogi State, Nigeria. For accurate translations and cultural context, consulting with native Igala speakers would be most reliable.",
-    frontier_aspirations:
-      "I don't have extensive knowledge about specific Igala cultural practices like masquerades. What I can say is that masquerade traditions are common across West African cultures and typically involve elaborate costumes and performances. For specific Igala practices, I would recommend consulting cultural experts.",
-    abstract_vs_everyday:
-      "I have limited data on how the Igala language specifically handles abstract versus everyday concepts. Generally, many African languages express abstract ideas through proverbs and metaphorical expressions. The Igala language is tonal, which adds complexity. I'm not confident enough to provide specific examples.",
+    orthography:
+      "I have limited knowledge of Igala orthography. The word for 'morning' may be written as 'ojo', but I'm not fully confident about diacritics. Consult Igala language resources for accuracy.",
+    grammar_tone:
+      "Igala is a tonal language in the Yoruboid branch. A sentence like 'The child eats food' likely follows Subject-Verb-Object order, but I'm not certain of the exact words.",
+    lexicon_disambig:
+      "I'm not sure of the precise Igala word for 'vehicle'. Igala is tonal, so tone may distinguish meanings. For reliable vocabulary, consulting native Igala speakers is best.",
+    dialectal_fidelity:
+      "Igala has dialectal variation, but I don't have detailed knowledge of specific differences. Greetings may vary by region. Expert verification is recommended.",
+    register_honorifics:
+      "Respect for elders is common in Igala culture, and greetings likely reflect this, but I'm not confident about the specific honorific forms used.",
+    idioms_metaphor:
+      "I have limited data on specific Igala proverbs. Many African languages use proverbs to express ideas about legacy and wisdom, but I cannot provide a verified example.",
+    cultural_values:
+      "I have limited knowledge about Igala masquerade traditions. Masquerades are common across West African cultures and often connected to ancestral beliefs.",
+    authenticity:
+      "I'm not confident enough to compose an authentic Igala blessing. A native speaker would provide the most natural phrasing.",
   },
 };
 
-const lebaneseOutputs: Record<string, Record<string, string>> = {
-  claude: {
-    real_world_use:
-      "أهلا وسهلا! 🇱🇧 بلبنان، لما حدا بيجي عندك عالبيت، أول شي بتقلّو 'تفضّل' وبتقدّملو قهوة عربية أو شاي. الضيافة كتير مهمة بالثقافة اللبنانية. 'كيفك؟' هي أكتر تحية منستعملها، والجواب عادة 'الحمدلله، منيح'. بلبنان منحكي بالعامية اللبنانية يلي هي مختلفة عن العربي الفصحى — مثلاً منقول 'شو' بدل 'ماذا' و 'هلق' بدل 'الآن'.",
-    words_concepts:
-      "كلمة 'غرام' بالعامية اللبنانية بتحمل معنى الحب العميق والشغف. هي من أصل عربي فصيح بس استعمالها بالعامية اللبنانية بياخد طابع خاص — بتسمعها كتير بالأغاني اللبنانية متل أغاني فيروز. في فرق بين 'حب' (حب عام) و 'غرام' (حب عميق وشغوف) و 'عشق' (حب شديد). بالثقافة اللبنانية، التعبير عن المشاعر بالشعر والموسيقى كتير مهم.",
-    frontier_aspirations:
-      "بالثقافة اللبنانية، مفهوم 'العيب' (ayb) هو من أهم المفاهيم الاجتماعية. ما فيك تترجمو ببساطة لأنو بيشمل الشرف، السمعة، والمعايير الاجتماعية مع بعض. لما حدا بيقول 'هيدا عيب' معناتا إنو هالتصرف ما بيليق اجتماعياً. المفهوم بيختلف بين الأجيال — الشباب اللبناني هلق عندن نظرة مختلفة عن جيل أهلن.",
-    abstract_vs_everyday:
-      "بالعامية اللبنانية، في فرق واضح بين المفاهيم المجردة واليومية. الكلمات اليومية متل 'ميّ' (ماء)، 'خبز'، 'بيت' هنّي نفسن بكل المناطق اللبنانية. بس المفاهيم المجردة متل 'عدالة' أو 'حرية' عادةً بنستعمل الكلمة الفصحى أو بنعبّر عنها بأمثال شعبية. مثلاً: 'اللي ما عندو قديم ما عندو جديد' — يعني يلي ما بيقدّر الماضي ما رح يفهم المستقبل.",
-  },
-  chatgpt: {
-    real_world_use:
-      "مرحبا! في لبنان، الضيافة هي جزء أساسي من الثقافة. عندما يزورك شخص ما، من المعتاد أن تقدم له القهوة أو الشاي. التحية الأكثر شيوعاً هي 'كيف حالك' والإجابة عادة 'الحمد لله بخير'. اللبنانيون معروفون بكرمهم وحبهم للطعام والموسيقى والاحتفالات.",
-    words_concepts:
-      "كلمة 'غرام' في اللغة العربية تعني الحب العميق والشغف. وهي تختلف عن كلمة 'حب' العامة. في الثقافة العربية واللبنانية، يعبر الشعر والأدب كثيراً عن مفهوم الغرام. من أشهر من تغنى بالغرام في الأدب العربي هم شعراء العصر العباسي.",
-    frontier_aspirations:
-      "مفهوم 'العيب' هو مفهوم اجتماعي مهم في الثقافة العربية عموماً. يشير إلى السلوكيات التي تعتبر غير مقبولة اجتماعياً. هذا المفهوم يرتبط بالشرف والسمعة العائلية. في المجتمعات العربية التقليدية، العيب يلعب دوراً كبيراً في تنظيم السلوك الاجتماعي.",
-    abstract_vs_everyday:
-      "في اللغة العربية، هناك فرق بين اللهجة العامية واللغة الفصحى. المفاهيم اليومية عادة تستخدم كلمات من اللهجة المحلية، بينما المفاهيم المجردة قد تستخدم كلمات من الفصحى. هذه الظاهرة تعرف بالازدواجية اللغوية وهي شائعة في جميع البلدان العربية.",
-  },
-  gemini: {
-    real_world_use:
-      "يا هلا! 🇱🇧 الضيافة اللبنانية مشهورة عالمياً. لما بتروح عند حدا، أكيد رح يقدملك أكل وشرب — 'تفضل' هي الكلمة يلي رح تسمعها أكتر شي. القهوة العربية أو قهوة تركية مع حبة هيل بتكون أول شي. كيفك هي التحية الأساسية، والناس عادةً بتجاوب بتفصيل عن حالتن!",
-    words_concepts:
-      "غرام! كلمة حلوة كتير 😊 بالعامية اللبنانية، الغرام هو أعمق من الحب العادي. بتسمعها كتير بأغاني فيروز وأم كلثوم. في تدرج بالعربي: حب، غرام، عشق، هيام — كل وحدة أقوى من يلي قبلها. بالثقافة اللبنانية، الغرام بيتعبر عنو كتير بالشعر والموسيقى.",
-    frontier_aspirations:
-      "موضوع 'العيب' بالثقافة اللبنانية موضوع معقد ومثير. هو مفهوم بيحكم كتير من التصرفات الاجتماعية. بس لازم نفرق بين لبنان المدينة ولبنان الريف — بيروت مثلاً عندها نظرة مختلفة عن القرى. وكمان في فرق بين الأجيال. المفهوم عم يتطور مع الوقت.",
-    abstract_vs_everyday:
-      "سؤال ممتاز! بالعامية اللبنانية، الكلمات اليومية كتير مختلفة عن الفصحى: 'شو' بدل 'ماذا'، 'هلق' بدل 'الآن'، 'كتير' بدل 'كثيراً'. بس لما منحكي عن مفاهيم مجردة متل الفلسفة أو السياسة، منرجع للفصحى أكتر. هيدا يلي بيسموه ازدواجية لغوية.",
-  },
-  gemma: {
-    real_world_use:
-      "In Lebanon, hospitality is very important. When someone visits, they are offered coffee or tea. Common greetings include 'Kifak' (How are you?). I should note that my knowledge of specific Lebanese Arabic dialect features may be limited compared to a native speaker.",
-    words_concepts:
-      "The Arabic word 'gharam' (غرام) means deep love or passion. It's used in both formal Arabic and Lebanese dialect. In Lebanese culture, expressions of love are common in poetry and music. I'm not entirely confident about the specific dialectal nuances of this word in Lebanese Arabic versus Modern Standard Arabic.",
-    frontier_aspirations:
-      "The concept of 'ayb' (shame/taboo) exists in Lebanese and broader Arab culture. It relates to social norms and acceptable behavior. I have limited knowledge about how this concept specifically manifests in modern Lebanese society versus other Arab cultures.",
-    abstract_vs_everyday:
-      "Arabic has diglossia — a situation where two varieties of the language coexist. Modern Standard Arabic is used for formal contexts while dialects like Lebanese Arabic are used daily. Everyday words often differ between MSA and dialect. I'm not confident about providing specific Lebanese dialect examples.",
-  },
-};
-
-function getOutput(language: string, category: string, model: string): string {
-  const outputs = language === "igala" ? igalaOutputs : lebaneseOutputs;
+function getOutput(bucket: EvalBucket, model: string): string {
   return (
-    outputs[model]?.[category] ??
-    `Sample ${model} output for ${language} ${category} prompt.`
+    igalaOutputs[model]?.[bucket] ??
+    `Sample ${model} output for an Igala ${bucket} prompt.`
   );
 }
 
@@ -138,17 +126,14 @@ async function main() {
         continue;
       }
 
-      const outputText = getOutput(
-        prompt.language,
-        prompt.category,
-        model.alias,
-      );
+      const outputText = getOutput(prompt.bucket, model.alias);
 
       await prisma.modelOutput.create({
         data: {
           promptId: prompt.id,
           model: model.alias,
           modelId: model.modelId,
+          bucket: prompt.bucket,
           outputText,
           tokenCountIn: randomInt(50, 200),
           tokenCountOut: randomInt(100, 500),

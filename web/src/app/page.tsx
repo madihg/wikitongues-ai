@@ -24,16 +24,16 @@ function LoginCard({
   return (
     <div className="w-full max-w-sm">
       <div className="mb-6 text-center">
-        <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
-        <p className="mt-1 text-sm text-gray-500">{description}</p>
+        <h2 className="text-xl font-semibold text-text-primary">{title}</h2>
+        <p className="mt-1 text-sm text-text-tertiary">{description}</p>
       </div>
 
       <form
         onSubmit={onSubmit}
-        className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+        className="space-y-4 rounded-lg border border-border bg-surface p-6 shadow-sm"
       >
         {error && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-subtle p-3 text-sm text-danger">
             {error}
           </div>
         )}
@@ -41,7 +41,7 @@ function LoginCard({
         <div>
           <label
             htmlFor={`${title}-email`}
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-text-secondary"
           >
             Email
           </label>
@@ -50,14 +50,14 @@ function LoginCard({
             name="email"
             type="email"
             required
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+            className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm focus:border-accent focus:outline-none"
           />
         </div>
 
         <div>
           <label
             htmlFor={`${title}-password`}
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-text-secondary"
           >
             Password
           </label>
@@ -66,21 +66,24 @@ function LoginCard({
             name="password"
             type="password"
             required
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+            className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm focus:border-accent focus:outline-none"
           />
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="w-full cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:opacity-50"
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
 
-        <p className="text-center text-sm text-gray-500">
+        <p className="text-center text-sm text-text-tertiary">
           Don&apos;t have an account?{" "}
-          <Link href={registerHref} className="text-gray-900 hover:underline">
+          <Link
+            href={registerHref}
+            className="text-accent-text hover:underline"
+          >
             Register
           </Link>
         </p>
@@ -132,16 +135,18 @@ export default function Home() {
   if (status === "loading" || session) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-text-tertiary">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <div className="mb-10 text-center">
-        <h1 className="text-3xl font-semibold text-gray-900">Wikitongues AI</h1>
-        <p className="mt-2 text-sm text-gray-500">
+        <h1 className="text-3xl font-semibold text-text-primary">
+          Wikitongues AI
+        </h1>
+        <p className="mt-2 text-sm text-text-tertiary">
           Language learning and annotation platform
         </p>
       </div>

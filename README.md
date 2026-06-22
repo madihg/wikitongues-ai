@@ -2,179 +2,99 @@
 
 **A collaboration between Halim Madi and [Wikitongues](https://wikitongues.org)**
 
-An AI-powered platform for evaluating and improving language model performance on endangered and low-resource languages. The system combines a learner-facing chatbot with a human annotation pipeline and a research dashboard — creating a feedback loop between AI generation, expert human review, and model improvement.
+Teaching AI to speak the world's underserved languages, community by community —
+starting with **Igala** — and building the public benchmark that holds every
+model accountable for how well it does.
+
+This is not just a tutor. It is the **instrument** for actually improving a
+language model on a low-resource language: a community-run annotation platform
+whose every judgment becomes training data, and a researcher-mode **model arena**
+that ranks model variants per linguistic dimension and turns the open question
+"weights vs. retrieval" into a measurement.
 
 ---
 
-## What this does
+## The thesis (verified)
 
-Most large language models perform poorly on low-resource languages. They hallucinate vocabulary, miss cultural nuance, and confuse dialects. This platform makes that visible and fixable.
+There is no single method to teach a model Igala. It is a staged ladder, and the
+order is the insight: **SFT-on-edits → DPO/KTO**, on an open-weights base, with
+**RAG kept permanently for facts**. Weights own _form_ (orthography, morphology,
+register, authenticity); retrieval owns _facts_ (taboo, idioms, dialect,
+disambiguation). DPO is the alignment _finisher_, not the teacher — on a base
+that can't spell Igala it just ranks two wrong answers. Continued pretraining is
+the eventual lever but is post-pilot (the clean corpus doesn't exist yet).
 
-It works in three parts:
+Full, adversarially-verified write-up: [`tasks/research-recommendation.md`](tasks/research-recommendation.md).
 
-1. **Learner interface** — A chatbot where someone can practice or learn an endangered language. Responses come from a three-agent AI pipeline. Low-confidence responses are automatically flagged and routed to human experts.
+## The flywheel
 
-2. **Annotation platform** — Human experts (annotators) review AI-generated responses, score them on cultural accuracy and linguistic authenticity, and correct errors. Their work feeds back into the knowledge base.
+The platform's annotation data **is** the training data:
 
-3. **Research dashboard** — Researchers track model performance across languages, compare models head-to-head, identify knowledge gaps, and export benchmark data.
+| Annotation                            | Becomes                                                |
+| ------------------------------------- | ------------------------------------------------------ |
+| Pairwise (winner + explanation)       | DPO preference pairs **and** the Bradley-Terry ranking |
+| Annotator edits (Agnes's corrections) | SFT gold targets                                       |
+| Rubric scores (4 axes, 1-5)           | Reward/eval signal + per-bucket diagnostics            |
 
----
+Collect → build training sets → fine-tune candidate → register in the arena →
+evaluate vs. baselines → promote winner → repeat (epochs).
 
-## Three-agent pipeline
+## The 8 evaluation buckets
 
-Every learner message goes through three agents in sequence:
+Each bucket is a prompt category, a rubric axis, and a data-collection target:
 
-```
-Learner message
-       │
-       ▼
-┌──────────────┐
-│  Translator  │  Generates a response using RAG (verified cultural/linguistic
-│    Agent     │  knowledge base) + Claude Sonnet 4.5. Self-rates confidence.
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│   Reviewer   │  Scores the response 0–100. Checks for hallucinations,
-│    Agent     │  cultural insensitivity, dialect errors, factual mistakes.
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Orchestrator │  Routes based on confidence:
-│    Agent     │  ≥70 → response goes to user
-└──────────────┘ 50–70 → retry with reviewer feedback
-                  <50 → escalate to human annotator (with disclaimer)
-```
+1. Orthography & spelling 2. Grammar, morphology & tone 3. Lexicon & disambiguation
+2. Dialectal fidelity 5. Register & honorifics 6. Idioms & metaphor
+3. Cultural knowledge & values 8. Authenticity vs. translationese
 
-All pipeline runs are logged for analysis and benchmarking.
+## The model arena (researcher mode)
 
----
-
-## Current languages
-
-- **Igala** (Niger-Congo, Nigeria)
-- **Lebanese Arabic** (Semitic, Lebanon/diaspora)
-
-More languages to be added.
+Register model variants that differ by exactly one rung — a closed baseline, the
+same base + RAG, a fine-tuned variant — and rank them on a contamination-safe
+held-out bank, **per bucket**, by human pairwise (Bradley-Terry with confidence
+intervals). LLM-as-judge is restricted to triage; it cannot grade a language it
+is itself poor at. `ns` cells = not statistically distinguishable at the current
+sample size (expected while the annotator pool is small — honest by design).
 
 ---
 
-## Models used
+## Roles
 
-- **Generation**: Claude Sonnet 4.5 (Anthropic) — pluggable, any model can be swapped in
-- **Embeddings**: OpenAI `text-embedding-3-small` for semantic RAG search
-- **Database**: PostgreSQL with pgvector for similarity search
-- **Planned**: Gemini integration
-
----
+| Role           | Who                          | What they do                                                           |
+| -------------- | ---------------------------- | ---------------------------------------------------------------------- |
+| **Learner**    | Heritage speaker / learner   | Practices Igala with the AI tutor                                      |
+| **Annotator**  | Fluent/native (Agnes's team) | Picks the better output, scores the rubric, **edits outputs directly** |
+| **Researcher** | Linguist / advisory council  | Runs the arena, compares variants per bucket, exports training sets    |
 
 ## Tech stack
 
-| Layer         | Technology                           |
-| ------------- | ------------------------------------ |
-| Frontend      | Next.js 14 (App Router)              |
-| Auth          | NextAuth.js                          |
-| Database      | PostgreSQL (Neon) + Prisma ORM       |
-| Vector search | pgvector                             |
-| AI            | Anthropic Claude + OpenAI embeddings |
-| Deployment    | Vercel                               |
-| Benchmarking  | Python scripts (Phase A)             |
+| Layer    | Technology                                                                                            |
+| -------- | ----------------------------------------------------------------------------------------------------- |
+| Frontend | Next.js 16 (App Router), React 19, Tailwind v4                                                        |
+| Auth     | NextAuth.js                                                                                           |
+| Database | **Supabase Postgres** (schema `wikitongues`) + Prisma + pgvector                                      |
+| AI       | Anthropic + OpenAI + Google (swappable per candidate); OpenAI-compatible for self-hosted open weights |
+| Ranking  | Bradley-Terry (per bucket) with bootstrap CIs                                                         |
+| Tests    | Vitest (unit/logic) + Playwright (e2e)                                                                |
 
----
+## Setup
 
-## Personas
+See [`web/SETUP.md`](web/SETUP.md). In short: fill `web/.env.local` with your
+Supabase connection strings + provider keys, `pnpm install`, `pnpm seed && pnpm
+seed:arena`, `pnpm dev`. The schema is already live in Supabase.
 
-| Role           | Who they are                                        | What they do                                                             |
-| -------------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
-| **Learner**    | Heritage speaker, curious learner, language student | Chats with the AI to practice or learn a language                        |
-| **Annotator**  | Fluent/native speaker of the target language        | Reviews AI outputs, scores them, corrects errors, manages prompts        |
-| **Researcher** | Linguist or academic                                | Tracks model performance, studies knowledge gaps, exports benchmark data |
+## Quality gates
 
----
-
-## Demo
-
-**Live app**: https://wikitongues-ai-halims-projects.vercel.app
-
-| Role       | Email                                     | Password   |
-| ---------- | ----------------------------------------- | ---------- |
-| Annotator  | `annotator@test.com`                      | `password` |
-| Researcher | `researcher@test.com`                     | `password` |
-| Learner    | Register free at `/register?role=learner` | —          |
-
----
-
-## Local setup
-
-### Prerequisites
-
-- Node.js 18+
-- PostgreSQL with pgvector extension (or a Neon account)
-- Anthropic API key
-- OpenAI API key
-
-### Web app
-
-```bash
-cd web
-cp .env.example .env.local
-# Fill in DATABASE_URL, NEXTAUTH_SECRET, ANTHROPIC_API_KEY, OPENAI_API_KEY
-
-npm install
-npx prisma migrate dev
-npx prisma db seed
-npm run dev
-```
-
-App runs at `http://localhost:3000`.
-
-### Seed the knowledge base
-
-```bash
-npm run seed         # Users, prompts, languages
-npm run seed:rag     # RAG knowledge base entries
-npm run seed:outputs # Model outputs for annotation
-```
-
-### Python benchmarking (Phase A)
-
-```bash
-pip install -e .
-cp .env.example .env
-# Fill in API keys
-python scripts/benchmark.py
-```
-
----
-
-## Project structure
-
-```
-wikitongues/
-├── web/                    # Next.js application
-│   ├── src/
-│   │   ├── app/            # Pages (App Router)
-│   │   │   ├── (app)/      # Protected annotator/researcher pages
-│   │   │   ├── (auth)/     # Login, register
-│   │   │   └── (learner)/  # Learner chat interface
-│   │   ├── components/     # React components
-│   │   └── lib/
-│   │       ├── agents/     # Translator, Reviewer, Orchestrator agents
-│   │       └── rag.ts      # RAG retrieval system
-│   └── prisma/             # Database schema and migrations
-└── scripts/                # Python benchmarking scripts
-```
+`pnpm typecheck` · `pnpm lint` · `pnpm test` (17 logic tests, incl. Bradley-Terry
+and the contamination-guard) · `pnpm test:e2e` · `pnpm build`.
 
 ---
 
 ## About
 
-This project is a collaboration between **[Halim Madi](https://github.com/madihg)** and **[Wikitongues](https://wikitongues.org)**, a nonprofit dedicated to documenting and revitalizing endangered languages worldwide.
-
-The platform is designed to surface where today's AI models fall short on cultural and linguistic nuance — and to build a human-in-the-loop system that closes those gaps over time.
-
----
+A collaboration between **[Halim Madi](https://github.com/madihg)** and
+**[Wikitongues](https://wikitongues.org)**, building toward the first public Igala
+model leaderboard for the Wikimedia Foundation conference (Ghana, Oct 2026).
 
 ## License
 

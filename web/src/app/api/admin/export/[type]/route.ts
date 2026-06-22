@@ -73,11 +73,11 @@ async function exportRubric(): Promise<string> {
     "modelId",
     "culturalAccuracy",
     "linguisticAuthenticity",
-    "creativeDepth",
+    "culturalNormAdherence",
     "factualCorrectness",
     "notesCulturalAccuracy",
     "notesLinguisticAuthenticity",
-    "notesCreativeDepth",
+    "notesCulturalNormAdherence",
     "notesFactualCorrectness",
     "annotator",
     "createdAt",
@@ -91,11 +91,11 @@ async function exportRubric(): Promise<string> {
       row.modelOutput.modelId,
       row.culturalAccuracy,
       row.linguisticAuthenticity,
-      row.creativeDepth,
+      row.culturalNormAdherence,
       row.factualCorrectness,
       row.notesCulturalAccuracy,
       row.notesLinguisticAuthenticity,
-      row.notesCreativeDepth,
+      row.notesCulturalNormAdherence,
       row.notesFactualCorrectness,
       row.annotator.name ?? row.annotator.email,
       row.createdAt.toISOString(),
@@ -112,7 +112,7 @@ async function exportReport(): Promise<string> {
       prisma.modelOutput.count(),
       prisma.pairwiseComparison.count(),
       prisma.rubricScore.count(),
-      prisma.handoffItem.count({ where: { gapCategory: { not: null } } }),
+      prisma.handoffItem.count({ where: { gapBucket: { not: null } } }),
     ]);
 
   const languages = await prisma.prompt.findMany({
@@ -127,7 +127,7 @@ async function exportReport(): Promise<string> {
 
   const resolvedGaps = await prisma.handoffItem.count({
     where: {
-      gapCategory: { not: null },
+      gapBucket: { not: null },
       status: { in: ["approved", "corrected"] },
     },
   });

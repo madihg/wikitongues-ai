@@ -1,28 +1,111 @@
-import { PrismaClient, PromptCategory, DifficultyLevel } from "@prisma/client";
+import {
+  PrismaClient,
+  EvalBucket,
+  DifficultyLevel,
+  PromptSplit,
+} from "@prisma/client";
 import { hash } from "bcryptjs";
-import { readFileSync, readdirSync } from "fs";
-import { join } from "path";
-import { parse } from "yaml";
 
 const prisma = new PrismaClient();
 
-const categoryMap: Record<string, PromptCategory> = {
-  real_world_use: "real_world_use",
-  words_concepts: "words_concepts",
-  frontier_aspirations: "frontier_aspirations",
-  abstract_vs_everyday: "abstract_vs_everyday",
-};
+interface SeedPrompt {
+  promptId: string;
+  bucket: EvalBucket;
+  text: string;
+  difficultyLevel: DifficultyLevel;
+  split: PromptSplit;
+  isHoldout: boolean;
+  provenance: string;
+  targetCulture?: string;
+  expectedCulturalContext?: string;
+}
 
-const difficultyMap: Record<string, DifficultyLevel> = {
-  basic: "basic",
-  intermediate: "intermediate",
-  advanced: "advanced",
-};
+// A small Igala-only seed catalogue. Prompts spread across the 8 EvalBucket
+// values, with a handful marked as held-out test prompts.
+const prompts: SeedPrompt[] = [
+  {
+    promptId: "ig_orth_001",
+    bucket: "orthography",
+    text: "Write the Igala word for 'morning' with correct spelling and diacritics.",
+    difficultyLevel: "basic",
+    split: "train",
+    isHoldout: false,
+    provenance: "community_authored",
+  },
+  {
+    promptId: "ig_gram_001",
+    bucket: "grammar_tone",
+    text: "Translate 'The child eats food' into Igala, keeping correct SVO word order.",
+    difficultyLevel: "intermediate",
+    split: "train",
+    isHoldout: false,
+    provenance: "community_authored",
+  },
+  {
+    promptId: "ig_lex_001",
+    bucket: "lexicon_disambig",
+    text: "Give the Igala word for 'vehicle' and explain how tone distinguishes it from 'farm'.",
+    difficultyLevel: "advanced",
+    split: "dev",
+    isHoldout: false,
+    provenance: "community_authored",
+  },
+  {
+    promptId: "ig_dial_001",
+    bucket: "dialectal_fidelity",
+    text: "Provide a greeting that varies across Igala dialects and note the differences.",
+    difficultyLevel: "intermediate",
+    split: "train",
+    isHoldout: false,
+    provenance: "community_authored",
+  },
+  {
+    promptId: "ig_reg_001",
+    bucket: "register_honorifics",
+    text: "Show how a younger person should respectfully greet an elder in Igala.",
+    difficultyLevel: "intermediate",
+    split: "test",
+    isHoldout: true,
+    provenance: "community_authored",
+    expectedCulturalContext:
+      "Igala greetings are hierarchical; younger people greet elders first, often with prostration or kneeling.",
+  },
+  {
+    promptId: "ig_idiom_001",
+    bucket: "idioms_metaphor",
+    text: "Explain the meaning of a common Igala proverb about legacy and the value of stories.",
+    difficultyLevel: "advanced",
+    split: "test",
+    isHoldout: true,
+    provenance: "community_authored",
+  },
+  {
+    promptId: "ig_cult_001",
+    bucket: "cultural_values",
+    text: "Describe the cultural significance of Egwu masquerade festivals in Igala society.",
+    difficultyLevel: "advanced",
+    split: "test",
+    isHoldout: true,
+    provenance: "community_authored",
+    targetCulture: "Igala",
+    expectedCulturalContext:
+      "Masquerades represent ancestral spirits and are sacred, not entertainment.",
+  },
+  {
+    promptId: "ig_auth_001",
+    bucket: "authenticity",
+    text: "Write a short, natural Igala blessing as a community member would say it, not back-translated from English.",
+    difficultyLevel: "intermediate",
+    split: "train",
+    isHoldout: false,
+    provenance: "community_authored",
+  },
+];
 
 async function main() {
   console.log("Seeding database...");
 
-  // Create test users
+  // Create test users (login still works with password "password")
   const annotatorHash = await hash("password", 12);
   const researcherHash = await hash("password", 12);
 
@@ -50,7 +133,7 @@ async function main() {
 
   console.log("Created test users");
 
-  // Add annotator languages
+  // Add annotator language (Igala only)
   await prisma.annotatorLanguage.upsert({
     where: {
       userId_language: { userId: annotator.id, language: "igala" },
@@ -63,54 +146,28 @@ async function main() {
     },
   });
 
-  await prisma.annotatorLanguage.upsert({
-    where: {
-      userId_language: { userId: annotator.id, language: "lebanese_arabic" },
-    },
-    update: {},
-    create: {
-      userId: annotator.id,
-      language: "lebanese_arabic",
-      expertiseLevel: "native",
-    },
-  });
-
-  console.log("Added annotator languages");
-
-  // Import prompts from YAML files
-  const promptsDir = join(__dirname, "../../data/prompts");
-  const files = readdirSync(promptsDir).filter(
-    (f) => f.endsWith(".yaml") && f !== "schema.yaml",
-  );
+  console.log("Added annotator language");
 
   let promptCount = 0;
-
-  for (const file of files) {
-    const content = readFileSync(join(promptsDir, file), "utf-8");
-    const data = parse(content);
-
-    if (!data?.prompts) continue;
-
-    for (const prompt of data.prompts) {
-      await prisma.prompt.upsert({
-        where: { promptId: prompt.id },
-        update: {},
-        create: {
-          promptId: prompt.id,
-          category: categoryMap[prompt.category],
-          language: prompt.language,
-          text: prompt.text,
-          sourceLanguage: prompt.source_language || null,
-          targetCulture: prompt.target_culture || null,
-          expectedCulturalContext: prompt.expected_cultural_context || null,
-          difficultyLevel:
-            difficultyMap[prompt.difficulty_level] || "intermediate",
-        },
-      });
-      promptCount++;
-    }
-
-    console.log(`Imported prompts from ${file}`);
+  for (const prompt of prompts) {
+    await prisma.prompt.upsert({
+      where: { promptId: prompt.promptId },
+      update: {},
+      create: {
+        promptId: prompt.promptId,
+        bucket: prompt.bucket,
+        language: "igala",
+        text: prompt.text,
+        targetCulture: prompt.targetCulture ?? null,
+        expectedCulturalContext: prompt.expectedCulturalContext ?? null,
+        difficultyLevel: prompt.difficultyLevel,
+        split: prompt.split,
+        isHoldout: prompt.isHoldout,
+        provenance: prompt.provenance,
+        createdById: annotator.id,
+      },
+    });
+    promptCount++;
   }
 
   console.log(`Seeded ${promptCount} prompts total`);

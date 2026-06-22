@@ -108,118 +108,10 @@ const igalaEntries: SeedEntry[] = [
   },
 ];
 
-const lebaneseArabicEntries: SeedEntry[] = [
-  // Vocabulary
-  {
-    language: "lebanese_arabic",
-    chunkType: "vocabulary",
-    topic: "Basic greetings",
-    content:
-      "Marhaba (مرحبا) — Hello. Kifak/Kifik (كيفك) — How are you? (m/f). Mniiha/Mniih (منيحة/منيح) — I'm good (f/m). Ahla w sahla (اهلا و سهلا) — Welcome. Sabah el-kheir (صباح الخير) — Good morning. Masa el-kheir (مسا الخير) — Good evening.",
-  },
-  {
-    language: "lebanese_arabic",
-    chunkType: "vocabulary",
-    topic: "Family terms",
-    content:
-      "Bayye (بيّي) — My father. Emme (إمّي) — My mother. Khayyé (خيّي) — My brother. Ekhte (أختي) — My sister. Jedde (جدّي) — My grandfather. Teta (تيتا) — My grandmother. Ammo (عمّو) — Paternal uncle. Khalo (خالو) — Maternal uncle. 'Aayle (عيلة) — Family.",
-  },
-  {
-    language: "lebanese_arabic",
-    chunkType: "vocabulary",
-    topic: "Food and dining",
-    content:
-      "Akil (أكل) — Food. Khubez (خبز) — Bread. Mayy (مي) — Water. Ahwe (قهوة) — Coffee. Tabkha (طبخة) — Cooked dish. Tfaddal/Tfaddali (تفضّل/تفضّلي) — Please, go ahead / help yourself (m/f). Sahtein (صحتين) — Bon appetit (lit. 'two healths').",
-  },
-  {
-    language: "lebanese_arabic",
-    chunkType: "vocabulary",
-    topic: "Common verbs",
-    content:
-      "Haki/Ehki (حكي/إحكي) — to speak/talk. Akol (آكُل) — to eat. Eshrab (إشرب) — to drink. Rouh (روح) — to go. Ta'a (تعا) — to come. Baddé (بدّي) — I want. Fhimt (فهمت) — I understood. Ma ba'ref (ما بعرف) — I don't know.",
-  },
-  // Grammar rules
-  {
-    language: "lebanese_arabic",
-    chunkType: "grammar_rule",
-    topic: "Verb conjugation basics",
-    content:
-      "Lebanese Arabic simplifies MSA verb conjugation. Present tense uses 'b-' prefix: b-ehki (I speak), bt-ehki (you speak), bi-yehki (he speaks), bt-ehki (she speaks). Future uses 'rah' or 'ha': rah rouh (I will go). Negation wraps the verb: ma b-ehki (I don't speak).",
-  },
-  {
-    language: "lebanese_arabic",
-    chunkType: "grammar_rule",
-    topic: "Levantine pronoun system",
-    content:
-      "Ana (أنا) — I. Enta/Ente (إنتَ/إنتِ) — You (m/f). Huwwe (هوّي) — He. Hiyye (هيّي) — She. Nehna (نحنا) — We. Entu (إنتو) — You (pl). Hennen (هنّي) — They. Possessive suffixes: -é (my), -ak/-ik (your m/f), -o/-a (his/her), -na (our), -kon (your pl), -on (their).",
-  },
-  {
-    language: "lebanese_arabic",
-    chunkType: "grammar_rule",
-    topic: "Question formation",
-    content:
-      "Questions often use intonation alone. Common question words: Shu (شو) — What. Min (مين) — Who. Wen (وين) — Where. Eymta (إيمتا) — When. Lesh (ليش) — Why. Kif (كيف) — How. Adesh (أديش) — How much. Kam (كم) — How many. Example: Wen rayih? (Where are you going?)",
-  },
-  // Cultural notes
-  {
-    language: "lebanese_arabic",
-    chunkType: "cultural_note",
-    topic: "Hospitality customs",
-    content:
-      "Lebanese hospitality (dayfe) is a core cultural value. Guests are offered coffee (ahwe) or tea immediately upon arrival. Refusing food or drink can be seen as impolite — it's customary to accept at least a small amount. The host will insist multiple times (the 'three refusals' custom). When visiting, bringing sweets or flowers is appreciated.",
-  },
-  {
-    language: "lebanese_arabic",
-    chunkType: "cultural_note",
-    topic: "Code-switching and multilingualism",
-    content:
-      "Lebanese speakers frequently code-switch between Arabic, French, and English, sometimes within a single sentence. 'Hi, kifak, ça va?' is a famous example blending English, Arabic, and French. This trilingual heritage reflects Lebanon's Ottoman, French Mandate, and modern globalized history. Formal contexts use more MSA; casual speech is heavily mixed.",
-  },
-  {
-    language: "lebanese_arabic",
-    chunkType: "cultural_note",
-    topic: "Religious and sectarian sensitivity",
-    content:
-      "Lebanon has 18 recognized religious sects. Language use can reflect religious background — some Christian communities use more French loanwords, while Muslim communities may use more MSA-influenced forms. Greetings can vary: 'Salam' vs 'Marhaba'. It is important to use neutral, inclusive language unless context is clear.",
-  },
-  // Example dialogues
-  {
-    language: "lebanese_arabic",
-    chunkType: "example_dialogue",
-    topic: "Ordering at a restaurant",
-    content:
-      "A: Marhaba! Shu fi lyom? (Hello! What's available today?)\nB: Fi tabbouleh, fattoush, w meshwi. (There's tabbouleh, fattoush, and grilled meat.)\nA: Tabbouleh w meshwi, iza btireed. (Tabbouleh and grilled meat, please.)\nB: Tekram! Shi tene? (Of course! Anything else?)\nA: Mayy bass. Shukran. (Just water. Thanks.)\nB: Sahtein! (Bon appetit!)",
-  },
-  {
-    language: "lebanese_arabic",
-    chunkType: "example_dialogue",
-    topic: "Meeting someone new",
-    content:
-      "A: Ahla w sahla! Shu esmak? (Welcome! What's your name?)\nB: Esme Ahmad. W ente? (My name is Ahmad. And you?)\nA: Ana Maya. Tsharrafna. (I'm Maya. Nice to meet you.)\nB: Ahla fik. Men wen ente? (Nice to meet you too. Where are you from?)\nA: Ana min Beirut. (I'm from Beirut.)",
-  },
-  // Translation pairs
-  {
-    language: "lebanese_arabic",
-    chunkType: "translation_pair",
-    topic: "Common expressions",
-    content:
-      "Thank you — Merci / Shukran (شكرا). Please — Iza btireed (إذا بتريد). I'm sorry — Sorry / Aasif (آسف). Excuse me — Ba'ed iznak (بعد إذنك). No problem — Mafi mushkle (ما في مشكلة). God willing — Inshallah (إنشاءالله). I love you — Bhibbak/Bhibbik (بحبّك). Goodbye — Bye / Yalla bye / Allah ma'ak (الله معك).",
-  },
-  {
-    language: "lebanese_arabic",
-    chunkType: "translation_pair",
-    topic: "Everyday phrases",
-    content:
-      "What time is it? — Adesh el-se'a? (أديش الساعة؟). I'm hungry — Jou'an/Jou'ane (جوعان/جوعانة). Let's go — Yalla (يلّا). Slow down — Shway shway (شوي شوي). It doesn't matter — Ma'lesh (معلش). I miss you — Eshta'tellak/Eshta'tellik (اشتقتلّك). That's enough — Khalas (خلص).",
-  },
-];
-
 async function main() {
   console.log("Seeding RAG entries...");
 
-  const allEntries = [...igalaEntries, ...lebaneseArabicEntries];
-
-  for (const entry of allEntries) {
+  for (const entry of igalaEntries) {
     await prisma.ragEntry.create({
       data: {
         language: entry.language,
@@ -233,11 +125,7 @@ async function main() {
     });
   }
 
-  const igalaCount = igalaEntries.length;
-  const lbCount = lebaneseArabicEntries.length;
-  console.log(
-    `Seeded ${igalaCount} Igala entries and ${lbCount} Lebanese Arabic entries (${igalaCount + lbCount} total).`,
-  );
+  console.log(`Seeded ${igalaEntries.length} Igala entries.`);
 }
 
 main()

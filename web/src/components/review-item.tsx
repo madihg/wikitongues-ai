@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { EvalBucket } from "@prisma/client";
+import { bucketLabel } from "@/lib/buckets";
 
 interface HandoffItemData {
   id: string;
@@ -8,7 +10,7 @@ interface HandoffItemData {
   modelAnswer: string;
   confidenceScore: number;
   reviewerReasoning: string | null;
-  gapCategory: string | null;
+  gapBucket: EvalBucket | null;
   status: string;
   correctedAnswer: string | null;
   reviewerId: string | null;
@@ -19,45 +21,31 @@ interface HandoffItemData {
   reviewer: { name: string | null; email: string } | null;
 }
 
-const GAP_COLORS: Record<string, string> = {
-  missing_vocabulary: "bg-red-100 text-red-800",
-  missing_cultural_context: "bg-purple-100 text-purple-800",
-  missing_dialect_knowledge: "bg-orange-100 text-orange-800",
-  missing_translation_pair: "bg-blue-100 text-blue-800",
-};
-
-const GAP_LABELS: Record<string, string> = {
-  missing_vocabulary: "Missing Vocabulary",
-  missing_cultural_context: "Missing Cultural Context",
-  missing_dialect_knowledge: "Missing Dialect Knowledge",
-  missing_translation_pair: "Missing Translation Pair",
-};
-
 function confidenceColor(score: number): string {
-  if (score < 0.4) return "bg-red-500";
-  if (score < 0.6) return "bg-orange-500";
-  if (score < 0.7) return "bg-yellow-500";
-  return "bg-green-500";
+  if (score < 0.4) return "bg-danger";
+  if (score < 0.6) return "bg-warning";
+  if (score < 0.7) return "bg-warning";
+  return "bg-success";
 }
 
 function confidenceTextColor(score: number): string {
-  if (score < 0.4) return "text-red-700";
-  if (score < 0.6) return "text-orange-700";
-  if (score < 0.7) return "text-yellow-700";
-  return "text-green-700";
+  if (score < 0.4) return "text-danger";
+  if (score < 0.6) return "text-warning";
+  if (score < 0.7) return "text-warning";
+  return "text-success";
 }
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending: "bg-yellow-100 text-yellow-800",
-    in_review: "bg-blue-100 text-blue-800",
-    approved: "bg-green-100 text-green-800",
-    corrected: "bg-indigo-100 text-indigo-800",
-    rejected: "bg-red-100 text-red-800",
+    pending: "bg-warning-subtle text-warning",
+    in_review: "bg-info-subtle text-info",
+    approved: "bg-success-subtle text-success",
+    corrected: "bg-accent-subtle text-accent-text",
+    rejected: "bg-danger-subtle text-danger",
   };
   return (
     <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] ?? "bg-gray-100 text-gray-800"}`}
+      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] ?? "bg-surface-sunken text-text-secondary"}`}
     >
       {status.replace("_", " ")}
     </span>
@@ -162,29 +150,27 @@ export function ReviewItem({
   }
 
   return (
-    <div className="rounded-lg border border-gray-300 bg-white shadow-lg">
-      <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+    <div className="rounded-lg border border-border-strong bg-surface shadow-md">
+      <div className="flex items-center justify-between border-b border-border px-6 py-4">
         <div className="flex items-center gap-3">
           <StatusBadge status={item.status} />
-          {item.gapCategory && (
-            <span
-              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${GAP_COLORS[item.gapCategory] ?? "bg-gray-100 text-gray-800"}`}
-            >
-              {GAP_LABELS[item.gapCategory] ?? item.gapCategory}
+          {item.gapBucket && (
+            <span className="inline-flex rounded-full bg-surface-sunken px-2 py-0.5 text-xs font-medium text-text-secondary">
+              {bucketLabel(item.gapBucket)}
             </span>
           )}
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-text-tertiary">
             Created {relativeTime(item.createdAt)}
           </span>
           {item.reviewedAt && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-text-tertiary">
               Reviewed {relativeTime(item.reviewedAt)}
             </span>
           )}
         </div>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600"
+          className="cursor-pointer text-text-muted hover:text-text-secondary"
           aria-label="Close"
         >
           <svg
@@ -210,7 +196,7 @@ export function ReviewItem({
           >
             {Math.round(item.confidenceScore * 100)}% confidence
           </span>
-          <div className="h-2 w-32 overflow-hidden rounded-full bg-gray-200">
+          <div className="h-2 w-32 overflow-hidden rounded-full bg-surface-sunken">
             <div
               className={`h-full rounded-full ${confidenceColor(item.confidenceScore)}`}
               style={{ width: `${item.confidenceScore * 100}%` }}
@@ -219,11 +205,11 @@ export function ReviewItem({
         </div>
 
         <div>
-          <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+          <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-text-tertiary">
             Learner Request
           </h4>
           <p
-            className="rounded-md bg-gray-50 p-3 text-sm text-gray-900"
+            className="rounded-md bg-surface-sunken p-3 text-sm text-text-primary"
             dir={learnerRequestIsRtl ? "rtl" : "ltr"}
           >
             {item.learnerRequest}
@@ -231,11 +217,11 @@ export function ReviewItem({
         </div>
 
         <div>
-          <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+          <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-text-tertiary">
             Model Answer
           </h4>
           <div
-            className="whitespace-pre-wrap rounded-md bg-gray-50 p-3 text-sm text-gray-900"
+            className="whitespace-pre-wrap rounded-md bg-surface-sunken p-3 text-sm text-text-primary"
             dir={modelAnswerIsRtl ? "rtl" : "ltr"}
           >
             {item.modelAnswer}
@@ -244,10 +230,10 @@ export function ReviewItem({
 
         {item.reviewerReasoning && (
           <div>
-            <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+            <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-text-tertiary">
               Reviewer Reasoning
             </h4>
-            <p className="rounded-md bg-gray-50 p-3 text-sm text-gray-700">
+            <p className="rounded-md bg-surface-sunken p-3 text-sm text-text-secondary">
               {item.reviewerReasoning}
             </p>
           </div>
@@ -255,11 +241,11 @@ export function ReviewItem({
 
         {item.correctedAnswer && (
           <div>
-            <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+            <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-text-tertiary">
               Corrected Answer
             </h4>
             <div
-              className="whitespace-pre-wrap rounded-md bg-indigo-50 p-3 text-sm text-gray-900"
+              className="whitespace-pre-wrap rounded-md bg-accent-subtle p-3 text-sm text-text-primary"
               dir={detectRtl(item.correctedAnswer) ? "rtl" : "ltr"}
             >
               {item.correctedAnswer}
@@ -268,36 +254,36 @@ export function ReviewItem({
         )}
 
         {item.reviewer && (
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-text-tertiary">
             Reviewed by {item.reviewer.name || item.reviewer.email}
           </div>
         )}
 
         {mode === "edit" && (
-          <div className="space-y-3 rounded-md border border-indigo-200 bg-indigo-50/50 p-4">
-            <h4 className="text-sm font-medium text-gray-900">
+          <div className="space-y-3 rounded-md border border-accent bg-accent-subtle/50 p-4">
+            <h4 className="text-sm font-medium text-text-primary">
               Edit & Approve
             </h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-500">
+                <label className="mb-1 block text-xs font-medium text-text-tertiary">
                   Original Answer
                 </label>
                 <div
-                  className="h-40 overflow-y-auto whitespace-pre-wrap rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-700"
+                  className="h-40 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-surface p-3 text-sm text-text-secondary"
                   dir={modelAnswerIsRtl ? "rtl" : "ltr"}
                 >
                   {item.modelAnswer}
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-500">
+                <label className="mb-1 block text-xs font-medium text-text-tertiary">
                   Corrected Answer
                 </label>
                 <textarea
                   value={editedAnswer}
                   onChange={(e) => setEditedAnswer(e.target.value)}
-                  className="h-40 w-full resize-none rounded-md border border-gray-300 p-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  className="h-40 w-full resize-none rounded-md border border-border-strong p-3 text-sm focus:border-accent focus:outline-none"
                   dir={modelAnswerIsRtl ? "rtl" : "ltr"}
                 />
               </div>
@@ -306,13 +292,13 @@ export function ReviewItem({
               <button
                 onClick={handleCorrect}
                 disabled={submitting || !editedAnswer.trim()}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:opacity-50"
               >
                 {submitting ? "Saving..." : "Save Correction"}
               </button>
               <button
                 onClick={() => setMode("view")}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="cursor-pointer rounded-md border border-border-strong px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
               >
                 Cancel
               </button>
@@ -321,27 +307,27 @@ export function ReviewItem({
         )}
 
         {mode === "reject" && (
-          <div className="space-y-3 rounded-md border border-red-200 bg-red-50/50 p-4">
-            <h4 className="text-sm font-medium text-gray-900">
+          <div className="space-y-3 rounded-md border border-danger bg-danger-subtle/50 p-4">
+            <h4 className="text-sm font-medium text-text-primary">
               Reject as Hallucination
             </h4>
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="Explain why this output is incorrect..."
-              className="h-24 w-full resize-none rounded-md border border-gray-300 p-3 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500"
+              className="h-24 w-full resize-none rounded-md border border-border-strong p-3 text-sm focus:border-danger focus:outline-none"
             />
             <div className="flex gap-2">
               <button
                 onClick={handleReject}
                 disabled={submitting || !rejectReason.trim()}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="cursor-pointer rounded-md bg-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
               >
                 {submitting ? "Rejecting..." : "Reject"}
               </button>
               <button
                 onClick={() => setMode("view")}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="cursor-pointer rounded-md border border-border-strong px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
               >
                 Cancel
               </button>
@@ -350,29 +336,29 @@ export function ReviewItem({
         )}
 
         {error && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-subtle p-3 text-sm text-danger">
             {error}
           </div>
         )}
 
         {!isResolved && mode === "view" && (
-          <div className="flex gap-2 border-t border-gray-200 pt-4">
+          <div className="flex gap-2 border-t border-border pt-4">
             <button
               onClick={handleApprove}
               disabled={submitting}
-              className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              className="cursor-pointer rounded-md bg-success px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
             >
               {submitting ? "Approving..." : "Approve"}
             </button>
             <button
               onClick={() => setMode("edit")}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              className="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
             >
               Edit & Approve
             </button>
             <button
               onClick={() => setMode("reject")}
-              className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              className="cursor-pointer rounded-md bg-danger px-4 py-2 text-sm font-medium text-white hover:opacity-90"
             >
               Reject
             </button>

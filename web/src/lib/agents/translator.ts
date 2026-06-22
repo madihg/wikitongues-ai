@@ -1,14 +1,18 @@
-import { generateText } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
 import { searchRag } from "@/lib/rag";
-import type { RagEntry } from "@prisma/client";
+import {
+  generateForCandidate,
+  type CandidateLike,
+  type RagChunk,
+} from "@/lib/arena/providers";
 
 // ─── Interfaces ─────────────────────────────────────────────
 
 export interface TranslatorInput {
   learnerMessage: string;
-  language: string; // "igala" or "lebanese_arabic"
+  language: string; // "igala"
   conversationHistory?: { role: string; content: string }[];
+  /** Optional candidate to drive generation. Defaults to DEFAULT_CANDIDATE — this is the model-swap seam. */
+  candidate?: CandidateLike;
 }
 
 export interface TranslatorOutput {
@@ -21,54 +25,31 @@ export interface TranslatorOutput {
   latencyMs: number;
 }
 
-// ─── Constants ──────────────────────────────────────────────
+// ─── Default learner-pipeline candidate ─────────────────────
+// The learner chat used to be hard-coded to Claude. It now runs whichever
+// candidate is passed in; this is the fallback when none is given.
 
-const MODEL_ALIAS = "claude";
-const MODEL_ID = "claude-sonnet-4-5-20250929";
+const IGALA_SYSTEM = [
+  "You are a cultural and linguistic expert in the Igala language.",
+  "Igala is a West Benue-Congo (Yoruboid) language spoken primarily in Kogi State, Nigeria.",
+  "It is a tonal language with a rich oral tradition encompassing proverbs, folk tales, and ceremonial speech.",
+  "Pay close attention to tonal distinctions, honorifics, and idiomatic expressions unique to Igala.",
+  "Do not confuse Igala with neighboring languages such as Idoma, Yoruba, or Igbo.",
+  "",
+  "Respond naturally and authentically in Igala. Provide cultural context where relevant.",
+  "If you are uncertain about vocabulary, grammar, tone, or cultural context, explicitly say so rather than guessing.",
+  "Do NOT hallucinate. If you don't know something, say \"I'm not sure about this\".",
+].join("\n");
 
-const LANGUAGE_CONTEXT: Record<string, string> = {
-  igala: [
-    "You are a cultural and linguistic expert in the Igala language.",
-    "Igala is a West Benue-Congo language spoken primarily in Kogi State, Nigeria.",
-    "It is a tonal language with a rich oral tradition encompassing proverbs, folk tales, and ceremonial speech.",
-    "Pay close attention to tonal distinctions, noun class agreements, and idiomatic expressions unique to Igala.",
-  ].join(" "),
-  lebanese_arabic: [
-    "You are a cultural and linguistic expert in Lebanese Arabic.",
-    "Lebanese Arabic is a Levantine Arabic dialect spoken in Lebanon.",
-    "It has no standard orthography and differs significantly from Modern Standard Arabic (MSA) in phonology, vocabulary, and grammar.",
-    "Distinguish clearly between Lebanese dialect forms and MSA when relevant.",
-    "Be sensitive to regional variations within Lebanon and the influence of French and English loanwords.",
-  ].join(" "),
+export const DEFAULT_CANDIDATE: CandidateLike = {
+  name: "claude",
+  provider: "anthropic",
+  baseModelId: "claude-sonnet-4-5-20250929",
+  useSystemPrompt: true,
+  systemPrompt: IGALA_SYSTEM,
+  ragEnabled: true,
+  decodingParams: { temperature: 0.7, maxTokens: 1024 },
 };
-
-// ─── System prompt builder ──────────────────────────────────
-
-function buildSystemPrompt(language: string, ragEntries: RagEntry[]): string {
-  const languageIntro =
-    LANGUAGE_CONTEXT[language] ??
-    `You are a cultural and linguistic expert in the language "${language}".`;
-
-  const coreInstructions = [
-    "Respond naturally and authentically in the target language.",
-    "Provide cultural context where it is relevant to the learner's question.",
-    "If you are uncertain about vocabulary, grammar, or cultural context, explicitly say so rather than guessing.",
-    "Do NOT hallucinate. If you don't know something, say \"I'm not sure about this\".",
-  ].join("\n");
-
-  let ragBlock: string;
-  if (ragEntries.length > 0) {
-    const formattedEntries = ragEntries
-      .map((e, i) => `[${i + 1}] (${e.chunkType} — ${e.topic})\n${e.content}`)
-      .join("\n\n");
-    ragBlock = `Use the following verified knowledge to ground your response:\n\n${formattedEntries}`;
-  } else {
-    ragBlock =
-      "No verified knowledge base entries were found for this query. Be extra cautious and flag any uncertainty.";
-  }
-
-  return `${languageIntro}\n\n${coreInstructions}\n\n${ragBlock}`;
-}
 
 // ─── Confidence heuristic ───────────────────────────────────
 
@@ -88,12 +69,8 @@ function assessConfidence(
   ragContextUsed: boolean,
 ): "high" | "medium" | "low" {
   if (!ragContextUsed) return "low";
-
   const lower = outputText.toLowerCase();
-  const hasUncertainty = UNCERTAINTY_MARKERS.some((marker) =>
-    lower.includes(marker),
-  );
-
+  const hasUncertainty = UNCERTAINTY_MARKERS.some((m) => lower.includes(m));
   return hasUncertainty ? "medium" : "high";
 }
 
@@ -102,49 +79,34 @@ function assessConfidence(
 export async function translate(
   input: TranslatorInput,
 ): Promise<TranslatorOutput> {
-  const start = Date.now();
+  const candidate = input.candidate ?? DEFAULT_CANDIDATE;
 
-  // 1. Query RAG
-  const ragEntries = await searchRag(input.learnerMessage, input.language, 5);
-  const ragContextUsed = ragEntries.length > 0;
-  const ragContextIds = ragEntries.map((e) => e.id);
+  // 1. Query RAG (only used if the candidate has RAG enabled)
+  const ragEntries = candidate.ragEnabled
+    ? await searchRag(input.learnerMessage, input.language, 5)
+    : [];
+  const ragContext: RagChunk[] = ragEntries.map((e) => ({
+    id: e.id,
+    content: e.content,
+    topic: e.topic,
+    chunkType: e.chunkType,
+  }));
+  const ragContextUsed = ragContext.length > 0;
 
-  // 2. Build system prompt
-  const systemPrompt = buildSystemPrompt(input.language, ragEntries);
-
-  // 3. Build message list from conversation history
-  const messages: { role: "user" | "assistant"; content: string }[] = [];
-  if (input.conversationHistory) {
-    for (const msg of input.conversationHistory) {
-      if (msg.role === "user" || msg.role === "assistant") {
-        messages.push({ role: msg.role, content: msg.content });
-      }
-    }
-  }
-  messages.push({ role: "user", content: input.learnerMessage });
-
-  // 4. Call model
-  const result = await generateText({
-    model: anthropic(MODEL_ID),
-    system: systemPrompt,
-    messages,
-    temperature: 0.7,
-    maxOutputTokens: 1024,
+  // 2. Generate through the swappable provider layer
+  const result = await generateForCandidate(candidate, {
+    userMessage: input.learnerMessage,
+    conversationHistory: input.conversationHistory,
+    ragContext,
   });
 
-  const outputText = result.text;
-  const latencyMs = Date.now() - start;
-
-  // 5. Assess confidence
-  const selfReportedConfidence = assessConfidence(outputText, ragContextUsed);
-
   return {
-    outputText,
-    ragContextIds,
+    outputText: result.text,
+    ragContextIds: result.ragContextIds,
     ragContextUsed,
-    selfReportedConfidence,
-    model: MODEL_ALIAS,
-    modelId: MODEL_ID,
-    latencyMs,
+    selfReportedConfidence: assessConfidence(result.text, ragContextUsed),
+    model: candidate.name ?? candidate.provider,
+    modelId: result.modelId,
+    latencyMs: result.latencyMs,
   };
 }

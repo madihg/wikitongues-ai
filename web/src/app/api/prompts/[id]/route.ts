@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { PromptCategory, DifficultyLevel } from "@prisma/client";
+import type { EvalBucket, DifficultyLevel } from "@prisma/client";
 
 export async function GET(
   _req: Request,
@@ -51,7 +51,7 @@ export async function PUT(
 
   const body = await req.json();
   const editableFields = [
-    "category",
+    "bucket",
     "language",
     "text",
     "sourceLanguage",
@@ -90,7 +90,7 @@ export async function PUT(
     prisma.prompt.update({
       where: { id },
       data: updates as {
-        category?: PromptCategory;
+        bucket?: EvalBucket;
         language?: string;
         text?: string;
         sourceLanguage?: string | null;
