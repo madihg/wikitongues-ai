@@ -11,29 +11,29 @@ export async function GET() {
 
   const [totalGaps, byStatus, byCategory] = await Promise.all([
     prisma.handoffItem.count({
-      where: { gapCategory: { not: null } },
+      where: { gapBucket: { not: null } },
     }),
     prisma.handoffItem.groupBy({
       by: ["status"],
-      where: { gapCategory: { not: null } },
-      _count: { id: true },
+      where: { gapBucket: { not: null } },
+      _count: { _all: true },
     }),
     prisma.handoffItem.groupBy({
-      by: ["gapCategory"],
-      where: { gapCategory: { not: null } },
-      _count: { id: true },
+      by: ["gapBucket"],
+      where: { gapBucket: { not: null } },
+      _count: { _all: true },
     }),
   ]);
 
   const statusCounts: Record<string, number> = {};
   for (const row of byStatus) {
-    statusCounts[row.status] = row._count.id;
+    statusCounts[row.status] = row._count._all;
   }
 
   const categoryCounts: Record<string, number> = {};
   for (const row of byCategory) {
-    if (row.gapCategory) {
-      categoryCounts[row.gapCategory] = row._count.id;
+    if (row.gapBucket) {
+      categoryCounts[row.gapBucket] = row._count._all;
     }
   }
 
@@ -45,15 +45,15 @@ export async function GET() {
   const epochStats = await prisma.handoffItem.groupBy({
     by: ["status"],
     where: {
-      gapCategory: { not: null },
+      gapBucket: { not: null },
       reviewedAt: { not: null },
     },
-    _count: { id: true },
+    _count: { _all: true },
   });
 
   const epochTrend = epochStats.map((row) => ({
     status: row.status,
-    count: row._count.id,
+    count: row._count._all,
   }));
 
   return NextResponse.json({

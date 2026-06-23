@@ -2,6 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { HelpButton } from "@/components/help-button";
+import { isResearcher } from "@/lib/personas";
 
 function StatCard({
   title,
@@ -13,118 +14,119 @@ function StatCard({
   description: string;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6">
-      <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-      <p className="mt-2 text-3xl font-semibold text-gray-900">{value}</p>
-      <p className="mt-1 text-sm text-gray-500">{description}</p>
+    <div className="rounded-lg border border-border bg-surface p-6">
+      <h3 className="text-sm font-medium text-text-tertiary">{title}</h3>
+      <p className="mt-2 text-3xl font-semibold text-text-primary">{value}</p>
+      <p className="mt-1 text-sm text-text-tertiary">{description}</p>
     </div>
   );
 }
 
 export default function AnnotatorDashboard() {
   const { data: session } = useSession();
+  const researcher = isResearcher(session?.user?.role, session?.user?.email);
 
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-text-primary">Dashboard</h1>
+        <p className="mt-1 text-sm text-text-tertiary">
           Welcome back, {session?.user?.name || session?.user?.email}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <div
+        className={`grid grid-cols-1 gap-6 ${researcher ? "md:grid-cols-3" : "md:grid-cols-1"}`}
+      >
         <StatCard
           title="Pending Annotations"
           value="12"
-          description="Pairwise comparisons and rubric scores awaiting review"
+          description="Pairwise comparisons and rubric scores awaiting your input"
         />
-        <StatCard
-          title="Pending Reviews"
-          value="3"
-          description="Handoff items flagged for human review"
-        />
-        <StatCard
-          title="Prompts Managed"
-          value="47"
-          description="Total prompts in the catalogue"
-        />
+        {researcher && (
+          <>
+            <StatCard
+              title="Pending Reviews"
+              value="3"
+              description="Handoff items flagged for human review"
+            />
+            <StatCard
+              title="Prompts Managed"
+              value="47"
+              description="Total prompts in the Igala catalogue"
+            />
+          </>
+        )}
       </div>
 
       <div className="mt-8">
-        <h2 className="mb-4 text-sm font-medium text-gray-700">
+        <h2 className="mb-4 text-sm font-medium text-text-secondary">
           Recent Activity
         </h2>
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div className="overflow-hidden rounded-lg border border-border bg-surface">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <tr className="border-b border-border bg-surface-sunken">
+                <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
                   Prompt
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
                   Type
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
                   Date
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {[
                 {
-                  prompt: "Describe a traditional Basque greeting",
+                  prompt: "Greet an elder respectfully in Igala",
                   type: "Pairwise",
                   status: "Pending",
                   date: "Today",
                 },
                 {
-                  prompt: "Translate proverb about rain and seasons",
+                  prompt: "Render an Igala proverb about patience",
                   type: "Rubric",
                   status: "Pending",
                   date: "Today",
                 },
                 {
-                  prompt: "Explain kinship terms in Swahili culture",
-                  type: "Review",
-                  status: "Flagged",
+                  prompt: "Igala kinship terms for extended family",
+                  type: "Pairwise",
+                  status: "Completed",
                   date: "Yesterday",
                 },
                 {
-                  prompt: "Cultural context for Quechua harvest ceremonies",
-                  type: "Pairwise",
-                  status: "Completed",
-                  date: "Feb 17",
-                },
-                {
-                  prompt: "Nuances of formal vs informal address in Arabic",
+                  prompt: "Cultural context for an Igala naming ceremony",
                   type: "Rubric",
                   status: "Completed",
-                  date: "Feb 16",
+                  date: "Jun 17",
                 },
               ].map((row, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
+                <tr key={i} className="hover:bg-surface-sunken">
+                  <td className="px-4 py-3 text-text-primary max-w-xs truncate">
                     {row.prompt}
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{row.type}</td>
+                  <td className="px-4 py-3 text-text-tertiary">{row.type}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                         row.status === "Pending"
-                          ? "bg-yellow-50 text-yellow-700"
+                          ? "bg-warning-subtle text-warning"
                           : row.status === "Flagged"
-                            ? "bg-red-50 text-red-700"
-                            : "bg-gray-100 text-gray-600"
+                            ? "bg-danger-subtle text-danger"
+                            : "bg-surface-sunken text-text-secondary"
                       }`}
                     >
                       {row.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{row.date}</td>
+                  <td className="px-4 py-3 text-text-tertiary">{row.date}</td>
                 </tr>
               ))}
             </tbody>

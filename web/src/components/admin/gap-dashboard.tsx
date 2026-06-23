@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { EvalBucket } from "@prisma/client";
+import { bucketLabel } from "@/lib/buckets";
+import { InfoTip } from "@/components/info-tip";
 
 interface GapData {
   totalGaps: number;
@@ -9,20 +12,6 @@ interface GapData {
   statusCounts: Record<string, number>;
   categoryCounts: Record<string, number>;
 }
-
-const GAP_CATEGORY_LABELS: Record<string, string> = {
-  missing_vocabulary: "Missing Vocabulary",
-  missing_cultural_context: "Missing Cultural Context",
-  missing_dialect_knowledge: "Missing Dialect Knowledge",
-  missing_translation_pair: "Missing Translation Pair",
-};
-
-const GAP_CATEGORY_COLORS: Record<string, string> = {
-  missing_vocabulary: "bg-blue-500",
-  missing_cultural_context: "bg-purple-500",
-  missing_dialect_knowledge: "bg-amber-500",
-  missing_translation_pair: "bg-rose-500",
-};
 
 export function GapDashboard() {
   const [data, setData] = useState<GapData | null>(null);
@@ -37,19 +26,19 @@ export function GapDashboard() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="text-sm text-gray-400">Loading gap data...</div>
+      <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+        <div className="text-sm text-text-muted">Loading gap data...</div>
       </div>
     );
   }
 
   if (!data || data.totalGaps === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">
+      <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-text-primary">
           Gap Closure Overview
         </h2>
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="mt-4 text-sm text-text-tertiary">
           No gaps identified yet. Gaps are tracked from handoff items flagged
           with gap categories.
         </p>
@@ -60,52 +49,59 @@ export function GapDashboard() {
   const maxCategoryCount = Math.max(...Object.values(data.categoryCounts), 1);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-gray-900">
+    <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
         Gap Closure Overview
+        <InfoTip width="w-80">
+          Knowledge gaps surfaced when the AI pipeline escalated a
+          low-confidence answer, categorized by the linguistic bucket it failed.
+          Resolving gaps feeds verified knowledge back into RAG.
+        </InfoTip>
       </h2>
 
       <div className="mt-4 grid grid-cols-3 gap-4">
-        <div className="rounded-lg border border-gray-100 p-4 text-center">
-          <div className="text-3xl font-bold text-gray-900">
+        <div className="rounded-lg border border-border p-4 text-center">
+          <div className="text-3xl font-bold text-text-primary">
             {data.totalGaps}
           </div>
-          <div className="mt-1 text-xs font-medium text-gray-500">
+          <div className="mt-1 text-xs font-medium text-text-tertiary">
             Total Gaps
           </div>
         </div>
-        <div className="rounded-lg border border-gray-100 p-4 text-center">
-          <div className="text-3xl font-bold text-green-600">
-            {data.resolved}
+        <div className="rounded-lg border border-border p-4 text-center">
+          <div className="text-3xl font-bold text-success">{data.resolved}</div>
+          <div className="mt-1 text-xs font-medium text-text-tertiary">
+            Resolved
           </div>
-          <div className="mt-1 text-xs font-medium text-gray-500">Resolved</div>
         </div>
-        <div className="rounded-lg border border-gray-100 p-4 text-center">
-          <div className="text-3xl font-bold text-orange-600">
+        <div className="rounded-lg border border-border p-4 text-center">
+          <div className="text-3xl font-bold text-warning">
             {data.remaining}
           </div>
-          <div className="mt-1 text-xs font-medium text-gray-500">
+          <div className="mt-1 text-xs font-medium text-text-tertiary">
             Remaining
           </div>
         </div>
       </div>
 
       <div className="mt-6">
-        <h3 className="text-sm font-semibold text-gray-700">By Category</h3>
+        <h3 className="text-sm font-semibold text-text-secondary">By Bucket</h3>
         <div className="mt-3 space-y-3">
-          {Object.entries(data.categoryCounts).map(([category, count]) => {
+          {Object.entries(data.categoryCounts).map(([bucket, count]) => {
             const pct = (count / maxCategoryCount) * 100;
             return (
-              <div key={category}>
+              <div key={bucket}>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-gray-700">
-                    {GAP_CATEGORY_LABELS[category] ?? category}
+                  <span className="font-medium text-text-secondary">
+                    {bucketLabel(bucket as EvalBucket)}
                   </span>
-                  <span className="tabular-nums text-gray-500">{count}</span>
+                  <span className="tabular-nums text-text-tertiary">
+                    {count}
+                  </span>
                 </div>
-                <div className="mt-1 h-2 w-full rounded-full bg-gray-100">
+                <div className="mt-1 h-2 w-full rounded-full bg-surface-sunken">
                   <div
-                    className={`h-2 rounded-full ${GAP_CATEGORY_COLORS[category] ?? "bg-gray-400"}`}
+                    className="h-2 rounded-full bg-accent"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -117,18 +113,18 @@ export function GapDashboard() {
 
       {data.resolved > 0 && (
         <div className="mt-6">
-          <h3 className="text-sm font-semibold text-gray-700">
+          <h3 className="text-sm font-semibold text-text-secondary">
             Resolution Progress
           </h3>
-          <div className="mt-2 h-3 w-full rounded-full bg-gray-100">
+          <div className="mt-2 h-3 w-full rounded-full bg-surface-sunken">
             <div
-              className="h-3 rounded-full bg-green-500 transition-all"
+              className="h-3 rounded-full bg-success transition-all"
               style={{
                 width: `${(data.resolved / data.totalGaps) * 100}%`,
               }}
             />
           </div>
-          <div className="mt-1 text-xs text-gray-500">
+          <div className="mt-1 text-xs text-text-tertiary">
             {Math.round((data.resolved / data.totalGaps) * 100)}% resolved
           </div>
         </div>

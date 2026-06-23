@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import type { EvalBucket } from "@prisma/client";
+import { bucketLabel } from "@/lib/buckets";
+import { InfoTip } from "@/components/info-tip";
 
 interface PromptData {
   id: string;
   promptId: string;
-  category: string;
+  bucket: EvalBucket;
   language: string;
   text: string;
   targetCulture: string | null;
@@ -30,22 +33,22 @@ interface Progress {
 interface RubricScores {
   culturalAccuracy: number;
   linguisticAuthenticity: number;
-  creativeDepth: number;
+  culturalNormAdherence: number;
   factualCorrectness: number;
   notesCulturalAccuracy: string;
   notesLinguisticAuthenticity: string;
-  notesCreativeDepth: string;
+  notesCulturalNormAdherence: string;
   notesFactualCorrectness: string;
 }
 
 const EMPTY_RUBRIC: RubricScores = {
   culturalAccuracy: 0,
   linguisticAuthenticity: 0,
-  creativeDepth: 0,
+  culturalNormAdherence: 0,
   factualCorrectness: 0,
   notesCulturalAccuracy: "",
   notesLinguisticAuthenticity: "",
-  notesCreativeDepth: "",
+  notesCulturalNormAdherence: "",
   notesFactualCorrectness: "",
 };
 
@@ -61,9 +64,9 @@ const DIMENSIONS = [
     notesKey: "notesLinguisticAuthenticity",
   },
   {
-    key: "creativeDepth",
-    label: "Creative Depth",
-    notesKey: "notesCreativeDepth",
+    key: "culturalNormAdherence",
+    label: "Cultural-norm adherence",
+    notesKey: "notesCulturalNormAdherence",
   },
   {
     key: "factualCorrectness",
@@ -71,20 +74,6 @@ const DIMENSIONS = [
     notesKey: "notesFactualCorrectness",
   },
 ] as const;
-
-const CATEGORY_STYLES: Record<string, string> = {
-  real_world_use: "bg-blue-100 text-blue-800",
-  words_concepts: "bg-green-100 text-green-800",
-  frontier_aspirations: "bg-purple-100 text-purple-800",
-  abstract_vs_everyday: "bg-orange-100 text-orange-800",
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  real_world_use: "Real World Use",
-  words_concepts: "Words & Concepts",
-  frontier_aspirations: "Frontier Aspirations",
-  abstract_vs_everyday: "Abstract vs Everyday",
-};
 
 function isRtlLanguage(language: string): boolean {
   const rtl = [
@@ -118,7 +107,10 @@ export function AnnotationInterface() {
   const [rubricB, setRubricB] = useState<RubricScores>({ ...EMPTY_RUBRIC });
   const [submitting, setSubmitting] = useState(false);
 
-  // Toast state
+  // Agnes's direct-edit field — corrected Igala per output (gold SFT targets).
+  const [editA, setEditA] = useState("");
+  const [editB, setEditB] = useState("");
+
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
@@ -137,9 +129,7 @@ export function AnnotationInterface() {
     setError(null);
     try {
       const res = await fetch("/api/annotations/next");
-      if (!res.ok) {
-        throw new Error("Failed to fetch next task");
-      }
+      if (!res.ok) throw new Error("Failed to fetch next task");
       const data = await res.json();
       if (data.complete) {
         setIsComplete(true);
@@ -149,6 +139,8 @@ export function AnnotationInterface() {
         setTask(data.task);
         setProgress(data.progress);
         setIsComplete(false);
+        setEditA(data.task?.outputA?.text ?? "");
+        setEditB(data.task?.outputB?.text ?? "");
       }
     } catch {
       setError("Failed to load annotation task. Please try again.");
@@ -161,7 +153,6 @@ export function AnnotationInterface() {
     fetchNext();
   }, [fetchNext]);
 
-  // Keyboard shortcuts for step 1
   useEffect(() => {
     if (step !== 1 || !task) return;
     function handleKey(e: KeyboardEvent) {
@@ -186,12 +177,25 @@ export function AnnotationInterface() {
   const isRubricComplete = (rubric: RubricScores) =>
     rubric.culturalAccuracy > 0 &&
     rubric.linguisticAuthenticity > 0 &&
-    rubric.creativeDepth > 0 &&
+    rubric.culturalNormAdherence > 0 &&
     rubric.factualCorrectness > 0;
 
   const handleSubmit = async () => {
     if (!task || !winner || submitting) return;
     if (!isRubricComplete(rubricA) || !isRubricComplete(rubricB)) return;
+
+    // Only send edits that actually changed the model output.
+    const edits: { modelOutputId: string; correctedText: string }[] = [];
+    if (editA.trim() && editA.trim() !== task.outputA.text.trim())
+      edits.push({
+        modelOutputId: task.outputA.id,
+        correctedText: editA.trim(),
+      });
+    if (editB.trim() && editB.trim() !== task.outputB.text.trim())
+      edits.push({
+        modelOutputId: task.outputB.id,
+        correctedText: editB.trim(),
+      });
 
     setSubmitting(true);
     try {
@@ -204,13 +208,15 @@ export function AnnotationInterface() {
           modelOutputBId: task.outputB.id,
           winner,
           explanation: explanation.trim(),
+          edits,
           rubricA: {
             modelOutputId: task.outputA.id,
             ...rubricA,
             notesCulturalAccuracy: rubricA.notesCulturalAccuracy || undefined,
             notesLinguisticAuthenticity:
               rubricA.notesLinguisticAuthenticity || undefined,
-            notesCreativeDepth: rubricA.notesCreativeDepth || undefined,
+            notesCulturalNormAdherence:
+              rubricA.notesCulturalNormAdherence || undefined,
             notesFactualCorrectness:
               rubricA.notesFactualCorrectness || undefined,
           },
@@ -220,7 +226,8 @@ export function AnnotationInterface() {
             notesCulturalAccuracy: rubricB.notesCulturalAccuracy || undefined,
             notesLinguisticAuthenticity:
               rubricB.notesLinguisticAuthenticity || undefined,
-            notesCreativeDepth: rubricB.notesCreativeDepth || undefined,
+            notesCulturalNormAdherence:
+              rubricB.notesCulturalNormAdherence || undefined,
             notesFactualCorrectness:
               rubricB.notesFactualCorrectness || undefined,
           },
@@ -232,9 +239,13 @@ export function AnnotationInterface() {
         throw new Error(data.error || "Submission failed");
       }
 
-      showToast("Annotation submitted successfully!", "success");
+      showToast(
+        edits.length > 0
+          ? `Saved — including ${edits.length} correction${edits.length > 1 ? "s" : ""}.`
+          : "Annotation submitted.",
+        "success",
+      );
 
-      // Reset state and fetch next
       setWinner(null);
       setExplanation("");
       setStep(1);
@@ -254,7 +265,7 @@ export function AnnotationInterface() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-text-tertiary">
           Loading next annotation task...
         </div>
       </div>
@@ -264,10 +275,10 @@ export function AnnotationInterface() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-danger">{error}</p>
         <button
           onClick={fetchNext}
-          className="mt-4 rounded-md bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
+          className="mt-4 cursor-pointer rounded-md bg-accent px-4 py-2 text-sm text-accent-contrast hover:bg-accent-hover"
         >
           Retry
         </button>
@@ -278,11 +289,9 @@ export function AnnotationInterface() {
   if (isComplete) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="rounded-lg border border-green-200 bg-green-50 p-8 text-center">
-          <h2 className="text-lg font-semibold text-green-900">
-            All caught up!
-          </h2>
-          <p className="mt-2 text-sm text-green-700">
+        <div className="rounded-lg border border-success/30 bg-success-subtle p-8 text-center">
+          <h2 className="text-lg text-success">All caught up</h2>
+          <p className="mt-2 text-sm text-text-secondary">
             {progress
               ? `You have completed all ${progress.total} comparisons.`
               : "There are no annotation tasks available right now."}
@@ -295,26 +304,24 @@ export function AnnotationInterface() {
   if (!task) return null;
 
   const isRtl = isRtlLanguage(task.prompt.language);
+  const textDir = isRtl ? "rtl" : "ltr";
+  const textFont = "font-mono"; // renders Igala tone diacritics cleanly
 
   return (
     <div className="relative">
-      {/* Toast */}
       {toast && (
         <div
-          className={`fixed right-6 top-6 z-50 rounded-md px-4 py-3 text-sm font-medium shadow-lg ${
-            toast.type === "success"
-              ? "bg-green-600 text-white"
-              : "bg-red-600 text-white"
+          className={`fixed right-6 top-6 z-50 rounded-md px-4 py-3 text-sm font-medium text-white shadow-lg ${
+            toast.type === "success" ? "bg-success" : "bg-danger"
           }`}
         >
           {toast.message}
         </div>
       )}
 
-      {/* Progress bar */}
       {progress && (
         <div className="mb-6">
-          <div className="flex items-center justify-between text-sm text-gray-600">
+          <div className="flex items-center justify-between text-sm text-text-secondary">
             <span>
               {progress.completed} of {progress.total} comparisons completed
             </span>
@@ -325,9 +332,9 @@ export function AnnotationInterface() {
               %
             </span>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200">
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-sunken">
             <div
-              className="h-full rounded-full bg-gray-900 transition-all"
+              className="h-full rounded-full bg-accent transition-all"
               style={{
                 width: `${progress.total > 0 ? (progress.completed / progress.total) * 100 : 0}%`,
               }}
@@ -336,56 +343,59 @@ export function AnnotationInterface() {
         </div>
       )}
 
-      {/* Prompt header */}
-      <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6">
+      <div className="mb-6 rounded-lg border border-border bg-surface p-6 shadow-sm">
         <div className="flex items-center gap-3">
-          <span
-            className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${
-              CATEGORY_STYLES[task.prompt.category] ||
-              "bg-gray-100 text-gray-800"
-            }`}
-          >
-            {CATEGORY_LABELS[task.prompt.category] || task.prompt.category}
+          <span className="inline-block rounded-full bg-accent-subtle px-3 py-1 text-xs font-medium text-accent-text">
+            {bucketLabel(task.prompt.bucket)}
           </span>
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-text-tertiary">
             {task.prompt.language}
             {task.prompt.targetCulture && ` / ${task.prompt.targetCulture}`}
           </span>
-          <span className="text-xs text-gray-400">{task.prompt.promptId}</span>
+          <span className="font-mono text-xs text-text-muted">
+            {task.prompt.promptId}
+          </span>
         </div>
-        <p className="mt-3 text-gray-900">{task.prompt.text}</p>
+        <p className="mt-3 text-text-primary">{task.prompt.text}</p>
       </div>
 
-      {/* Step indicator */}
       <div className="mb-6 flex items-center gap-4">
         <div
           className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
-            step === 1 ? "bg-gray-900 text-white" : "bg-green-600 text-white"
+            step === 1
+              ? "bg-accent text-accent-contrast"
+              : "bg-success text-white"
           }`}
         >
-          {step === 1 ? "1" : "\u2713"}
+          {step === 1 ? "1" : "✓"}
         </div>
-        <div className="text-sm font-medium text-gray-700">
+        <div className="text-sm font-medium text-text-secondary">
           Pairwise Comparison
         </div>
-        <div className="h-px flex-1 bg-gray-200" />
+        <div className="h-px flex-1 bg-border" />
         <div
           className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
-            step === 2 ? "bg-gray-900 text-white" : "bg-gray-200 text-gray-500"
+            step === 2
+              ? "bg-accent text-accent-contrast"
+              : "bg-surface-sunken text-text-tertiary"
           }`}
         >
           2
         </div>
         <div
-          className={`text-sm font-medium ${step === 2 ? "text-gray-700" : "text-gray-400"}`}
+          className={`flex items-center gap-2 text-sm font-medium ${step === 2 ? "text-text-secondary" : "text-text-muted"}`}
         >
-          Rubric Scoring
+          Rubric & Corrections
+          <InfoTip width="w-80">
+            Score each output 1-5 on four axes: cultural accuracy, linguistic
+            authenticity, cultural-norm adherence (honorifics/register/taboo),
+            and factual correctness.
+          </InfoTip>
         </div>
       </div>
 
       {step === 1 && (
         <>
-          {/* Pairwise comparison */}
           <div className="grid gap-6 md:grid-cols-2">
             {[
               {
@@ -403,34 +413,36 @@ export function AnnotationInterface() {
             ].map(({ label, output, value, key }) => (
               <div
                 key={value}
-                className={`rounded-lg border-2 bg-white p-6 transition-colors ${
+                className={`cursor-pointer rounded-lg border-2 bg-surface p-6 transition-colors ${
                   winner === value
-                    ? "border-gray-900 ring-1 ring-gray-900"
-                    : "border-gray-200 hover:border-gray-300"
+                    ? "border-accent ring-1 ring-accent"
+                    : "border-border hover:border-border-strong"
                 }`}
+                onClick={() => setWinner(value)}
               >
                 <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-700">
+                  <h3 className="text-sm font-semibold text-text-secondary">
                     {label}
                   </h3>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-text-muted">
                     Press {key} to select
                   </span>
                 </div>
                 <div
-                  className={`whitespace-pre-wrap text-sm leading-relaxed text-gray-800 ${
-                    isRtl ? "font-serif" : ""
-                  }`}
-                  dir={isRtl ? "rtl" : "ltr"}
+                  className={`whitespace-pre-wrap text-sm leading-relaxed text-text-primary ${textFont}`}
+                  dir={textDir}
                 >
                   {output.text}
                 </div>
                 <button
-                  onClick={() => setWinner(value)}
-                  className={`mt-4 w-full rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setWinner(value);
+                  }}
+                  className={`mt-4 w-full cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                     winner === value
-                      ? "bg-gray-900 text-white"
-                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                      ? "bg-accent text-accent-contrast"
+                      : "border border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
                   }`}
                 >
                   {winner === value ? `${label} Selected` : `Select ${label}`}
@@ -439,21 +451,20 @@ export function AnnotationInterface() {
             ))}
           </div>
 
-          {/* Explanation */}
           <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-text-secondary">
               Explanation{" "}
-              <span className="text-gray-400">(minimum 20 characters)</span>
+              <span className="text-text-muted">(minimum 20 characters)</span>
             </label>
             <textarea
               value={explanation}
               onChange={(e) => setExplanation(e.target.value)}
               placeholder="Explain why you chose this output as the winner..."
               rows={3}
-              className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              className="mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:border-accent"
             />
             {explanation.length > 0 && explanation.trim().length < 20 && (
-              <p className="mt-1 text-xs text-red-500">
+              <p className="mt-1 text-xs text-danger">
                 {20 - explanation.trim().length} more characters needed
               </p>
             )}
@@ -462,9 +473,9 @@ export function AnnotationInterface() {
           <button
             onClick={handleProceedToRubric}
             disabled={!winner || explanation.trim().length < 20}
-            className="mt-6 rounded-md bg-gray-900 px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mt-6 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Continue to Rubric Scoring
+            Continue to Rubric & Corrections
           </button>
         </>
       )}
@@ -473,7 +484,7 @@ export function AnnotationInterface() {
         <>
           <button
             onClick={() => setStep(1)}
-            className="mb-6 text-sm text-gray-500 hover:text-gray-700"
+            className="mb-6 cursor-pointer text-sm text-text-tertiary hover:text-text-secondary"
           >
             &larr; Back to pairwise comparison
           </button>
@@ -485,73 +496,110 @@ export function AnnotationInterface() {
                 rubric: rubricA,
                 setRubric: setRubricA,
                 output: task.outputA,
+                edit: editA,
+                setEdit: setEditA,
               },
               {
                 label: "Output B",
                 rubric: rubricB,
                 setRubric: setRubricB,
                 output: task.outputB,
+                edit: editB,
+                setEdit: setEditB,
               },
-            ].map(({ label, rubric, setRubric, output }) => (
-              <div
-                key={label}
-                className="rounded-lg border border-gray-200 bg-white p-6"
-              >
-                <h3 className="mb-2 text-sm font-semibold text-gray-700">
-                  {label}
-                </h3>
+            ].map(({ label, rubric, setRubric, output, edit, setEdit }) => {
+              const changed =
+                edit.trim() !== "" && edit.trim() !== output.text.trim();
+              return (
                 <div
-                  className={`mb-4 max-h-32 overflow-y-auto rounded bg-gray-50 p-3 text-xs leading-relaxed text-gray-600 ${
-                    isRtl ? "font-serif" : ""
-                  }`}
-                  dir={isRtl ? "rtl" : "ltr"}
+                  key={label}
+                  className="rounded-lg border border-border bg-surface p-6 shadow-sm"
                 >
-                  {output.text}
-                </div>
+                  <h3 className="mb-2 text-sm font-semibold text-text-secondary">
+                    {label}
+                  </h3>
+                  <div
+                    className={`mb-4 max-h-32 overflow-y-auto rounded bg-surface-sunken p-3 text-xs leading-relaxed text-text-secondary ${textFont}`}
+                    dir={textDir}
+                  >
+                    {output.text}
+                  </div>
 
-                <div className="space-y-5">
-                  {DIMENSIONS.map(({ key, label: dimLabel, notesKey }) => (
-                    <div key={key}>
-                      <div className="mb-2 text-sm font-medium text-gray-700">
-                        {dimLabel}
+                  <div className="space-y-5">
+                    {DIMENSIONS.map(({ key, label: dimLabel, notesKey }) => (
+                      <div key={key}>
+                        <div className="mb-2 text-sm font-medium text-text-secondary">
+                          {dimLabel}
+                        </div>
+                        <div className="flex gap-2">
+                          {[1, 2, 3, 4, 5].map((score) => (
+                            <button
+                              key={score}
+                              onClick={() =>
+                                setRubric((prev) => ({ ...prev, [key]: score }))
+                              }
+                              className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-sm font-medium transition-colors ${
+                                rubric[key as keyof RubricScores] === score
+                                  ? "bg-accent text-accent-contrast"
+                                  : "border border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
+                              }`}
+                            >
+                              {score}
+                            </button>
+                          ))}
+                        </div>
+                        <textarea
+                          value={
+                            (rubric[
+                              notesKey as keyof RubricScores
+                            ] as string) || ""
+                          }
+                          onChange={(e) =>
+                            setRubric((prev) => ({
+                              ...prev,
+                              [notesKey]: e.target.value,
+                            }))
+                          }
+                          placeholder="Optional notes..."
+                          rows={1}
+                          className="mt-2 w-full rounded-md border border-border px-2 py-1.5 text-xs text-text-secondary placeholder:text-text-muted focus-visible:border-accent"
+                        />
                       </div>
-                      <div className="flex gap-2">
-                        {[1, 2, 3, 4, 5].map((score) => (
-                          <button
-                            key={score}
-                            onClick={() =>
-                              setRubric((prev) => ({ ...prev, [key]: score }))
-                            }
-                            className={`flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium transition-colors ${
-                              rubric[key as keyof RubricScores] === score
-                                ? "bg-gray-900 text-white"
-                                : "border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-                            }`}
-                          >
-                            {score}
-                          </button>
-                        ))}
-                      </div>
-                      <textarea
-                        value={
-                          (rubric[notesKey as keyof RubricScores] as string) ||
-                          ""
-                        }
-                        onChange={(e) =>
-                          setRubric((prev) => ({
-                            ...prev,
-                            [notesKey]: e.target.value,
-                          }))
-                        }
-                        placeholder="Optional notes..."
-                        rows={1}
-                        className="mt-2 w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-gray-400 focus:outline-none"
-                      />
+                    ))}
+                  </div>
+
+                  {/* Direct-edit field (Agnes) — corrected Igala becomes gold training data */}
+                  <div className="mt-5 border-t border-border pt-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-sm font-medium text-text-secondary">
+                        Correct this response (optional)
+                        <InfoTip width="w-80">
+                          Rewriting the response the way a fluent speaker would
+                          creates a gold SFT training target — the single
+                          highest-value data the project collects.
+                        </InfoTip>
+                      </label>
+                      {changed && (
+                        <span className="rounded-full bg-success-subtle px-2 py-0.5 text-xs text-success">
+                          edited
+                        </span>
+                      )}
                     </div>
-                  ))}
+                    <textarea
+                      value={edit}
+                      onChange={(e) => setEdit(e.target.value)}
+                      rows={3}
+                      dir={textDir}
+                      className={`w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary focus-visible:border-accent ${textFont}`}
+                    />
+                    <p className="mt-1 text-xs text-text-muted">
+                      Rewrite it the way a fluent speaker would. Your correction
+                      is saved as a gold example.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-8 flex items-center justify-end gap-4">
@@ -562,7 +610,7 @@ export function AnnotationInterface() {
                 !isRubricComplete(rubricA) ||
                 !isRubricComplete(rubricB)
               }
-              className="rounded-md bg-gray-900 px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+              className="cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               {submitting ? "Submitting..." : "Submit Annotation"}
             </button>

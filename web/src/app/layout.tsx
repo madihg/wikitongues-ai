@@ -4,7 +4,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Wikitongues AI",
-  description: "Language model evaluation and annotation platform",
+  description:
+    "Teaching AI to speak the world's underserved languages, community by community — starting with Igala.",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },

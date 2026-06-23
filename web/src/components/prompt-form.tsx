@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { BUCKETS } from "@/lib/buckets";
 
 interface PromptData {
   id?: string;
   promptId?: string;
-  category: string;
+  bucket: string;
   language: string;
   text: string;
   sourceLanguage: string | null;
@@ -21,13 +22,6 @@ interface PromptFormProps {
   onSuccess: () => void;
 }
 
-const CATEGORIES = [
-  { value: "real_world_use", label: "Real World Use" },
-  { value: "words_concepts", label: "Words & Concepts" },
-  { value: "frontier_aspirations", label: "Frontier Aspirations" },
-  { value: "abstract_vs_everyday", label: "Abstract vs Everyday" },
-];
-
 const DIFFICULTIES = [
   { value: "basic", label: "Basic" },
   { value: "intermediate", label: "Intermediate" },
@@ -40,7 +34,7 @@ export function PromptForm({
   onClose,
   onSuccess,
 }: PromptFormProps) {
-  const [category, setCategory] = useState("real_world_use");
+  const [bucket, setBucket] = useState<string>(BUCKETS[0].key);
   const [language, setLanguage] = useState("");
   const [text, setText] = useState("");
   const [sourceLanguage, setSourceLanguage] = useState("");
@@ -54,7 +48,7 @@ export function PromptForm({
 
   useEffect(() => {
     if (prompt) {
-      setCategory(prompt.category);
+      setBucket(prompt.bucket);
       setLanguage(prompt.language);
       setText(prompt.text);
       setSourceLanguage(prompt.sourceLanguage ?? "");
@@ -62,7 +56,7 @@ export function PromptForm({
       setExpectedCulturalContext(prompt.expectedCulturalContext ?? "");
       setDifficultyLevel(prompt.difficultyLevel ?? "intermediate");
     } else {
-      setCategory("real_world_use");
+      setBucket(BUCKETS[0].key);
       setLanguage("");
       setText("");
       setSourceLanguage("");
@@ -81,8 +75,8 @@ export function PromptForm({
     e.preventDefault();
     setError("");
 
-    if (!category || !language || !text.trim()) {
-      setError("Category, language, and text are required.");
+    if (!bucket || !language || !text.trim()) {
+      setError("Bucket, language, and text are required.");
       return;
     }
 
@@ -95,7 +89,7 @@ export function PromptForm({
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          category,
+          bucket,
           language,
           text: text.trim(),
           sourceLanguage: sourceLanguage || undefined,
@@ -120,14 +114,14 @@ export function PromptForm({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">
+      <div className="w-full max-w-2xl rounded-lg bg-surface shadow-md">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <h2 className="text-lg font-semibold text-text-primary">
             {isEditing ? "Edit Prompt" : "Create Prompt"}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="cursor-pointer text-text-muted hover:text-text-secondary"
             aria-label="Close"
           >
             <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -142,46 +136,46 @@ export function PromptForm({
 
         <form onSubmit={handleSubmit} className="space-y-4 px-6 py-4">
           {error && (
-            <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-md bg-danger-subtle px-4 py-3 text-sm text-danger">
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Category <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-text-secondary">
+                Bucket <span className="text-danger">*</span>
               </label>
               <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={bucket}
+                onChange={(e) => setBucket(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
               >
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
+                {BUCKETS.map((b) => (
+                  <option key={b.key} value={b.key}>
+                    {b.label}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Language <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-text-secondary">
+                Language <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
                 placeholder="e.g. igala, lebanese_arabic"
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Prompt Text <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-text-secondary">
+              Prompt Text <span className="text-danger">*</span>
             </label>
             <textarea
               value={text}
@@ -189,56 +183,56 @@ export function PromptForm({
               rows={6}
               dir={isArabic ? "rtl" : "ltr"}
               placeholder="Enter the prompt text..."
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-text-secondary">
                 Source Language
               </label>
               <input
                 type="text"
                 value={sourceLanguage}
                 onChange={(e) => setSourceLanguage(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-text-secondary">
                 Target Culture
               </label>
               <input
                 type="text"
                 value={targetCulture}
                 onChange={(e) => setTargetCulture(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-text-secondary">
               Expected Cultural Context
             </label>
             <textarea
               value={expectedCulturalContext}
               onChange={(e) => setExpectedCulturalContext(e.target.value)}
               rows={3}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-text-secondary">
               Difficulty Level
             </label>
             <select
               value={difficultyLevel}
               onChange={(e) => setDifficultyLevel(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
             >
               {DIFFICULTIES.map((d) => (
                 <option key={d.value} value={d.value}>
@@ -248,18 +242,18 @@ export function PromptForm({
             </select>
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="cursor-pointer rounded-md border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:opacity-50"
             >
               {saving
                 ? "Saving..."

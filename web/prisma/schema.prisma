@@ -3,19 +3,44 @@ generator client {
   previewFeatures = ["postgresqlExtensions"]
 }
 
-// pgvector extension for embedding similarity search
-// If not available, RAG falls back to keyword search
+// Wikitongues AI v2 - Igala pilot.
+// Backed by Halim's Supabase project (schema selected via ?schema=wikitongues in DATABASE_URL).
+// pgvector powers RAG similarity search; RAG falls back to keyword search if unavailable.
 
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
   extensions = [vector]
 }
+
+// ─── Roles & people ──────────────────────────────────────────
 
 enum UserRole {
   LEARNER
   ANNOTATOR
   RESEARCHER
+}
+
+enum ExpertiseLevel {
+  native
+  heritage
+  fluent
+  conversational
+}
+
+// ─── The 8 evaluation buckets ────────────────────────────────
+// Each bucket is three things at once: a prompt category, a rubric axis,
+// and a data-collection target. Canonical taxonomy for the whole platform.
+enum EvalBucket {
+  orthography // 1 spelling & diacritics
+  grammar_tone // 2 grammar, morphology, tone
+  lexicon_disambig // 3 lexicon & disambiguation (interference: genetically Yoruba/Igbo; observed: Idoma)
+  dialectal_fidelity // 4 no collapse to a prestige standard
+  register_honorifics // 5 register & honorifics
+  idioms_metaphor // 6 idioms, metaphor, floating motifs
+  cultural_values // 7 cultural knowledge & values (taboo/sacred)
+  authenticity // 8 authenticity vs translationese
 }
 
 enum DifficultyLevel {
@@ -24,11 +49,10 @@ enum DifficultyLevel {
   advanced
 }
 
-enum PromptCategory {
-  real_world_use
-  words_concepts
-  frontier_aspirations
-  abstract_vs_everyday
+enum PromptSplit {
+  train // usable for training-set export
+  dev // calibration / tuning
+  test // held-out benchmark; NEVER exported for training
 }
 
 enum HandoffStatus {
@@ -37,13 +61,6 @@ enum HandoffStatus {
   approved
   corrected
   rejected
-}
-
-enum GapCategory {
-  missing_vocabulary
-  missing_cultural_context
-  missing_dialect_knowledge
-  missing_translation_pair
 }
 
 enum VerificationStatus {
@@ -65,39 +82,48 @@ model User {
   languages           AnnotatorLanguage[]
   pairwiseComparisons PairwiseComparison[]
   rubricScores        RubricScore[]
+  outputEdits         OutputEdit[]
   handoffReviews      HandoffItem[]        @relation("ReviewedBy")
   promptsCreated      Prompt[]             @relation("CreatedBy")
   promptsEdited       PromptEdit[]
 }
 
 model AnnotatorLanguage {
-  id             String @id @default(cuid())
+  id             String         @id @default(cuid())
   userId         String
-  language       String
-  expertiseLevel String // native, fluent, conversational
+  language       String         @default("igala")
+  expertiseLevel ExpertiseLevel
 
   user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, language])
 }
 
+// ─── Prompts & the held-out bank ─────────────────────────────
+
 model Prompt {
-  id                     String          @id @default(cuid())
-  promptId               String          @unique // e.g. ig_rw_001
-  category               PromptCategory
-  language               String
-  text                   String
-  sourceLanguage         String?
-  targetCulture          String?
+  id                      String          @id @default(cuid())
+  promptId                String          @unique // e.g. ig_orth_001
+  bucket                  EvalBucket
+  language                String          @default("igala")
+  text                    String
+  sourceLanguage          String?
+  targetCulture           String?
   expectedCulturalContext String?
-  difficultyLevel        DifficultyLevel @default(intermediate)
-  createdById            String?
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
+  difficultyLevel         DifficultyLevel @default(intermediate)
+  split                   PromptSplit     @default(train)
+  isHoldout               Boolean         @default(false) // convenience flag; true == split test
+  provenance              String? // e.g. community_authored, must NOT be Igala-Wikipedia for held-out
+  createdById             String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 
   createdBy    User?         @relation("CreatedBy", fields: [createdById], references: [id])
   edits        PromptEdit[]
   modelOutputs ModelOutput[]
+
+  @@index([language, bucket])
+  @@index([split])
 }
 
 model PromptEdit {
@@ -113,63 +139,114 @@ model PromptEdit {
   user   User   @relation(fields: [userId], references: [id])
 }
 
-model ModelOutput {
-  id            String   @id @default(cuid())
-  promptId      String
-  model         String   // claude, chatgpt, gemini, gemma
-  modelId       String   // full model ID e.g. claude-sonnet-4-5-20250929
-  outputText    String
-  tokenCountIn  Int?
-  tokenCountOut Int?
-  latencyMs     Int?
-  epochId       String?
-  runId         String?
-  createdAt     DateTime @default(now())
+// ─── Model generations ───────────────────────────────────────
 
-  prompt       Prompt               @relation(fields: [promptId], references: [id])
-  epoch        Epoch?               @relation(fields: [epochId], references: [id])
-  pairwiseAsA  PairwiseComparison[] @relation("ModelA")
-  pairwiseAsB  PairwiseComparison[] @relation("ModelB")
-  rubricScores RubricScore[]
+model ModelOutput {
+  id               String      @id @default(cuid())
+  promptId         String
+  model            String // denormalized label e.g. "claude", "gemma"
+  modelId          String // full provider model id
+  candidateModelId String? // arena candidate that produced this (null for legacy/manual)
+  evalRunId        String? // eval run that generated this output
+  bucket           EvalBucket? // denormalized from prompt for fast filtering
+  outputText       String
+  ragContextIds    String[]    @default([])
+  tokenCountIn     Int?
+  tokenCountOut    Int?
+  latencyMs        Int?
+  epochId          String?
+  runId            String?
+  createdAt        DateTime    @default(now())
+
+  prompt         Prompt               @relation(fields: [promptId], references: [id])
+  candidateModel CandidateModel?      @relation(fields: [candidateModelId], references: [id])
+  evalRun        EvalRun?             @relation(fields: [evalRunId], references: [id])
+  epoch          Epoch?               @relation(fields: [epochId], references: [id])
+  pairwiseAsA    PairwiseComparison[] @relation("ModelA")
+  pairwiseAsB    PairwiseComparison[] @relation("ModelB")
+  rubricScores   RubricScore[]
+  edits          OutputEdit[]
+
+  @@index([candidateModelId])
+  @@index([evalRunId])
 }
 
+// ─── Human signal: pairwise, rubric, edits ───────────────────
+
 model PairwiseComparison {
-  id             String   @id @default(cuid())
-  promptId       String   // references Prompt.promptId for easy lookup
+  id             String     @id @default(cuid())
+  promptId       String
+  bucket         EvalBucket?
   modelOutputAId String
   modelOutputBId String
-  winner         String   // "a" or "b"
+  winner         String // "a" | "b" | "tie"
   explanation    String
   annotatorId    String
   epochId        String?
-  createdAt      DateTime @default(now())
+  evalRunId      String?
+  createdAt      DateTime   @default(now())
 
   modelOutputA ModelOutput @relation("ModelA", fields: [modelOutputAId], references: [id])
   modelOutputB ModelOutput @relation("ModelB", fields: [modelOutputBId], references: [id])
   annotator    User        @relation(fields: [annotatorId], references: [id])
   epoch        Epoch?      @relation(fields: [epochId], references: [id])
+  evalRun      EvalRun?    @relation(fields: [evalRunId], references: [id])
+
+  @@index([bucket])
+  @@index([evalRunId])
 }
 
+// Rubric axes aligned to the project's four scored dimensions.
+// NOTE: creativeDepth was renamed to culturalNormAdherence (Sonja's correction).
 model RubricScore {
-  id                          String   @id @default(cuid())
+  id                          String      @id @default(cuid())
   promptId                    String
   modelOutputId               String
-  culturalAccuracy            Int      // 1-5
-  linguisticAuthenticity      Int      // 1-5
-  creativeDepth               Int      // 1-5
-  factualCorrectness          Int      // 1-5
+  bucket                      EvalBucket?
+  culturalAccuracy            Int // 1-5
+  linguisticAuthenticity      Int // 1-5
+  culturalNormAdherence       Int // 1-5 (was creativeDepth)
+  factualCorrectness          Int // 1-5
   notesCulturalAccuracy       String?
   notesLinguisticAuthenticity String?
-  notesCreativeDepth          String?
+  notesCulturalNormAdherence  String?
   notesFactualCorrectness     String?
   annotatorId                 String
   epochId                     String?
-  createdAt                   DateTime @default(now())
+  evalRunId                   String?
+  createdAt                   DateTime    @default(now())
 
   modelOutput ModelOutput @relation(fields: [modelOutputId], references: [id])
   annotator   User        @relation(fields: [annotatorId], references: [id])
   epoch       Epoch?      @relation(fields: [epochId], references: [id])
+  evalRun     EvalRun?    @relation(fields: [evalRunId], references: [id])
+
+  @@index([evalRunId])
 }
+
+// Agnes's direct-edit field as a first-class object (gold SFT target).
+model OutputEdit {
+  id                 String             @id @default(cuid())
+  modelOutputId      String
+  promptId           String
+  bucket             EvalBucket?
+  originalText       String // model output as shown
+  correctedText      String // annotator's corrected Igala
+  rationale          String?
+  annotatorId        String
+  verificationStatus VerificationStatus @default(single_annotator)
+  epochId            String?
+  createdAt          DateTime           @default(now())
+
+  modelOutput ModelOutput @relation(fields: [modelOutputId], references: [id])
+  annotator   User        @relation(fields: [annotatorId], references: [id])
+  epoch       Epoch?      @relation(fields: [epochId], references: [id])
+
+  @@index([modelOutputId])
+  @@index([verificationStatus])
+}
+
+// ─── Handoff / escalation from the learner pipeline ──────────
 
 model HandoffItem {
   id                 String             @id @default(cuid())
@@ -177,7 +254,7 @@ model HandoffItem {
   modelAnswer        String
   confidenceScore    Float
   reviewerReasoning  String?
-  gapCategory        GapCategory?
+  gapBucket          EvalBucket?
   status             HandoffStatus      @default(pending)
   correctedAnswer    String?
   reviewerId         String?
@@ -191,11 +268,13 @@ model HandoffItem {
   pipelineRun   PipelineRun? @relation(fields: [pipelineRunId], references: [id])
 }
 
+// ─── Epochs (the flywheel clock) ─────────────────────────────
+
 model Epoch {
   id                     String    @id @default(cuid())
   epochNumber            Int
-  language               String
-  trigger                String    // manual, correction_threshold, scheduled
+  language               String    @default("igala")
+  trigger                String // manual, correction_threshold, scheduled
   ragSnapshotId          String?
   promptCatalogueVersion String?
   startedAt              DateTime  @default(now())
@@ -205,8 +284,209 @@ model Epoch {
   modelOutputs        ModelOutput[]
   pairwiseComparisons PairwiseComparison[]
   rubricScores        RubricScore[]
+  outputEdits         OutputEdit[]
+  fineTuneJobs        FineTuneJob[]
+  evalRuns            EvalRun[]
 
   @@unique([epochNumber, language])
+}
+
+// ─── Researcher Model Arena ──────────────────────────────────
+
+enum CandidateKind {
+  baseline // frontier API, no adaptation
+  rag // base + retrieval
+  sft // supervised fine-tune from edits
+  dpo // preference fine-tune from pairwise
+  continued_pretrain // CPT checkpoint
+  composite // e.g. CPT base + DPO adapter + RAG
+}
+
+enum FineTuneMethod {
+  sft
+  dpo
+  continued_pretrain
+}
+
+enum FineTuneStatus {
+  draft
+  building_dataset
+  uploading
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+  registered
+}
+
+enum EvalRunStatus {
+  draft
+  generating
+  awaiting_human
+  judging
+  aggregating
+  complete
+  failed
+}
+
+enum EvalTrigger {
+  manual
+  post_finetune
+  scheduled
+  epoch_rollover
+}
+
+// A candidate is a fully-specified, reproducible generation recipe.
+model CandidateModel {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  family          String // claude, gpt, gemini, gemma, aya, lugha-llama
+  versionLabel    String?
+  kind            CandidateKind
+  language        String        @default("igala")
+
+  // config (everything needed to reproduce a generation)
+  baseModelId     String // provider model id
+  provider        String        @default("anthropic") // anthropic, openai, google, openai-compatible
+  apiEndpoint     String? // null = platform default router
+  hfRepo          String?
+  adapterUri      String? // LoRA/DPO adapter location, null for full FT
+  systemPrompt    String?
+  useSystemPrompt Boolean       @default(false)
+  ragEnabled      Boolean       @default(false)
+  ragSnapshotId   String?
+  decodingParams  Json? // {temperature, topP, maxTokens}
+
+  // lineage / provenance
+  fineTuneSource    String?
+  fineTuneJobId     String?         @unique
+  parentCandidateId String?
+
+  color       String? // viz color
+  isPublic    Boolean  @default(false) // visible on public leaderboard
+  isChampion  Boolean  @default(false)
+  archived    Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  fineTuneJob     FineTuneJob?     @relation("JobOutput", fields: [fineTuneJobId], references: [id])
+  parent          CandidateModel?  @relation("Lineage", fields: [parentCandidateId], references: [id])
+  children        CandidateModel[] @relation("Lineage")
+  modelOutputs    ModelOutput[]
+  evalRuns        EvalRun[]
+  jobsTrainedFrom FineTuneJob[]    @relation("JobBase")
+
+  @@index([language, archived])
+}
+
+model FineTuneJob {
+  id                String         @id @default(cuid())
+  method            FineTuneMethod
+  provider          String // openai, together, fireworks, vertex, modal
+  baseModelId       String
+  baseCandidateId   String?
+  language          String         @default("igala")
+  trainingFormat    String // openai-chat, dpo-pairs, raw-text-cpt
+  systemPrompt      String?
+
+  // data lineage: which collected annotations built the set
+  sourcePairwiseIds String[]     @default([])
+  sourceEditIds     String[]     @default([])
+  sourceRubricIds   String[]     @default([])
+  holdoutPromptIds  String[]     @default([])
+  bucketFilter      EvalBucket[] @default([])
+  nTrainingRows     Int?
+  datasetUri        String?
+  hyperparameters   Json?
+
+  providerJobId  String?
+  providerFileId String?
+  status         FineTuneStatus @default(draft)
+  errorMessage   String?
+  costUsd        Float?
+  epochId        String?
+
+  triggeredById String?
+  createdAt     DateTime  @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  baseCandidate   CandidateModel? @relation("JobBase", fields: [baseCandidateId], references: [id])
+  outputCandidate CandidateModel? @relation("JobOutput")
+  epoch           Epoch?          @relation(fields: [epochId], references: [id])
+
+  @@index([status, language])
+}
+
+model EvalRun {
+  id               String        @id @default(cuid())
+  candidateModelId String
+  language         String        @default("igala")
+  promptSetLabel   String
+  holdoutPromptIds String[]      @default([])
+  judgeModel       String? // null = human-only run
+  positionSwap     Boolean       @default(true)
+  status           EvalRunStatus @default(draft)
+  trigger          EvalTrigger   @default(manual)
+  epochId          String?
+
+  // denormalized roll-ups
+  nPrompts       Int     @default(0)
+  winRate        Float?
+  meanRubric     Float?
+  meanRank       Float?
+  costUsd        Float?
+  configSnapshot Json?
+  published      Boolean @default(false)
+
+  triggeredById String?
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  candidateModel      CandidateModel       @relation(fields: [candidateModelId], references: [id])
+  epoch               Epoch?               @relation(fields: [epochId], references: [id])
+  scores              EvalScore[]
+  modelOutputs        ModelOutput[]
+  pairwiseComparisons PairwiseComparison[]
+  rubricScores        RubricScore[]
+
+  @@index([candidateModelId, status])
+}
+
+model EvalScore {
+  id        String     @id @default(cuid())
+  evalRunId String
+  bucket    EvalBucket
+  promptId  String? // null = bucket-level aggregate row
+
+  // per-prompt result (promptId set)
+  modelOutputId         String?
+  candidateWon          Boolean?
+  candidateRank         Int?
+  humanScore            Float?
+  judgeScore            Float?
+  judgeRationale        String?
+  positionSwapAgreement Boolean?
+  confidence            Float?
+  rawJudgePayload       Json?
+
+  // bucket-level aggregate (promptId null)
+  btStrength      Float? // Bradley-Terry latent strength
+  btCiLow         Float?
+  btCiHigh        Float?
+  bucketWinRate   Float?
+  bucketMeanScore Float?
+  bucketN         Int?
+  distinguishable Boolean? // false = not enough signal to rank
+
+  createdAt DateTime @default(now())
+
+  evalRun EvalRun @relation(fields: [evalRunId], references: [id])
+
+  @@index([evalRunId, bucket])
 }
 
 // ─── Phase C: Conversational AI ──────────────────────────────
@@ -214,7 +494,7 @@ model Epoch {
 model Conversation {
   id        String   @id @default(cuid())
   learnerId String?
-  language  String
+  language  String   @default("igala")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -238,6 +518,7 @@ model Message {
 model PipelineRun {
   id                  String   @id @default(cuid())
   messageId           String   @unique
+  candidateModelId    String?
   translatorModel     String
   translatorOutput    String
   translatorLatencyMs Int?
@@ -247,25 +528,27 @@ model PipelineRun {
   ragContextIds       String[]
   retryCount          Int      @default(0)
   finalDisposition    String
-  gapCategory         String?
+  gapBucket           String?
   createdAt           DateTime @default(now())
 
   message     Message      @relation(fields: [messageId], references: [id])
   handoffItem HandoffItem?
 }
 
+// ─── RAG knowledge base ──────────────────────────────────────
+
 model RagEntry {
-  id                 String                         @id @default(cuid())
-  language           String
+  id                 String                      @id @default(cuid())
+  language           String                      @default("igala")
   chunkType          String
   topic              String
   content            String
   source             String
-  verificationStatus String                         @default("seed")
+  verificationStatus String                      @default("seed")
   annotatorId        String?
   embedding          Unsupported("vector(1536)")?
-  createdAt          DateTime                       @default(now())
-  updatedAt          DateTime                       @updatedAt
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
 
   history RagEntryHistory[]
 }

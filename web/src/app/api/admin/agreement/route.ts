@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 const DIMENSIONS = [
   "culturalAccuracy",
   "linguisticAuthenticity",
-  "creativeDepth",
+  "culturalNormAdherence",
   "factualCorrectness",
 ] as const;
 
@@ -39,7 +39,7 @@ export async function GET() {
       annotatorId: true,
       culturalAccuracy: true,
       linguisticAuthenticity: true,
-      creativeDepth: true,
+      culturalNormAdherence: true,
       factualCorrectness: true,
     },
   });

@@ -9,15 +9,20 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "migrate:phase-a": "tsx scripts/migrate-phase-a.ts",
-    "seed:outputs": "tsx prisma/seed-model-outputs.ts",
-    "seed:rag": "tsx prisma/seed-rag.ts"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:sql": "prisma migrate diff --from-empty --to-schema-datamodel ./prisma/schema.prisma --script",
+    "seed": "tsx prisma/seed.ts",
+    "seed:rag": "tsx prisma/seed-rag.ts",
+    "seed:arena": "tsx prisma/seed-arena.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.45",
+    "@ai-sdk/google": "^3.0.0",
     "@ai-sdk/openai": "^3.0.29",
     "@auth/prisma-adapter": "^2.11.1",
     "@prisma/client": "^6.19.2",
@@ -39,6 +44,7 @@
     ]
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^20",
@@ -49,6 +55,7 @@
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
+    "vitest": "^2.1.8",
     "yaml": "^2.8.2"
   }
 }

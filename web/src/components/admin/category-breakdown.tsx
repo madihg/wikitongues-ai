@@ -1,35 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { EvalBucket } from "@prisma/client";
+import { bucketLabel } from "@/lib/buckets";
+import { InfoTip } from "@/components/info-tip";
 
 interface CategoryModel {
   model: string;
   culturalAccuracy: number;
   linguisticAuthenticity: number;
-  creativeDepth: number;
+  culturalNormAdherence: number;
   factualCorrectness: number;
   count: number;
 }
 
 type BreakdownData = Record<string, Record<string, CategoryModel[]>>;
 
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  real_world_use: { bg: "bg-emerald-100", text: "text-emerald-800" },
-  words_concepts: { bg: "bg-blue-100", text: "text-blue-800" },
-  frontier_aspirations: { bg: "bg-purple-100", text: "text-purple-800" },
-  abstract_vs_everyday: { bg: "bg-amber-100", text: "text-amber-800" },
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  real_world_use: "Real World Use",
-  words_concepts: "Words & Concepts",
-  frontier_aspirations: "Frontier Aspirations",
-  abstract_vs_everyday: "Abstract vs. Everyday",
-};
-
 const LANGUAGE_LABELS: Record<string, string> = {
   igala: "Igala",
-  lebanese_arabic: "Lebanese Arabic",
 };
 
 export function CategoryBreakdown() {
@@ -45,8 +33,8 @@ export function CategoryBreakdown() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="text-sm text-gray-400">
+      <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+        <div className="text-sm text-text-muted">
           Loading category breakdown...
         </div>
       </div>
@@ -57,11 +45,11 @@ export function CategoryBreakdown() {
 
   if (languages.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">
+      <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-text-primary">
           Rubric Scores by Category
         </h2>
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="mt-4 text-sm text-text-tertiary">
           No rubric data available yet.
         </p>
       </div>
@@ -69,61 +57,60 @@ export function CategoryBreakdown() {
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-gray-900">
+    <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
         Rubric Scores by Category
+        <InfoTip width="w-80">
+          Performance broken down by the 8 evaluation buckets (orthography,
+          grammar/tone, lexicon, dialect, register/honorifics, idioms, cultural
+          values, authenticity). Each bucket is a distinct way models fail at
+          Igala.
+        </InfoTip>
       </h2>
 
       {languages.map((lang) => (
         <div key={lang} className="mt-6">
-          <h3 className="text-sm font-semibold text-gray-700">
+          <h3 className="text-sm font-semibold text-text-secondary">
             {LANGUAGE_LABELS[lang] ?? lang}
           </h3>
 
           <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            {Object.entries(data[lang]).map(([category, models]) => {
-              const colors = CATEGORY_COLORS[category] ?? {
-                bg: "bg-gray-100",
-                text: "text-gray-800",
-              };
-
+            {Object.entries(data[lang]).map(([bucket, models]) => {
               return (
                 <div
-                  key={category}
-                  className="rounded-lg border border-gray-100 p-4"
+                  key={bucket}
+                  className="rounded-lg border border-border p-4"
                 >
-                  <span
-                    className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${colors.bg} ${colors.text}`}
-                  >
-                    {CATEGORY_LABELS[category] ?? category}
+                  <span className="inline-block rounded-full bg-surface-sunken px-2.5 py-0.5 text-xs font-medium text-text-secondary">
+                    {bucketLabel(bucket as EvalBucket)}
                   </span>
 
                   <table className="mt-3 w-full text-left text-xs">
                     <thead>
-                      <tr className="text-gray-500">
+                      <tr className="text-text-tertiary">
                         <th className="pb-1 pr-2 font-medium">Model</th>
                         <th className="pb-1 pr-2 text-right font-medium">CA</th>
                         <th className="pb-1 pr-2 text-right font-medium">LA</th>
-                        <th className="pb-1 pr-2 text-right font-medium">CD</th>
+                        <th className="pb-1 pr-2 text-right font-medium">CN</th>
                         <th className="pb-1 text-right font-medium">FC</th>
                       </tr>
                     </thead>
                     <tbody>
                       {models.map((m) => (
-                        <tr key={m.model} className="border-t border-gray-50">
-                          <td className="py-1.5 pr-2 font-medium text-gray-800">
+                        <tr key={m.model} className="border-t border-border">
+                          <td className="py-1.5 pr-2 font-medium text-text-secondary">
                             {m.model}
                           </td>
-                          <td className="py-1.5 pr-2 text-right tabular-nums text-gray-600">
+                          <td className="py-1.5 pr-2 text-right tabular-nums text-text-secondary">
                             {m.culturalAccuracy}
                           </td>
-                          <td className="py-1.5 pr-2 text-right tabular-nums text-gray-600">
+                          <td className="py-1.5 pr-2 text-right tabular-nums text-text-secondary">
                             {m.linguisticAuthenticity}
                           </td>
-                          <td className="py-1.5 pr-2 text-right tabular-nums text-gray-600">
-                            {m.creativeDepth}
+                          <td className="py-1.5 pr-2 text-right tabular-nums text-text-secondary">
+                            {m.culturalNormAdherence}
                           </td>
-                          <td className="py-1.5 text-right tabular-nums text-gray-600">
+                          <td className="py-1.5 text-right tabular-nums text-text-secondary">
                             {m.factualCorrectness}
                           </td>
                         </tr>

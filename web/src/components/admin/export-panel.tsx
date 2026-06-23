@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { InfoTip } from "@/components/info-tip";
 
 type ExportType = "pairwise" | "rubric" | "report";
 
@@ -55,8 +56,16 @@ export function ExportPanel() {
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-gray-900">Export Data</h2>
+    <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
+        Export Data
+        <InfoTip width="w-80">
+          Download collected data for offline analysis. (For model-training
+          exports — clean DPO pairs from pairwise picks and SFT targets from
+          edits — use the Model Arena&apos;s Fine-tune jobs, which exclude
+          held-out prompts.)
+        </InfoTip>
+      </h2>
 
       <div className="mt-4 flex flex-wrap gap-3">
         {EXPORTS.map((exp) => (
@@ -64,10 +73,10 @@ export function ExportPanel() {
             key={exp.type}
             onClick={() => handleExport(exp.type)}
             disabled={downloading !== null}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-text-secondary shadow-sm transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
           >
             <svg
-              className="h-4 w-4 text-gray-400"
+              className="h-4 w-4 text-text-muted"
               fill="none"
               viewBox="0 0 24 24"
               strokeWidth={2}
@@ -84,7 +93,7 @@ export function ExportPanel() {
         ))}
       </div>
 
-      <p className="mt-3 text-xs text-gray-400">
+      <p className="mt-3 text-xs text-text-muted">
         Exports include all available data across all languages and epochs.
       </p>
     </div>

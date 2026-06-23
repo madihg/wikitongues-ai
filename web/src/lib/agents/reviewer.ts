@@ -1,12 +1,13 @@
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import type { EvalBucket } from "@prisma/client";
 
 // ─── Types ──────────────────────────────────────────────────
 
 export interface ReviewerInput {
   originalMessage: string;
   translatorOutput: string;
-  language: string; // "igala" or "lebanese_arabic"
+  language: string; // "igala"
   ragContext: {
     id: string;
     content: string;
@@ -19,15 +20,18 @@ export interface ReviewerOutput {
   passed: boolean;
   confidenceScore: number; // 0-100
   reasoning: string;
-  gapCategory:
-    | "missing_vocabulary"
-    | "missing_cultural_context"
-    | "missing_dialect_knowledge"
-    | "missing_translation_pair"
-    | null;
+  gapBucket: EvalBucket | null;
   issues: string[];
   latencyMs: number;
 }
+
+// Map the reviewer's coarse gap labels to the canonical EvalBucket taxonomy.
+const GAP_TO_BUCKET: Record<string, EvalBucket> = {
+  missing_vocabulary: "lexicon_disambig",
+  missing_cultural_context: "cultural_values",
+  missing_dialect_knowledge: "dialectal_fidelity",
+  missing_translation_pair: "authenticity",
+};
 
 // ─── Language-specific system prompts ───────────────────────
 
@@ -40,15 +44,6 @@ Igala is a West Benue-Congo language spoken primarily in Kogi State, Nigeria. It
 - Check for cultural appropriateness within Igala cultural norms and traditions
 - Be alert to invented words or phrases that may not exist in Igala
 - Note that Igala has very limited digital presence, so the model may hallucinate vocabulary`,
-
-  lebanese_arabic: `You are a linguistic and cultural reviewer specializing in Lebanese Arabic.
-
-Lebanese Arabic is a Levantine Arabic dialect spoken in Lebanon. It has non-standard orthography and differs significantly from Modern Standard Arabic (MSA). When reviewing translations or responses involving Lebanese Arabic:
-- Distinguish carefully between Lebanese dialect features and MSA — using MSA where Lebanese should be used is a dialect mismatch
-- Account for common code-switching norms (French and English borrowings are natural in Lebanese Arabic)
-- Verify cultural references are appropriate to Lebanese culture, not generic Arab culture
-- Check that informal/colloquial register is used appropriately rather than formal MSA
-- Note that orthographic conventions may vary — focus on phonological and grammatical accuracy`,
 };
 
 // ─── Review function ────────────────────────────────────────
@@ -107,7 +102,7 @@ Please evaluate the translator's response and return your assessment as JSON.`;
       passed: false,
       confidenceScore: 0,
       reasoning: `Reviewer agent error: ${error instanceof Error ? error.message : String(error)}`,
-      gapCategory: null,
+      gapBucket: null,
       issues: ["reviewer_error"],
       latencyMs: Date.now() - start,
     };
@@ -175,7 +170,7 @@ function applyScoring(
       passed: false,
       confidenceScore: 30,
       reasoning: "Reviewer model returned unparseable output.",
-      gapCategory: null,
+      gapBucket: null,
       issues: ["unparseable_review"],
       latencyMs,
     };
@@ -209,21 +204,22 @@ function applyScoring(
     passed = false;
   }
 
-  // Determine gap category
-  let gapCategory: ReviewerOutput["gapCategory"] = null;
+  // Determine gap bucket by mapping the reviewer's coarse gap label
+  // onto the canonical EvalBucket taxonomy.
+  let gapBucket: EvalBucket | null = null;
   if (
     !passed &&
     parsed.gap_category &&
     VALID_GAP_CATEGORIES.has(parsed.gap_category)
   ) {
-    gapCategory = parsed.gap_category as ReviewerOutput["gapCategory"];
+    gapBucket = GAP_TO_BUCKET[parsed.gap_category] ?? null;
   }
 
   return {
     passed,
     confidenceScore: confidence,
     reasoning: parsed.reasoning,
-    gapCategory,
+    gapBucket,
     issues: parsed.issues,
     latencyMs,
   };

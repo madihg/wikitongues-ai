@@ -2,18 +2,21 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { Prisma, PromptCategory, DifficultyLevel } from "@prisma/client";
+import type { Prisma, EvalBucket, DifficultyLevel } from "@prisma/client";
 
-const CATEGORY_ABBREV: Record<string, string> = {
-  real_world_use: "rw",
-  words_concepts: "wc",
-  frontier_aspirations: "fa",
-  abstract_vs_everyday: "ae",
+const BUCKET_ABBREV: Record<EvalBucket, string> = {
+  orthography: "orth",
+  grammar_tone: "gram",
+  lexicon_disambig: "lex",
+  dialectal_fidelity: "dial",
+  register_honorifics: "reg",
+  idioms_metaphor: "idiom",
+  cultural_values: "cult",
+  authenticity: "auth",
 };
 
 const LANG_CODES: Record<string, string> = {
   igala: "ig",
-  lebanese_arabic: "la",
 };
 
 function getLangCode(language: string): string {
@@ -27,7 +30,7 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const category = searchParams.get("category");
+  const bucket = searchParams.get("bucket");
   const language = searchParams.get("language");
   const difficulty = searchParams.get("difficulty");
   const search = searchParams.get("search");
@@ -36,8 +39,8 @@ export async function GET(req: Request) {
 
   const where: Prisma.PromptWhereInput = {};
 
-  if (category) {
-    where.category = category as PromptCategory;
+  if (bucket) {
+    where.bucket = bucket as EvalBucket;
   }
   if (language) {
     where.language = language;
@@ -76,29 +79,33 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const {
-    category,
+    bucket,
     language,
     text,
     sourceLanguage,
     targetCulture,
     expectedCulturalContext,
     difficultyLevel,
+    split,
+    isHoldout,
+    provenance,
   } = body;
 
-  if (!category || !language || !text) {
+  if (!bucket || !language || !text) {
     return NextResponse.json(
-      { error: "category, language, and text are required" },
+      { error: "bucket, language, and text are required" },
       { status: 400 },
     );
   }
 
   const langCode = getLangCode(language);
-  const catAbbrev = CATEGORY_ABBREV[category] ?? category.slice(0, 2);
+  const bucketAbbrev =
+    BUCKET_ABBREV[bucket as EvalBucket] ?? String(bucket).slice(0, 4);
 
-  // Find the highest existing number for this lang+category combo
+  // Find the highest existing number for this lang+bucket combo
   const existing = await prisma.prompt.findMany({
     where: {
-      promptId: { startsWith: `${langCode}_${catAbbrev}_` },
+      promptId: { startsWith: `${langCode}_${bucketAbbrev}_` },
     },
     select: { promptId: true },
     orderBy: { promptId: "desc" },
@@ -114,18 +121,21 @@ export async function POST(req: Request) {
     }
   }
 
-  const promptId = `${langCode}_${catAbbrev}_${String(nextNum).padStart(3, "0")}`;
+  const promptId = `${langCode}_${bucketAbbrev}_${String(nextNum).padStart(3, "0")}`;
 
   const prompt = await prisma.prompt.create({
     data: {
       promptId,
-      category: category as PromptCategory,
+      bucket: bucket as EvalBucket,
       language,
       text,
       sourceLanguage: sourceLanguage || null,
       targetCulture: targetCulture || null,
       expectedCulturalContext: expectedCulturalContext || null,
       difficultyLevel: (difficultyLevel as DifficultyLevel) || "intermediate",
+      ...(split ? { split } : {}),
+      ...(typeof isHoldout === "boolean" ? { isHoldout } : {}),
+      ...(provenance ? { provenance } : {}),
       createdById: session.user.id,
     },
     include: { createdBy: { select: { name: true, email: true } } },

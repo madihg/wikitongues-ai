@@ -100,30 +100,32 @@ export function ChatInterface() {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="max-w-md text-center">
-          <h2 className="mb-2 text-2xl font-semibold text-gray-900">
+          <h2 className="mb-2 text-2xl font-semibold text-text-primary">
             Choose Your Language
           </h2>
-          <p className="mb-8 text-gray-500">
+          <p className="mb-8 text-text-tertiary">
             Select the language you want to practice
           </p>
           <div className="flex gap-4">
             <button
               onClick={() => setLanguage("igala")}
-              className="flex-1 rounded-lg border-2 border-gray-200 px-6 py-8 transition-all hover:border-gray-900 hover:shadow-md"
+              className="flex-1 cursor-pointer rounded-lg border-2 border-border px-6 py-8 transition-all hover:border-accent hover:shadow-md"
             >
               <div className="text-3xl mb-2">🇳🇬</div>
-              <div className="font-semibold text-gray-900">Igala</div>
-              <div className="mt-1 text-sm text-gray-500">
+              <div className="font-semibold text-text-primary">Igala</div>
+              <div className="mt-1 text-sm text-text-tertiary">
                 Kogi State, Nigeria
               </div>
             </button>
             <button
               onClick={() => setLanguage("lebanese_arabic")}
-              className="flex-1 rounded-lg border-2 border-gray-200 px-6 py-8 transition-all hover:border-gray-900 hover:shadow-md"
+              className="flex-1 cursor-pointer rounded-lg border-2 border-border px-6 py-8 transition-all hover:border-accent hover:shadow-md"
             >
               <div className="text-3xl mb-2">🇱🇧</div>
-              <div className="font-semibold text-gray-900">Lebanese Arabic</div>
-              <div className="mt-1 text-sm text-gray-500">
+              <div className="font-semibold text-text-primary">
+                Lebanese Arabic
+              </div>
+              <div className="mt-1 text-sm text-text-tertiary">
                 Levantine dialect
               </div>
             </button>
@@ -136,20 +138,20 @@ export function ChatInterface() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-200 px-6 py-3">
+      <div className="flex items-center justify-between border-b border-border px-6 py-3">
         <div className="flex items-center gap-3">
           <span className="text-lg">{language === "igala" ? "🇳🇬" : "🇱🇧"}</span>
           <div>
-            <h2 className="text-sm font-semibold text-gray-900">
+            <h2 className="text-sm font-semibold text-text-primary">
               {language === "igala" ? "Igala" : "Lebanese Arabic"}
             </h2>
-            <p className="text-xs text-gray-500">Language Learning Chat</p>
+            <p className="text-xs text-text-tertiary">Language Learning Chat</p>
           </div>
         </div>
         <div className="flex gap-2">
           <button
             onClick={startNewConversation}
-            className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
+            className="cursor-pointer rounded-md bg-surface-sunken px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-border"
           >
             New Chat
           </button>
@@ -158,7 +160,7 @@ export function ChatInterface() {
               setLanguage("");
               startNewConversation();
             }}
-            className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700"
+            className="cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium text-text-tertiary hover:text-text-secondary"
           >
             Switch Language
           </button>
@@ -170,12 +172,12 @@ export function ChatInterface() {
         {messages.length === 0 && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
-              <p className="text-lg font-medium text-gray-900">
+              <p className="text-lg font-medium text-text-primary">
                 {language === "igala"
                   ? "Ene o! Start practicing Igala"
                   : "!أهلا وسهلا Start practicing Lebanese Arabic"}
               </p>
-              <p className="mt-2 text-sm text-gray-500">
+              <p className="mt-2 text-sm text-text-tertiary">
                 Type a message to begin your conversation
               </p>
             </div>
@@ -191,8 +193,8 @@ export function ChatInterface() {
               <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                   msg.role === "user"
-                    ? "bg-gray-900 text-white"
-                    : "bg-gray-100 text-gray-900"
+                    ? "bg-accent text-accent-contrast"
+                    : "bg-surface-sunken text-text-primary"
                 }`}
                 dir={isRtl ? "rtl" : "ltr"}
               >
@@ -202,22 +204,22 @@ export function ChatInterface() {
                 {msg.role === "assistant" && msg.source && (
                   <div className="mt-2 flex items-center gap-2">
                     {msg.source === "ai" && (
-                      <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                      <span className="inline-flex items-center rounded-full bg-success-subtle px-2 py-0.5 text-xs text-success">
                         AI Verified
                       </span>
                     )}
                     {msg.source === "ai_pending_review" && (
-                      <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">
+                      <span className="inline-flex items-center rounded-full bg-warning-subtle px-2 py-0.5 text-xs text-warning">
                         Pending Human Review
                       </span>
                     )}
                     {msg.source === "human" && (
-                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      <span className="inline-flex items-center rounded-full bg-info-subtle px-2 py-0.5 text-xs text-info">
                         Human Reviewed
                       </span>
                     )}
                     {msg.confidenceScore != null && (
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-text-muted">
                         {Math.round(msg.confidenceScore)}% confidence
                       </span>
                     )}
@@ -229,15 +231,15 @@ export function ChatInterface() {
 
           {loading && (
             <div className="flex justify-start">
-              <div className="rounded-2xl bg-gray-100 px-4 py-3">
+              <div className="rounded-2xl bg-surface-sunken px-4 py-3">
                 <div className="flex items-center gap-1">
-                  <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" />
+                  <div className="h-2 w-2 animate-bounce rounded-full bg-text-muted" />
                   <div
-                    className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                    className="h-2 w-2 animate-bounce rounded-full bg-text-muted"
                     style={{ animationDelay: "0.1s" }}
                   />
                   <div
-                    className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                    className="h-2 w-2 animate-bounce rounded-full bg-text-muted"
                     style={{ animationDelay: "0.2s" }}
                   />
                 </div>
@@ -251,16 +253,13 @@ export function ChatInterface() {
 
       {/* Error */}
       {error && (
-        <div className="mx-6 mb-2 rounded-md bg-red-50 px-4 py-2 text-sm text-red-600">
+        <div className="mx-6 mb-2 rounded-md bg-danger-subtle px-4 py-2 text-sm text-danger">
           {error}
         </div>
       )}
 
       {/* Input */}
-      <form
-        onSubmit={sendMessage}
-        className="border-t border-gray-200 px-6 py-4"
-      >
+      <form onSubmit={sendMessage} className="border-t border-border px-6 py-4">
         <div className="flex items-end gap-3">
           <textarea
             ref={inputRef}
@@ -279,13 +278,13 @@ export function ChatInterface() {
             }
             dir={isRtl ? "rtl" : "ltr"}
             rows={1}
-            className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-gray-500 focus:ring-0 focus:outline-none"
+            className="flex-1 resize-none rounded-xl border border-border-strong px-4 py-3 text-sm focus:border-accent focus:outline-none"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="rounded-xl bg-gray-900 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="cursor-pointer rounded-xl bg-accent px-6 py-3 text-sm font-medium text-accent-contrast transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             Send
           </button>

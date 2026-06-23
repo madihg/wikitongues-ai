@@ -26,7 +26,7 @@ export async function GET(req: Request) {
       winRate: number;
       culturalAccuracy: number;
       linguisticAuthenticity: number;
-      creativeDepth: number;
+      culturalNormAdherence: number;
       factualCorrectness: number;
       overallScore: number;
     }>
@@ -87,7 +87,7 @@ export async function GET(req: Request) {
         modelOutputId: true,
         culturalAccuracy: true,
         linguisticAuthenticity: true,
-        creativeDepth: true,
+        culturalNormAdherence: true,
         factualCorrectness: true,
       },
     });
@@ -97,7 +97,7 @@ export async function GET(req: Request) {
       {
         culturalAccuracy: number[];
         linguisticAuthenticity: number[];
-        creativeDepth: number[];
+        culturalNormAdherence: number[];
         factualCorrectness: number[];
       }
     >();
@@ -109,14 +109,14 @@ export async function GET(req: Request) {
         modelScores.set(model, {
           culturalAccuracy: [],
           linguisticAuthenticity: [],
-          creativeDepth: [],
+          culturalNormAdherence: [],
           factualCorrectness: [],
         });
       }
       const ms = modelScores.get(model)!;
       ms.culturalAccuracy.push(score.culturalAccuracy);
       ms.linguisticAuthenticity.push(score.linguisticAuthenticity);
-      ms.creativeDepth.push(score.creativeDepth);
+      ms.culturalNormAdherence.push(score.culturalNormAdherence);
       ms.factualCorrectness.push(score.factualCorrectness);
     }
 
@@ -136,7 +136,7 @@ export async function GET(req: Request) {
       const scores = modelScores.get(model);
       const ca = scores ? avg(scores.culturalAccuracy) : 0;
       const la = scores ? avg(scores.linguisticAuthenticity) : 0;
-      const cd = scores ? avg(scores.creativeDepth) : 0;
+      const cd = scores ? avg(scores.culturalNormAdherence) : 0;
       const fc = scores ? avg(scores.factualCorrectness) : 0;
       const overallScore = (ca + la + cd + fc) / 4;
 
@@ -145,7 +145,7 @@ export async function GET(req: Request) {
         winRate: Math.round(winRate * 10) / 10,
         culturalAccuracy: Math.round(ca * 100) / 100,
         linguisticAuthenticity: Math.round(la * 100) / 100,
-        creativeDepth: Math.round(cd * 100) / 100,
+        culturalNormAdherence: Math.round(cd * 100) / 100,
         factualCorrectness: Math.round(fc * 100) / 100,
         overallScore: Math.round(overallScore * 100) / 100,
       };

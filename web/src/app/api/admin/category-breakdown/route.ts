@@ -14,14 +14,14 @@ export async function GET() {
     select: {
       culturalAccuracy: true,
       linguisticAuthenticity: true,
-      creativeDepth: true,
+      culturalNormAdherence: true,
       factualCorrectness: true,
       modelOutput: {
         select: {
           model: true,
           prompt: {
             select: {
-              category: true,
+              bucket: true,
               language: true,
             },
           },
@@ -30,7 +30,7 @@ export async function GET() {
     },
   });
 
-  // Group: language -> category -> model -> dimension scores
+  // Group: language -> bucket -> model -> dimension scores
   const breakdown: Record<
     string,
     Record<
@@ -40,7 +40,7 @@ export async function GET() {
         {
           culturalAccuracy: number[];
           linguisticAuthenticity: number[];
-          creativeDepth: number[];
+          culturalNormAdherence: number[];
           factualCorrectness: number[];
         }
       >
@@ -49,7 +49,7 @@ export async function GET() {
 
   for (const score of rubricScores) {
     const lang = score.modelOutput.prompt.language;
-    const cat = score.modelOutput.prompt.category;
+    const cat = score.modelOutput.prompt.bucket;
     const model = score.modelOutput.model;
 
     if (!breakdown[lang]) breakdown[lang] = {};
@@ -58,7 +58,7 @@ export async function GET() {
       breakdown[lang][cat][model] = {
         culturalAccuracy: [],
         linguisticAuthenticity: [],
-        creativeDepth: [],
+        culturalNormAdherence: [],
         factualCorrectness: [],
       };
     }
@@ -66,7 +66,7 @@ export async function GET() {
     const bucket = breakdown[lang][cat][model];
     bucket.culturalAccuracy.push(score.culturalAccuracy);
     bucket.linguisticAuthenticity.push(score.linguisticAuthenticity);
-    bucket.creativeDepth.push(score.creativeDepth);
+    bucket.culturalNormAdherence.push(score.culturalNormAdherence);
     bucket.factualCorrectness.push(score.factualCorrectness);
   }
 
@@ -84,7 +84,7 @@ export async function GET() {
         model: string;
         culturalAccuracy: number;
         linguisticAuthenticity: number;
-        creativeDepth: number;
+        culturalNormAdherence: number;
         factualCorrectness: number;
         count: number;
       }>
@@ -98,7 +98,7 @@ export async function GET() {
         model,
         culturalAccuracy: avg(scores.culturalAccuracy),
         linguisticAuthenticity: avg(scores.linguisticAuthenticity),
-        creativeDepth: avg(scores.creativeDepth),
+        culturalNormAdherence: avg(scores.culturalNormAdherence),
         factualCorrectness: avg(scores.factualCorrectness),
         count: scores.culturalAccuracy.length,
       }));

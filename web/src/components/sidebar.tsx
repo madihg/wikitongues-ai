@@ -3,15 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-
-const annotatorLinks = [
-  { href: "/annotator", label: "Dashboard" },
-  { href: "/annotator/annotate", label: "Annotate" },
-  { href: "/annotator/prompts", label: "Prompts" },
-  { href: "/annotator/review", label: "Review" },
-];
-
-const adminLinks = [{ href: "/admin", label: "Admin Dashboard" }];
+import { navForRole, isOwner, isResearcher, PERSONAS } from "@/lib/personas";
 
 export function Sidebar() {
   const { data: session } = useSession();
@@ -19,16 +11,20 @@ export function Sidebar() {
 
   if (!session) return null;
 
-  const isResearcher = session.user.role === "RESEARCHER";
-  const links = isResearcher
-    ? [...annotatorLinks, ...adminLinks]
-    : annotatorLinks;
+  const { role, email } = session.user;
+  const links = navForRole(role, email);
+  const owner = isOwner(email);
+  const researcher = isResearcher(role, email);
+
+  const roleLabel = owner
+    ? "Owner"
+    : role.charAt(0) + role.slice(1).toLowerCase();
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-gray-200 bg-white">
-      <div className="border-b border-gray-200 px-6 py-5">
-        <h1 className="text-lg font-semibold text-gray-900">Wikitongues AI</h1>
-        <p className="mt-1 text-sm text-gray-500">Annotation Platform</p>
+    <aside className="flex h-screen w-64 flex-col border-r border-border bg-surface">
+      <div className="border-b border-border px-6 py-5">
+        <h1 className="text-lg text-text-primary">Wikitongues AI</h1>
+        <p className="mt-1 text-sm text-text-tertiary">Igala language pilot</p>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
@@ -44,27 +40,55 @@ export function Sidebar() {
               href={link.href}
               className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-gray-100 text-gray-900"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  ? "bg-accent-subtle text-accent-text"
+                  : "text-text-secondary hover:bg-surface-sunken hover:text-text-primary"
               }`}
             >
               {link.label}
             </Link>
           );
         })}
+
+        {/* Owner-only persona switcher: act as any of the three personas. */}
+        {owner && (
+          <div className="mt-6 border-t border-border pt-4">
+            <div className="px-3 pb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              View as
+            </div>
+            {PERSONAS.map((p) => (
+              <Link
+                key={p.key}
+                href={p.href}
+                className="block rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text-primary"
+                title={p.blurb}
+              >
+                {p.label}
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Researchers (non-owner) get a quick link to the learner tutor too. */}
+        {researcher && !owner && (
+          <div className="mt-6 border-t border-border pt-4">
+            <Link
+              href="/learner/chat"
+              className="block rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text-primary"
+            >
+              Learner tutor
+            </Link>
+          </div>
+        )}
       </nav>
 
-      <div className="border-t border-gray-200 px-6 py-4">
-        <div className="text-sm font-medium text-gray-900">
+      <div className="border-t border-border px-6 py-4">
+        <div className="text-sm font-medium text-text-primary">
           {session.user.name || session.user.email}
         </div>
-        <div className="text-xs text-gray-500 capitalize">
-          {session.user.role.charAt(0) +
-            session.user.role.slice(1).toLowerCase()}
-        </div>
+        <div className="text-xs text-text-tertiary">{roleLabel}</div>
         <button
           onClick={() => signOut({ callbackUrl: "/" })}
-          className="mt-3 cursor-pointer text-sm text-gray-500 hover:text-gray-700"
+          className="mt-3 cursor-pointer text-sm text-text-tertiary transition-colors hover:text-text-primary"
         >
           Sign out
         </button>

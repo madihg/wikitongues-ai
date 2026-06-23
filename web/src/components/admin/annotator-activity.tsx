@@ -33,19 +33,19 @@ export function AnnotatorActivity() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="text-sm text-gray-400">Loading activity data...</div>
+      <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+        <div className="text-sm text-text-muted">Loading activity data...</div>
       </div>
     );
   }
 
   if (data.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">
+      <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-text-primary">
           Annotator Activity
         </h2>
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="mt-4 text-sm text-text-tertiary">
           No annotator activity recorded yet.
         </p>
       </div>
@@ -62,15 +62,15 @@ export function AnnotatorActivity() {
   );
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-gray-900">
+    <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+      <h2 className="text-lg font-semibold text-text-primary">
         Annotator Activity
       </h2>
 
       <div className="mt-4 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-xs font-medium uppercase tracking-wider text-gray-500">
+            <tr className="border-b border-border text-xs font-medium uppercase tracking-wider text-text-tertiary">
               <th className="py-3 pr-4">Annotator</th>
               <th className="py-3 pr-4 text-right">Pairwise</th>
               <th className="py-3 pr-4 text-right">Rubric Scores</th>
@@ -80,27 +80,27 @@ export function AnnotatorActivity() {
           </thead>
           <tbody>
             {data.map((a) => (
-              <tr key={a.name} className="border-b border-gray-50">
-                <td className="py-3 pr-4 font-medium text-gray-900">
+              <tr key={a.name} className="border-b border-border">
+                <td className="py-3 pr-4 font-medium text-text-primary">
                   {a.name}
                 </td>
-                <td className="py-3 pr-4 text-right tabular-nums text-gray-600">
+                <td className="py-3 pr-4 text-right tabular-nums text-text-secondary">
                   {a.pairwiseCount}
                 </td>
-                <td className="py-3 pr-4 text-right tabular-nums text-gray-600">
+                <td className="py-3 pr-4 text-right tabular-nums text-text-secondary">
                   {a.rubricCount}
                 </td>
-                <td className="py-3 pr-4 text-right tabular-nums text-gray-600">
+                <td className="py-3 pr-4 text-right tabular-nums text-text-secondary">
                   {a.handoffCount}
                 </td>
-                <td className="py-3 text-right text-gray-500">
+                <td className="py-3 text-right text-text-tertiary">
                   {formatDate(a.lastActive)}
                 </td>
               </tr>
             ))}
 
-            <tr className="border-t-2 border-gray-200 font-semibold">
-              <td className="py-3 pr-4 text-gray-900">Total</td>
+            <tr className="border-t-2 border-border-strong font-semibold">
+              <td className="py-3 pr-4 text-text-primary">Total</td>
               <td className="py-3 pr-4 text-right tabular-nums">
                 {totals.pairwise}
               </td>

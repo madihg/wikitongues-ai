@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import type { EvalBucket } from "@prisma/client";
+import { bucketLabel } from "@/lib/buckets";
 import { ReviewItem } from "./review-item";
 
 interface HandoffItemData {
@@ -9,7 +11,7 @@ interface HandoffItemData {
   modelAnswer: string;
   confidenceScore: number;
   reviewerReasoning: string | null;
-  gapCategory: string | null;
+  gapBucket: EvalBucket | null;
   status: string;
   correctedAnswer: string | null;
   reviewerId: string | null;
@@ -33,32 +35,18 @@ interface Stats {
 
 type StatusFilter = "all" | "pending" | "in_review" | "resolved";
 
-const GAP_COLORS: Record<string, string> = {
-  missing_vocabulary: "bg-red-100 text-red-800",
-  missing_cultural_context: "bg-purple-100 text-purple-800",
-  missing_dialect_knowledge: "bg-orange-100 text-orange-800",
-  missing_translation_pair: "bg-blue-100 text-blue-800",
-};
-
-const GAP_LABELS: Record<string, string> = {
-  missing_vocabulary: "Missing Vocabulary",
-  missing_cultural_context: "Missing Cultural Context",
-  missing_dialect_knowledge: "Missing Dialect Knowledge",
-  missing_translation_pair: "Missing Translation Pair",
-};
-
 function confidenceColor(score: number): string {
-  if (score < 0.4) return "bg-red-500";
-  if (score < 0.6) return "bg-orange-500";
-  if (score < 0.7) return "bg-yellow-500";
-  return "bg-green-500";
+  if (score < 0.4) return "bg-danger";
+  if (score < 0.6) return "bg-warning";
+  if (score < 0.7) return "bg-warning";
+  return "bg-success";
 }
 
 function confidenceTextColor(score: number): string {
-  if (score < 0.4) return "text-red-700";
-  if (score < 0.6) return "text-orange-700";
-  if (score < 0.7) return "text-yellow-700";
-  return "text-green-700";
+  if (score < 0.4) return "text-danger";
+  if (score < 0.6) return "text-warning";
+  if (score < 0.7) return "text-warning";
+  return "text-success";
 }
 
 function relativeTime(dateStr: string): string {
@@ -76,15 +64,15 @@ function relativeTime(dateStr: string): string {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending: "bg-yellow-100 text-yellow-800",
-    in_review: "bg-blue-100 text-blue-800",
-    approved: "bg-green-100 text-green-800",
-    corrected: "bg-indigo-100 text-indigo-800",
-    rejected: "bg-red-100 text-red-800",
+    pending: "bg-warning-subtle text-warning",
+    in_review: "bg-info-subtle text-info",
+    approved: "bg-success-subtle text-success",
+    corrected: "bg-accent-subtle text-accent-text",
+    rejected: "bg-danger-subtle text-danger",
   };
   return (
     <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] ?? "bg-gray-100 text-gray-800"}`}
+      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] ?? "bg-surface-sunken text-text-secondary"}`}
     >
       {status.replace("_", " ")}
     </span>
@@ -174,20 +162,20 @@ export function ReviewQueue() {
   return (
     <div>
       {stats && (
-        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-6 rounded-lg border border-border bg-surface p-4">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              <span className="font-semibold text-gray-900">
+            <div className="text-sm text-text-secondary">
+              <span className="font-semibold text-text-primary">
                 {stats.resolved}
               </span>{" "}
               gaps resolved,{" "}
-              <span className="font-semibold text-gray-900">
+              <span className="font-semibold text-text-primary">
                 {stats.pending}
               </span>{" "}
               remaining
             </div>
             {stats.averageTimeInQueueHours !== null && (
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-text-tertiary">
                 Avg. time in queue:{" "}
                 {stats.averageTimeInQueueHours < 1
                   ? `${Math.round(stats.averageTimeInQueueHours * 60)}m`
@@ -198,7 +186,7 @@ export function ReviewQueue() {
         </div>
       )}
 
-      <div className="mb-4 flex gap-1 rounded-lg border border-gray-200 bg-white p-1">
+      <div className="mb-4 flex gap-1 rounded-lg border border-border bg-surface p-1">
         {filters.map((f) => (
           <button
             key={f.key}
@@ -206,15 +194,15 @@ export function ReviewQueue() {
               setFilter(f.key);
               setPage(1);
             }}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               filter === f.key
-                ? "bg-gray-900 text-white"
-                : "text-gray-600 hover:bg-gray-100"
+                ? "bg-accent text-accent-contrast"
+                : "text-text-secondary hover:bg-surface-sunken"
             }`}
           >
             {f.label}
             {f.key === "pending" && stats ? (
-              <span className="ml-1.5 rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800">
+              <span className="ml-1.5 rounded-full bg-warning-subtle px-1.5 py-0.5 text-xs text-warning">
                 {stats.pending}
               </span>
             ) : null}
@@ -223,12 +211,12 @@ export function ReviewQueue() {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-gray-500">
+        <div className="py-12 text-center text-sm text-text-tertiary">
           Loading...
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-12 text-center">
-          <p className="text-sm text-gray-400">
+        <div className="rounded-lg border border-dashed border-border-strong bg-surface p-12 text-center">
+          <p className="text-sm text-text-muted">
             No items pending review. The AI is doing well!
           </p>
         </div>
@@ -246,24 +234,22 @@ export function ReviewQueue() {
               <button
                 key={item.id}
                 onClick={() => setExpandedId(item.id)}
-                className="block w-full rounded-lg border border-gray-200 bg-white p-4 text-left transition-shadow hover:shadow-md"
+                className="block w-full cursor-pointer rounded-lg border border-border bg-surface p-4 text-left transition-shadow hover:shadow-md"
               >
                 <div className="flex items-start justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="mb-2 flex items-center gap-2">
                       <StatusBadge status={item.status} />
-                      {item.gapCategory && (
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${GAP_COLORS[item.gapCategory] ?? "bg-gray-100 text-gray-800"}`}
-                        >
-                          {GAP_LABELS[item.gapCategory] ?? item.gapCategory}
+                      {item.gapBucket && (
+                        <span className="inline-flex rounded-full bg-surface-sunken px-2 py-0.5 text-xs font-medium text-text-secondary">
+                          {bucketLabel(item.gapBucket)}
                         </span>
                       )}
                     </div>
-                    <p className="truncate text-sm text-gray-900">
+                    <p className="truncate text-sm text-text-primary">
                       {item.learnerRequest}
                     </p>
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-text-tertiary">
                       {relativeTime(item.createdAt)}
                     </p>
                   </div>
@@ -273,7 +259,7 @@ export function ReviewQueue() {
                     >
                       {Math.round(item.confidenceScore * 100)}%
                     </span>
-                    <div className="mt-1 h-1.5 w-16 overflow-hidden rounded-full bg-gray-200">
+                    <div className="mt-1 h-1.5 w-16 overflow-hidden rounded-full bg-surface-sunken">
                       <div
                         className={`h-full rounded-full ${confidenceColor(item.confidenceScore)}`}
                         style={{
@@ -294,17 +280,17 @@ export function ReviewQueue() {
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50"
+            className="cursor-pointer rounded-md border border-border-strong px-3 py-1.5 text-sm text-text-secondary disabled:opacity-50"
           >
             Previous
           </button>
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-text-tertiary">
             Page {page} of {totalPages}
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50"
+            className="cursor-pointer rounded-md border border-border-strong px-3 py-1.5 text-sm text-text-secondary disabled:opacity-50"
           >
             Next
           </button>

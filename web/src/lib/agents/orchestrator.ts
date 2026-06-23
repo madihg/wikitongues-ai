@@ -1,3 +1,4 @@
+import type { EvalBucket } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { translate } from "./translator";
 import { review } from "./reviewer";
@@ -216,7 +217,7 @@ interface FinalizeParams {
     passed: boolean;
     confidenceScore: number;
     reasoning: string;
-    gapCategory: string | null;
+    gapBucket: EvalBucket | null;
     issues: string[];
     latencyMs: number;
   };
@@ -265,7 +266,7 @@ async function finalize(params: FinalizeParams): Promise<OrchestratorResult> {
       ragContextIds: translatorResult.ragContextIds,
       retryCount,
       finalDisposition: disposition,
-      gapCategory: reviewerResult.gapCategory,
+      gapBucket: reviewerResult.gapBucket,
     },
   });
 
@@ -283,12 +284,7 @@ async function finalize(params: FinalizeParams): Promise<OrchestratorResult> {
         modelAnswer: translatorResult.outputText,
         confidenceScore,
         reviewerReasoning: reviewerResult.reasoning,
-        gapCategory: reviewerResult.gapCategory as
-          | "missing_vocabulary"
-          | "missing_cultural_context"
-          | "missing_dialect_knowledge"
-          | "missing_translation_pair"
-          | undefined,
+        gapBucket: reviewerResult.gapBucket,
         status: "pending",
         pipelineRunId: pipelineRun.id,
       },
