@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { bucketLabel } from "@/lib/buckets";
+import { InfoTip } from "@/components/info-tip";
 import type { EvalBucket } from "@prisma/client";
 
 interface Vote {
@@ -68,8 +69,13 @@ export function ContestedItems() {
   return (
     <div className="space-y-8">
       <section>
-        <h2 className="mb-1 text-lg text-text-primary">
+        <h2 className="mb-1 flex items-center gap-2 text-lg text-text-primary">
           Contested comparisons
+          <InfoTip width="w-80">
+            Prompts where annotators disagreed on the winner. Group resolution
+            here raises inter-annotator agreement; promoting an edit marks it
+            multi-annotator-verified (gold).
+          </InfoTip>
         </h2>
         <p className="mb-4 text-sm text-text-secondary">
           Prompts where annotators disagreed on the winner. Resolve these

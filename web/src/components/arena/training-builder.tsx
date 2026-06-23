@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BUCKETS, bucketLabel } from "@/lib/buckets";
+import { InfoTip } from "@/components/info-tip";
 import type { EvalBucket, VerificationStatus } from "@prisma/client";
 
 interface Options {
@@ -182,7 +183,17 @@ export function TrainingBuilder() {
         className="grid gap-4 rounded-lg border border-border bg-surface p-4 shadow-sm sm:grid-cols-2"
       >
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-text-secondary">Method</span>
+          <span className="flex items-center gap-2 text-text-secondary">
+            Method
+            <InfoTip width="w-80">
+              Build a training set from collected annotations and launch a
+              fine-tune. DPO uses winner/loser pairs from pairwise comparisons;
+              SFT uses annotator corrections as gold completions. Held-out
+              (test-split) prompts are always excluded. The &quot;mock&quot;
+              provider simulates training; wire a real provider to train for
+              real.
+            </InfoTip>
+          </span>
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value as Method)}

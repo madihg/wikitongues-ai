@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { InfoTip } from "@/components/info-tip";
 
 interface LeaderboardEntry {
   model: string;
@@ -63,8 +64,15 @@ export function Leaderboard() {
 
   return (
     <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-text-primary">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
         Model Leaderboard
+        <InfoTip width="w-80">
+          Models ranked by aggregate human scores per language. Win rate is how
+          often a model&apos;s output was picked over another&apos;s in blind
+          pairwise comparisons; the rubric columns are mean 1-5 scores on each
+          axis. This is the legacy per-model view; the Model Arena gives the
+          per-bucket, statistically-honest ranking.
+        </InfoTip>
       </h2>
 
       <div className="mt-4 flex gap-1 border-b border-border">

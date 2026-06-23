@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { EvalBucket } from "@prisma/client";
 import { bucketLabel } from "@/lib/buckets";
+import { InfoTip } from "@/components/info-tip";
 
 interface CategoryModel {
   model: string;
@@ -57,8 +58,14 @@ export function CategoryBreakdown() {
 
   return (
     <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-text-primary">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
         Rubric Scores by Category
+        <InfoTip width="w-80">
+          Performance broken down by the 8 evaluation buckets (orthography,
+          grammar/tone, lexicon, dialect, register/honorifics, idioms, cultural
+          values, authenticity). Each bucket is a distinct way models fail at
+          Igala.
+        </InfoTip>
       </h2>
 
       {languages.map((lang) => (

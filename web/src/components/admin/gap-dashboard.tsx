@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { EvalBucket } from "@prisma/client";
 import { bucketLabel } from "@/lib/buckets";
+import { InfoTip } from "@/components/info-tip";
 
 interface GapData {
   totalGaps: number;
@@ -49,8 +50,13 @@ export function GapDashboard() {
 
   return (
     <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-text-primary">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
         Gap Closure Overview
+        <InfoTip width="w-80">
+          Knowledge gaps surfaced when the AI pipeline escalated a
+          low-confidence answer, categorized by the linguistic bucket it failed.
+          Resolving gaps feeds verified knowledge back into RAG.
+        </InfoTip>
       </h2>
 
       <div className="mt-4 grid grid-cols-3 gap-4">

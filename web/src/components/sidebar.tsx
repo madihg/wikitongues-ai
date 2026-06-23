@@ -3,18 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-
-const annotatorLinks = [
-  { href: "/annotator", label: "Dashboard" },
-  { href: "/annotator/annotate", label: "Annotate" },
-  { href: "/annotator/prompts", label: "Prompts" },
-  { href: "/annotator/review", label: "Review" },
-];
-
-const researcherLinks = [
-  { href: "/admin", label: "Researcher Dashboard" },
-  { href: "/admin/arena", label: "Model Arena" },
-];
+import { navForRole, isOwner, isResearcher, PERSONAS } from "@/lib/personas";
 
 export function Sidebar() {
   const { data: session } = useSession();
@@ -22,10 +11,14 @@ export function Sidebar() {
 
   if (!session) return null;
 
-  const isResearcher = session.user.role === "RESEARCHER";
-  const links = isResearcher
-    ? [...annotatorLinks, ...researcherLinks]
-    : annotatorLinks;
+  const { role, email } = session.user;
+  const links = navForRole(role, email);
+  const owner = isOwner(email);
+  const researcher = isResearcher(role, email);
+
+  const roleLabel = owner
+    ? "Owner"
+    : role.charAt(0) + role.slice(1).toLowerCase();
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-border bg-surface">
@@ -55,16 +48,44 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Owner-only persona switcher: act as any of the three personas. */}
+        {owner && (
+          <div className="mt-6 border-t border-border pt-4">
+            <div className="px-3 pb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              View as
+            </div>
+            {PERSONAS.map((p) => (
+              <Link
+                key={p.key}
+                href={p.href}
+                className="block rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text-primary"
+                title={p.blurb}
+              >
+                {p.label}
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Researchers (non-owner) get a quick link to the learner tutor too. */}
+        {researcher && !owner && (
+          <div className="mt-6 border-t border-border pt-4">
+            <Link
+              href="/learner/chat"
+              className="block rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text-primary"
+            >
+              Learner tutor
+            </Link>
+          </div>
+        )}
       </nav>
 
       <div className="border-t border-border px-6 py-4">
         <div className="text-sm font-medium text-text-primary">
           {session.user.name || session.user.email}
         </div>
-        <div className="text-xs capitalize text-text-tertiary">
-          {session.user.role.charAt(0) +
-            session.user.role.slice(1).toLowerCase()}
-        </div>
+        <div className="text-xs text-text-tertiary">{roleLabel}</div>
         <button
           onClick={() => signOut({ callbackUrl: "/" })}
           className="mt-3 cursor-pointer text-sm text-text-tertiary transition-colors hover:text-text-primary"

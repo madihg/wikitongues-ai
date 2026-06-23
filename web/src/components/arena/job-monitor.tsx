@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { InfoTip } from "@/components/info-tip";
 
 interface JobCandidateRef {
   id: string;
@@ -89,10 +90,15 @@ export function JobMonitor() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-text-secondary">
+        <p className="flex items-center gap-2 text-sm text-text-secondary">
           Each job turns collected annotations into a training set, runs it
           through a provider, and (on success) auto-registers the result as a
           new candidate with a queued held-out eval.
+          <InfoTip width="w-80">
+            Fine-tune jobs and their status. On success a job auto-registers its
+            output as a new candidate and queues an evaluation against the
+            held-out bank — closing the loop.
+          </InfoTip>
         </p>
         <button
           onClick={load}

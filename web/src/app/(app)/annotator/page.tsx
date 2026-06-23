@@ -2,6 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { HelpButton } from "@/components/help-button";
+import { isResearcher } from "@/lib/personas";
 
 function StatCard({
   title,
@@ -23,6 +24,7 @@ function StatCard({
 
 export default function AnnotatorDashboard() {
   const { data: session } = useSession();
+  const researcher = isResearcher(session?.user?.role, session?.user?.email);
 
   return (
     <div>
@@ -33,22 +35,28 @@ export default function AnnotatorDashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <div
+        className={`grid grid-cols-1 gap-6 ${researcher ? "md:grid-cols-3" : "md:grid-cols-1"}`}
+      >
         <StatCard
           title="Pending Annotations"
           value="12"
-          description="Pairwise comparisons and rubric scores awaiting review"
+          description="Pairwise comparisons and rubric scores awaiting your input"
         />
-        <StatCard
-          title="Pending Reviews"
-          value="3"
-          description="Handoff items flagged for human review"
-        />
-        <StatCard
-          title="Prompts Managed"
-          value="47"
-          description="Total prompts in the catalogue"
-        />
+        {researcher && (
+          <>
+            <StatCard
+              title="Pending Reviews"
+              value="3"
+              description="Handoff items flagged for human review"
+            />
+            <StatCard
+              title="Prompts Managed"
+              value="47"
+              description="Total prompts in the Igala catalogue"
+            />
+          </>
+        )}
       </div>
 
       <div className="mt-8">
@@ -76,34 +84,28 @@ export default function AnnotatorDashboard() {
             <tbody className="divide-y divide-border">
               {[
                 {
-                  prompt: "Describe a traditional Basque greeting",
+                  prompt: "Greet an elder respectfully in Igala",
                   type: "Pairwise",
                   status: "Pending",
                   date: "Today",
                 },
                 {
-                  prompt: "Translate proverb about rain and seasons",
+                  prompt: "Render an Igala proverb about patience",
                   type: "Rubric",
                   status: "Pending",
                   date: "Today",
                 },
                 {
-                  prompt: "Explain kinship terms in Swahili culture",
-                  type: "Review",
-                  status: "Flagged",
+                  prompt: "Igala kinship terms for extended family",
+                  type: "Pairwise",
+                  status: "Completed",
                   date: "Yesterday",
                 },
                 {
-                  prompt: "Cultural context for Quechua harvest ceremonies",
-                  type: "Pairwise",
-                  status: "Completed",
-                  date: "Feb 17",
-                },
-                {
-                  prompt: "Nuances of formal vs informal address in Arabic",
+                  prompt: "Cultural context for an Igala naming ceremony",
                   type: "Rubric",
                   status: "Completed",
-                  date: "Feb 16",
+                  date: "Jun 17",
                 },
               ].map((row, i) => (
                 <tr key={i} className="hover:bg-surface-sunken">

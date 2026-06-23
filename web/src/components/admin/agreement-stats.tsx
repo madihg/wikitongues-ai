@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { InfoTip } from "@/components/info-tip";
 
 interface AgreementDimension {
   dimension: string;
@@ -57,8 +58,15 @@ export function AgreementStats() {
 
   return (
     <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-text-primary">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
         Inter-Annotator Agreement
+        <InfoTip width="w-80">
+          Inter-annotator agreement via Krippendorff&apos;s alpha (0 = chance, 1
+          = perfect). It measures whether annotators apply the rubric
+          consistently. Subjective axes (cultural-norm adherence, idioms)
+          legitimately score lower; raise agreement with collective calibration
+          sessions rather than forcing it.
+        </InfoTip>
       </h2>
 
       {!hasData ? (

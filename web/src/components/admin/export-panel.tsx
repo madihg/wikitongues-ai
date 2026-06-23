@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { InfoTip } from "@/components/info-tip";
 
 type ExportType = "pairwise" | "rubric" | "report";
 
@@ -56,7 +57,15 @@ export function ExportPanel() {
 
   return (
     <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-text-primary">Export Data</h2>
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
+        Export Data
+        <InfoTip width="w-80">
+          Download collected data for offline analysis. (For model-training
+          exports — clean DPO pairs from pairwise picks and SFT targets from
+          edits — use the Model Arena&apos;s Fine-tune jobs, which exclude
+          held-out prompts.)
+        </InfoTip>
+      </h2>
 
       <div className="mt-4 flex flex-wrap gap-3">
         {EXPORTS.map((exp) => (

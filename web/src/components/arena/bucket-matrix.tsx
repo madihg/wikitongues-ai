@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { InfoTip } from "@/components/info-tip";
 
 interface Cell {
   bucket: string;
@@ -144,6 +145,12 @@ export function BucketMatrix() {
         <span className="font-mono">
           human pairwise · Bradley-Terry per bucket
         </span>
+        <InfoTip width="w-80">
+          Each cell is a 0-100 Bradley-Terry &quot;arena strength&quot; from
+          human pairwise votes, per bucket. &quot;ns&quot; = not statistically
+          distinguishable at the current sample size (expected while the
+          annotator pool is small). LLM-as-judge is never used to rank here.
+        </InfoTip>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-sm">

@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { canAccess } from "@/lib/personas";
 
 export function RoleGuard({
   allowedRoles,
@@ -14,6 +15,9 @@ export function RoleGuard({
   const { data: session, status } = useSession();
   const router = useRouter();
 
+  const allowed =
+    !!session && canAccess(allowedRoles, session.user.role, session.user.email);
+
   useEffect(() => {
     if (status === "loading") return;
 
@@ -22,10 +26,10 @@ export function RoleGuard({
       return;
     }
 
-    if (!allowedRoles.includes(session.user.role)) {
+    if (!allowed) {
       router.push("/");
     }
-  }, [session, status, allowedRoles, router]);
+  }, [session, status, allowed, router]);
 
   if (status === "loading") {
     return (
@@ -35,7 +39,7 @@ export function RoleGuard({
     );
   }
 
-  if (!session || !allowedRoles.includes(session.user.role)) {
+  if (!allowed) {
     return null;
   }
 

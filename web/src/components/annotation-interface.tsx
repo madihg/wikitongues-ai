@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { EvalBucket } from "@prisma/client";
 import { bucketLabel } from "@/lib/buckets";
+import { InfoTip } from "@/components/info-tip";
 
 interface PromptData {
   id: string;
@@ -382,9 +383,14 @@ export function AnnotationInterface() {
           2
         </div>
         <div
-          className={`text-sm font-medium ${step === 2 ? "text-text-secondary" : "text-text-muted"}`}
+          className={`flex items-center gap-2 text-sm font-medium ${step === 2 ? "text-text-secondary" : "text-text-muted"}`}
         >
           Rubric & Corrections
+          <InfoTip width="w-80">
+            Score each output 1-5 on four axes: cultural accuracy, linguistic
+            authenticity, cultural-norm adherence (honorifics/register/taboo),
+            and factual correctness.
+          </InfoTip>
         </div>
       </div>
 
@@ -565,8 +571,13 @@ export function AnnotationInterface() {
                   {/* Direct-edit field (Agnes) — corrected Igala becomes gold training data */}
                   <div className="mt-5 border-t border-border pt-4">
                     <div className="mb-2 flex items-center justify-between">
-                      <label className="text-sm font-medium text-text-secondary">
+                      <label className="flex items-center gap-2 text-sm font-medium text-text-secondary">
                         Correct this response (optional)
+                        <InfoTip width="w-80">
+                          Rewriting the response the way a fluent speaker would
+                          creates a gold SFT training target — the single
+                          highest-value data the project collects.
+                        </InfoTip>
                       </label>
                       {changed && (
                         <span className="rounded-full bg-success-subtle px-2 py-0.5 text-xs text-success">

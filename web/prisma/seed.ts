@@ -131,7 +131,20 @@ async function main() {
     },
   });
 
-  console.log("Created test users");
+  // Owner account (Halim) — RESEARCHER role + owner privileges (can switch personas).
+  const ownerHash = await hash(process.env.OWNER_PASSWORD || "password", 12);
+  await prisma.user.upsert({
+    where: { email: "madihalim@gmail.com" },
+    update: { role: "RESEARCHER" },
+    create: {
+      email: "madihalim@gmail.com",
+      name: "Halim Madi",
+      passwordHash: ownerHash,
+      role: "RESEARCHER",
+    },
+  });
+
+  console.log("Created users (incl. owner madihalim@gmail.com)");
 
   // Add annotator language (Igala only)
   await prisma.annotatorLanguage.upsert({

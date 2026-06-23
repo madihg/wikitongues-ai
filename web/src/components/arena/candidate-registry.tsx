@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { InfoTip } from "@/components/info-tip";
 
 interface Candidate {
   id: string;
@@ -133,9 +134,14 @@ export function CandidateRegistry() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-text-secondary">
+        <p className="flex items-center gap-2 text-sm text-text-secondary">
           A candidate is a reproducible recipe: base model + optional RAG,
           system prompt, or fine-tune artifact.
+          <InfoTip width="w-80">
+            A candidate is a fully-specified, reproducible generation recipe, so
+            &quot;Claude baseline&quot;, &quot;Gemma + RAG&quot;, and a
+            fine-tuned variant are all just rows that differ by one ingredient.
+          </InfoTip>
         </p>
         <button
           onClick={() => setOpen((v) => !v)}
@@ -199,7 +205,15 @@ export function CandidateRegistry() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-text-secondary">Kind</span>
+            <span className="flex items-center gap-2 text-text-secondary">
+              Kind
+              <InfoTip width="w-80">
+                baseline = frontier API, no adaptation. rag = base + retrieval.
+                sft = supervised fine-tune from edits. dpo = preference
+                fine-tune from pairwise picks. continued_pretrain = a CPT
+                checkpoint. composite = a stack of these.
+              </InfoTip>
+            </span>
             <select
               value={form.kind}
               onChange={(e) => setForm({ ...form, kind: e.target.value })}
