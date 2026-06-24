@@ -36,6 +36,7 @@ export async function GET() {
 
   // Pairwise: map each comparison's two outputs to their candidates.
   const comparisons = await prisma.pairwiseComparison.findMany({
+    where: { isDemo: false },
     select: {
       winner: true,
       bucket: true,
@@ -60,6 +61,7 @@ export async function GET() {
 
   // Rubric: map each score's output to its candidate.
   const rubricScores = await prisma.rubricScore.findMany({
+    where: { isDemo: false },
     select: {
       bucket: true,
       culturalAccuracy: true,

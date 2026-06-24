@@ -30,6 +30,16 @@ const NAV = [
     tip: "Items where annotators disagreed, plus edits pending verification. Resolve these together to raise inter-annotator agreement and promote corrections to gold.",
   },
   {
+    href: "/admin/arena/costs",
+    label: "Cost ledger",
+    tip: "Holistic spend across providers — inference (estimated from token counts) and fine-tune training, including the cost of Together sessions.",
+  },
+  {
+    href: "/admin/arena/demo",
+    label: "Demo session",
+    tip: "Start a throwaway walkthrough of the real annotation episode for a live audience. Demo records never reach training, the leaderboard, or fine-tune sources.",
+  },
+  {
     href: "/admin",
     label: "Dashboard",
     tip: "Back to the researcher overview.",

@@ -157,8 +157,6 @@ export function PromptList() {
     setPage(1);
   }
 
-  const isArabicLang = (lang: string) => lang === "lebanese_arabic";
-
   return (
     <div>
       {/* Toast */}
@@ -282,7 +280,7 @@ export function PromptList() {
                     </td>
                     <td
                       className="max-w-xs truncate px-4 py-3 text-text-secondary"
-                      dir={isArabicLang(prompt.language) ? "rtl" : "ltr"}
+                      dir="ltr"
                     >
                       {prompt.text.length > 80
                         ? prompt.text.slice(0, 80) + "..."
@@ -333,9 +331,7 @@ export function PromptList() {
                             </h4>
                             <p
                               className="mt-1 whitespace-pre-wrap text-sm text-text-secondary"
-                              dir={
-                                isArabicLang(prompt.language) ? "rtl" : "ltr"
-                              }
+                              dir="ltr"
                             >
                               {expandedPrompt.text}
                             </p>

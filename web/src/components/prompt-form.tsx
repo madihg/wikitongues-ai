@@ -69,8 +69,6 @@ export function PromptForm({
 
   if (!open) return null;
 
-  const isArabic = language === "lebanese_arabic";
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -167,7 +165,7 @@ export function PromptForm({
                 type="text"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                placeholder="e.g. igala, lebanese_arabic"
+                placeholder="igala"
                 className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
               />
             </div>
@@ -181,7 +179,7 @@ export function PromptForm({
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={6}
-              dir={isArabic ? "rtl" : "ltr"}
+              dir="ltr"
               placeholder="Enter the prompt text..."
               className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
             />

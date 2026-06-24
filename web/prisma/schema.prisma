@@ -70,6 +70,15 @@ enum VerificationStatus {
   expert_reviewed
 }
 
+// Holistic cost ledger categories (the instrument's spend).
+enum CostCategory {
+  finetune // Together / OpenAI fine-tune training runs
+  eval_generation // candidate answer generation on the held-out bank
+  judge // LLM-as-judge triage calls
+  inference // ad-hoc / learner-tutor inference
+  other
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -83,6 +92,8 @@ model User {
   pairwiseComparisons PairwiseComparison[]
   rubricScores        RubricScore[]
   outputEdits         OutputEdit[]
+  coldAuthorAnswers   ColdAuthorAnswer[]
+  promptFlags         PromptFlag[]
   handoffReviews      HandoffItem[]        @relation("ReviewedBy")
   promptsCreated      Prompt[]             @relation("CreatedBy")
   promptsEdited       PromptEdit[]
@@ -118,9 +129,11 @@ model Prompt {
   createdAt               DateTime        @default(now())
   updatedAt               DateTime        @updatedAt
 
-  createdBy    User?         @relation("CreatedBy", fields: [createdById], references: [id])
-  edits        PromptEdit[]
-  modelOutputs ModelOutput[]
+  createdBy         User?              @relation("CreatedBy", fields: [createdById], references: [id])
+  edits             PromptEdit[]
+  modelOutputs      ModelOutput[]
+  coldAuthorAnswers ColdAuthorAnswer[]
+  flags             PromptFlag[]
 
   @@index([language, bucket])
   @@index([split])
@@ -156,6 +169,8 @@ model ModelOutput {
   latencyMs        Int?
   epochId          String?
   runId            String?
+  isDemo           Boolean     @default(false) // generated inside a demo/testing session
+  demoSessionId    String?
   createdAt        DateTime    @default(now())
 
   prompt         Prompt               @relation(fields: [promptId], references: [id])
@@ -179,11 +194,14 @@ model PairwiseComparison {
   bucket         EvalBucket?
   modelOutputAId String
   modelOutputBId String
-  winner         String // "a" | "b" | "tie"
+  winner         String // "a" | "b" | "tie" | "both_inadequate"
+  confidence     Int? // 1-4 self-reported confidence in the pick
   explanation    String
   annotatorId    String
   epochId        String?
   evalRunId      String?
+  isDemo         Boolean    @default(false) // collected in a demo/testing session — never exported
+  demoSessionId  String?
   createdAt      DateTime   @default(now())
 
   modelOutputA ModelOutput @relation("ModelA", fields: [modelOutputAId], references: [id])
@@ -194,6 +212,7 @@ model PairwiseComparison {
 
   @@index([bucket])
   @@index([evalRunId])
+  @@index([isDemo])
 }
 
 // Rubric axes aligned to the project's four scored dimensions.
@@ -211,9 +230,12 @@ model RubricScore {
   notesLinguisticAuthenticity String?
   notesCulturalNormAdherence  String?
   notesFactualCorrectness     String?
+  confidence                  Int? // optional 1-4 confidence in the scoring
   annotatorId                 String
   epochId                     String?
   evalRunId                   String?
+  isDemo                      Boolean     @default(false)
+  demoSessionId               String?
   createdAt                   DateTime    @default(now())
 
   modelOutput ModelOutput @relation(fields: [modelOutputId], references: [id])
@@ -233,9 +255,14 @@ model OutputEdit {
   originalText       String // model output as shown
   correctedText      String // annotator's corrected Igala
   rationale          String?
+  provenance         String? // model_correction | salvage_both_inadequate
+  consentBenchmark   Boolean            @default(true) // may enter the public benchmark
+  consentTraining    Boolean            @default(true) // may enter training sets
   annotatorId        String
   verificationStatus VerificationStatus @default(single_annotator)
   epochId            String?
+  isDemo             Boolean            @default(false)
+  demoSessionId      String?
   createdAt          DateTime           @default(now())
 
   modelOutput ModelOutput @relation(fields: [modelOutputId], references: [id])
@@ -244,6 +271,79 @@ model OutputEdit {
 
   @@index([modelOutputId])
   @@index([verificationStatus])
+  @@index([isDemo])
+}
+
+// The annotator's OWN answer, authored BEFORE any model output is revealed
+// (source-free gold). An edit inherits the translationese of the text it edits;
+// a cold answer does not. This is the anti-translationese signal.
+model ColdAuthorAnswer {
+  id                 String             @id @default(cuid())
+  promptId           String
+  bucket             EvalBucket?
+  answerText         String
+  provenance         String             @default("speaker_authored_sourcefree")
+  consentBenchmark   Boolean            @default(true)
+  consentTraining    Boolean            @default(true)
+  annotatorId        String
+  verificationStatus VerificationStatus @default(single_annotator)
+  epochId            String?
+  isDemo             Boolean            @default(false)
+  demoSessionId      String?
+  createdAt          DateTime           @default(now())
+
+  prompt    Prompt @relation(fields: [promptId], references: [id])
+  annotator User   @relation(fields: [annotatorId], references: [id])
+
+  @@index([promptId])
+  @@index([annotatorId])
+  @@index([isDemo])
+}
+
+// An annotator flags a prompt as malformed / untranslatable so it can be culled.
+// Shaping the instrument is part of the annotator's role.
+model PromptFlag {
+  id          String   @id @default(cuid())
+  promptId    String
+  annotatorId String
+  reason      String
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  prompt    Prompt @relation(fields: [promptId], references: [id])
+  annotator User   @relation(fields: [annotatorId], references: [id])
+
+  @@index([promptId])
+}
+
+// A researcher-launched walkthrough. Records created under it carry isDemo=true and
+// the demoSessionId, and are excluded from training exports, the leaderboard, and
+// fine-tune source selection. This is the "run a live demo without polluting data" seam.
+model DemoSession {
+  id          String    @id @default(cuid())
+  label       String
+  createdById String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  endedAt     DateTime?
+}
+
+// Holistic cost ledger: every dollar the instrument spends, in one place —
+// Together fine-tune training, eval generation, judge calls, ad-hoc inference.
+model CostEntry {
+  id          String       @id @default(cuid())
+  category    CostCategory
+  provider    String // together, openai, anthropic, google
+  label       String
+  amountUsd   Float
+  estimated   Boolean      @default(true) // true = derived from token counts + pricing table
+  refType     String? // fine_tune_job | eval_run | ...
+  refId       String?
+  createdById String?
+  createdAt   DateTime     @default(now())
+
+  @@index([category])
+  @@index([refType, refId])
 }
 
 // ─── Handoff / escalation from the learner pipeline ──────────
