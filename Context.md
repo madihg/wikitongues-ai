@@ -132,15 +132,19 @@ Full rebuild of the annotator flow per Halim's research synthesis, plus three ne
 5. **Learner = Igala only + explainer landing**. `chat-interface.tsx` rebuilt with no language picker, no Lebanese/RTL. New `/learner` explainer page ("Teaching AI to speak Igala") is the landing; `roles.ts` + `personas.ts` redirect learners there → "Start practicing" → `/learner/chat`. Swept remaining `lebanese_arabic`/RTL from `prompt-form.tsx` + `prompt-list.tsx`.
 
 ### Schema + migration (additive, safe on live data)
+
 Migration `web/prisma/migrations/20260624120000_episode_cold_author_demo_cost` — applied to Supabase schema `wikitongues` via the management API (token-scoped), baselined with `prisma migrate resolve --applied`, client regenerated. New: enum `CostCategory`; models `ColdAuthorAnswer`, `PromptFlag`, `DemoSession`, `CostEntry`. Added columns: `PairwiseComparison.confidence` + winner now allows `tie|both_inadequate` (KEPT as String — BT/aggregate/export already speak this union; migration-safe); `RubricScore.confidence`; `OutputEdit.provenance/consentBenchmark/consentTraining`; `+isDemo/+demoSessionId` on PairwiseComparison/RubricScore/OutputEdit/ColdAuthorAnswer/ModelOutput. All 16 columns + 4 tables verified present in Supabase.
 
 ### Contamination + demo guards (where isDemo:false / isHoldout is enforced)
+
 `isDemo:false` added to: export route (DPO+SFT), leaderboard route (pairwise+rubric), build route (pairwise+edits), Together JSONL builder. `isHoldout` still dropped in the pure builders (`training-export.ts`, tested). `/next` excludes demo comparisons from the real completion set.
 
 ### buckets.ts additions
+
 Each `BucketDef` now has `scoring: "subjective"|"factual"` + `watchFor`. Helpers: `bucketWatchFor`, `bucketScoring`, `isFactualBucket`, `isGoldFirstBucket` (register+tone). Factual = lexicon_disambig, idioms_metaphor, cultural_values.
 
 ### Locked decisions (Halim can revisit)
+
 - Score the WINNER only (not both outputs).
 - `tie` and `both_inadequate` are two distinct winner values.
 - Gold-first cold authoring auto-applies to register_honorifics + grammar_tone only.
@@ -148,16 +152,25 @@ Each `BucketDef` now has `scoring: "subjective"|"factual"` + `watchFor`. Helpers
 - `winner` stays a String union, not a Prisma enum (migration safety + BT already types it).
 
 ### Verification (proof)
+
 `pnpm typecheck` 0 · `pnpm lint` clean · `pnpm test` 27/27 (added diff.test.ts ×4, pricing.test.ts ×6) · `pnpm build` compiled successfully (all new routes present). Live-DB runtime smoke test created+read+deleted ColdAuthorAnswer/PromptFlag/CostEntry/DemoSession → "SMOKE OK", then the throwaway script was removed.
 
 ### New/changed files
+
 New: `lib/arena/together.ts`, `lib/arena/pricing.ts`(+test), `lib/diff.ts`(+test), `components/tone-keyboard.tsx`, `components/arena/cost-ledger.tsx`, `components/arena/demo-launcher.tsx`, `app/(app)/admin/arena/costs/page.tsx`, `app/(app)/admin/arena/demo/page.tsx`, `app/(learner)/learner/page.tsx`, `app/api/annotations/flag/route.ts`, `app/api/arena/costs/route.ts`, `app/api/arena/demo-sessions/route.ts`, the migration dir.
 Changed: `prisma/schema.prisma`, `annotation-interface.tsx`, `chat-interface.tsx`, `buckets.ts`, `personas.ts`, `roles.ts`, `fine-tune-providers.ts`, `api/annotations/next+submit`, `api/arena/export+leaderboard+eval-runs/[id]/generate+jobs/[id]/build`, `admin/arena/page.tsx` (nav: +Cost ledger +Demo session), `prompt-form.tsx`, `prompt-list.tsx`.
 
 ### Open questions / next steps
+
 - NOT committed/pushed/deployed this session — awaiting Halim's go (prior PR #1 already merged to main `3fd6a20`; this is new work on the same branch).
 - Gold-first sampling currently register+tone only; consider a deterministic ~1-in-3 sample of other buckets.
 - Factual-bucket references come from `searchRag(prompt.text)` (semantic, may be approximate) + `prompt.expectedCulturalContext`. Curated per-prompt gold references would be stronger.
 - Together cost is estimated from rows×tokens×epochs (Together's API doesn't return cost). A Together webhook (singulars pattern) would capture actuals — not wired.
 - Demo sessions have no auto-cleanup/finalize endpoint yet (records just sit flagged isDemo).
 - Real community-authored held-out prompts still needed (never from Igala Wikipedia). Raise Idoma-vs-Yoruba/Igbo with Lydia (noted in lexicon_disambig watchFor).
+
+### Design system artifact (2026-06-24)
+
+`wikitongues-design-system.html` (repo root) - a standalone, self-demonstrating, exhaustive brand reference, built so Halim can hand it to a person or a bot to make slides / IG posts. Mirrors `web/src/app/globals.css` exactly (tokens are the source of truth). Covers: foundations + personality + wordmark, full color ramps (ochre 50-700, ink 50-950, clay/sage/indigo) + semantic tokens + contrast rules, typography (Fraunces/Inter/JetBrains Mono, type scale, Igala-in-mono), spacing/radius/elevation/motion scales, live components, the arena data-viz language (pick A=indigo / B=clay, red→ochre→green score ramp, `ns` honesty), voice & copy do/don't, imagery direction, **presentation templates (1920×1080)** and **IG templates (1080² / 1080×1350 / story)** as real rendered previews, plus a **machine-readable JSON token block + a "brief a bot" prompt template**. Has a light/dark toggle. Note on brand fonts: Fraunces/Inter are on impeccable's reflex-reject list but identity-preservation wins (already shipping), so they were kept, not swapped.
+
+The `/learner` landing page (`web/src/app/(learner)/learner/page.tsx`) was restyled as a brand exemplar: Fraunces display headline with an italic ochre accent word ("Igala"), em dashes removed, mono kicker + meta line, staggered `.animate-rise` entrance (new keyframe in globals.css, reduced-motion safe). Gates still green (typecheck/lint/build). Open: confirm accent `#e0a21f` vs the official Wikitongues brand kit before any print use.

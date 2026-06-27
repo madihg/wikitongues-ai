@@ -14,10 +14,7 @@ import { google } from "@ai-sdk/google";
  */
 
 export type CandidateProvider =
-  | "anthropic"
-  | "openai"
-  | "google"
-  | "openai-compatible";
+  "anthropic" | "openai" | "google" | "openai-compatible";
 
 export interface CandidateLike {
   id?: string;
