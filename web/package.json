@@ -15,7 +15,8 @@
     "db:sql": "prisma migrate diff --from-empty --to-schema-datamodel ./prisma/schema.prisma --script",
     "seed": "tsx prisma/seed.ts",
     "seed:rag": "tsx prisma/seed-rag.ts",
-    "seed:arena": "tsx prisma/seed-arena.ts"
+    "seed:arena": "tsx prisma/seed-arena.ts",
+    "seed:outputs": "tsx prisma/seed-outputs.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
