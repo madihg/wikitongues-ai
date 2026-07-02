@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { RUBRIC_V2 } from "@/lib/buckets";
 
-const DIMENSIONS = [
-  "culturalAccuracy",
-  "linguisticAuthenticity",
-  "culturalNormAdherence",
-  "factualCorrectness",
-] as const;
+/**
+ * Inter-annotator agreement per rubric v2 axis (std-dev proxy).
+ * Groups axis scores by (modelOutputId, axis); only items scored by 2+
+ * annotators count. N/A (null) scores are excluded from the numeric proxy.
+ */
 
 function standardDeviation(values: number[]): number {
   if (values.length < 2) return 0;
@@ -18,11 +18,10 @@ function standardDeviation(values: number[]): number {
   return Math.sqrt(variance);
 }
 
-// Convert average std dev to a 0-1 agreement proxy
-// Lower std dev = higher agreement. Max possible std dev on 1-5 scale is ~2.
-// We invert so that higher = better agreement (like Krippendorff's alpha)
+// Convert average std dev to a 0-1 agreement proxy.
+// Lower std dev = higher agreement. Max plausible std dev on a 0-5 scale ~2.5.
 function stdDevToAgreement(avgStdDev: number): number {
-  const maxStdDev = 2.0;
+  const maxStdDev = 2.5;
   return Math.max(0, Math.min(1, 1 - avgStdDev / maxStdDev));
 }
 
@@ -32,60 +31,46 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Get all rubric scores grouped by modelOutputId
-  const rubricScores = await prisma.rubricScore.findMany({
+  const axisScores = await prisma.rubricAxisScore.findMany({
+    where: { isDemo: false, score: { not: null } },
     select: {
       modelOutputId: true,
       annotatorId: true,
-      culturalAccuracy: true,
-      linguisticAuthenticity: true,
-      culturalNormAdherence: true,
-      factualCorrectness: true,
+      axis: true,
+      score: true,
     },
   });
 
-  // Group scores by modelOutputId
-  const byOutput = new Map<string, typeof rubricScores>();
-  for (const score of rubricScores) {
-    const existing = byOutput.get(score.modelOutputId) ?? [];
-    existing.push(score);
-    byOutput.set(score.modelOutputId, existing);
+  // Group by (modelOutputId, axis).
+  const byItem = new Map<string, { annotatorId: string; score: number }[]>();
+  for (const s of axisScores) {
+    if (s.score === null) continue;
+    const key = `${s.modelOutputId}:${s.axis}`;
+    const arr = byItem.get(key) ?? [];
+    arr.push({ annotatorId: s.annotatorId, score: s.score });
+    byItem.set(key, arr);
   }
 
-  // Only consider items with multiple annotators
-  const multiAnnotated = Array.from(byOutput.entries()).filter(([, scores]) => {
-    const annotators = new Set(scores.map((s) => s.annotatorId));
-    return annotators.size >= 2;
-  });
+  const agreement = RUBRIC_V2.map((axisDef) => {
+    const stdDevs: number[] = [];
+    for (const [key, scores] of byItem.entries()) {
+      if (!key.endsWith(`:${axisDef.key}`)) continue;
+      const annotators = new Set(scores.map((s) => s.annotatorId));
+      if (annotators.size < 2) continue;
+      stdDevs.push(standardDeviation(scores.map((s) => s.score)));
+    }
 
-  if (multiAnnotated.length === 0) {
-    return NextResponse.json({
-      agreement: DIMENSIONS.map((dim) => ({
-        dimension: dim,
+    if (stdDevs.length === 0) {
+      return {
+        dimension: axisDef.label,
         alpha: null,
         interpretation: "No multi-annotator data available",
         itemCount: 0,
-      })),
-      method: "std_dev_proxy",
-      note: "Agreement scores are computed as a standard deviation proxy. Full Krippendorff's alpha requires the krippendorff Python package.",
-    });
-  }
-
-  const dimensionAgreement = DIMENSIONS.map((dim) => {
-    const stdDevs: number[] = [];
-
-    for (const [, scores] of multiAnnotated) {
-      const values = scores.map((s) => s[dim]);
-      const sd = standardDeviation(values);
-      stdDevs.push(sd);
+      };
     }
 
-    const avgStdDev =
-      stdDevs.length > 0
-        ? stdDevs.reduce((a, b) => a + b, 0) / stdDevs.length
-        : 0;
+    const avgStdDev = stdDevs.reduce((a, b) => a + b, 0) / stdDevs.length;
     const alpha = Math.round(stdDevToAgreement(avgStdDev) * 1000) / 1000;
-
     let interpretation: string;
     if (alpha >= 0.8) interpretation = "Good";
     else if (alpha >= 0.6) interpretation = "Tentative";
@@ -93,16 +78,16 @@ export async function GET() {
     else interpretation = "Low";
 
     return {
-      dimension: dim as string,
+      dimension: axisDef.label,
       alpha,
       interpretation,
-      itemCount: multiAnnotated.length,
+      itemCount: stdDevs.length,
     };
   });
 
   return NextResponse.json({
-    agreement: dimensionAgreement,
+    agreement,
     method: "std_dev_proxy",
-    note: "Agreement scores are computed as a standard deviation proxy. Full Krippendorff's alpha requires the krippendorff Python package.",
+    note: "Agreement per rubric v2 axis, computed as a standard-deviation proxy over items scored by 2+ annotators. Full Krippendorff's alpha lands with the calibration mode.",
   });
 }

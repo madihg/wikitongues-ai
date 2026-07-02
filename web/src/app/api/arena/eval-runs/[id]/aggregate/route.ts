@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
-import { BUCKET_KEYS, RUBRIC_KEYS } from "@/lib/buckets";
+import { BUCKET_KEYS } from "@/lib/buckets";
 import type { EvalBucket, Prisma } from "@prisma/client";
 
 /**
@@ -47,17 +47,15 @@ export async function POST(
       })
     : [];
 
-  // Rubric on this run's outputs.
+  // Rubric v2 on this run's outputs: one row per scored axis (N/A excluded).
   const rubrics = outputIds.length
-    ? await prisma.rubricScore.findMany({
-        where: { modelOutputId: { in: outputIds } },
+    ? await prisma.rubricAxisScore.findMany({
+        where: { modelOutputId: { in: outputIds }, score: { not: null } },
         select: {
           modelOutputId: true,
           bucket: true,
-          culturalAccuracy: true,
-          linguisticAuthenticity: true,
-          culturalNormAdherence: true,
-          factualCorrectness: true,
+          axis: true,
+          score: true,
         },
       })
     : [];
@@ -87,14 +85,8 @@ export async function POST(
     const bucket = (r.bucket ??
       bucketByOutput.get(r.modelOutputId) ??
       null) as EvalBucket | null;
-    if (!bucket) continue;
-    const mean =
-      (r.culturalAccuracy +
-        r.linguisticAuthenticity +
-        r.culturalNormAdherence +
-        r.factualCorrectness) /
-      RUBRIC_KEYS.length;
-    rubricSum[bucket] += mean;
+    if (!bucket || r.score === null) continue;
+    rubricSum[bucket] += r.score;
     rubricN[bucket] += 1;
   }
 

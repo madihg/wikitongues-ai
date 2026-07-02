@@ -46,6 +46,16 @@ export function PromptForm({
 
   const isEditing = !!prompt?.id;
 
+  // Escape closes the modal from anywhere.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   useEffect(() => {
     if (prompt) {
       setBucket(prompt.bucket);
@@ -68,8 +78,6 @@ export function PromptForm({
   }, [prompt, open]);
 
   if (!open) return null;
-
-  const isArabic = language === "lebanese_arabic";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -113,8 +121,16 @@ export function PromptForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-2xl rounded-lg bg-surface shadow-md">
+    // Backdrop click and Escape both dismiss (2026-07-02 call: Agnes couldn't
+    // close the modal by clicking outside it).
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl rounded-lg bg-surface shadow-md"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="text-lg font-semibold text-text-primary">
             {isEditing ? "Edit Prompt" : "Create Prompt"}
@@ -167,7 +183,7 @@ export function PromptForm({
                 type="text"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                placeholder="e.g. igala, lebanese_arabic"
+                placeholder="igala"
                 className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
               />
             </div>
@@ -181,7 +197,7 @@ export function PromptForm({
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={6}
-              dir={isArabic ? "rtl" : "ltr"}
+              dir="ltr"
               placeholder="Enter the prompt text..."
               className="mt-1 block w-full rounded-md border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none"
             />

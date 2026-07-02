@@ -31,7 +31,7 @@ export async function GET(req: Request) {
 
   if (type === "dpo") {
     const comparisons = await prisma.pairwiseComparison.findMany({
-      where: { winner: { in: ["a", "b"] } },
+      where: { winner: { in: ["a", "b"] }, isDemo: false },
       select: {
         winner: true,
         bucket: true,
@@ -75,6 +75,7 @@ export async function GET(req: Request) {
 
   if (type === "sft") {
     const edits = await prisma.outputEdit.findMany({
+      where: { isDemo: false },
       select: {
         correctedText: true,
         bucket: true,

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
 import { generateForCandidate, type RagChunk } from "@/lib/arena/providers";
 import { searchRag } from "@/lib/rag";
+import { estimateGenerationCostUsd, roundUsd } from "@/lib/arena/pricing";
 
 /**
  * Generate the candidate's answers on the frozen held-out bank. Uses the
@@ -41,6 +42,7 @@ export async function POST(
 
   let generated = 0;
   let failed = 0;
+  let costUsd = 0;
 
   for (const prompt of prompts) {
     try {
@@ -76,6 +78,11 @@ export async function POST(
           epochId: run.epochId,
         },
       });
+      costUsd += estimateGenerationCostUsd({
+        modelId: result.modelId,
+        tokensIn: result.tokensIn,
+        tokensOut: result.tokensOut,
+      });
       generated++;
     } catch (e) {
       failed++;
@@ -88,7 +95,10 @@ export async function POST(
 
   await prisma.evalRun.update({
     where: { id },
-    data: { status: generated > 0 ? "awaiting_human" : "failed" },
+    data: {
+      status: generated > 0 ? "awaiting_human" : "failed",
+      costUsd: roundUsd(costUsd),
+    },
   });
 
   return NextResponse.json({ generated, failed, total: prompts.length });

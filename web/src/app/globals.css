@@ -216,6 +216,21 @@ a:hover {
   color: var(--wt-ink-950);
 }
 
+/* Brand entrance: a gentle staggered rise, used on hero/landing surfaces. */
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-rise {
+  animation: riseIn 0.5s var(--ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

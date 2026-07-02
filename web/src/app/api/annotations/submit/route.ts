@@ -2,66 +2,74 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isRubricV2Axis, RUBRIC_VERSION } from "@/lib/buckets";
 import type { Prisma } from "@prisma/client";
 
-interface RubricInput {
-  modelOutputId: string;
-  culturalAccuracy: number;
-  linguisticAuthenticity: number;
-  culturalNormAdherence: number;
-  factualCorrectness: number;
-  notesCulturalAccuracy?: string;
-  notesLinguisticAuthenticity?: string;
-  notesCulturalNormAdherence?: string;
-  notesFactualCorrectness?: string;
+/**
+ * Submit one annotation episode. The episode produces up to four independent
+ * artifacts, each elicited as a separate act so "the signals agree" stays
+ * meaningful:
+ *   1. PairwiseComparison  — winner (a|b|tie|both_inadequate) + confidence + why
+ *   2. RubricAxisScore[]   — rubric v2 (Lydia's axes) on the WINNER only,
+ *                            0-5 per axis (0 = completely wrong) or null = N/A
+ *   3. OutputEdit          — inline correction of the winner (gold SFT target)
+ *   4. ColdAuthorAnswer    — the annotator's own answer, authored before models
+ *                            were shown (gold-first), OR a salvage rewrite when
+ *                            both outputs were inadequate.
+ *
+ * The explanation is encouraged but has NO minimum length (2026-07-02 call).
+ * Demo-session submissions are flagged isDemo=true and excluded everywhere
+ * training data is built.
+ */
+
+const WINNERS = ["a", "b", "tie", "both_inadequate"] as const;
+type Winner = (typeof WINNERS)[number];
+
+interface AxisScoreInput {
+  axis: string;
+  score: number | null; // 0-5, null = N/A
+  note?: string;
 }
 
-interface EditInput {
-  modelOutputId: string;
-  correctedText: string;
-  rationale?: string;
+interface AuthoredInput {
+  answerText: string;
+  consentBenchmark?: boolean;
+  consentTraining?: boolean;
 }
 
-function validateScore(value: unknown): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= 1 &&
-    value <= 5
-  );
+function validScore(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 5;
 }
 
-function validateRubric(rubric: unknown): rubric is RubricInput {
-  if (!rubric || typeof rubric !== "object") return false;
-  const r = rubric as Record<string, unknown>;
-  return (
-    typeof r.modelOutputId === "string" &&
-    validateScore(r.culturalAccuracy) &&
-    validateScore(r.linguisticAuthenticity) &&
-    validateScore(r.culturalNormAdherence) &&
-    validateScore(r.factualCorrectness)
-  );
+/** Parse rubric v2 axis scores. Returns null if the payload is malformed. */
+function parseAxisScores(raw: unknown): AxisScoreInput[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: AxisScoreInput[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") return null;
+    const o = item as Record<string, unknown>;
+    if (!isRubricV2Axis(o.axis)) return null;
+    if (o.score !== null && !validScore(o.score)) return null;
+    out.push({
+      axis: o.axis as string,
+      score: o.score as number | null,
+      note:
+        typeof o.note === "string" && o.note.trim() ? o.note.trim() : undefined,
+    });
+  }
+  return out;
 }
 
-function parseEdits(raw: unknown): EditInput[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((e) => {
-    if (!e || typeof e !== "object") return [];
-    const r = e as Record<string, unknown>;
-    if (typeof r.modelOutputId !== "string") return [];
-    if (
-      typeof r.correctedText !== "string" ||
-      r.correctedText.trim().length === 0
-    )
-      return [];
-    return [
-      {
-        modelOutputId: r.modelOutputId,
-        correctedText: r.correctedText.trim(),
-        rationale: typeof r.rationale === "string" ? r.rationale : undefined,
-      },
-    ];
-  });
+function parseAuthored(raw: unknown): AuthoredInput | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.answerText !== "string" || o.answerText.trim().length === 0)
+    return null;
+  return {
+    answerText: o.answerText.trim(),
+    consentBenchmark: o.consentBenchmark !== false,
+    consentTraining: o.consentTraining !== false,
+  };
 }
 
 export async function POST(req: Request) {
@@ -78,55 +86,79 @@ export async function POST(req: Request) {
     modelOutputAId,
     modelOutputBId,
     winner,
+    confidence,
     explanation,
-    rubricA,
-    rubricB,
+    rubricAxes,
+    edit,
+    coldAuthor,
+    salvageAnswer,
+    demoSessionId,
   } = body;
-  const edits = parseEdits(body.edits);
 
   if (!promptId || !modelOutputAId || !modelOutputBId) {
     return NextResponse.json(
-      {
-        error:
-          "Missing required fields: promptId, modelOutputAId, modelOutputBId",
-      },
+      { error: "Missing promptId, modelOutputAId, or modelOutputBId" },
       { status: 400 },
     );
   }
 
-  if (winner !== "a" && winner !== "b") {
+  if (!WINNERS.includes(winner as Winner)) {
     return NextResponse.json(
-      { error: "Winner must be 'a' or 'b'" },
+      { error: `winner must be one of: ${WINNERS.join(", ")}` },
       { status: 400 },
     );
   }
+  const win = winner as Winner;
 
-  if (
-    !explanation ||
-    typeof explanation !== "string" ||
-    explanation.trim().length < 20
-  ) {
-    return NextResponse.json(
-      { error: "Explanation is required and must be at least 20 characters" },
-      { status: 400 },
-    );
+  // Explanation is encouraged but optional — no minimum length (2026-07-02 call).
+  const explanationText =
+    typeof explanation === "string" ? explanation.trim() : "";
+
+  let conf: number | null = null;
+  if (confidence != null) {
+    if (
+      typeof confidence !== "number" ||
+      !Number.isInteger(confidence) ||
+      confidence < 1 ||
+      confidence > 4
+    ) {
+      return NextResponse.json(
+        { error: "confidence must be an integer from 1 to 4" },
+        { status: 400 },
+      );
+    }
+    conf = confidence;
   }
 
-  if (!validateRubric(rubricA) || !validateRubric(rubricB)) {
-    return NextResponse.json(
-      {
-        error:
-          "Invalid rubric scores. Each dimension must be an integer from 1 to 5.",
-      },
-      { status: 400 },
-    );
+  // Rubric is required when there is a single winner; ignored otherwise.
+  // Every axis must be answered: a 0-5 score or an explicit N/A (null),
+  // and at least one axis must carry a real score.
+  const hasWinner = win === "a" || win === "b";
+  let axisScores: AxisScoreInput[] = [];
+  if (hasWinner) {
+    const parsed = parseAxisScores(rubricAxes);
+    if (!parsed || parsed.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Rubric on the winner is required: per-axis scores 0-5, or null for N/A",
+        },
+        { status: 400 },
+      );
+    }
+    if (!parsed.some((a) => a.score !== null)) {
+      return NextResponse.json(
+        { error: "At least one rubric axis must be scored (not all N/A)" },
+        { status: 400 },
+      );
+    }
+    axisScores = parsed;
   }
 
   const [outputA, outputB] = await Promise.all([
     prisma.modelOutput.findUnique({ where: { id: modelOutputAId } }),
     prisma.modelOutput.findUnique({ where: { id: modelOutputBId } }),
   ]);
-
   if (!outputA || !outputB) {
     return NextResponse.json(
       { error: "One or both model outputs not found" },
@@ -134,35 +166,35 @@ export async function POST(req: Request) {
     );
   }
 
-  // Resolve the bucket once, so pairwise / rubric / edits all carry it.
   const prompt = await prisma.prompt.findUnique({
     where: { id: outputA.promptId },
     select: { bucket: true },
   });
   const bucket = outputA.bucket ?? prompt?.bucket ?? null;
 
-  const existing = await prisma.pairwiseComparison.findFirst({
-    where: {
-      annotatorId,
-      promptId,
-      OR: [
-        { modelOutputAId, modelOutputBId },
-        { modelOutputAId: modelOutputBId, modelOutputBId: modelOutputAId },
-      ],
-    },
-  });
+  const isDemo = typeof demoSessionId === "string" && demoSessionId.length > 0;
 
-  if (existing) {
-    return NextResponse.json(
-      { error: "You have already submitted a comparison for this pair" },
-      { status: 409 },
-    );
+  // Outside a demo, one comparison per (annotator, prompt, pair).
+  if (!isDemo) {
+    const existing = await prisma.pairwiseComparison.findFirst({
+      where: {
+        annotatorId,
+        promptId,
+        OR: [
+          { modelOutputAId, modelOutputBId },
+          { modelOutputAId: modelOutputBId, modelOutputBId: modelOutputAId },
+        ],
+      },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: "You have already submitted a comparison for this pair" },
+        { status: 409 },
+      );
+    }
   }
 
-  const outputById = new Map([
-    [outputA.id, outputA],
-    [outputB.id, outputB],
-  ]);
+  const winnerOutput = win === "a" ? outputA : win === "b" ? outputB : null;
 
   const ops: Prisma.PrismaPromise<unknown>[] = [
     prisma.pairwiseComparison.create({
@@ -171,67 +203,131 @@ export async function POST(req: Request) {
         bucket,
         modelOutputAId,
         modelOutputBId,
-        winner,
-        explanation: explanation.trim(),
+        winner: win,
+        confidence: conf,
+        explanation: explanationText,
         annotatorId,
-      },
-    }),
-    prisma.rubricScore.create({
-      data: {
-        promptId,
-        modelOutputId: rubricA.modelOutputId,
-        bucket,
-        culturalAccuracy: rubricA.culturalAccuracy,
-        linguisticAuthenticity: rubricA.linguisticAuthenticity,
-        culturalNormAdherence: rubricA.culturalNormAdherence,
-        factualCorrectness: rubricA.factualCorrectness,
-        notesCulturalAccuracy: rubricA.notesCulturalAccuracy || null,
-        notesLinguisticAuthenticity:
-          rubricA.notesLinguisticAuthenticity || null,
-        notesCulturalNormAdherence: rubricA.notesCulturalNormAdherence || null,
-        notesFactualCorrectness: rubricA.notesFactualCorrectness || null,
-        annotatorId,
-      },
-    }),
-    prisma.rubricScore.create({
-      data: {
-        promptId,
-        modelOutputId: rubricB.modelOutputId,
-        bucket,
-        culturalAccuracy: rubricB.culturalAccuracy,
-        linguisticAuthenticity: rubricB.linguisticAuthenticity,
-        culturalNormAdherence: rubricB.culturalNormAdherence,
-        factualCorrectness: rubricB.factualCorrectness,
-        notesCulturalAccuracy: rubricB.notesCulturalAccuracy || null,
-        notesLinguisticAuthenticity:
-          rubricB.notesLinguisticAuthenticity || null,
-        notesCulturalNormAdherence: rubricB.notesCulturalNormAdherence || null,
-        notesFactualCorrectness: rubricB.notesFactualCorrectness || null,
-        annotatorId,
+        isDemo,
+        demoSessionId: isDemo ? demoSessionId : null,
       },
     }),
   ];
 
-  // Agnes's direct-edit field -> gold SFT targets.
-  for (const edit of edits) {
-    const src = outputById.get(edit.modelOutputId);
-    if (!src) continue;
+  // Rubric v2 on the winner only: one row per axis. N/A axes (score null) are
+  // stored too — an explicit "not relevant" is signal, not absence.
+  if (hasWinner && winnerOutput) {
+    for (const a of axisScores) {
+      ops.push(
+        prisma.rubricAxisScore.create({
+          data: {
+            promptId,
+            modelOutputId: winnerOutput.id,
+            bucket,
+            axis: a.axis,
+            score: a.score,
+            note: a.note ?? null,
+            rubricVersion: RUBRIC_VERSION,
+            annotatorId,
+            isDemo,
+            demoSessionId: isDemo ? demoSessionId : null,
+          },
+        }),
+      );
+    }
+  }
+
+  // Inline edit -> gold SFT target. Targets the explicit modelOutputId if given
+  // (the tie path corrects a chosen side without faking a winner), otherwise the
+  // winner. Not used for both_inadequate (salvage authoring is used instead).
+  let editsSaved = 0;
+  if (edit && typeof edit === "object") {
+    const e = edit as Record<string, unknown>;
+    const targetId =
+      typeof e.modelOutputId === "string" ? e.modelOutputId : null;
+    const target =
+      targetId === outputA.id
+        ? outputA
+        : targetId === outputB.id
+          ? outputB
+          : winnerOutput;
+    const corrected =
+      typeof e.correctedText === "string" ? e.correctedText.trim() : "";
+    if (target && corrected && corrected !== target.outputText.trim()) {
+      editsSaved = 1;
+      ops.push(
+        prisma.outputEdit.create({
+          data: {
+            modelOutputId: target.id,
+            promptId: target.promptId,
+            bucket,
+            originalText: target.outputText,
+            correctedText: corrected,
+            rationale: typeof e.rationale === "string" ? e.rationale : null,
+            provenance: "model_correction",
+            consentBenchmark: e.consentBenchmark !== false,
+            consentTraining: e.consentTraining !== false,
+            annotatorId,
+            isDemo,
+            demoSessionId: isDemo ? demoSessionId : null,
+          },
+        }),
+      );
+    }
+  }
+
+  // Cold-authored source-free gold (authored before models were shown).
+  let coldSaved = false;
+  const cold = parseAuthored(coldAuthor);
+  if (cold) {
+    coldSaved = true;
     ops.push(
-      prisma.outputEdit.create({
+      prisma.coldAuthorAnswer.create({
         data: {
-          modelOutputId: edit.modelOutputId,
-          promptId: src.promptId,
+          promptId,
           bucket,
-          originalText: src.outputText,
-          correctedText: edit.correctedText,
-          rationale: edit.rationale || null,
+          answerText: cold.answerText,
+          provenance: "speaker_authored_sourcefree",
+          consentBenchmark: cold.consentBenchmark ?? true,
+          consentTraining: cold.consentTraining ?? true,
           annotatorId,
+          isDemo,
+          demoSessionId: isDemo ? demoSessionId : null,
         },
       }),
     );
   }
 
+  // Salvage rewrite when both outputs were inadequate (a fresh correct answer,
+  // not an edit of any one output) -> also a gold target.
+  let salvageSaved = false;
+  if (win === "both_inadequate") {
+    const salvage = parseAuthored(salvageAnswer);
+    if (salvage) {
+      salvageSaved = true;
+      ops.push(
+        prisma.coldAuthorAnswer.create({
+          data: {
+            promptId,
+            bucket,
+            answerText: salvage.answerText,
+            provenance: "corrected_from_inadequate",
+            consentBenchmark: salvage.consentBenchmark ?? true,
+            consentTraining: salvage.consentTraining ?? true,
+            annotatorId,
+            isDemo,
+            demoSessionId: isDemo ? demoSessionId : null,
+          },
+        }),
+      );
+    }
+  }
+
   await prisma.$transaction(ops);
 
-  return NextResponse.json({ success: true, editsSaved: edits.length });
+  return NextResponse.json({
+    success: true,
+    editsSaved,
+    coldSaved,
+    salvageSaved,
+  });
 }

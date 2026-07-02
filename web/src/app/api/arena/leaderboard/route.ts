@@ -36,6 +36,7 @@ export async function GET() {
 
   // Pairwise: map each comparison's two outputs to their candidates.
   const comparisons = await prisma.pairwiseComparison.findMany({
+    where: { isDemo: false },
     select: {
       winner: true,
       bucket: true,
@@ -58,29 +59,27 @@ export async function GET() {
     });
   }
 
-  // Rubric: map each score's output to its candidate.
-  const rubricScores = await prisma.rubricScore.findMany({
+  // Rubric v2: one row per scored axis. N/A (null) scores are stored but
+  // excluded from ranking math.
+  const axisScores = await prisma.rubricAxisScore.findMany({
+    where: { isDemo: false, score: { not: null } },
     select: {
       bucket: true,
-      culturalAccuracy: true,
-      linguisticAuthenticity: true,
-      culturalNormAdherence: true,
-      factualCorrectness: true,
+      axis: true,
+      score: true,
       modelOutput: { select: { candidateModelId: true, bucket: true } },
     },
   });
 
   const rubric: RubricRow[] = [];
-  for (const r of rubricScores) {
+  for (const r of axisScores) {
     const cid = r.modelOutput?.candidateModelId;
-    if (!cid || !candidateById.has(cid)) continue;
+    if (!cid || !candidateById.has(cid) || r.score === null) continue;
     rubric.push({
       candidateId: cid,
       bucket: r.bucket ?? r.modelOutput?.bucket ?? null,
-      culturalAccuracy: r.culturalAccuracy,
-      linguisticAuthenticity: r.linguisticAuthenticity,
-      culturalNormAdherence: r.culturalNormAdherence,
-      factualCorrectness: r.factualCorrectness,
+      axis: r.axis,
+      score: r.score,
     });
   }
 

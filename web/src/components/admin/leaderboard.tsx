@@ -6,11 +6,13 @@ import { InfoTip } from "@/components/info-tip";
 interface LeaderboardEntry {
   model: string;
   winRate: number;
-  culturalAccuracy: number;
-  linguisticAuthenticity: number;
-  culturalNormAdherence: number;
-  factualCorrectness: number;
+  axes: Record<string, number>;
   overallScore: number;
+}
+
+interface AxisDef {
+  key: string;
+  label: string;
 }
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -19,6 +21,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 export function Leaderboard() {
   const [data, setData] = useState<Record<string, LeaderboardEntry[]>>({});
+  const [axes, setAxes] = useState<AxisDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>("");
 
@@ -27,6 +30,7 @@ export function Leaderboard() {
       .then((res) => res.json())
       .then((json) => {
         setData(json.leaderboard ?? {});
+        setAxes(json.axes ?? []);
         const langs = Object.keys(json.leaderboard ?? {});
         if (langs.length > 0 && !activeTab) {
           setActiveTab(langs[0]);
@@ -69,9 +73,10 @@ export function Leaderboard() {
         <InfoTip width="w-80">
           Models ranked by aggregate human scores per language. Win rate is how
           often a model&apos;s output was picked over another&apos;s in blind
-          pairwise comparisons; the rubric columns are mean 1-5 scores on each
-          axis. This is the legacy per-model view; the Model Arena gives the
-          per-bucket, statistically-honest ranking.
+          pairwise comparisons; the rubric columns are mean 0-5 scores per axis
+          (N/A judgments are excluded from means). This is the legacy per-model
+          view; the Model Arena gives the per-bucket, statistically-honest
+          ranking.
         </InfoTip>
       </h2>
 
@@ -103,12 +108,11 @@ export function Leaderboard() {
                 <th className="py-3 pr-4">Rank</th>
                 <th className="py-3 pr-4">Model</th>
                 <th className="py-3 pr-4 text-right">Win Rate (%)</th>
-                <th className="py-3 pr-4 text-right">Cultural Acc.</th>
-                <th className="py-3 pr-4 text-right">Ling. Auth.</th>
-                <th className="py-3 pr-4 text-right">
-                  Cultural-norm adherence
-                </th>
-                <th className="py-3 pr-4 text-right">Factual Corr.</th>
+                {axes.map((a) => (
+                  <th key={a.key} className="py-3 pr-4 text-right">
+                    {a.label}
+                  </th>
+                ))}
                 <th className="py-3 text-right">Overall</th>
               </tr>
             </thead>
@@ -134,18 +138,14 @@ export function Leaderboard() {
                   <td className="py-3 pr-4 text-right tabular-nums">
                     {entry.winRate}
                   </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {entry.culturalAccuracy}
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {entry.linguisticAuthenticity}
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {entry.culturalNormAdherence}
-                  </td>
-                  <td className="py-3 pr-4 text-right tabular-nums">
-                    {entry.factualCorrectness}
-                  </td>
+                  {axes.map((a) => (
+                    <td
+                      key={a.key}
+                      className="py-3 pr-4 text-right tabular-nums"
+                    >
+                      {entry.axes[a.key] ?? "—"}
+                    </td>
+                  ))}
                   <td className="py-3 text-right font-semibold tabular-nums">
                     {entry.overallScore}
                   </td>

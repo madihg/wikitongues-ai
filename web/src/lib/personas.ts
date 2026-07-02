@@ -74,7 +74,7 @@ export const PERSONAS: Persona[] = [
   {
     key: "learner",
     label: "Learner",
-    href: "/learner/chat",
+    href: "/learner",
     blurb: "The Igala chat tutor",
   },
   {

@@ -11,8 +11,10 @@ interface Message {
   createdAt?: string;
 }
 
+// Igala-only pilot. The tutor practices one language; there is no language picker.
+const LANGUAGE = "igala";
+
 export function ChatInterface() {
-  const [language, setLanguage] = useState<string>("");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -21,15 +23,13 @@ export function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const isRtl = language === "lebanese_arabic";
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim() || !language || loading) return;
+    if (!input.trim() || loading) return;
 
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
@@ -49,7 +49,7 @@ export function ChatInterface() {
         body: JSON.stringify({
           conversationId,
           message: userMessage.content,
-          language,
+          language: LANGUAGE,
         }),
       });
 
@@ -95,76 +95,25 @@ export function ChatInterface() {
     setError(null);
   }
 
-  // Language selection screen
-  if (!language) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="max-w-md text-center">
-          <h2 className="mb-2 text-2xl font-semibold text-text-primary">
-            Choose Your Language
-          </h2>
-          <p className="mb-8 text-text-tertiary">
-            Select the language you want to practice
-          </p>
-          <div className="flex gap-4">
-            <button
-              onClick={() => setLanguage("igala")}
-              className="flex-1 cursor-pointer rounded-lg border-2 border-border px-6 py-8 transition-all hover:border-accent hover:shadow-md"
-            >
-              <div className="text-3xl mb-2">🇳🇬</div>
-              <div className="font-semibold text-text-primary">Igala</div>
-              <div className="mt-1 text-sm text-text-tertiary">
-                Kogi State, Nigeria
-              </div>
-            </button>
-            <button
-              onClick={() => setLanguage("lebanese_arabic")}
-              className="flex-1 cursor-pointer rounded-lg border-2 border-border px-6 py-8 transition-all hover:border-accent hover:shadow-md"
-            >
-              <div className="text-3xl mb-2">🇱🇧</div>
-              <div className="font-semibold text-text-primary">
-                Lebanese Arabic
-              </div>
-              <div className="mt-1 text-sm text-text-tertiary">
-                Levantine dialect
-              </div>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-6 py-3">
         <div className="flex items-center gap-3">
-          <span className="text-lg">{language === "igala" ? "🇳🇬" : "🇱🇧"}</span>
+          <span className="text-lg">🇳🇬</span>
           <div>
-            <h2 className="text-sm font-semibold text-text-primary">
-              {language === "igala" ? "Igala" : "Lebanese Arabic"}
-            </h2>
-            <p className="text-xs text-text-tertiary">Language Learning Chat</p>
+            <h2 className="text-sm font-semibold text-text-primary">Igala</h2>
+            <p className="text-xs text-text-tertiary">
+              Practice with the Igala tutor
+            </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={startNewConversation}
-            className="cursor-pointer rounded-md bg-surface-sunken px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-border"
-          >
-            New Chat
-          </button>
-          <button
-            onClick={() => {
-              setLanguage("");
-              startNewConversation();
-            }}
-            className="cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium text-text-tertiary hover:text-text-secondary"
-          >
-            Switch Language
-          </button>
-        </div>
+        <button
+          onClick={startNewConversation}
+          className="cursor-pointer rounded-md bg-surface-sunken px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-border"
+        >
+          New chat
+        </button>
       </div>
 
       {/* Messages */}
@@ -173,9 +122,7 @@ export function ChatInterface() {
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
               <p className="text-lg font-medium text-text-primary">
-                {language === "igala"
-                  ? "Ene o! Start practicing Igala"
-                  : "!أهلا وسهلا Start practicing Lebanese Arabic"}
+                Ẹnẹ o! Start practicing Igala
               </p>
               <p className="mt-2 text-sm text-text-tertiary">
                 Type a message to begin your conversation
@@ -196,7 +143,6 @@ export function ChatInterface() {
                     ? "bg-accent text-accent-contrast"
                     : "bg-surface-sunken text-text-primary"
                 }`}
-                dir={isRtl ? "rtl" : "ltr"}
               >
                 <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
 
@@ -271,12 +217,7 @@ export function ChatInterface() {
                 sendMessage(e);
               }
             }}
-            placeholder={
-              language === "igala"
-                ? "Type your message in English or Igala..."
-                : "...اكتب رسالتك بالعربي أو بالإنكليزي"
-            }
-            dir={isRtl ? "rtl" : "ltr"}
+            placeholder="Type your message in English or Igala..."
             rows={1}
             className="flex-1 resize-none rounded-xl border border-border-strong px-4 py-3 text-sm focus:border-accent focus:outline-none"
             disabled={loading}

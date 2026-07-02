@@ -102,7 +102,75 @@ SLICE 2 DONE + COMMITTED + PUSHED (commit e53d699, branch halim-bot/fervent-jemi
 REMAINING (Halim wiring + product decisions, NOT code-blocked): add Supabase DB password + provider keys to web/.env.local (schema already live) -> pnpm install && pnpm seed && pnpm seed:rag && pnpm seed:arena && pnpm dev. Real fine-tuning is MOCK (wire real provider in lib/arena/fine-tune-providers.ts + GPU/serving endpoint; register output as openai-compatible candidate; CPT still post-pilot). Confirm Wikitongues accent hex (#e0a21f reconstructed) vs brand kit. Raise Idoma-vs-Yoruba/Igbo w/ Lydia. Add real community-authored held-out prompts (never from Igala Wikipedia). PR: https://github.com/madihg/wikitongues-ai/pull/new/halim-bot/fervent-jemison-b6bb05
 
 ## Session State (2026-06-22, cont. 2) - IA + explainers shipped; merge/deploy gated on DB password
+
 Pushed: f82fdc4. PR open: https://github.com/madihg/wikitongues-ai/pull/1 (base main).
 Done: persona IA (annotators=Dashboard+Annotate only; Prompts/Review route-guarded to researchers; order Prompts-before-Annotate); owner madihalim@gmail.com persona switcher + full access (lib/personas + RoleGuard override); owner seeded (RESEARCHER, pw "password"/OWNER_PASSWORD); InfoTip "i" explainers across arena + researcher dashboard + annotation. Gates green.
 Creds: Anthropic+OpenAI keys pulled from singulars into web/.env.local (gitignored). Vercel project wikitongues-ai (prj_AwAKSlDX94BE4ojZbLpHiNHO9VS6, root dir web/), CLI authed as madihg.
 BLOCKER for merge+deploy: Supabase DB PASSWORD (singulars uses REST key, no PG url; no mgmt token to reset). Also no Google/Gemini key found (Gemini baseline optional). On receipt: set Vercel env DATABASE_URL/DIRECT_URL (Supabase, replace Neon) + keys + NEXTAUTH; merge PR#1; deploy. Holding to avoid breaking live cutover.
+
+## Session State (2026-06-24) - Cold-authoring annotation episode + demo sessions + cost ledger + Together provider + Igala-only learner
+
+Full rebuild of the annotator flow per Halim's research synthesis, plus three new researcher capabilities and the learner cleanup. NOT yet committed/pushed/deployed this session (awaiting Halim's go). All four gates green + a live-DB runtime smoke test passed (created/read/deleted every new model, then cleaned up).
+
+### What shipped (and why)
+
+1. **The annotation episode** (replaces the old 2-step pairwise+rubric flow). `web/src/components/annotation-interface.tsx` is now a guided episode producing up to FOUR independent artifacts, each elicited as a separate act so "the three signals agree" stays meaningful:
+   - **Prompt card**: bucket label + a per-bucket **watch-for line** (the fail-mode to look for) + **"Flag prompt"** (malformed/untranslatable → culls it, POST `/api/annotations/flag` → `PromptFlag`).
+   - **Cold authoring (gold-first)**: on `register_honorifics` + `grammar_tone` buckets, the annotator writes their OWN Igala answer FIRST, with the Igala **tone keyboard**, then it LOCKS and the models are revealed. Saved as `ColdAuthorAnswer` (provenance `speaker_authored_sourcefree`). This is the anti-translationese signal — an edit inherits the translationese of the text it edits; a cold answer does not.
+   - **Blind pairwise**: A/B hidden + randomized, **confidence 1-4**, and explicit **"tie"** and **"both inadequate"** (two distinct outcomes, per Halim).
+   - **Score the winner ONLY** (not both — the doc's "least work, cleanest target"). **Subjective** buckets are blind; a low score (≤2) forces a rationale. **Factual** buckets (`lexicon_disambig`, `idioms_metaphor`, `cultural_values`) show a **RAG reference panel** so fluency can't rescue an invented fact.
+   - **Inline edit of the winner**: tone keyboard + a **tone-aware word diff** (`web/src/lib/diff.ts`, never strips diacritics). `both_inadequate` swaps this for "write the correct version" → salvage gold (`ColdAuthorAnswer`, provenance `corrected_from_inadequate`). `tie` lets you optionally correct a chosen side WITHOUT faking a winner (edit attaches via `edit.modelOutputId`).
+   - **Consent**: one block (may-enter-benchmark / may-train) covering everything authored that episode → stored on `ColdAuthorAnswer` and `OutputEdit`.
+   - Demo banner shown when `?demo=<id>` is in the URL.
+
+2. **Demo / testing session** (researcher). `/admin/arena/demo` → `DemoLauncher` → POST `/api/arena/demo-sessions` creates a `DemoSession`, returns `/annotator/annotate?demo=<id>`. Everything submitted under it is `isDemo=true` and EXCLUDED from training export, leaderboard, and fine-tune sources. Lets Halim walk anyone through the real flow live without polluting data.
+
+3. **Holistic cost ledger** (researcher). `/admin/arena/costs` → `CostLedger` → GET `/api/arena/costs`. Derives spend live: **inference** estimated from `ModelOutput` token counts × `pricing.ts` rates (grouped by provider), **fine-tune** from `FineTuneJob.costUsd` (the "Together sessions" line, broken out as a headline total), plus the explicit `CostEntry` ledger. Eval generation now records `EvalRun.costUsd` (`eval-runs/[id]/generate`). Rates live in `web/src/lib/arena/pricing.ts` (estimates — providers don't return per-call cost).
+
+4. **Together AI fine-tune provider** (real, OFF for the pilot). `web/src/lib/arena/together.ts` = the real API client (2-step file upload → presigned PUT → `/v1/fine-tunes` → poll), mirroring singulars. Wired into `fine-tune-providers.ts` `together` provider (builds JSONL from the job via the same contamination+demo-guarded builders). Default provider stays the offline **mock**; Together throws a clear error unless `TOGETHER_API_KEY` is set. Base models: Llama-3.3-70B / Qwen3-14B / Mistral-Nemo (sft+dpo).
+
+5. **Learner = Igala only + explainer landing**. `chat-interface.tsx` rebuilt with no language picker, no Lebanese/RTL. New `/learner` explainer page ("Teaching AI to speak Igala") is the landing; `roles.ts` + `personas.ts` redirect learners there → "Start practicing" → `/learner/chat`. Swept remaining `lebanese_arabic`/RTL from `prompt-form.tsx` + `prompt-list.tsx`.
+
+### Schema + migration (additive, safe on live data)
+
+Migration `web/prisma/migrations/20260624120000_episode_cold_author_demo_cost` — applied to Supabase schema `wikitongues` via the management API (token-scoped), baselined with `prisma migrate resolve --applied`, client regenerated. New: enum `CostCategory`; models `ColdAuthorAnswer`, `PromptFlag`, `DemoSession`, `CostEntry`. Added columns: `PairwiseComparison.confidence` + winner now allows `tie|both_inadequate` (KEPT as String — BT/aggregate/export already speak this union; migration-safe); `RubricScore.confidence`; `OutputEdit.provenance/consentBenchmark/consentTraining`; `+isDemo/+demoSessionId` on PairwiseComparison/RubricScore/OutputEdit/ColdAuthorAnswer/ModelOutput. All 16 columns + 4 tables verified present in Supabase.
+
+### Contamination + demo guards (where isDemo:false / isHoldout is enforced)
+
+`isDemo:false` added to: export route (DPO+SFT), leaderboard route (pairwise+rubric), build route (pairwise+edits), Together JSONL builder. `isHoldout` still dropped in the pure builders (`training-export.ts`, tested). `/next` excludes demo comparisons from the real completion set.
+
+### buckets.ts additions
+
+Each `BucketDef` now has `scoring: "subjective"|"factual"` + `watchFor`. Helpers: `bucketWatchFor`, `bucketScoring`, `isFactualBucket`, `isGoldFirstBucket` (register+tone). Factual = lexicon_disambig, idioms_metaphor, cultural_values.
+
+### Locked decisions (Halim can revisit)
+
+- Score the WINNER only (not both outputs).
+- `tie` and `both_inadequate` are two distinct winner values.
+- Gold-first cold authoring auto-applies to register_honorifics + grammar_tone only.
+- One consent block per episode (not per-artifact).
+- `winner` stays a String union, not a Prisma enum (migration safety + BT already types it).
+
+### Verification (proof)
+
+`pnpm typecheck` 0 · `pnpm lint` clean · `pnpm test` 27/27 (added diff.test.ts ×4, pricing.test.ts ×6) · `pnpm build` compiled successfully (all new routes present). Live-DB runtime smoke test created+read+deleted ColdAuthorAnswer/PromptFlag/CostEntry/DemoSession → "SMOKE OK", then the throwaway script was removed.
+
+### New/changed files
+
+New: `lib/arena/together.ts`, `lib/arena/pricing.ts`(+test), `lib/diff.ts`(+test), `components/tone-keyboard.tsx`, `components/arena/cost-ledger.tsx`, `components/arena/demo-launcher.tsx`, `app/(app)/admin/arena/costs/page.tsx`, `app/(app)/admin/arena/demo/page.tsx`, `app/(learner)/learner/page.tsx`, `app/api/annotations/flag/route.ts`, `app/api/arena/costs/route.ts`, `app/api/arena/demo-sessions/route.ts`, the migration dir.
+Changed: `prisma/schema.prisma`, `annotation-interface.tsx`, `chat-interface.tsx`, `buckets.ts`, `personas.ts`, `roles.ts`, `fine-tune-providers.ts`, `api/annotations/next+submit`, `api/arena/export+leaderboard+eval-runs/[id]/generate+jobs/[id]/build`, `admin/arena/page.tsx` (nav: +Cost ledger +Demo session), `prompt-form.tsx`, `prompt-list.tsx`.
+
+### Open questions / next steps
+
+- NOT committed/pushed/deployed this session — awaiting Halim's go (prior PR #1 already merged to main `3fd6a20`; this is new work on the same branch).
+- Gold-first sampling currently register+tone only; consider a deterministic ~1-in-3 sample of other buckets.
+- Factual-bucket references come from `searchRag(prompt.text)` (semantic, may be approximate) + `prompt.expectedCulturalContext`. Curated per-prompt gold references would be stronger.
+- Together cost is estimated from rows×tokens×epochs (Together's API doesn't return cost). A Together webhook (singulars pattern) would capture actuals — not wired.
+- Demo sessions have no auto-cleanup/finalize endpoint yet (records just sit flagged isDemo).
+- Real community-authored held-out prompts still needed (never from Igala Wikipedia). Raise Idoma-vs-Yoruba/Igbo with Lydia (noted in lexicon_disambig watchFor).
+
+### Design system artifact (2026-06-24)
+
+`wikitongues-design-system.html` (repo root) - a standalone, self-demonstrating, exhaustive brand reference, built so Halim can hand it to a person or a bot to make slides / IG posts. Mirrors `web/src/app/globals.css` exactly (tokens are the source of truth). Covers: foundations + personality + wordmark, full color ramps (ochre 50-700, ink 50-950, clay/sage/indigo) + semantic tokens + contrast rules, typography (Fraunces/Inter/JetBrains Mono, type scale, Igala-in-mono), spacing/radius/elevation/motion scales, live components, the arena data-viz language (pick A=indigo / B=clay, red→ochre→green score ramp, `ns` honesty), voice & copy do/don't, imagery direction, **presentation templates (1920×1080)** and **IG templates (1080² / 1080×1350 / story)** as real rendered previews, plus a **machine-readable JSON token block + a "brief a bot" prompt template**. Has a light/dark toggle. Note on brand fonts: Fraunces/Inter are on impeccable's reflex-reject list but identity-preservation wins (already shipping), so they were kept, not swapped.
+
+The `/learner` landing page (`web/src/app/(learner)/learner/page.tsx`) was restyled as a brand exemplar: Fraunces display headline with an italic ochre accent word ("Igala"), em dashes removed, mono kicker + meta line, staggered `.animate-rise` entrance (new keyframe in globals.css, reduced-motion safe). Gates still green (typecheck/lint/build). Open: confirm accent `#e0a21f` vs the official Wikitongues brand kit before any print use.
