@@ -57,8 +57,11 @@ async function exportPairwise(): Promise<string> {
   return [header, ...rows].join("\n");
 }
 
+// Rubric v2 export: long format, one row per scored axis. "NA" marks an
+// explicit not-applicable judgment (distinct from the axis simply not existing).
 async function exportRubric(): Promise<string> {
-  const data = await prisma.rubricScore.findMany({
+  const data = await prisma.rubricAxisScore.findMany({
+    where: { isDemo: false },
     include: {
       modelOutput: { select: { model: true, modelId: true } },
       annotator: { select: { name: true, email: true } },
@@ -71,14 +74,10 @@ async function exportRubric(): Promise<string> {
     "promptId",
     "model",
     "modelId",
-    "culturalAccuracy",
-    "linguisticAuthenticity",
-    "culturalNormAdherence",
-    "factualCorrectness",
-    "notesCulturalAccuracy",
-    "notesLinguisticAuthenticity",
-    "notesCulturalNormAdherence",
-    "notesFactualCorrectness",
+    "axis",
+    "score",
+    "note",
+    "rubricVersion",
     "annotator",
     "createdAt",
   ]);
@@ -89,14 +88,10 @@ async function exportRubric(): Promise<string> {
       row.promptId,
       row.modelOutput.model,
       row.modelOutput.modelId,
-      row.culturalAccuracy,
-      row.linguisticAuthenticity,
-      row.culturalNormAdherence,
-      row.factualCorrectness,
-      row.notesCulturalAccuracy,
-      row.notesLinguisticAuthenticity,
-      row.notesCulturalNormAdherence,
-      row.notesFactualCorrectness,
+      row.axis,
+      row.score === null ? "NA" : row.score,
+      row.note,
+      row.rubricVersion,
       row.annotator.name ?? row.annotator.email,
       row.createdAt.toISOString(),
     ]),
@@ -111,7 +106,7 @@ async function exportReport(): Promise<string> {
       prisma.prompt.count(),
       prisma.modelOutput.count(),
       prisma.pairwiseComparison.count(),
-      prisma.rubricScore.count(),
+      prisma.rubricAxisScore.count(),
       prisma.handoffItem.count({ where: { gapBucket: { not: null } } }),
     ]);
 

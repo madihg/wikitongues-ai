@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { EvalBucket } from "@prisma/client";
-import { bucketLabel } from "@/lib/buckets";
+import { bucketLabel, RUBRIC_V2, RUBRIC_ANCHORS } from "@/lib/buckets";
 import { InfoTip } from "@/components/info-tip";
 import { ToneKeyboard } from "@/components/tone-keyboard";
 import { wordDiff } from "@/lib/diff";
 
 type Winner = "a" | "b" | "tie" | "both_inadequate";
 type Step = "prompt" | "pairwise" | "score";
+/** Per-axis rubric value: 0-5 score, "na" = not applicable, null = unanswered. */
+type AxisVal = number | "na" | null;
 
 interface RefEntry {
   topic: string;
@@ -39,61 +41,45 @@ interface Progress {
   total: number;
 }
 
-interface RubricScores {
-  culturalAccuracy: number;
-  linguisticAuthenticity: number;
-  culturalNormAdherence: number;
-  factualCorrectness: number;
-  notesCulturalAccuracy: string;
-  notesLinguisticAuthenticity: string;
-  notesCulturalNormAdherence: string;
-  notesFactualCorrectness: string;
-}
-
-const EMPTY_RUBRIC: RubricScores = {
-  culturalAccuracy: 0,
-  linguisticAuthenticity: 0,
-  culturalNormAdherence: 0,
-  factualCorrectness: 0,
-  notesCulturalAccuracy: "",
-  notesLinguisticAuthenticity: "",
-  notesCulturalNormAdherence: "",
-  notesFactualCorrectness: "",
-};
-
-const DIMENSIONS = [
-  {
-    key: "culturalAccuracy",
-    label: "Cultural accuracy",
-    notesKey: "notesCulturalAccuracy",
-  },
-  {
-    key: "linguisticAuthenticity",
-    label: "Linguistic authenticity",
-    notesKey: "notesLinguisticAuthenticity",
-  },
-  {
-    key: "culturalNormAdherence",
-    label: "Cultural-norm adherence",
-    notesKey: "notesCulturalNormAdherence",
-  },
-  {
-    key: "factualCorrectness",
-    label: "Factual correctness",
-    notesKey: "notesFactualCorrectness",
-  },
-] as const;
-
 const WINNER_OPTIONS: { value: Winner; label: string; hint: string }[] = [
   { value: "a", label: "Output A", hint: "1" },
   { value: "b", label: "Output B", hint: "2" },
   { value: "tie", label: "Tie — both adequate", hint: "3" },
-  {
-    value: "both_inadequate",
-    label: "Both inadequate",
-    hint: "4",
-  },
+  { value: "both_inadequate", label: "Both inadequate", hint: "4" },
 ];
+
+const emptyAxisVals = (): Record<string, AxisVal> =>
+  Object.fromEntries(RUBRIC_V2.map((a) => [a.key, null]));
+
+/** Draft persistence: an episode in progress survives navigation away and
+ *  flaky connections (form-reset bug from the 2026-07-02 call). */
+interface EpisodeDraft {
+  step: Step;
+  coldAnswer: string;
+  coldLocked: boolean;
+  winner: Winner | null;
+  confidence: number | null;
+  explanation: string;
+  axisVals: Record<string, AxisVal>;
+  axisNotes: Record<string, string>;
+  editWinner: string;
+  tieTarget: "a" | "b";
+  tieEdit: string;
+  salvage: string;
+}
+
+function draftKeyFor(task: TaskData): string {
+  return `wt-episode-${task.outputA.id}:${task.outputB.id}`;
+}
+
+function loadDraft(key: string): EpisodeDraft | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as EpisodeDraft) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function AnnotationInterface() {
   const [task, setTask] = useState<TaskData | null>(null);
@@ -117,8 +103,10 @@ export function AnnotationInterface() {
   const [confidence, setConfidence] = useState<number | null>(null);
   const [explanation, setExplanation] = useState("");
 
-  // Score the winner
-  const [rubric, setRubric] = useState<RubricScores>({ ...EMPTY_RUBRIC });
+  // Rubric v2 (Lydia's axes): per-axis 0-5 or N/A, on the winner only.
+  const [axisVals, setAxisVals] =
+    useState<Record<string, AxisVal>>(emptyAxisVals());
+  const [axisNotes, setAxisNotes] = useState<Record<string, string>>({});
   const [editWinner, setEditWinner] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
 
@@ -164,7 +152,8 @@ export function AnnotationInterface() {
     setWinner(null);
     setConfidence(null);
     setExplanation("");
-    setRubric({ ...EMPTY_RUBRIC });
+    setAxisVals(emptyAxisVals());
+    setAxisNotes({});
     setEditWinner("");
     setTieTarget("a");
     setTieEdit("");
@@ -173,6 +162,21 @@ export function AnnotationInterface() {
     setConsentTraining(true);
     setFlagOpen(false);
     setFlagReason("");
+  }, []);
+
+  const restoreDraft = useCallback((d: EpisodeDraft) => {
+    setStep(d.step);
+    setColdAnswer(d.coldAnswer);
+    setColdLocked(d.coldLocked);
+    setWinner(d.winner);
+    setConfidence(d.confidence);
+    setExplanation(d.explanation);
+    setAxisVals({ ...emptyAxisVals(), ...d.axisVals });
+    setAxisNotes(d.axisNotes ?? {});
+    setEditWinner(d.editWinner);
+    setTieTarget(d.tieTarget);
+    setTieEdit(d.tieEdit);
+    setSalvage(d.salvage);
   }, []);
 
   const fetchNext = useCallback(async () => {
@@ -195,17 +199,68 @@ export function AnnotationInterface() {
         setTask(data.task);
         setProgress(data.progress);
         setIsComplete(false);
+        // Resume an in-progress episode for this exact pair, if one exists.
+        const draft = loadDraft(draftKeyFor(data.task));
+        if (draft) restoreDraft(draft);
       }
     } catch {
       setError("Failed to load annotation task. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [resetEpisode]);
+  }, [resetEpisode, restoreDraft]);
 
   useEffect(() => {
     fetchNext();
   }, [fetchNext]);
+
+  // Autosave the episode draft so navigation or a dropped connection never
+  // loses in-progress work.
+  useEffect(() => {
+    if (!task) return;
+    const draft: EpisodeDraft = {
+      step,
+      coldAnswer,
+      coldLocked,
+      winner,
+      confidence,
+      explanation,
+      axisVals,
+      axisNotes,
+      editWinner,
+      tieTarget,
+      tieEdit,
+      salvage,
+    };
+    try {
+      sessionStorage.setItem(draftKeyFor(task), JSON.stringify(draft));
+    } catch {
+      // storage full/unavailable — non-fatal
+    }
+  }, [
+    task,
+    step,
+    coldAnswer,
+    coldLocked,
+    winner,
+    confidence,
+    explanation,
+    axisVals,
+    axisNotes,
+    editWinner,
+    tieTarget,
+    tieEdit,
+    salvage,
+  ]);
+
+  const clearDraft = useCallback(() => {
+    if (!task) return;
+    try {
+      sessionStorage.removeItem(draftKeyFor(task));
+    } catch {
+      // ignore
+    }
+  }, [task]);
 
   // Keyboard winner selection on the pairwise step.
   useEffect(() => {
@@ -241,29 +296,19 @@ export function AnnotationInterface() {
 
   function proceedToScore() {
     if (!winner || confidence === null) return;
-    if (explanation.trim().length < 20) return;
-    if (winner === "a" && task) setEditWinner(task.outputA.text);
-    if (winner === "b" && task) setEditWinner(task.outputB.text);
+    if (winner === "a" && task && !editWinner) setEditWinner(task.outputA.text);
+    if (winner === "b" && task && !editWinner) setEditWinner(task.outputB.text);
     setStep("score");
   }
 
-  const lowScoreMissingNote = (r: RubricScores) =>
-    DIMENSIONS.some((d) => {
-      const score = r[d.key as keyof RubricScores] as number;
-      const note = (r[d.notesKey as keyof RubricScores] as string) ?? "";
-      return score > 0 && score <= 2 && note.trim().length === 0;
-    });
-
-  const rubricComplete = (r: RubricScores) =>
-    r.culturalAccuracy > 0 &&
-    r.linguisticAuthenticity > 0 &&
-    r.culturalNormAdherence > 0 &&
-    r.factualCorrectness > 0 &&
-    !lowScoreMissingNote(r);
+  // Every axis answered (score or explicit N/A), and at least one real score.
+  const rubricComplete = () =>
+    RUBRIC_V2.every((a) => axisVals[a.key] !== null) &&
+    RUBRIC_V2.some((a) => typeof axisVals[a.key] === "number");
 
   const canSubmit = () => {
     if (!winner) return false;
-    if (winner === "a" || winner === "b") return rubricComplete(rubric);
+    if (winner === "a" || winner === "b") return rubricComplete();
     return true; // tie / both_inadequate: pairwise + optional authoring is enough
   };
 
@@ -282,18 +327,11 @@ export function AnnotationInterface() {
     };
 
     if (winner === "a" || winner === "b") {
-      payload.rubric = {
-        culturalAccuracy: rubric.culturalAccuracy,
-        linguisticAuthenticity: rubric.linguisticAuthenticity,
-        culturalNormAdherence: rubric.culturalNormAdherence,
-        factualCorrectness: rubric.factualCorrectness,
-        notesCulturalAccuracy: rubric.notesCulturalAccuracy || undefined,
-        notesLinguisticAuthenticity:
-          rubric.notesLinguisticAuthenticity || undefined,
-        notesCulturalNormAdherence:
-          rubric.notesCulturalNormAdherence || undefined,
-        notesFactualCorrectness: rubric.notesFactualCorrectness || undefined,
-      };
+      payload.rubricAxes = RUBRIC_V2.map((a) => ({
+        axis: a.key,
+        score: axisVals[a.key] === "na" ? null : axisVals[a.key],
+        note: axisNotes[a.key]?.trim() ? axisNotes[a.key].trim() : undefined,
+      }));
       if (winnerOutput && editWinner.trim() !== winnerOutput.text.trim()) {
         payload.edit = {
           correctedText: editWinner.trim(),
@@ -351,6 +389,7 @@ export function AnnotationInterface() {
           : "Annotation submitted.",
         "success",
       );
+      clearDraft();
       await fetchNext();
     } catch (err) {
       showToast(
@@ -375,6 +414,7 @@ export function AnnotationInterface() {
       });
       if (!res.ok) throw new Error((await res.json()).error || "Flag failed");
       showToast("Prompt flagged. Loading the next one.", "success");
+      clearDraft();
       await fetchNext();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Flag failed", "error");
@@ -423,6 +463,56 @@ export function AnnotationInterface() {
   if (!task) return null;
 
   const textFont = "font-mono"; // renders Igala tone diacritics cleanly
+
+  const axisButtons = (axisKey: string) => (
+    <div className="flex flex-wrap gap-2">
+      <button
+        onClick={() => setAxisVals((p) => ({ ...p, [axisKey]: "na" }))}
+        title="Not applicable — this axis is not relevant to this prompt"
+        className={`flex h-9 cursor-pointer items-center justify-center rounded-md px-3 text-xs font-medium transition-colors ${
+          axisVals[axisKey] === "na"
+            ? "bg-info text-white"
+            : "border border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
+        }`}
+      >
+        N/A
+      </button>
+      {[0, 1, 2, 3, 4, 5].map((s) => (
+        <button
+          key={s}
+          onClick={() => setAxisVals((p) => ({ ...p, [axisKey]: s }))}
+          title={RUBRIC_ANCHORS[s]}
+          className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-sm font-medium transition-colors ${
+            axisVals[axisKey] === s
+              ? "bg-accent text-accent-contrast"
+              : "border border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
+          }`}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+
+  const axisBlock = (pass: "linguistic" | "pragmatics") =>
+    RUBRIC_V2.filter((a) => a.pass === pass).map((a) => (
+      <div key={a.key}>
+        <div className="mb-2 flex items-center gap-2 text-sm font-medium text-text-secondary">
+          {a.label}
+          <InfoTip width="w-72">{a.description}</InfoTip>
+        </div>
+        {axisButtons(a.key)}
+        <textarea
+          value={axisNotes[a.key] ?? ""}
+          onChange={(e) =>
+            setAxisNotes((p) => ({ ...p, [a.key]: e.target.value }))
+          }
+          placeholder="Optional note — what exactly is right or wrong…"
+          rows={1}
+          className="mt-2 w-full rounded-md border border-border px-2 py-1.5 text-xs text-text-secondary placeholder:text-text-muted focus-visible:border-accent"
+        />
+      </div>
+    ));
 
   return (
     <div className="relative">
@@ -515,7 +605,7 @@ export function AnnotationInterface() {
               disabled={flagReason.trim().length < 3}
               className="cursor-pointer rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
             >
-              Flag & skip
+              Flag &amp; skip
             </button>
           </div>
         )}
@@ -563,8 +653,8 @@ export function AnnotationInterface() {
           ) : (
             <>
               <p className="text-sm text-text-secondary">
-                You&apos;ll compare two AI answers blind, pick the better Igala,
-                score it, and optionally correct it.
+                You&apos;ll compare two AI answers blind, pick the better Igala
+                (or say both are wrong), score it, and optionally correct it.
               </p>
               <button
                 onClick={revealModels}
@@ -669,24 +759,18 @@ export function AnnotationInterface() {
             </div>
           </div>
 
-          {/* Explanation */}
+          {/* Explanation — encouraged, never required */}
           <div className="mt-6">
             <label className="block text-sm font-medium text-text-secondary">
-              Why?{" "}
-              <span className="text-text-muted">(minimum 20 characters)</span>
+              Why? <span className="text-text-muted">(optional)</span>
             </label>
             <textarea
               value={explanation}
               onChange={(e) => setExplanation(e.target.value)}
-              placeholder="Explain your choice — what makes the Igala better or both inadequate…"
+              placeholder="What makes the Igala better — or both inadequate? Even a few words help."
               rows={3}
               className="mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:border-accent"
             />
-            {explanation.length > 0 && explanation.trim().length < 20 && (
-              <p className="mt-1 text-xs text-danger">
-                {20 - explanation.trim().length} more characters needed
-              </p>
-            )}
           </div>
 
           <div className="mt-6 flex items-center gap-3">
@@ -698,9 +782,7 @@ export function AnnotationInterface() {
             </button>
             <button
               onClick={proceedToScore}
-              disabled={
-                !winner || confidence === null || explanation.trim().length < 20
-              }
+              disabled={!winner || confidence === null}
               className="cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               Continue
@@ -719,13 +801,19 @@ export function AnnotationInterface() {
             &larr; Back to comparison
           </button>
 
-          {/* Single-winner: rubric on the winner + inline edit */}
+          {/* Single-winner: rubric v2 on the winner + inline edit */}
           {(winner === "a" || winner === "b") && winnerOutput && (
             <div className="space-y-6">
               <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-                <h3 className="mb-2 text-sm font-semibold text-text-secondary">
+                <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-text-secondary">
                   You picked {winner === "a" ? "Output A" : "Output B"} — score
                   it
+                  <InfoTip width="w-80">
+                    0 = completely wrong, 5 = you&apos;d say it exactly like
+                    this. N/A = this axis isn&apos;t relevant to this prompt
+                    (e.g. no idiom or honorific present). Hover a number for its
+                    meaning.
+                  </InfoTip>
                 </h3>
                 <div
                   className={`mb-4 max-h-32 overflow-y-auto rounded bg-surface-sunken p-3 text-xs leading-relaxed text-text-secondary ${textFont}`}
@@ -740,8 +828,8 @@ export function AnnotationInterface() {
                       Reference — fact-check against this
                       <InfoTip width="w-80">
                         This is a factual bucket. A fluent-sounding answer that
-                        invents a fact should still score low on factual
-                        correctness. Check it against the reference.
+                        invents a fact should still score low on meaning and
+                        cultural relevance. Check it against the reference.
                       </InfoTip>
                     </div>
                     {task.reference.note && (
@@ -767,57 +855,22 @@ export function AnnotationInterface() {
                   </div>
                 )}
 
-                <div className="space-y-5">
-                  {DIMENSIONS.map(({ key, label, notesKey }) => {
-                    const score = rubric[key as keyof RubricScores] as number;
-                    const note =
-                      (rubric[notesKey as keyof RubricScores] as string) || "";
-                    const needsNote =
-                      score > 0 && score <= 2 && note.trim().length === 0;
-                    return (
-                      <div key={key}>
-                        <div className="mb-2 text-sm font-medium text-text-secondary">
-                          {label}
-                        </div>
-                        <div className="flex gap-2">
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <button
-                              key={s}
-                              onClick={() =>
-                                setRubric((p) => ({ ...p, [key]: s }))
-                              }
-                              className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-sm font-medium transition-colors ${
-                                score === s
-                                  ? "bg-accent text-accent-contrast"
-                                  : "border border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
-                              }`}
-                            >
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                        <textarea
-                          value={note}
-                          onChange={(e) =>
-                            setRubric((p) => ({
-                              ...p,
-                              [notesKey]: e.target.value,
-                            }))
-                          }
-                          placeholder={
-                            needsNote
-                              ? "A low score needs a short reason…"
-                              : "Optional notes…"
-                          }
-                          rows={1}
-                          className={`mt-2 w-full rounded-md border px-2 py-1.5 text-xs text-text-secondary placeholder:text-text-muted focus-visible:border-accent ${
-                            needsNote ? "border-danger" : "border-border"
-                          }`}
-                        />
-                      </div>
-                    );
-                  })}
+                {/* Pass 1: the language itself */}
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                  The language
                 </div>
+                <div className="space-y-5">{axisBlock("linguistic")}</div>
+
+                {/* Pass 2: pragmatics — Lydia's reflective second pass */}
+                <div className="mb-1 mt-7 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                  Thinking about the answer you just scored…
+                </div>
+                <div className="space-y-5">{axisBlock("pragmatics")}</div>
+
+                <p className="mt-4 text-xs text-text-muted">
+                  0 = completely wrong · 5 = perfect · N/A = not relevant to
+                  this prompt
+                </p>
               </div>
 
               {/* Inline edit of the winner, with a tone-aware diff */}

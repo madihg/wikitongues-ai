@@ -170,6 +170,104 @@ export function isGoldFirstBucket(key: EvalBucket | null | undefined): boolean {
   return key === "register_honorifics" || key === "grammar_tone";
 }
 
+// ─── Rubric v2 (Lydia's revised rubric, 2026-07) ─────────────────────────
+// Axes are data, not schema: the Monday rubric-lock meeting can rename, add,
+// or drop axes here without a migration. Two passes: linguistic axes are
+// scored first; pragmatics axes are a reflective second pass ("Thinking about
+// the answers you just gave…"). Scale 0-5 (0 = completely wrong, anchors
+// below), or N/A when the axis is not relevant to the prompt.
+export const RUBRIC_VERSION = "v2";
+
+export interface RubricV2Axis {
+  key: string;
+  label: string;
+  description: string;
+  pass: "linguistic" | "pragmatics";
+}
+
+export const RUBRIC_V2: RubricV2Axis[] = [
+  {
+    key: "syntax",
+    label: "Grammar & word order",
+    description:
+      "Is the grammatical structure right — word order, morphology, agreement?",
+    pass: "linguistic",
+  },
+  {
+    key: "lexicon",
+    label: "Words",
+    description: "Are these real, correct Igala words (nothing invented)?",
+    pass: "linguistic",
+  },
+  {
+    key: "spelling",
+    label: "Spelling",
+    description: "Are the words spelled correctly (the letters themselves)?",
+    pass: "linguistic",
+  },
+  {
+    key: "diacritics",
+    label: "Diacritics & tone marks",
+    description:
+      "Are tone marks and dotted vowels present and correct? Critical for Igala.",
+    pass: "linguistic",
+  },
+  {
+    key: "semantics",
+    label: "Meaning",
+    description: "Does the response mean what it should?",
+    pass: "linguistic",
+  },
+  {
+    key: "cultural_relevance",
+    label: "Cultural relevance",
+    description: "Does the content match Igala culture and cultural practices?",
+    pass: "pragmatics",
+  },
+  {
+    key: "authenticity",
+    label: "Authenticity",
+    description:
+      "Would a real person say it like this? (register and tone included)",
+    pass: "pragmatics",
+  },
+  {
+    key: "dialect",
+    label: "Dialect",
+    description:
+      "Is dialect handled well — no collapse to one prestige standard, no odd mixing?",
+    pass: "pragmatics",
+  },
+  {
+    key: "contamination",
+    label: "Cross-linguistic contamination",
+    description:
+      "Is it free of bleed from Yoruba, Idoma, Igbo, or English — in words, grammar, or cultural references? (5 = fully Igala, 0 = another language entirely)",
+    pass: "pragmatics",
+  },
+];
+
+export const RUBRIC_V2_KEYS = RUBRIC_V2.map((a) => a.key);
+
+export function isRubricV2Axis(value: unknown): boolean {
+  return typeof value === "string" && RUBRIC_V2_KEYS.includes(value);
+}
+
+export function rubricV2Label(key: string): string {
+  return RUBRIC_V2.find((a) => a.key === key)?.label ?? key;
+}
+
+/** Lydia's anchor set (provisional 0-5 wording — final anchors to be locked
+ *  at the Monday rubric meeting; the platform stores 0-5 + N/A regardless). */
+export const RUBRIC_ANCHORS: Record<number, string> = {
+  0: "Completely wrong — nothing is correct",
+  1: "Many mistakes; only one or two things correct",
+  2: "Somewhat accurate; several mistakes",
+  3: "About half right",
+  4: "Mostly accurate; a few mistakes",
+  5: "Very accurate — I'd say it like this",
+};
+
 /** The four scored rubric axes (creativeDepth was renamed to culturalNormAdherence). */
 export interface RubricAxis {
   key:

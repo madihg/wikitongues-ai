@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isRubricV2Axis, RUBRIC_VERSION } from "@/lib/buckets";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -9,12 +10,14 @@ import type { Prisma } from "@prisma/client";
  * artifacts, each elicited as a separate act so "the signals agree" stays
  * meaningful:
  *   1. PairwiseComparison  — winner (a|b|tie|both_inadequate) + confidence + why
- *   2. RubricScore         — on the WINNER only (a|b), least-work / cleanest target
+ *   2. RubricAxisScore[]   — rubric v2 (Lydia's axes) on the WINNER only,
+ *                            0-5 per axis (0 = completely wrong) or null = N/A
  *   3. OutputEdit          — inline correction of the winner (gold SFT target)
  *   4. ColdAuthorAnswer    — the annotator's own answer, authored before models
  *                            were shown (gold-first), OR a salvage rewrite when
  *                            both outputs were inadequate.
  *
+ * The explanation is encouraged but has NO minimum length (2026-07-02 call).
  * Demo-session submissions are flagged isDemo=true and excluded everywhere
  * training data is built.
  */
@@ -22,15 +25,10 @@ import type { Prisma } from "@prisma/client";
 const WINNERS = ["a", "b", "tie", "both_inadequate"] as const;
 type Winner = (typeof WINNERS)[number];
 
-interface RubricInput {
-  culturalAccuracy: number;
-  linguisticAuthenticity: number;
-  culturalNormAdherence: number;
-  factualCorrectness: number;
-  notesCulturalAccuracy?: string;
-  notesLinguisticAuthenticity?: string;
-  notesCulturalNormAdherence?: string;
-  notesFactualCorrectness?: string;
+interface AxisScoreInput {
+  axis: string;
+  score: number | null; // 0-5, null = N/A
+  note?: string;
 }
 
 interface AuthoredInput {
@@ -40,18 +38,26 @@ interface AuthoredInput {
 }
 
 function validScore(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 5;
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 5;
 }
 
-function validateRubric(r: unknown): r is RubricInput {
-  if (!r || typeof r !== "object") return false;
-  const o = r as Record<string, unknown>;
-  return (
-    validScore(o.culturalAccuracy) &&
-    validScore(o.linguisticAuthenticity) &&
-    validScore(o.culturalNormAdherence) &&
-    validScore(o.factualCorrectness)
-  );
+/** Parse rubric v2 axis scores. Returns null if the payload is malformed. */
+function parseAxisScores(raw: unknown): AxisScoreInput[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: AxisScoreInput[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") return null;
+    const o = item as Record<string, unknown>;
+    if (!isRubricV2Axis(o.axis)) return null;
+    if (o.score !== null && !validScore(o.score)) return null;
+    out.push({
+      axis: o.axis as string,
+      score: o.score as number | null,
+      note:
+        typeof o.note === "string" && o.note.trim() ? o.note.trim() : undefined,
+    });
+  }
+  return out;
 }
 
 function parseAuthored(raw: unknown): AuthoredInput | null {
@@ -82,7 +88,7 @@ export async function POST(req: Request) {
     winner,
     confidence,
     explanation,
-    rubric,
+    rubricAxes,
     edit,
     coldAuthor,
     salvageAnswer,
@@ -104,16 +110,9 @@ export async function POST(req: Request) {
   }
   const win = winner as Winner;
 
-  if (
-    !explanation ||
-    typeof explanation !== "string" ||
-    explanation.trim().length < 20
-  ) {
-    return NextResponse.json(
-      { error: "Explanation is required and must be at least 20 characters" },
-      { status: 400 },
-    );
-  }
+  // Explanation is encouraged but optional — no minimum length (2026-07-02 call).
+  const explanationText =
+    typeof explanation === "string" ? explanation.trim() : "";
 
   let conf: number | null = null;
   if (confidence != null) {
@@ -132,12 +131,28 @@ export async function POST(req: Request) {
   }
 
   // Rubric is required when there is a single winner; ignored otherwise.
+  // Every axis must be answered: a 0-5 score or an explicit N/A (null),
+  // and at least one axis must carry a real score.
   const hasWinner = win === "a" || win === "b";
-  if (hasWinner && !validateRubric(rubric)) {
-    return NextResponse.json(
-      { error: "Rubric on the winner is required (four integer scores 1-5)" },
-      { status: 400 },
-    );
+  let axisScores: AxisScoreInput[] = [];
+  if (hasWinner) {
+    const parsed = parseAxisScores(rubricAxes);
+    if (!parsed || parsed.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Rubric on the winner is required: per-axis scores 0-5, or null for N/A",
+        },
+        { status: 400 },
+      );
+    }
+    if (!parsed.some((a) => a.score !== null)) {
+      return NextResponse.json(
+        { error: "At least one rubric axis must be scored (not all N/A)" },
+        { status: 400 },
+      );
+    }
+    axisScores = parsed;
   }
 
   const [outputA, outputB] = await Promise.all([
@@ -190,7 +205,7 @@ export async function POST(req: Request) {
         modelOutputBId,
         winner: win,
         confidence: conf,
-        explanation: explanation.trim(),
+        explanation: explanationText,
         annotatorId,
         isDemo,
         demoSessionId: isDemo ? demoSessionId : null,
@@ -198,30 +213,27 @@ export async function POST(req: Request) {
     }),
   ];
 
-  // Rubric on the winner only.
-  if (hasWinner && winnerOutput && validateRubric(rubric)) {
-    ops.push(
-      prisma.rubricScore.create({
-        data: {
-          promptId,
-          modelOutputId: winnerOutput.id,
-          bucket,
-          culturalAccuracy: rubric.culturalAccuracy,
-          linguisticAuthenticity: rubric.linguisticAuthenticity,
-          culturalNormAdherence: rubric.culturalNormAdherence,
-          factualCorrectness: rubric.factualCorrectness,
-          notesCulturalAccuracy: rubric.notesCulturalAccuracy || null,
-          notesLinguisticAuthenticity:
-            rubric.notesLinguisticAuthenticity || null,
-          notesCulturalNormAdherence: rubric.notesCulturalNormAdherence || null,
-          notesFactualCorrectness: rubric.notesFactualCorrectness || null,
-          confidence: conf,
-          annotatorId,
-          isDemo,
-          demoSessionId: isDemo ? demoSessionId : null,
-        },
-      }),
-    );
+  // Rubric v2 on the winner only: one row per axis. N/A axes (score null) are
+  // stored too — an explicit "not relevant" is signal, not absence.
+  if (hasWinner && winnerOutput) {
+    for (const a of axisScores) {
+      ops.push(
+        prisma.rubricAxisScore.create({
+          data: {
+            promptId,
+            modelOutputId: winnerOutput.id,
+            bucket,
+            axis: a.axis,
+            score: a.score,
+            note: a.note ?? null,
+            rubricVersion: RUBRIC_VERSION,
+            annotatorId,
+            isDemo,
+            demoSessionId: isDemo ? demoSessionId : null,
+          },
+        }),
+      );
+    }
   }
 
   // Inline edit -> gold SFT target. Targets the explicit modelOutputId if given

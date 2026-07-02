@@ -3,13 +3,16 @@ import {
   type BradleyTerryResult,
   type PairwiseObservation,
 } from "./bradley-terry";
-import { BUCKET_KEYS, RUBRIC_KEYS } from "@/lib/buckets";
+import { BUCKET_KEYS } from "@/lib/buckets";
 import type { EvalBucket } from "@prisma/client";
 
 /**
  * Arena aggregation: turn collected human pairwise + rubric signal into a
  * per-bucket ranking matrix. Pure functions — the API route supplies plain
  * rows mapped from Prisma so this stays unit-testable.
+ *
+ * Rubric rows are axis-keyed (rubric v2): one row per scored axis. N/A scores
+ * (null) are excluded before rows reach this module.
  */
 
 /** A pairwise comparison reduced to the two candidates and the winner. */
@@ -20,22 +23,20 @@ export interface PairwiseRow {
   bucket: EvalBucket | null;
 }
 
-/** A rubric submission reduced to a candidate, bucket, and the four 1-5 axes. */
+/** One scored rubric axis (v2): candidate, bucket, axis key, 0-5 score. */
 export interface RubricRow {
   candidateId: string;
   bucket: EvalBucket | null;
-  culturalAccuracy: number;
-  linguisticAuthenticity: number;
-  culturalNormAdherence: number;
-  factualCorrectness: number;
+  axis: string;
+  score: number;
 }
 
 export interface RubricMeans {
-  culturalAccuracy: number;
-  linguisticAuthenticity: number;
-  culturalNormAdherence: number;
-  factualCorrectness: number;
+  /** Mean per axis key (only axes that were actually scored appear). */
+  axes: Record<string, number>;
+  /** Mean of the axis means. */
   overall: number;
+  /** Number of scored axis rows that fed this cell. */
   n: number;
 }
 
@@ -72,38 +73,24 @@ export function rankPairwise(rows: PairwiseRow[]): {
   return { byBucket, overall };
 }
 
-function emptyMeans(): { sum: RubricMeans; count: number } {
-  return {
-    sum: {
-      culturalAccuracy: 0,
-      linguisticAuthenticity: 0,
-      culturalNormAdherence: 0,
-      factualCorrectness: 0,
-      overall: 0,
-      n: 0,
-    },
-    count: 0,
-  };
-}
-
-/** Mean rubric per candidate, per bucket and overall ("__overall__"). */
+/** Mean rubric per candidate, per bucket and overall ("__overall__").
+ *  Per-axis means first; a cell's overall is the mean of its axis means, so
+ *  a frequently-scored axis doesn't drown out a rarely-applicable one. */
 export function aggregateRubric(
   rows: RubricRow[],
 ): Record<string, Record<string, RubricMeans>> {
+  // cid -> cellKey -> axis -> {sum, n}
   const acc: Record<
     string,
-    Record<string, { sum: RubricMeans; count: number }>
+    Record<string, Record<string, { sum: number; n: number }>>
   > = {};
 
   const add = (cid: string, key: string, row: RubricRow) => {
     acc[cid] ??= {};
-    acc[cid][key] ??= emptyMeans();
-    const a = acc[cid][key];
-    a.sum.culturalAccuracy += row.culturalAccuracy;
-    a.sum.linguisticAuthenticity += row.linguisticAuthenticity;
-    a.sum.culturalNormAdherence += row.culturalNormAdherence;
-    a.sum.factualCorrectness += row.factualCorrectness;
-    a.count += 1;
+    acc[cid][key] ??= {};
+    acc[cid][key][row.axis] ??= { sum: 0, n: 0 };
+    acc[cid][key][row.axis].sum += row.score;
+    acc[cid][key][row.axis].n += 1;
   };
 
   for (const row of rows) {
@@ -114,23 +101,22 @@ export function aggregateRubric(
   const out: Record<string, Record<string, RubricMeans>> = {};
   for (const [cid, byKey] of Object.entries(acc)) {
     out[cid] = {};
-    for (const [key, { sum, count }] of Object.entries(byKey)) {
-      const n = count || 1;
-      const means: RubricMeans = {
-        culturalAccuracy: sum.culturalAccuracy / n,
-        linguisticAuthenticity: sum.linguisticAuthenticity / n,
-        culturalNormAdherence: sum.culturalNormAdherence / n,
-        factualCorrectness: sum.factualCorrectness / n,
-        overall: 0,
-        n: count,
+    for (const [key, byAxis] of Object.entries(byKey)) {
+      const axes: Record<string, number> = {};
+      let n = 0;
+      for (const [axis, { sum, n: axisN }] of Object.entries(byAxis)) {
+        axes[axis] = sum / axisN;
+        n += axisN;
+      }
+      const axisMeans = Object.values(axes);
+      out[cid][key] = {
+        axes,
+        overall:
+          axisMeans.length > 0
+            ? axisMeans.reduce((s, v) => s + v, 0) / axisMeans.length
+            : 0,
+        n,
       };
-      means.overall =
-        (means.culturalAccuracy +
-          means.linguisticAuthenticity +
-          means.culturalNormAdherence +
-          means.factualCorrectness) /
-        RUBRIC_KEYS.length;
-      out[cid][key] = means;
     }
   }
   return out;

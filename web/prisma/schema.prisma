@@ -91,6 +91,7 @@ model User {
   languages           AnnotatorLanguage[]
   pairwiseComparisons PairwiseComparison[]
   rubricScores        RubricScore[]
+  rubricAxisScores    RubricAxisScore[]
   outputEdits         OutputEdit[]
   coldAuthorAnswers   ColdAuthorAnswer[]
   promptFlags         PromptFlag[]
@@ -173,14 +174,15 @@ model ModelOutput {
   demoSessionId    String?
   createdAt        DateTime    @default(now())
 
-  prompt         Prompt               @relation(fields: [promptId], references: [id])
-  candidateModel CandidateModel?      @relation(fields: [candidateModelId], references: [id])
-  evalRun        EvalRun?             @relation(fields: [evalRunId], references: [id])
-  epoch          Epoch?               @relation(fields: [epochId], references: [id])
-  pairwiseAsA    PairwiseComparison[] @relation("ModelA")
-  pairwiseAsB    PairwiseComparison[] @relation("ModelB")
-  rubricScores   RubricScore[]
-  edits          OutputEdit[]
+  prompt           Prompt               @relation(fields: [promptId], references: [id])
+  candidateModel   CandidateModel?      @relation(fields: [candidateModelId], references: [id])
+  evalRun          EvalRun?             @relation(fields: [evalRunId], references: [id])
+  epoch            Epoch?               @relation(fields: [epochId], references: [id])
+  pairwiseAsA      PairwiseComparison[] @relation("ModelA")
+  pairwiseAsB      PairwiseComparison[] @relation("ModelB")
+  rubricScores     RubricScore[]
+  rubricAxisScores RubricAxisScore[]
+  edits            OutputEdit[]
 
   @@index([candidateModelId])
   @@index([evalRunId])
@@ -217,15 +219,18 @@ model PairwiseComparison {
 
 // Rubric axes aligned to the project's four scored dimensions.
 // NOTE: creativeDepth was renamed to culturalNormAdherence (Sonja's correction).
+// Scale: 0-5 (0 = completely wrong). null = N/A (axis not relevant to this prompt).
+// rubricVersion partitions data if the rubric ever changes mid-project.
 model RubricScore {
   id                          String      @id @default(cuid())
   promptId                    String
   modelOutputId               String
   bucket                      EvalBucket?
-  culturalAccuracy            Int // 1-5
-  linguisticAuthenticity      Int // 1-5
-  culturalNormAdherence       Int // 1-5 (was creativeDepth)
-  factualCorrectness          Int // 1-5
+  culturalAccuracy            Int? // 0-5, null = N/A
+  linguisticAuthenticity      Int? // 0-5, null = N/A
+  culturalNormAdherence       Int? // 0-5, null = N/A (was creativeDepth)
+  factualCorrectness          Int? // 0-5, null = N/A
+  rubricVersion               String      @default("v1")
   notesCulturalAccuracy       String?
   notesLinguisticAuthenticity String?
   notesCulturalNormAdherence  String?
@@ -244,6 +249,35 @@ model RubricScore {
   evalRun     EvalRun?    @relation(fields: [evalRunId], references: [id])
 
   @@index([evalRunId])
+}
+
+// Rubric v2 (Lydia's revised rubric, 2026-07): one row per scored axis.
+// Axes are DATA, not columns, so the Monday rubric-lock meeting can rename,
+// add, or drop axes without a migration. The axis catalogue lives in
+// src/lib/buckets.ts (RUBRIC_V2). Scale 0-5 (0 = completely wrong),
+// null = N/A (axis not relevant to this prompt).
+model RubricAxisScore {
+  id            String      @id @default(cuid())
+  promptId      String
+  modelOutputId String
+  bucket        EvalBucket?
+  axis          String // RUBRIC_V2 key, e.g. syntax, diacritics, contamination
+  score         Int? // 0-5, null = N/A
+  note          String?
+  rubricVersion String      @default("v2")
+  annotatorId   String
+  epochId       String?
+  evalRunId     String?
+  isDemo        Boolean     @default(false)
+  demoSessionId String?
+  createdAt     DateTime    @default(now())
+
+  modelOutput ModelOutput @relation(fields: [modelOutputId], references: [id])
+  annotator   User        @relation(fields: [annotatorId], references: [id])
+
+  @@index([modelOutputId])
+  @@index([axis])
+  @@index([isDemo])
 }
 
 // Agnes's direct-edit field as a first-class object (gold SFT target).

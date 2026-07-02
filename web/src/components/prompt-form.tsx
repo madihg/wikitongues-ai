@@ -46,6 +46,16 @@ export function PromptForm({
 
   const isEditing = !!prompt?.id;
 
+  // Escape closes the modal from anywhere.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   useEffect(() => {
     if (prompt) {
       setBucket(prompt.bucket);
@@ -111,8 +121,16 @@ export function PromptForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-2xl rounded-lg bg-surface shadow-md">
+    // Backdrop click and Escape both dismiss (2026-07-02 call: Agnes couldn't
+    // close the modal by clicking outside it).
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl rounded-lg bg-surface shadow-md"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="text-lg font-semibold text-text-primary">
             {isEditing ? "Edit Prompt" : "Create Prompt"}

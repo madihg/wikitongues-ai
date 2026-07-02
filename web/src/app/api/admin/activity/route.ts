@@ -34,7 +34,7 @@ export async function GET() {
           orderBy: { createdAt: "desc" },
           select: { createdAt: true },
         }),
-        prisma.rubricScore.findFirst({
+        prisma.rubricAxisScore.findFirst({
           where: { annotatorId: user.id },
           orderBy: { createdAt: "desc" },
           select: { createdAt: true },
