@@ -19,7 +19,11 @@ import { searchRag } from "../src/lib/rag";
 // Candidates to generate answers from. Two different models give a meaningful
 // A/B. Add the Claude / Gemini candidates back here once their API keys have
 // credit (Anthropic was out of balance and Gemini had no key at seed time).
-const CANDIDATE_SLUGS = ["gpt-4o-baseline", "gpt-4o-mini-baseline"];
+const CANDIDATE_SLUGS = [
+  "gpt-4o-baseline",
+  "gemini-2-0-flash-baseline",
+  "gpt-4o-mini-baseline",
+];
 
 // Additional candidates to ensure exist (additive, real models).
 const EXTRA_CANDIDATES = [
