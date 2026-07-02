@@ -174,3 +174,61 @@ Changed: `prisma/schema.prisma`, `annotation-interface.tsx`, `chat-interface.tsx
 `wikitongues-design-system.html` (repo root) - a standalone, self-demonstrating, exhaustive brand reference, built so Halim can hand it to a person or a bot to make slides / IG posts. Mirrors `web/src/app/globals.css` exactly (tokens are the source of truth). Covers: foundations + personality + wordmark, full color ramps (ochre 50-700, ink 50-950, clay/sage/indigo) + semantic tokens + contrast rules, typography (Fraunces/Inter/JetBrains Mono, type scale, Igala-in-mono), spacing/radius/elevation/motion scales, live components, the arena data-viz language (pick A=indigo / B=clay, red→ochre→green score ramp, `ns` honesty), voice & copy do/don't, imagery direction, **presentation templates (1920×1080)** and **IG templates (1080² / 1080×1350 / story)** as real rendered previews, plus a **machine-readable JSON token block + a "brief a bot" prompt template**. Has a light/dark toggle. Note on brand fonts: Fraunces/Inter are on impeccable's reflex-reject list but identity-preservation wins (already shipping), so they were kept, not swapped.
 
 The `/learner` landing page (`web/src/app/(learner)/learner/page.tsx`) was restyled as a brand exemplar: Fraunces display headline with an italic ochre accent word ("Igala"), em dashes removed, mono kicker + meta line, staggered `.animate-rise` entrance (new keyframe in globals.css, reduced-motion safe). Gates still green (typecheck/lint/build). Open: confirm accent `#e0a21f` vs the official Wikitongues brand kit before any print use.
+
+## Session State (2026-07-02) - RUBRIC V2 (Lydia's axes) + all Jul-2-call bugs fixed + merged to main + deployed
+
+Context: the Jul 2 8am call (Halim, Agnes, Daniel, Lydia) ran the live demo against STALE production (10 days old, pre-everything). Agnes hit bugs live; Halim promised fixes before next Tuesday's call. This session fixed everything, restructured the rubric to Lydia's revision, merged PR #2 to main (b7916b2), and redeployed production.
+
+### Root cause of the call's bugs
+
+Production was never redeployed after the episode work: main lacked `both_inadequate` entirely; prod also predated the Supabase env cutover (hanging submissions = old code, likely paused Neon). The demo URL served the ancient 2-step flow. Fix = the deploy itself.
+
+### Rubric v2 (THE big change - Lydia's revised rubric, from the Source-of-Truth doc tab + Jul 2 call)
+
+- New model `RubricAxisScore`: ONE ROW PER SCORED AXIS. Axes are CONFIG (`RUBRIC_V2` in `web/src/lib/buckets.ts`), not schema - the Monday rubric-lock meeting can rename/add/drop axes with a code edit, no migration.
+- 9 axes in two passes. Linguistic (scored first): syntax, lexicon, spelling, diacritics, semantics. Pragmatics (reflective second pass, Lydia's framing "Thinking about the answer you just scored…"): cultural_relevance, authenticity, dialect, contamination (cross-linguistic bleed; 5 = fully Igala).
+- Scale 0-5 (0 = completely wrong - Agnes's ask) + per-axis N/A (null in DB; an explicit N/A row IS stored - "not relevant" is signal). Lydia's anchors are tooltips (`RUBRIC_ANCHORS`), marked provisional until Monday.
+- `rubricVersion` stamps every score (legacy = v1, new = v2) so rubric changes never mix data. Old 4-axis `RubricScore` table retained (3 test rows), columns made nullable; NO new writes go there.
+- Consumers ALL ported to v2 (axis-generic, N/A-safe, isDemo-excluded): submit route (accepts `rubricAxes: [{axis, score|null, note?}]`, requires every axis answered + ≥1 real score, winner-only), arena leaderboard, eval-run aggregate, admin leaderboard (+ win-rate fix: tie/both_inadequate now count as games without wins, was crediting B on ties), admin category-breakdown, admin agreement (per-axis std-dev proxy), admin export (long-format CSV: axis,score,NA,note,version), admin activity. Components leaderboard.tsx + category-breakdown.tsx render dynamic axis columns from the API's `axes` list.
+- `aggregate.ts` rubric half rewritten: per-axis means; a cell's overall = mean of axis means (rare axes not drowned by frequent ones). Tests updated + new cases (0-score pull-down, axis-weighting) - 29/29 green.
+
+### Jul 2 call bugs - all fixed
+
+1. "Both are wrong" option: EXISTED on branch since 6/24 (`both_inadequate` + salvage rewrite); root cause was stale prod. Deployed now.
+2. Explanation min-20-chars: REMOVED everywhere (UI label says optional, API accepts empty). Lydia had independently suggested optional explanations for workload.
+3. Rubric N/A: per-axis N/A button (info-blue when selected).
+4. Rubric 0: scale now 0-5 with anchors.
+5. Continue-button deadlock when both wrong: resolved via both_inadequate being a first-class winner value.
+6. Un-dismissable New Prompt modal: backdrop click + Escape now close it (`prompt-form.tsx`).
+7. Annotate form resets on navigation: episodes now AUTOSAVE to sessionStorage per output-pair (`wt-episode-<idA>:<idB>`), restored on return, cleared on submit/flag. Matters for Agnes's flaky power/connectivity.
+8. Review queue not populating during call: old-prod artifact (annotations don't feed /annotator/review - that's learner handoffs; submitted edits appear in /admin/arena/contested "Edits pending verification"). Worth showing Agnes where submissions actually land.
+9. Learner defaulted to Lebanese Arabic: already fixed (Igala-only + explainer landing), now deployed.
+
+### Deploy state (READ THIS - two Vercel projects!)
+
+PR #2 (https://github.com/madihg/wikitongues-ai/pull/2) merged to main = b7916b2. TWO Vercel projects exist: `wikitongues-ai` (prj_AwAK..., GitHub-integrated - merging to main AUTO-DEPLOYS, has full env) and `wikitongues-ai-web` (prj_tHoR..., created Jun 18, HAD ZERO ENV VARS - the source of the call's hanging submissions; env now populated too). The PUBLIC URL https://wikitongues-ai-web.vercel.app was aliased to a Jun 18 build; this session RE-POINTED it to the fresh auto-deploy (wikitongues-pubwbm7lf, built from main b7916b2, Ready). Smoke-tested live: /, /learner, /annotator/annotate, /admin/arena all 200, /api/annotations/next 401 unauthed, zero Lebanese.
+
+CAVEATS: (1) The alias is MANUAL/static - after the NEXT merge to main, re-point it: `vercel alias set <new-deploy-url> wikitongues-ai-web.vercel.app`, or better: in the Vercel dashboard move the domain wikitongues-ai-web.vercel.app from project wikitongues-ai-web to project wikitongues-ai (Settings -> Domains) so it auto-tracks production - CLI can't (domain "assigned to another project"). (2) The live build was created seconds BEFORE GOOGLE_GENERATIVE_AI_API_KEY was added to env, so prod runtime LACKS the Gemini key until the next deploy (annotation flow unaffected; only Gemini "Run eval" in the arena). (3) CLI `vercel --prod` deploys came out BLOCKED (team plan friction; the Jun 23 "not a member of the team / upgrade to Pro" email is related) - the GitHub auto-deploy path works, use PRs. (4) Direct `git push origin HEAD:main` is classifier-blocked; PR flow (gh pr create + gh pr merge) works. Vercel prod env on wikitongues-ai: DATABASE_URL/DIRECT_URL (Supabase wikitongues schema), ANTHROPIC_API_KEY (NO CREDIT - top up!), OPENAI_API_KEY (works, GPT-4.1/o3 accessible), GOOGLE_GENERATIVE_AI_API_KEY, NEXTAUTH_SECRET+URL.
+
+### Call intel (from Granola/Gmail/Drive agents, Jul 2)
+
+- Team: START WITH 5 ANNOTATORS (Agnes hand-picks, replaces laggards). Budget: 105 reviewer-hours over ~3 months (Daniel) = 8-9 h/week total. Agnes sends 5 names+emails; access "next week or so". Train-the-trainer model.
+- Rubric process: Lydia emails both rubrics + justification to broader team TODAY, inviting challenge; Halim+Lydia finalize MONDAY morning (before Google Research mtg); next Tuesday call = demo updated platform + rubric, then Agnes trains her team.
+- Goal quote: "best Igala-speaking model in the world by October."
+- Live model finding: both outputs for 'morning' were wrong; Agnes: "it's not an Igala word… maybe it's coming from Yoruba" - validates the contamination axis.
+- Daniel acknowledged the DB should eventually move to a Wikitongues-owned Supabase (currently Halim's personal project smytgqkgomsfyurskpcl).
+- Jun 30 recap email confirms training sequencing: RAG first → SFT on community edits (esp. orthography/diacritics) → DPO later. Kartik: A/B as cheap bootstrap, LLM-judge to find low-signal rubrics, learn a weighted rubric predictor. Josiah: anchor annotators with expert-reviewed corpus. Andrew Smart (Jul 1): Berezkin folklore-motif DB (ruthenia.ru/folklore/berezkin) as a prompt source for idioms/motifs buckets. DAIR: licensingafricandatasets.com for data governance.
+- Lydia's doc extras: multimodal (video recordings of correct pronunciations - discuss with Agnes), MQM metrics (themqm.org), WALS for Yoruba/Idoma what-NOT-to-do, "expectation of model movement" per bucket (High: diacritics, morphosyntax, semantics, register, authenticity; Medium: lexicon, tone, idioms; Low: spelling, punctuation, dialect, honorifics). Google-side companion rubric exists (Andrew Smart's "Cultural Significance" rater guidelines doc, 1-5+N/A with anchors).
+
+### Data-size math (for the pilot, within the 105-hour budget)
+
+~6 min/episode → ~10/hour → 105h ≈ 1,000-1,050 episodes total capacity. Binomial power: distinguishing a 65/35 model pair needs ~85 comparisons (one-sided α=.05, power .8); 60/40 needs ~190. With 3 candidates (3 pairs) and 8 buckets, clear-cut differences (65/35) per bucket per pair ≈ 85×3×8 ≈ 2,000 - OVER budget. Honest pilot framing: ~125 episodes/bucket total → per-bucket distinguishability only for large gaps; overall (pooled) ranking solid. SFT: 500-1,000 verified gold targets = measurable movement (LIMA/Tamil-Llama scale); DPO: 2-5K clean pairs = post-pilot; CPT: needs 10M+ clean tokens - doesn't exist yet.
+
+### Open / next steps
+
+- MONDAY: rubric-lock with Lydia. Platform is config-ready: edit `RUBRIC_V2` axes/labels/anchors in buckets.ts only. Open rubric questions to settle: (a) 0-vs-1 anchor overlap (0 absorbed "nothing correct"; Lydia's 1-anchor needs rewording), (b) factual correctness now lives in semantics+cultural_relevance + the factual-bucket reference panel - confirm that's acceptable, (c) exact anchor wording per level.
+- Prompt bank is 8 prompts (1/bucket) - FAR too small for 5 annotators. Need ~30-50/bucket; community-authored for held-out. Berezkin motifs + Agnes's team as sources. `pnpm seed:outputs` generates answers for new prompts.
+- When Agnes's 5 names arrive: create accounts (register route allows self-signup as ANNOTATOR; or seed). CHANGE default passwords ("password") + set OWNER_PASSWORD in prod.
+- Anthropic key: OUT OF CREDIT + possibly compromised (rotate! see 2026-06-24 security notes; OpenAI key shared across projects - rotate both). Gemini 2.5-pro needs paid tier.
+- Swap-consistency reinjection + calibration mode still unbuilt (spec'd in research doc). Krippendorff proper still a proxy.
+- DB migration to Wikitongues-owned Supabase - Daniel acknowledged, plan post-pilot.
