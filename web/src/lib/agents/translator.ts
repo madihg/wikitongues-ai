@@ -42,9 +42,12 @@ const IGALA_SYSTEM = [
 ].join("\n");
 
 export const DEFAULT_CANDIDATE: CandidateLike = {
-  name: "claude",
-  provider: "anthropic",
-  baseModelId: "claude-sonnet-4-5-20250929",
+  // Most powerful model that is currently funded. To use Claude instead, switch to
+  //   { name: "claude", provider: "anthropic", baseModelId: "claude-opus-4-8" }
+  // once the Anthropic account has credit.
+  name: "gpt-4.1",
+  provider: "openai",
+  baseModelId: "gpt-4.1",
   useSystemPrompt: true,
   systemPrompt: IGALA_SYSTEM,
   ragEnabled: true,

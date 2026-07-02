@@ -35,8 +35,8 @@ const EXTRA_CANDIDATES = [
 
 // Per-slug model override for GENERATION only (does not touch the registry).
 const MODEL_OVERRIDE: Record<string, string> = {
-  "claude-sonnet-4-5-baseline": "claude-sonnet-4-6",
-  "claude-sonnet-4-5-rag": "claude-sonnet-4-6",
+  "claude-sonnet-4-5-baseline": "claude-opus-4-8",
+  "claude-sonnet-4-5-rag": "claude-opus-4-8",
 };
 
 async function main() {
