@@ -8,6 +8,7 @@ import {
   bucketScoring,
   isFactualBucket,
   isGoldFirstBucket,
+  axesForBucket,
 } from "@/lib/buckets";
 
 /**
@@ -131,6 +132,7 @@ export async function GET(req: Request) {
             goldFirst: isGoldFirstBucket(prompt.bucket),
             watchFor: bucketWatchFor(prompt.bucket),
             scoring: bucketScoring(prompt.bucket),
+            applicableAxes: axesForBucket(prompt.bucket),
             reference,
             outputA: { id: outputA.id, text: outputA.outputText },
             outputB: { id: outputB.id, text: outputB.outputText },

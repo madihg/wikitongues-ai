@@ -31,9 +31,32 @@ interface TaskData {
   goldFirst: boolean;
   watchFor: string;
   scoring: "subjective" | "factual";
+  /** Rubric axes in-scope for this prompt category (others default to N/A). */
+  applicableAxes: string[];
   reference: { note: string | null; entries: RefEntry[] } | null;
   outputA: { id: string; text: string };
   outputB: { id: string; text: string };
+}
+
+/**
+ * Read a fetch Response as JSON without ever throwing. A serverless 500/504 or a
+ * proxy error page returns HTML, and a blind `res.json()` on that throws the
+ * cryptic "Unexpected token '<'..." error that reads as a mysterious JSON bug.
+ * This returns a usable object with an `error` string instead.
+ */
+async function safeJson(
+  res: Response,
+): Promise<Record<string, unknown> & { error?: string }> {
+  const text = await res.text().catch(() => "");
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return {
+      error: res.ok
+        ? "Unexpected server response."
+        : `Server error (${res.status}). Please try again.`,
+    };
+  }
 }
 
 interface Progress {
@@ -188,23 +211,33 @@ export function AnnotationInterface() {
         ? `/api/annotations/next?demo=${encodeURIComponent(demo)}`
         : "/api/annotations/next";
       const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch next task");
-      const data = await res.json();
+      const data = (await safeJson(res)) as {
+        error?: string;
+        complete?: boolean;
+        progress?: Progress;
+        task?: TaskData;
+      };
+      if (!res.ok)
+        throw new Error(data.error || "Failed to load the next task.");
       resetEpisode();
-      if (data.complete) {
+      if (data.complete || !data.task) {
         setIsComplete(true);
         setTask(null);
         if (data.progress) setProgress(data.progress);
       } else {
         setTask(data.task);
-        setProgress(data.progress);
+        setProgress(data.progress ?? null);
         setIsComplete(false);
         // Resume an in-progress episode for this exact pair, if one exists.
         const draft = loadDraft(draftKeyFor(data.task));
         if (draft) restoreDraft(draft);
       }
-    } catch {
-      setError("Failed to load annotation task. Please try again.");
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Failed to load annotation task. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -301,9 +334,18 @@ export function AnnotationInterface() {
     setStep("score");
   }
 
-  // Every axis answered (score or explicit N/A), and at least one real score.
+  // In-scope axes for this prompt category (fallback: all axes).
+  const inScope: string[] =
+    task && task.applicableAxes.length > 0
+      ? task.applicableAxes
+      : RUBRIC_V2.map((a) => a.key);
+  const inScopeAxes = RUBRIC_V2.filter((a) => inScope.includes(a.key));
+  const offScopeAxes = RUBRIC_V2.filter((a) => !inScope.includes(a.key));
+
+  // Every IN-SCOPE axis answered (score or explicit N/A), and at least one real
+  // score anywhere (in- or off-scope). Off-scope axes are optional.
   const rubricComplete = () =>
-    RUBRIC_V2.every((a) => axisVals[a.key] !== null) &&
+    inScopeAxes.every((a) => axisVals[a.key] !== null) &&
     RUBRIC_V2.some((a) => typeof axisVals[a.key] === "number");
 
   const canSubmit = () => {
@@ -327,7 +369,10 @@ export function AnnotationInterface() {
     };
 
     if (winner === "a" || winner === "b") {
-      payload.rubricAxes = RUBRIC_V2.map((a) => ({
+      // Send in-scope axes plus any off-scope axis the annotator chose to answer.
+      payload.rubricAxes = RUBRIC_V2.filter(
+        (a) => inScope.includes(a.key) || axisVals[a.key] !== null,
+      ).map((a) => ({
         axis: a.key,
         score: axisVals[a.key] === "na" ? null : axisVals[a.key],
         note: axisNotes[a.key]?.trim() ? axisNotes[a.key].trim() : undefined,
@@ -374,11 +419,8 @@ export function AnnotationInterface() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Submission failed");
-      }
-      const data = await res.json();
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || "Submission failed");
       const extras: string[] = [];
       if (data.editsSaved) extras.push("a correction");
       if (data.coldSaved) extras.push("your own answer");
@@ -412,7 +454,8 @@ export function AnnotationInterface() {
           reason: flagReason.trim(),
         }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || "Flag failed");
+      if (!res.ok)
+        throw new Error((await safeJson(res)).error || "Flag failed");
       showToast("Prompt flagged. Loading the next one.", "success");
       clearDraft();
       await fetchNext();
@@ -494,8 +537,8 @@ export function AnnotationInterface() {
     </div>
   );
 
-  const axisBlock = (pass: "linguistic" | "pragmatics") =>
-    RUBRIC_V2.filter((a) => a.pass === pass).map((a) => (
+  const axisBlock = (axes: typeof RUBRIC_V2) =>
+    axes.map((a) => (
       <div key={a.key}>
         <div className="mb-2 flex items-center gap-2 text-sm font-medium text-text-secondary">
           {a.label}
@@ -513,6 +556,9 @@ export function AnnotationInterface() {
         />
       </div>
     ));
+
+  const inScopeLinguistic = inScopeAxes.filter((a) => a.pass === "linguistic");
+  const inScopePragmatics = inScopeAxes.filter((a) => a.pass === "pragmatics");
 
   return (
     <div className="relative">
@@ -711,7 +757,10 @@ export function AnnotationInterface() {
           </div>
 
           {/* Winner choice incl. tie / both-inadequate */}
-          <div className="mt-6 flex flex-wrap gap-2">
+          <div className="mt-6 text-sm font-medium text-text-secondary">
+            Which is the better Igala — or is neither good?
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
             {WINNER_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -855,21 +904,47 @@ export function AnnotationInterface() {
                   </div>
                 )}
 
-                {/* Pass 1: the language itself */}
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                  The language
-                </div>
-                <div className="space-y-5">{axisBlock("linguistic")}</div>
+                {/* Pass 1: the language itself (in-scope axes only) */}
+                {inScopeLinguistic.length > 0 && (
+                  <>
+                    <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                      The language
+                    </div>
+                    <div className="space-y-5">
+                      {axisBlock(inScopeLinguistic)}
+                    </div>
+                  </>
+                )}
 
-                {/* Pass 2: pragmatics — Lydia's reflective second pass */}
-                <div className="mb-1 mt-7 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                  Thinking about the answer you just scored…
-                </div>
-                <div className="space-y-5">{axisBlock("pragmatics")}</div>
+                {/* Pass 2: pragmatics — the reflective second pass (in-scope) */}
+                {inScopePragmatics.length > 0 && (
+                  <>
+                    <div className="mb-1 mt-7 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                      Thinking about the answer you just scored…
+                    </div>
+                    <div className="space-y-5">
+                      {axisBlock(inScopePragmatics)}
+                    </div>
+                  </>
+                )}
+
+                {/* Off-scope axes: collapsed by default (this prompt category
+                    usually doesn't need them, but you can score any that apply). */}
+                {offScopeAxes.length > 0 && (
+                  <details className="mt-6 rounded-md border border-border bg-surface-sunken px-3 py-2">
+                    <summary className="cursor-pointer text-xs font-medium text-text-tertiary">
+                      Other rubric axes (not usually relevant to this prompt) —
+                      score only if they apply
+                    </summary>
+                    <div className="mt-4 space-y-5">
+                      {axisBlock(offScopeAxes)}
+                    </div>
+                  </details>
+                )}
 
                 <p className="mt-4 text-xs text-text-muted">
-                  0 = completely wrong · 5 = perfect · N/A = not relevant to
-                  this prompt
+                  0 = completely wrong · 5 = perfect · N/A = not relevant here.
+                  Axes shown are the ones that matter for this prompt.
                 </p>
               </div>
 

@@ -172,6 +172,11 @@ export async function POST(req: Request) {
   });
   const bucket = outputA.bucket ?? prompt?.bucket ?? null;
 
+  // The Prompt's DB id (cuid). ColdAuthorAnswer.promptId is a FK to Prompt.id,
+  // so it must use this — NOT the public promptId string (e.g. "ig_orth_001")
+  // that the client sends, which would violate the FK and 500 the request.
+  const promptDbId = outputA.promptId;
+
   const isDemo = typeof demoSessionId === "string" && demoSessionId.length > 0;
 
   // Outside a demo, one comparison per (annotator, prompt, pair).
@@ -283,7 +288,7 @@ export async function POST(req: Request) {
     ops.push(
       prisma.coldAuthorAnswer.create({
         data: {
-          promptId,
+          promptId: promptDbId,
           bucket,
           answerText: cold.answerText,
           provenance: "speaker_authored_sourcefree",
@@ -307,7 +312,7 @@ export async function POST(req: Request) {
       ops.push(
         prisma.coldAuthorAnswer.create({
           data: {
-            promptId,
+            promptId: promptDbId,
             bucket,
             answerText: salvage.answerText,
             provenance: "corrected_from_inadequate",
@@ -322,7 +327,17 @@ export async function POST(req: Request) {
     }
   }
 
-  await prisma.$transaction(ops);
+  try {
+    await prisma.$transaction(ops);
+  } catch (e) {
+    // Always return JSON — a bare 500 with an empty/HTML body makes the client's
+    // response.json() throw the cryptic "Unexpected end of JSON input".
+    console.error("annotation submit failed:", e);
+    return NextResponse.json(
+      { error: "Could not save your annotation. Please try again." },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({
     success: true,
