@@ -18,6 +18,7 @@ function csvRow(values: (string | number | null | undefined)[]): string {
 
 async function exportPairwise(): Promise<string> {
   const data = await prisma.pairwiseComparison.findMany({
+    where: { isDemo: false },
     include: {
       modelOutputA: { select: { model: true, modelId: true } },
       modelOutputB: { select: { model: true, modelId: true } },
@@ -105,8 +106,8 @@ async function exportReport(): Promise<string> {
     await Promise.all([
       prisma.prompt.count(),
       prisma.modelOutput.count(),
-      prisma.pairwiseComparison.count(),
-      prisma.rubricAxisScore.count(),
+      prisma.pairwiseComparison.count({ where: { isDemo: false } }),
+      prisma.rubricAxisScore.count({ where: { isDemo: false } }),
       prisma.handoffItem.count({ where: { gapBucket: { not: null } } }),
     ]);
 

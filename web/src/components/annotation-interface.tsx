@@ -86,6 +86,7 @@ interface EpisodeDraft {
   axisVals: Record<string, AxisVal>;
   axisNotes: Record<string, string>;
   editWinner: string;
+  editSeededFor: "a" | "b" | null;
   tieTarget: "a" | "b";
   tieEdit: string;
   salvage: string;
@@ -131,6 +132,9 @@ export function AnnotationInterface() {
     useState<Record<string, AxisVal>>(emptyAxisVals());
   const [axisNotes, setAxisNotes] = useState<Record<string, string>>({});
   const [editWinner, setEditWinner] = useState("");
+  // Which winner (a|b) editWinner was seeded from, so switching the pick re-seeds
+  // instead of leaving the LOSING output's text staged as a "correction".
+  const [editSeededFor, setEditSeededFor] = useState<"a" | "b" | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
 
   // Tie: optionally correct one side
@@ -178,6 +182,7 @@ export function AnnotationInterface() {
     setAxisVals(emptyAxisVals());
     setAxisNotes({});
     setEditWinner("");
+    setEditSeededFor(null);
     setTieTarget("a");
     setTieEdit("");
     setSalvage("");
@@ -197,6 +202,7 @@ export function AnnotationInterface() {
     setAxisVals({ ...emptyAxisVals(), ...d.axisVals });
     setAxisNotes(d.axisNotes ?? {});
     setEditWinner(d.editWinner);
+    setEditSeededFor(d.editSeededFor ?? null);
     setTieTarget(d.tieTarget);
     setTieEdit(d.tieEdit);
     setSalvage(d.salvage);
@@ -261,6 +267,7 @@ export function AnnotationInterface() {
       axisVals,
       axisNotes,
       editWinner,
+      editSeededFor,
       tieTarget,
       tieEdit,
       salvage,
@@ -281,6 +288,7 @@ export function AnnotationInterface() {
     axisVals,
     axisNotes,
     editWinner,
+    editSeededFor,
     tieTarget,
     tieEdit,
     salvage,
@@ -329,8 +337,18 @@ export function AnnotationInterface() {
 
   function proceedToScore() {
     if (!winner || confidence === null) return;
-    if (winner === "a" && task && !editWinner) setEditWinner(task.outputA.text);
-    if (winner === "b" && task && !editWinner) setEditWinner(task.outputB.text);
+    // Seed the edit box with the CURRENT winner's text whenever the pick changed
+    // (or on first entry). If the annotator already edited this same winner, keep
+    // their text. This prevents the losing output's text from being saved as a
+    // "correction" of the winner after an A<->B switch.
+    if (
+      (winner === "a" || winner === "b") &&
+      task &&
+      editSeededFor !== winner
+    ) {
+      setEditWinner(winner === "a" ? task.outputA.text : task.outputB.text);
+      setEditSeededFor(winner);
+    }
     setStep("score");
   }
 

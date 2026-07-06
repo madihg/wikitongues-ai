@@ -14,6 +14,7 @@ export async function GET() {
   if (guard.error) return guard.error;
 
   const comparisons = await prisma.pairwiseComparison.findMany({
+    where: { isDemo: false },
     orderBy: { createdAt: "desc" },
     select: {
       promptId: true,
@@ -59,7 +60,7 @@ export async function GET() {
   }));
 
   const pendingEdits = await prisma.outputEdit.findMany({
-    where: { verificationStatus: "single_annotator" },
+    where: { verificationStatus: "single_annotator", isDemo: false },
     orderBy: { createdAt: "desc" },
     take: 50,
     select: {
