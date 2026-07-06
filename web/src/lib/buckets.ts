@@ -1,10 +1,13 @@
 import type { EvalBucket } from "@prisma/client";
 
 /**
- * The 8 Igala evaluation buckets. Each bucket is three things at once:
- * a prompt category, a rubric axis, and a data-collection target.
- * Canonical taxonomy for the whole platform. Keep in sync with the
- * Prisma `EvalBucket` enum.
+ * PROMPT CATEGORIES (what a prompt tests) — the Prisma `EvalBucket` enum values,
+ * relabelled to Lydia's Jul-6 taxonomy. Distinct from the RUBRIC AXES an output
+ * is scored on (RUBRIC_V2 below): a prompt category maps to the SUBSET of axes
+ * that are in-scope for it (`axes`), so a spelling prompt doesn't force a
+ * grammar score and a greeting prompt doesn't force a spelling score. Everything
+ * off-scope defaults to N/A. Enum keys are internal; labels are what people see,
+ * so we can rename categories without a migration.
  */
 export interface BucketDef {
   key: EvalBucket;
@@ -21,104 +24,118 @@ export interface BucketDef {
    *    invented fact (cultural knowledge, idiom meaning, lexical disambiguation).
    */
   scoring: "subjective" | "factual";
-  /** The single fail-mode the annotator should watch for on this bucket. */
+  /** The single fail-mode the annotator should watch for on this category. */
   watchFor: string;
+  /** RUBRIC_V2 axis keys that are in-scope for prompts in this category. */
+  axes: string[];
 }
 
 export const BUCKETS: BucketDef[] = [
   {
     key: "orthography",
     num: 1,
-    label: "Orthography & spelling",
-    short: "Orthography",
+    label: "Spelling & tone marks",
+    short: "Spelling",
     description:
-      "Correct spelling and diacritics. Only weights truly teach letterforms.",
+      "Single words and short forms where getting the letters and the tone marks right is the whole point.",
     family: "linguistic",
     scoring: "subjective",
     watchFor:
-      "Wrong or missing diacritics, dropped tone marks, or English-influenced spelling.",
+      "Wrong or missing tone marks / dotted vowels, or English-influenced spelling.",
+    axes: ["spelling", "diacritics", "lexicon"],
   },
   {
     key: "grammar_tone",
     num: 2,
-    label: "Grammar, morphology & tone",
-    short: "Grammar & tone",
+    label: "Grammar & sentence structure",
+    short: "Grammar",
     description:
-      "Igala is tonal. Tone is largely unmarked in available text, so this is as much a data-creation problem as a method one.",
+      "Full sentences that test word order, tense, and agreement — e.g. keeping correct SVO order in a translation.",
     family: "linguistic",
     scoring: "subjective",
     watchFor:
-      "Is the tone melody preserved? Watch for dropped tone marks and wrong morphology.",
+      "Wrong word order, tense, or agreement — even when the individual words are right.",
+    axes: ["syntax", "semantics", "lexicon"],
   },
   {
     key: "lexicon_disambig",
     num: 3,
-    label: "Lexicon & disambiguation",
-    short: "Lexicon",
+    label: "Vocabulary & word meaning",
+    short: "Vocabulary",
     description:
-      "Correct Igala words, no bleed from neighbors. Observed confusion: Idoma. Genetic interference risk during training: Yoruba/Igbo (Igala is Yoruboid). Flag for Lydia.",
+      "The right Igala word, no bleed from neighbours, and tone-distinguished meanings (Igala is Yoruboid; observed confusion with Idoma / Yoruba / Igbo).",
     family: "linguistic",
     scoring: "factual",
     watchFor:
-      "A wrong word, or one that bled in from Idoma / Yoruba / Igbo instead of true Igala.",
-  },
-  {
-    key: "dialectal_fidelity",
-    num: 4,
-    label: "Dialectal fidelity",
-    short: "Dialect",
-    description:
-      "No collapse to a single prestige standard. Multi-annotator agreement guards against it.",
-    family: "linguistic",
-    scoring: "subjective",
-    watchFor:
-      "Collapse to one prestige standard, or a form that erases your dialect's variant.",
+      "A wrong word, or one that bled in from Idoma / Yoruba / Igbo / English instead of true Igala.",
+    axes: ["lexicon", "contamination", "semantics", "diacritics"],
   },
   {
     key: "register_honorifics",
-    num: 5,
-    label: "Register & honorifics",
+    num: 4,
+    label: "Register, tone & honorifics",
     short: "Register",
     description:
-      "Correct register and honorific conventions. Rule-like; strongest preference-optimization bucket.",
+      "The same content across registers — angry vs polite, to an elder vs a friend — and the deference forms that go with them.",
     family: "cultural",
     scoring: "subjective",
     watchFor:
-      "Wrong deference — is the honorific form right for who is speaking to whom?",
+      "Wrong level of deference or tone-of-voice for who is speaking to whom.",
+    axes: ["authenticity", "cultural_relevance", "semantics"],
   },
   {
     key: "idioms_metaphor",
-    num: 6,
-    label: "Idioms, metaphor & floating motifs",
-    short: "Idioms",
+    num: 5,
+    label: "Figurative language",
+    short: "Figurative",
     description:
-      "Idioms read culturally, not literally. Novel idioms stay hard regardless of method.",
+      "Idioms, metaphor, proverbs and floating motifs — read culturally, not literally.",
     family: "cultural",
     scoring: "factual",
     watchFor: "Is the proverb read literally instead of for its real meaning?",
+    axes: ["semantics", "cultural_relevance", "authenticity", "contamination"],
   },
   {
     key: "cultural_values",
-    num: 7,
+    num: 6,
     label: "Cultural knowledge & values",
     short: "Culture",
     description:
-      "Taboo, sacred, local knowledge and values. Keep facts in retrieval, not weights.",
+      "Taboo, sacred, and local knowledge — where a fluent-sounding but invented fact is the danger.",
     family: "cultural",
     scoring: "factual",
     watchFor:
       "Plausible-but-invented detail about Igala people, places, lineage, or taboo.",
+    axes: ["cultural_relevance", "contamination", "authenticity", "semantics"],
   },
   {
     key: "authenticity",
-    num: 8,
-    label: "Authenticity vs translationese",
+    num: 7,
+    label: "Authenticity & naturalness",
     short: "Authenticity",
-    description: "Community-written, not back-translated from English.",
+    description:
+      "Would a real Igala speaker say it this way, or does it read back-translated from English?",
     family: "cultural",
     scoring: "subjective",
     watchFor:
-      "Does it read translated-from-English rather than how an Igala speaker would actually say it?",
+      "Reads translated-from-English rather than how an Igala speaker would actually say it.",
+    axes: ["authenticity", "cultural_relevance", "contamination"],
+  },
+  {
+    // Parked per Lydia's Jul-6 finding (Igala dialects are largely mutually
+    // intelligible — Unubi & Atadosa 2019). Kept as an experimental category;
+    // likely becomes a code-switching benchmark rather than a quality axis.
+    key: "dialectal_fidelity",
+    num: 8,
+    label: "Dialect & code-switching (experimental)",
+    short: "Dialect",
+    description:
+      "Experimental: does the model collapse to one prestige dialect, or mix dialects oddly within a phrase? To be resolved with Agnes.",
+    family: "linguistic",
+    scoring: "subjective",
+    watchFor:
+      "Collapse to one prestige standard, or unnatural mixing of dialect forms.",
+    axes: ["contamination", "authenticity"],
   },
 ];
 
@@ -159,6 +176,12 @@ export function isFactualBucket(key: EvalBucket | null | undefined): boolean {
   return bucketScoring(key) === "factual";
 }
 
+/** RUBRIC_V2 axis keys in-scope for a prompt category. Empty (all axes) if unknown. */
+export function axesForBucket(key: EvalBucket | null | undefined): string[] {
+  if (!key) return [];
+  return BUCKET_BY_KEY[key]?.axes ?? [];
+}
+
 /**
  * Whether the episode should ask the annotator to author their own answer FIRST
  * (cold / source-free gold), before any model output is revealed. Always on for
@@ -170,13 +193,22 @@ export function isGoldFirstBucket(key: EvalBucket | null | undefined): boolean {
   return key === "register_honorifics" || key === "grammar_tone";
 }
 
-// ─── Rubric v2 (Lydia's revised rubric, 2026-07) ─────────────────────────
-// Axes are data, not schema: the Monday rubric-lock meeting can rename, add,
-// or drop axes here without a migration. Two passes: linguistic axes are
-// scored first; pragmatics axes are a reflective second pass ("Thinking about
-// the answers you just gave…"). Scale 0-5 (0 = completely wrong, anchors
-// below), or N/A when the axis is not relevant to the prompt.
-export const RUBRIC_VERSION = "v2";
+// ─── RUBRIC AXES (rubric v-next, aligned to Lydia's Jul-6 revision) ──────────
+// Axes are DATA, not schema, so this set stays mutable for the ~2 weeks of live
+// annotation before it stabilises — no migration to rename/add/drop an axis, and
+// every score is stamped with RUBRIC_VERSION so a change never silently mixes
+// data. Two passes: the language itself (scored first), then a reflective
+// "as a whole" pass. Scale 0-5 (0 = completely wrong, anchors below) or N/A.
+//
+// Deltas from the first draft, per the Jul-6 calls + our recommendation:
+//  - "Words" -> "Word choice", "Diacritics" -> "Tone marks", "Meaning" kept
+//    plain — accessible to non-linguist annotators (Sonja's concern).
+//  - DROPPED "dialect" as a scored axis (Igala dialects are largely mutually
+//    intelligible; it becomes a separate code-switching benchmark, not a score).
+//  - KEPT "Is it Igala?" (cross-linguistic contamination) as its OWN axis rather
+//    than folding it into authenticity — it is the headline, most-measurable,
+//    most-trainable failure mode and must be reportable on its own.
+export const RUBRIC_VERSION = "v3";
 
 export interface RubricV2Axis {
   key: string;
@@ -190,13 +222,14 @@ export const RUBRIC_V2: RubricV2Axis[] = [
     key: "syntax",
     label: "Grammar & word order",
     description:
-      "Is the grammatical structure right — word order, morphology, agreement?",
+      "Is the grammatical structure right — word order, tense, agreement?",
     pass: "linguistic",
   },
   {
     key: "lexicon",
-    label: "Words",
-    description: "Are these real, correct Igala words (nothing invented)?",
+    label: "Word choice",
+    description:
+      "Are these real, correct Igala words — nothing invented, nothing borrowed from another language?",
     pass: "linguistic",
   },
   {
@@ -207,42 +240,37 @@ export const RUBRIC_V2: RubricV2Axis[] = [
   },
   {
     key: "diacritics",
-    label: "Diacritics & tone marks",
+    label: "Tone marks",
     description:
-      "Are tone marks and dotted vowels present and correct? Critical for Igala.",
+      "Are the tone marks and dotted vowels present and correct? This is where Igala models fail most.",
     pass: "linguistic",
   },
   {
     key: "semantics",
     label: "Meaning",
-    description: "Does the response mean what it should?",
+    description:
+      "Did the intended meaning come across, even if the wording isn't perfect?",
     pass: "linguistic",
   },
   {
     key: "cultural_relevance",
-    label: "Cultural relevance",
-    description: "Does the content match Igala culture and cultural practices?",
+    label: "Cultural fit",
+    description:
+      "Does the content match Igala culture and practice (not a Western-centric assumption)?",
     pass: "pragmatics",
   },
   {
     key: "authenticity",
     label: "Authenticity",
     description:
-      "Would a real person say it like this? (register and tone included)",
-    pass: "pragmatics",
-  },
-  {
-    key: "dialect",
-    label: "Dialect",
-    description:
-      "Is dialect handled well — no collapse to one prestige standard, no odd mixing?",
+      "Would a real Igala speaker actually say it this way — natural register and tone, not translated-from-English?",
     pass: "pragmatics",
   },
   {
     key: "contamination",
-    label: "Cross-linguistic contamination",
+    label: "Is it Igala?",
     description:
-      "Is it free of bleed from Yoruba, Idoma, Igbo, or English — in words, grammar, or cultural references? (5 = fully Igala, 0 = another language entirely)",
+      "Free of bleed from Yoruba, Idoma, Igbo, or English — in words, grammar, or references. 5 = fully Igala, 0 = another language.",
     pass: "pragmatics",
   },
 ];
