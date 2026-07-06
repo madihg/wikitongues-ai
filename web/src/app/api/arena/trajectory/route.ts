@@ -42,6 +42,7 @@ export async function GET() {
   // directly (comparison.epochId) or via its eval run (evalRun.epochId).
   const comparisons = await prisma.pairwiseComparison.findMany({
     where: {
+      isDemo: false,
       OR: [
         { epochId: { in: epochIds } },
         { evalRun: { epochId: { in: epochIds } } },

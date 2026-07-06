@@ -18,7 +18,7 @@ export async function GET() {
       _count: {
         select: {
           pairwiseComparisons: true,
-          rubricScores: true,
+          rubricAxisScores: true,
           handoffReviews: true,
         },
       },
@@ -60,7 +60,7 @@ export async function GET() {
       return {
         name: user.name ?? user.email,
         pairwiseCount: user._count.pairwiseComparisons,
-        rubricCount: user._count.rubricScores,
+        rubricCount: user._count.rubricAxisScores,
         handoffCount: user._count.handoffReviews,
         lastActive: lastActive?.toISOString() ?? null,
       };

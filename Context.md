@@ -232,3 +232,40 @@ CAVEATS: (1) The alias is MANUAL/static - after the NEXT merge to main, re-point
 - Anthropic key: OUT OF CREDIT + possibly compromised (rotate! see 2026-06-24 security notes; OpenAI key shared across projects - rotate both). Gemini 2.5-pro needs paid tier.
 - Swap-consistency reinjection + calibration mode still unbuilt (spec'd in research doc). Krippendorff proper still a proxy.
 - DB migration to Wikitongues-owned Supabase - Daniel acknowledged, plan post-pilot.
+
+## Session State (2026-07-06 pm) - Jul-6 taxonomy shipped + THE JSON bug fixed + deployed
+
+Reviewed the three Jul-6 calls (Lydia rubric-lock, Google Research, Daniel sync) and Lydia's Source-of-Truth tabs. Challenged her taxonomy, implemented the recommended version, fixed the real "JSON bug", merged PR #3 to main (388854b), re-aliased the public URL to the new build, and verified the fix live.
+
+### THE JSON bug (root cause found + fixed)
+
+"Both inadequate" + a salvage rewrite (and the gold-first cold-author path) 500'd with an EMPTY body -> the client's `res.json()` threw "Unexpected end of JSON input" = the "no man's land JSON bug" Agnes/Halim hit. Cause: `ColdAuthorAnswer.promptId` is a FK to `Prompt.id` (cuid) but the submit route passed the PUBLIC promptId ("ig_orth_001"), violating the FK. Fix (submit/route.ts): use `outputA.promptId` (the cuid) for both ColdAuthorAnswer creates; wrap `$transaction` in try/catch returning JSON 500; and add `safeJson()` in annotation-interface.tsx so NO client fetch can ever crash on a non-JSON 5xx again. Verified live: both_inadequate+salvage -> 200 salvageSaved:true (was 500). NOTE: PairwiseComparison.promptId and RubricAxisScore.promptId are free strings (no FK) so they still store the public promptId - inconsistent but harmless; ColdAuthorAnswer is the only FK'd one.
+
+### Taxonomy (the deliverable) - `tasks/taxonomy-recommendation.md`
+
+Verdict: Lydia's Jul-6 direction is right; adopted with 3 challenges. (1) KEEP cross-linguistic contamination as its OWN scored axis (she folded it into "authenticity" on Jul 6 - disagree; it's the headline, most-measurable, most-trainable failure). (2) SCOPE axes per prompt category (each category declares in-scope axes; others collapse/N/A) instead of "all axes, mostly N/A" - denser data, less fatigue. (3) DROP "dialect" as a scored axis -> future code-switching benchmark (Igala dialects mutually intelligible). Adopted from her as-is: prompt-category vs rubric-axis split, diacritics split from spelling, pragmatics split (cultural fit vs authenticity), 0-5 + N/A.
+
+RUBRIC axes now 8 (`RUBRIC_V2` in buckets.ts, `RUBRIC_VERSION="v3"`): syntax(Grammar & word order), lexicon(Word choice), spelling, diacritics(Tone marks), semantics(Meaning) | cultural_relevance(Cultural fit), authenticity, contamination(Is it Igala?). Labels are non-linguist-friendly (Sonja's concern). PROMPT CATEGORIES = the EvalBucket enum RELABELLED (no migration) with an `axes[]` in-scope list each: orthography->"Spelling & tone marks", grammar_tone->"Grammar & sentence structure", lexicon_disambig->"Vocabulary & word meaning", register_honorifics->"Register, tone & honorifics", idioms_metaphor->"Figurative language", cultural_values->"Cultural knowledge & values", authenticity->"Authenticity & naturalness", dialectal_fidelity->"Dialect & code-switching (experimental)". `/api/annotations/next` sends `applicableAxes`; the interface shows in-scope axes + collapses off-scope; rubricComplete requires all IN-SCOPE answered + >=1 real score.
+
+CRITICAL PROCESS NOTE (from Jul-6): the rubric was DELIBERATELY NOT locked - it stays mutable ~2 weeks then revises from real annotation. Our config+version-stamp architecture already supports this (edit RUBRIC_V2 / BUCKETS axes in buckets.ts only; every score carries RUBRIC_VERSION). Do NOT hardcode axes anywhere.
+
+### Deploy
+
+PR #3 merged main=388854b. GitHub auto-deploy -> wikitongues-ai project deployment `wikitongues-govs8ukjf` (Ready). Public URL https://wikitongues-ai-web.vercel.app re-aliased to it (MANUAL - re-alias after each merge, or move the domain to the wikitongues-ai project in the Vercel dashboard so it auto-tracks; CLI can't move it, "assigned to another project"). CLI `vercel --prod` still comes out BLOCKED (team plan). Env has GOOGLE_GENERATIVE_AI_API_KEY now.
+
+### Deliverables done
+
+- `tasks/taxonomy-recommendation.md` (buckets + prompt categories + the challenge).
+- Gmail DRAFT (not sent) to the advisory group (Lydia, Daniel, Emily emilyblack@nyu.edu, Erin evanliemt@google.com, Andrew andrewsmart@google.com, Isaac icaswell@google.com, Sonja sonja.schmergalunder@gmail.com): subject "Igala benchmark: rubric taxonomy, and how much data / how many people it takes" - taxonomy + data-size math + blindspots, no creds/deploy. Halim to review recipients + send.
+- Multi-agent prototype review workflow run (wf_4136135d-53e) - findings folded in below when it lands.
+
+### Data-size answer (for reference, also in the email)
+
+5 annotators, ~105 hrs -> ~1,000 episodes. Benchmark: 65/35 model gap needs ~85 comparisons, 60/40 ~190; full per-bucket resolution ~2,000 (over budget) -> pilot resolves LARGE per-bucket gaps + solid pooled overall. SFT 500-1,000 gold (reachable); DPO 2-5K (post-pilot); CPT 10M+ tokens (doesn't exist). BINDING CONSTRAINT = PROMPTS not people: have 8, need ~30-50/category community-authored held-out. Blindspots: prompt bank 4% of needed; keep contamination measured standalone; text-only phonology gap (Lydia); calibration session week 1 (agreement was 0.08-0.17); data governance (DAIR framework).
+
+### Open / next
+
+- Lydia writing per-axis anchors (what's a 2 vs 4, with Igala examples) - the real quality lever.
+- Build the prompt bank to ~30-50/category (community-authored held-out; Berezkin motifs for figurative/cultural). `pnpm seed:outputs` generates model answers for new prompts.
+- Dialect/code-switching resolved with Agnes (Jul 7).
+- Still open from before: rotate Anthropic+OpenAI keys; calibration mode + swap-consistency reinjection unbuilt; move DB to Wikitongues-owned Supabase; move the Vercel domain to auto-track.

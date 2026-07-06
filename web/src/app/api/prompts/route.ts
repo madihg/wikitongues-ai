@@ -123,6 +123,14 @@ export async function POST(req: Request) {
 
   const promptId = `${langCode}_${bucketAbbrev}_${String(nextNum).padStart(3, "0")}`;
 
+  // CONTAMINATION INVARIANT: the held-out benchmark is defined by split==='test'
+  // (what the arena serves/freezes) AND by isHoldout (what the training-export
+  // guards drop). These MUST stay identical or a benchmarked prompt can leak into
+  // training. Derive one from the other so they can never diverge; either signal
+  // marks a prompt held-out.
+  const wantsHoldout = split === "test" || isHoldout === true;
+  const effSplit = wantsHoldout ? "test" : split || "train";
+
   const prompt = await prisma.prompt.create({
     data: {
       promptId,
@@ -133,8 +141,8 @@ export async function POST(req: Request) {
       targetCulture: targetCulture || null,
       expectedCulturalContext: expectedCulturalContext || null,
       difficultyLevel: (difficultyLevel as DifficultyLevel) || "intermediate",
-      ...(split ? { split } : {}),
-      ...(typeof isHoldout === "boolean" ? { isHoldout } : {}),
+      split: effSplit,
+      isHoldout: wantsHoldout,
       ...(provenance ? { provenance } : {}),
       createdById: session.user.id,
     },
