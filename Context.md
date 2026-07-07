@@ -271,14 +271,16 @@ PR #3 merged main=388854b. GitHub auto-deploy -> wikitongues-ai project deployme
 - Still open from before: rotate Anthropic+OpenAI keys; calibration mode + swap-consistency reinjection unbuilt; move DB to Wikitongues-owned Supabase; move the Vercel domain to auto-track.
 
 ### Multi-agent prototype review (2026-07-06 pm) - findings + fixes (PR #4, main=65ae8e5)
+
 Ran a 13-agent review (5 finders + adversarial verifiers), wf_4136135d-53e. Fixed all confirmed high/critical + data-integrity:
+
 - HIGH data corruption: switching pairwise pick A<->B after visiting the score step left the LOSING output's text in the edit box, saved as a gold "correction" of the winner. Fixed via `editSeededFor` state (re-seed editWinner on pick change; persisted in draft). annotation-interface.tsx.
 - CRITICAL benchmark leak: `split=='test'` (arena held-out) and `isHoldout` (training-export guard) were set INDEPENDENTLY in prompts/route.ts POST -> a test prompt with isHoldout=false could train on the benchmark. Fixed: derive both from either signal at write time (invariant `isHoldout == split==='test'`). Verified 0 existing rows mismatch. NOTE follow-up: also make the export/build/fine-tune BUILDERS key off split (defense in depth) - not done, write-invariant closes it for all new data.
-- MEDIUM demo leak: admin/export (pairwise CSV + report counts), arena/trajectory, arena/contested (+pending edits) now exclude isDemo. 
+- MEDIUM demo leak: admin/export (pairwise CSV + report counts), arena/trajectory, arena/contested (+pending edits) now exclude isDemo.
 - MEDIUM: admin/activity counted orphaned legacy `rubricScores` (always 0) -> now `rubricAxisScores`.
 - LOW hardening: annotations/flag + submit guard req.json() + wrap DB writes -> always JSON.
-Verified FALSE by adversarial pass (NOT bugs): OutputEdit.promptId cuid (it's correct); arena/contested POST editId P2025 (failure mode wrong).
-DEFERRED (documented, low-risk to leave for now):
+  Verified FALSE by adversarial pass (NOT bugs): OutputEdit.promptId cuid (it's correct); arena/contested POST editId P2025 (failure mode wrong).
+  DEFERRED (documented, low-risk to leave for now):
 - PairwiseComparison.promptId + RubricAxisScore.promptId store the PUBLIC promptId string while ColdAuthorAnswer stores the cuid (FK). Dormant (all current readers self-consistent: leaderboard/contested/dedup all use the public string); becomes a problem only for a future cross-table join. Fixing requires a coordinated migration + update of the dedup lookup + leaderboard + contested. Do it as one shot, not a one-liner.
 - Shared `withApiErrors()` wrapper for all annotations+arena GET routes (annotations/next + arena reads can 500 non-JSON on DB error). Client `safeJson()` already degrades these gracefully; the wrapper is the clean fix.
 - Orphaned legacy `RubricScore` model + RUBRIC_AXES/RUBRIC_KEYS exports in buckets.ts - no writer; delete in a cleanup pass.

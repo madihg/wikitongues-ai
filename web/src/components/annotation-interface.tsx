@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { EvalBucket } from "@prisma/client";
-import { bucketLabel, RUBRIC_V2, RUBRIC_ANCHORS } from "@/lib/buckets";
+import {
+  bucketLabel,
+  RUBRIC_V2,
+  RUBRIC_ANCHORS,
+  axisAnchors,
+} from "@/lib/buckets";
 import { InfoTip } from "@/components/info-tip";
 import { ToneKeyboard } from "@/components/tone-keyboard";
 import { wordDiff } from "@/lib/diff";
@@ -556,24 +561,53 @@ export function AnnotationInterface() {
   );
 
   const axisBlock = (axes: typeof RUBRIC_V2) =>
-    axes.map((a) => (
-      <div key={a.key}>
-        <div className="mb-2 flex items-center gap-2 text-sm font-medium text-text-secondary">
-          {a.label}
-          <InfoTip width="w-72">{a.description}</InfoTip>
+    axes.map((a) => {
+      const anchors = axisAnchors(a.key);
+      return (
+        <div key={a.key}>
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-text-secondary">
+            {a.label}
+            <InfoTip width="w-72">{a.description}</InfoTip>
+          </div>
+          {/* Worked 0 / 3 / 5 examples so it's clear what this axis rates. */}
+          {anchors.length > 0 && (
+            <div className="mb-2 space-y-1 rounded-md border border-border bg-surface-sunken px-3 py-2">
+              {anchors.map((an) => {
+                const chip =
+                  an.score === 0
+                    ? "bg-danger-subtle text-danger"
+                    : an.score === 5
+                      ? "bg-success-subtle text-success"
+                      : "bg-warning-subtle text-warning";
+                return (
+                  <div
+                    key={an.score}
+                    className="flex items-start gap-2 text-xs leading-snug"
+                  >
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded font-mono text-[11px] font-semibold ${chip}`}
+                    >
+                      {an.score}
+                    </span>
+                    <span className="text-text-secondary">{an.text}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {axisButtons(a.key)}
+          <textarea
+            value={axisNotes[a.key] ?? ""}
+            onChange={(e) =>
+              setAxisNotes((p) => ({ ...p, [a.key]: e.target.value }))
+            }
+            placeholder="Optional note — what exactly is right or wrong…"
+            rows={1}
+            className="mt-2 w-full rounded-md border border-border px-2 py-1.5 text-xs text-text-secondary placeholder:text-text-muted focus-visible:border-accent"
+          />
         </div>
-        {axisButtons(a.key)}
-        <textarea
-          value={axisNotes[a.key] ?? ""}
-          onChange={(e) =>
-            setAxisNotes((p) => ({ ...p, [a.key]: e.target.value }))
-          }
-          placeholder="Optional note — what exactly is right or wrong…"
-          rows={1}
-          className="mt-2 w-full rounded-md border border-border px-2 py-1.5 text-xs text-text-secondary placeholder:text-text-muted focus-visible:border-accent"
-        />
-      </div>
-    ));
+      );
+    });
 
   const inScopeLinguistic = inScopeAxes.filter((a) => a.pass === "linguistic");
   const inScopePragmatics = inScopeAxes.filter((a) => a.pass === "pragmatics");
