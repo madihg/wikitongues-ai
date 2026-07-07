@@ -9,33 +9,37 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Get all users with annotator-relevant relations
   const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      _count: {
-        select: {
-          pairwiseComparisons: true,
-          rubricAxisScores: true,
-          handoffReviews: true,
-        },
-      },
-    },
+    select: { id: true, name: true, email: true },
   });
 
-  // Get latest activity timestamps per user
+  // Count only REAL work: demo-session rows carry isDemo=true and must never
+  // inflate an annotator's totals. _count relations can't filter isDemo, so we
+  // count explicitly. Handoff reviews have no demo concept.
   const activityData = await Promise.all(
     users.map(async (user) => {
-      const [latestPairwise, latestRubric, latestHandoff] = await Promise.all([
+      const [
+        pairwiseCount,
+        rubricCount,
+        handoffCount,
+        latestPairwise,
+        latestRubric,
+        latestHandoff,
+      ] = await Promise.all([
+        prisma.pairwiseComparison.count({
+          where: { annotatorId: user.id, isDemo: false },
+        }),
+        prisma.rubricAxisScore.count({
+          where: { annotatorId: user.id, isDemo: false },
+        }),
+        prisma.handoffItem.count({ where: { reviewerId: user.id } }),
         prisma.pairwiseComparison.findFirst({
-          where: { annotatorId: user.id },
+          where: { annotatorId: user.id, isDemo: false },
           orderBy: { createdAt: "desc" },
           select: { createdAt: true },
         }),
         prisma.rubricAxisScore.findFirst({
-          where: { annotatorId: user.id },
+          where: { annotatorId: user.id, isDemo: false },
           orderBy: { createdAt: "desc" },
           select: { createdAt: true },
         }),
@@ -59,9 +63,9 @@ export async function GET() {
 
       return {
         name: user.name ?? user.email,
-        pairwiseCount: user._count.pairwiseComparisons,
-        rubricCount: user._count.rubricAxisScores,
-        handoffCount: user._count.handoffReviews,
+        pairwiseCount,
+        rubricCount,
+        handoffCount,
         lastActive: lastActive?.toISOString() ?? null,
       };
     }),
