@@ -59,7 +59,7 @@ function toObservation(row: PairwiseRow): PairwiseObservation {
   return { a: row.candidateA, b: row.candidateB, winner: row.winner };
 }
 
-/** Run Bradley-Terry separately for each of the 8 buckets, plus overall. */
+/** Run Bradley-Terry separately for each prompt category, plus overall. */
 export function rankPairwise(rows: PairwiseRow[]): {
   byBucket: Record<string, BradleyTerryResult>;
   overall: BradleyTerryResult;

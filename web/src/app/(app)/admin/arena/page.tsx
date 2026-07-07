@@ -22,7 +22,7 @@ const NAV = [
   {
     href: "/admin/arena/trajectory",
     label: "Trajectory",
-    tip: "Per-bucket champion strength over epochs — proof (or not) that the feedback loop is moving the needle on each linguistic dimension.",
+    tip: "Per-category champion strength over epochs — proof (or not) that the feedback loop is moving the needle on each prompt category.",
   },
   {
     href: "/admin/arena/contested",
@@ -55,19 +55,21 @@ export default function ArenaPage() {
             Model Arena
             <InfoTip label="About the arena" width="w-80">
               The arena ranks candidate models{" "}
-              <strong>per linguistic bucket</strong> using human pairwise
+              <strong>per prompt category</strong> using human pairwise
               judgments converted to <strong>Bradley-Terry</strong> strengths
-              (the LMArena standard). Register variants that differ by one rung
-              (baseline, +RAG, fine-tuned), generate their answers on a
-              contamination-safe held-out bank, and have annotators compare them
-              blind. LLM-as-judge is restricted to triage — it can&apos;t grade
-              a language it is itself poor at.
+              (the LMArena standard). Categories are the same ones annotators
+              work in (spelling &amp; tone marks, grammar, vocabulary, register,
+              figurative language, cultural knowledge, authenticity). Register
+              variants that differ by one rung (baseline, +RAG, fine-tuned),
+              generate their answers on a contamination-safe held-out bank, and
+              have annotators compare them blind. LLM-as-judge is restricted to
+              triage — it can&apos;t grade a language it is itself poor at.
             </InfoTip>
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-text-secondary">
             Register model variants that differ by exactly one rung — a closed
             baseline, the same base with RAG, a fine-tuned variant — and rank
-            them on the held-out Igala bank, per linguistic bucket. The
+            them on the held-out Igala bank, per prompt category. The
             rung-by-rung deltas are the experiment.
           </p>
         </div>
@@ -91,7 +93,7 @@ export default function ArenaPage() {
 
       <HelpButton
         title="Model Arena"
-        description="The arena ranks candidate models per linguistic bucket using human pairwise judgments converted to Bradley-Terry strengths. Register candidates (a base model + optional RAG, system prompt, or fine-tune artifact), generate their answers on the held-out question bank, and have annotators compare them blind. Cells show a 0-100 arena strength with a confidence-aware tint; 'ns' marks buckets where the sample is too small to tell candidates apart. LLM-as-judge is restricted to triage and never reports a score here."
+        description="The arena ranks candidate models per prompt category using human pairwise judgments converted to Bradley-Terry strengths. Register candidates (a base model + optional RAG, system prompt, or fine-tune artifact), generate their answers on the held-out question bank, and have annotators compare them blind. Cells show a 0-100 arena strength with a confidence-aware tint; 'ns' marks categories where the sample is too small to tell candidates apart. LLM-as-judge is restricted to triage and never reports a score here."
       />
     </div>
   );

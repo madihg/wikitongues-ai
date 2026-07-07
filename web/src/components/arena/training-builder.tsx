@@ -188,10 +188,13 @@ export function TrainingBuilder() {
             <InfoTip width="w-80">
               Build a training set from collected annotations and launch a
               fine-tune. DPO uses winner/loser pairs from pairwise comparisons;
-              SFT uses annotator corrections as gold completions. Held-out
-              (test-split) prompts are always excluded. The &quot;mock&quot;
-              provider simulates training; wire a real provider to train for
-              real.
+              SFT uses annotator corrections and cold-authored gold as
+              completions. Target specific <strong>prompt categories</strong>{" "}
+              (the same categories annotators work in) with the filter below;
+              the per-axis rubric scores are the evaluation signal, not a
+              training target yet. Held-out (test-split) prompts are always
+              excluded. The &quot;mock&quot; provider simulates training; wire
+              Together (or another provider) to train for real.
             </InfoTip>
           </span>
           <select
@@ -259,7 +262,7 @@ export function TrainingBuilder() {
 
         <fieldset className="flex flex-col gap-2 text-sm sm:col-span-2">
           <span className="text-text-secondary">
-            Bucket filter (empty = all buckets)
+            Prompt-category filter (empty = all categories)
           </span>
           <div className="flex flex-wrap gap-2">
             {BUCKETS.map((b) => {
