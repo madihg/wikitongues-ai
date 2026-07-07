@@ -285,8 +285,7 @@ export function rubricV2Label(key: string): string {
   return RUBRIC_V2.find((a) => a.key === key)?.label ?? key;
 }
 
-/** Lydia's anchor set (provisional 0-5 wording — final anchors to be locked
- *  at the Monday rubric meeting; the platform stores 0-5 + N/A regardless). */
+/** Generic 0-5 wording, shown on hover over each score button. */
 export const RUBRIC_ANCHORS: Record<number, string> = {
   0: "Completely wrong — nothing is correct",
   1: "Many mistakes; only one or two things correct",
@@ -295,6 +294,123 @@ export const RUBRIC_ANCHORS: Record<number, string> = {
   4: "Mostly accurate; a few mistakes",
   5: "Very accurate — I'd say it like this",
 };
+
+/**
+ * Per-axis worked examples of the 0 / 3 / 5 points, shown UNDER each axis so an
+ * annotator sees exactly what they're rating. Draft anchors: the concepts are
+ * solid and the cross-linguistic-contamination example uses real Yoruba, but
+ * the Igala-specific wording is illustrative and will be replaced with
+ * community-vetted examples by Lydia/Agnes. Kept as config so that swap is a
+ * one-line edit, no migration.
+ */
+export interface AxisAnchor {
+  score: number;
+  text: string;
+}
+
+export const RUBRIC_AXIS_ANCHORS: Record<string, AxisAnchor[]> = {
+  syntax: [
+    {
+      score: 0,
+      text: "Words are jumbled or in English order — it doesn't read as an Igala sentence.",
+    },
+    {
+      score: 3,
+      text: "Mostly the right order, but one part is off (a misplaced verb, or the wrong tense).",
+    },
+    {
+      score: 5,
+      text: "Correct Igala word order, tense and agreement all the way through.",
+    },
+  ],
+  lexicon: [
+    {
+      score: 0,
+      text: "The key word is invented, or borrowed from another language, not Igala.",
+    },
+    {
+      score: 3,
+      text: "Real Igala words, but one is the wrong choice for the meaning here.",
+    },
+    {
+      score: 5,
+      text: "Every word is the correct, natural Igala word for what's meant.",
+    },
+  ],
+  spelling: [
+    {
+      score: 0,
+      text: "English-ised spelling — dotted vowels (ẹ, ọ) written as plain e / o.",
+    },
+    { score: 3, text: "Recognisable, but with a couple of letter mistakes." },
+    {
+      score: 5,
+      text: "Spelled correctly, including ẹ / ọ and the right letters throughout.",
+    },
+  ],
+  diacritics: [
+    {
+      score: 0,
+      text: "No tone marks at all — the word is written bare, so its meaning is ambiguous.",
+    },
+    {
+      score: 3,
+      text: "Some tone marks present, but at least one is missing or on the wrong vowel.",
+    },
+    { score: 5, text: "All tone marks and dotted vowels present and correct." },
+  ],
+  semantics: [
+    { score: 0, text: "Says something unrelated to what was asked." },
+    {
+      score: 3,
+      text: "The gist is there, but part of the meaning is lost or changed.",
+    },
+    { score: 5, text: "Conveys exactly the intended meaning." },
+  ],
+  cultural_relevance: [
+    {
+      score: 0,
+      text: "Assumes a Western norm that doesn't fit Igala practice.",
+    },
+    {
+      score: 3,
+      text: "Broadly appropriate, but a detail doesn't match Igala custom.",
+    },
+    {
+      score: 5,
+      text: "Fully matches how this is actually done in Igala culture.",
+    },
+  ],
+  authenticity: [
+    {
+      score: 0,
+      text: "Reads as a stiff, word-for-word translation from English.",
+    },
+    {
+      score: 3,
+      text: "Understandable, but not quite how a native speaker would phrase it.",
+    },
+    { score: 5, text: "Exactly how a real Igala speaker would say it." },
+  ],
+  contamination: [
+    {
+      score: 0,
+      text: 'It\'s another language — e.g. the Yoruba greeting "Ẹ kú àárọ̀" returned for an Igala prompt.',
+    },
+    {
+      score: 3,
+      text: "Mostly Igala, but a word or phrase has bled in from Yoruba / Idoma / Igbo / English.",
+    },
+    {
+      score: 5,
+      text: "Entirely Igala, with no bleed from any other language.",
+    },
+  ],
+};
+
+export function axisAnchors(key: string): AxisAnchor[] {
+  return RUBRIC_AXIS_ANCHORS[key] ?? [];
+}
 
 /** The four scored rubric axes (creativeDepth was renamed to culturalNormAdherence). */
 export interface RubricAxis {
