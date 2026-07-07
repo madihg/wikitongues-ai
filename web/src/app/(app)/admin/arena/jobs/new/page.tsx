@@ -8,10 +8,10 @@ export default function NewJobPage() {
         <div>
           <h1 className="text-2xl text-text-primary">New Fine-tune Job</h1>
           <p className="mt-2 max-w-2xl text-sm text-text-secondary">
-            Pick a method and a base candidate, optionally filter by bucket, and
-            launch. The builder excludes held-out (test-split) prompts from the
-            training set automatically — a benchmark that leaked into training
-            is meaningless.
+            Pick a method and a base candidate, optionally filter by prompt
+            category, and launch. The builder excludes held-out (test-split)
+            prompts from the training set automatically — a benchmark that
+            leaked into training is meaningless.
           </p>
         </div>
         <Link

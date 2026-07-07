@@ -73,9 +73,9 @@ export function CategoryBreakdown() {
       <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
         Rubric Scores by Category
         <InfoTip width="w-80">
-          Mean rubric v2 axis scores (0-5) broken down by the 8 evaluation
-          buckets. N/A judgments are excluded from means; a dash means the axis
-          hasn&apos;t been scored in that bucket yet.
+          Mean rubric axis scores (0-5) broken down by prompt category. N/A
+          judgments are excluded from means; a dash means the axis hasn&apos;t
+          been scored in that category yet.
         </InfoTip>
       </h2>
 
