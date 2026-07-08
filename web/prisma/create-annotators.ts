@@ -24,13 +24,19 @@ import { readFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
 
-// Unambiguous alphabet — no 0/O/1/l/I — so passwords are easy to read and type.
-const ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+// Pronounceable, all-lowercase passwords (consonant+vowel syllables + 2 digits),
+// e.g. "tukabeni47". Random mixed-case strings get mistyped constantly on phones;
+// these are easy to read aloud, type, and dictate over WhatsApp, while four
+// syllables + two digits keep ~31 bits of entropy — plenty for these accounts.
+const CONS = "bdfghjkmnprstvwz"; // no ambiguous/awkward consonants
+const VOWELS = "aeiou";
 
-function strongPassword(len = 14): string {
-  let out = "";
-  for (let i = 0; i < len; i++) out += ALPHABET[randomInt(ALPHABET.length)];
-  return out;
+function strongPassword(): string {
+  let word = "";
+  for (let i = 0; i < 4; i++) {
+    word += CONS[randomInt(CONS.length)] + VOWELS[randomInt(VOWELS.length)];
+  }
+  return `${word}${10 + randomInt(90)}`; // trailing 2 digits, no leading zero
 }
 
 interface Entry {

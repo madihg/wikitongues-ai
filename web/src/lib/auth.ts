@@ -22,8 +22,12 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Emails are stored lowercased; normalize the input so a stray capital
+        // or trailing space (common on mobile) doesn't cause a false "invalid
+        // email or password". Passwords stay verbatim.
+        const email = credentials.email.trim().toLowerCase();
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email },
         });
 
         if (!user) {
