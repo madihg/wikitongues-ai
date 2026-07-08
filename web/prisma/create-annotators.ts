@@ -54,7 +54,22 @@ function parseEntry(raw: string): Entry | null {
 async function main() {
   const args = process.argv.slice(2);
   const reset = args.includes("--reset");
-  const rest = args.filter((a) => a !== "--reset");
+
+  // Optional `--role researcher` (default annotator) — lets the same tool mint a
+  // researcher login (e.g. for the community lead). Only applied to an existing
+  // account when --role is passed explicitly, so a routine annotator --reset run
+  // can never silently demote a researcher.
+  const roleIdx = args.indexOf("--role");
+  const roleValIdx = roleIdx === -1 ? -1 : roleIdx + 1;
+  const roleExplicit = roleIdx !== -1;
+  const role: "ANNOTATOR" | "RESEARCHER" =
+    roleExplicit && /researcher/i.test(args[roleValIdx] ?? "")
+      ? "RESEARCHER"
+      : "ANNOTATOR";
+
+  const rest = args.filter(
+    (a, i) => a !== "--reset" && i !== roleIdx && i !== roleValIdx,
+  );
 
   const raws: string[] = [];
   for (let i = 0; i < rest.length; i++) {
@@ -102,15 +117,20 @@ async function main() {
     const passwordHash = await hash(password, 12);
     const user = await prisma.user.upsert({
       where: { email },
-      update: { passwordHash, ...(name ? { name } : {}) },
+      update: {
+        passwordHash,
+        ...(name ? { name } : {}),
+        ...(roleExplicit ? { role } : {}),
+      },
       create: {
         email,
         name: name ?? email.split("@")[0],
         passwordHash,
-        role: "ANNOTATOR",
+        role,
       },
     });
-    // Every annotator on this project is an Igala native speaker.
+    // Give everyone the Igala (native) assignment so the annotation queue works
+    // for them — harmless for researchers, who can also annotate.
     await prisma.annotatorLanguage.upsert({
       where: { userId_language: { userId: user.id, language: "igala" } },
       update: {},
@@ -119,12 +139,12 @@ async function main() {
     results.push({
       email,
       password,
-      note: existing ? "password reset" : "created",
+      note: `${existing ? "password reset" : "created"} — ${role}`,
     });
   }
 
   const w = Math.max(...results.map((r) => r.email.length), 5);
-  console.log("\n=== Annotator credentials — sign in at /login ===");
+  console.log("\n=== Credentials — sign in at /login ===");
   console.log(`${"EMAIL".padEnd(w)}  ${"PASSWORD".padEnd(14)}  NOTE`);
   console.log(`${"-".repeat(w)}  ${"-".repeat(14)}  ----`);
   for (const r of results) {
