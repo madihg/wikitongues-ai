@@ -65,6 +65,9 @@ export function Leaderboard() {
   const entries = data[activeTab] ?? [];
   const bestScore =
     entries.length > 0 ? Math.max(...entries.map((e) => e.overallScore)) : 0;
+  // Only crown a "Best" model once there's actual rubric signal. With no axis
+  // scores yet everyone sits at 0, and tagging all of them "Best" reads as a bug.
+  const isBest = (score: number) => bestScore > 0 && score === bestScore;
 
   return (
     <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
@@ -121,7 +124,7 @@ export function Leaderboard() {
                 <tr
                   key={entry.model}
                   className={`border-b border-border ${
-                    entry.overallScore === bestScore
+                    isBest(entry.overallScore)
                       ? "bg-accent-subtle font-medium"
                       : ""
                   }`}
@@ -129,7 +132,7 @@ export function Leaderboard() {
                   <td className="py-3 pr-4 text-text-secondary">{i + 1}</td>
                   <td className="py-3 pr-4 font-medium text-text-primary">
                     {entry.model}
-                    {entry.overallScore === bestScore && (
+                    {isBest(entry.overallScore) && (
                       <span className="ml-2 inline-block rounded-md bg-accent-subtle px-1.5 py-0.5 text-xs text-accent-text">
                         Best
                       </span>

@@ -10,6 +10,7 @@ import {
   isGoldFirstBucket,
   axesForBucket,
 } from "@/lib/buckets";
+import { firstPairs, MAX_SHOWS_PER_PROMPT } from "@/lib/pairing";
 
 /**
  * Serve the next annotation task. The response now carries everything the
@@ -34,7 +35,11 @@ export async function GET(req: Request) {
 
   const promptsWithOutputs = await prisma.prompt.findMany({
     where: { modelOutputs: { some: {} } },
-    include: { modelOutputs: { orderBy: { createdAt: "asc" } } },
+    // Deterministic order (id as a tiebreak on equal timestamps) so the capped
+    // pair selection here matches /api/annotator/summary's pending calc exactly.
+    include: {
+      modelOutputs: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+    },
   });
 
   const eligiblePrompts = promptsWithOutputs.filter(
@@ -62,83 +67,82 @@ export async function GET(req: Request) {
     }
   }
 
+  // Cap how many pairs a single prompt yields so annotators don't see the same
+  // prompt on every C(n,2) combination. With 3 model outputs this shows a prompt
+  // at most MAX_SHOWS_PER_PROMPT times instead of 3.
   let totalComparisons = 0;
   let completedCount = 0;
   for (const prompt of eligiblePrompts) {
     const outputs = prompt.modelOutputs;
-    for (let i = 0; i < outputs.length; i++) {
-      for (let j = i + 1; j < outputs.length; j++) {
-        totalComparisons++;
-        const key = `${prompt.promptId}:${[outputs[i].id, outputs[j].id].sort().join(":")}`;
-        if (completedPairs.has(key)) completedCount++;
-      }
+    for (const [i, j] of firstPairs(outputs.length, MAX_SHOWS_PER_PROMPT)) {
+      totalComparisons++;
+      const key = `${prompt.promptId}:${[outputs[i].id, outputs[j].id].sort().join(":")}`;
+      if (completedPairs.has(key)) completedCount++;
     }
   }
 
   for (const prompt of eligiblePrompts) {
     const outputs = prompt.modelOutputs;
-    for (let i = 0; i < outputs.length; i++) {
-      for (let j = i + 1; j < outputs.length; j++) {
-        const key = `${prompt.promptId}:${[outputs[i].id, outputs[j].id].sort().join(":")}`;
-        if (completedPairs.has(key)) continue;
+    for (const [i, j] of firstPairs(outputs.length, MAX_SHOWS_PER_PROMPT)) {
+      const key = `${prompt.promptId}:${[outputs[i].id, outputs[j].id].sort().join(":")}`;
+      if (completedPairs.has(key)) continue;
 
-        // Randomly assign A/B to avoid position bias.
-        const swap = Math.random() > 0.5;
-        const outputA = swap ? outputs[j] : outputs[i];
-        const outputB = swap ? outputs[i] : outputs[j];
+      // Randomly assign A/B to avoid position bias.
+      const swap = Math.random() > 0.5;
+      const outputA = swap ? outputs[j] : outputs[i];
+      const outputB = swap ? outputs[i] : outputs[j];
 
-        // For factual buckets, surface a reference so fluency can't rescue an
-        // invented fact. Subjective buckets stay blind (no reference shown).
-        let reference: {
-          note: string | null;
-          entries: { topic: string; content: string; source: string }[];
-        } | null = null;
-        if (isFactualBucket(prompt.bucket)) {
-          let entries: {
-            topic: string;
-            content: string;
-            source: string;
-          }[] = [];
-          try {
-            const rag = await searchRag(prompt.text, prompt.language, 3);
-            entries = rag.map((r) => ({
-              topic: r.topic,
-              content: r.content,
-              source: r.source,
-            }));
-          } catch {
-            entries = [];
-          }
-          reference = {
-            note: prompt.expectedCulturalContext,
-            entries,
-          };
+      // For factual buckets, surface a reference so fluency can't rescue an
+      // invented fact. Subjective buckets stay blind (no reference shown).
+      let reference: {
+        note: string | null;
+        entries: { topic: string; content: string; source: string }[];
+      } | null = null;
+      if (isFactualBucket(prompt.bucket)) {
+        let entries: {
+          topic: string;
+          content: string;
+          source: string;
+        }[] = [];
+        try {
+          const rag = await searchRag(prompt.text, prompt.language, 3);
+          entries = rag.map((r) => ({
+            topic: r.topic,
+            content: r.content,
+            source: r.source,
+          }));
+        } catch {
+          entries = [];
         }
-
-        return NextResponse.json({
-          complete: false,
-          demo: isDemo,
-          progress: { completed: completedCount, total: totalComparisons },
-          task: {
-            prompt: {
-              id: prompt.id,
-              promptId: prompt.promptId,
-              bucket: prompt.bucket,
-              language: prompt.language,
-              text: prompt.text,
-              targetCulture: prompt.targetCulture,
-              expectedCulturalContext: prompt.expectedCulturalContext,
-            },
-            goldFirst: isGoldFirstBucket(prompt.bucket),
-            watchFor: bucketWatchFor(prompt.bucket),
-            scoring: bucketScoring(prompt.bucket),
-            applicableAxes: axesForBucket(prompt.bucket),
-            reference,
-            outputA: { id: outputA.id, text: outputA.outputText },
-            outputB: { id: outputB.id, text: outputB.outputText },
-          },
-        });
+        reference = {
+          note: prompt.expectedCulturalContext,
+          entries,
+        };
       }
+
+      return NextResponse.json({
+        complete: false,
+        demo: isDemo,
+        progress: { completed: completedCount, total: totalComparisons },
+        task: {
+          prompt: {
+            id: prompt.id,
+            promptId: prompt.promptId,
+            bucket: prompt.bucket,
+            language: prompt.language,
+            text: prompt.text,
+            targetCulture: prompt.targetCulture,
+            expectedCulturalContext: prompt.expectedCulturalContext,
+          },
+          goldFirst: isGoldFirstBucket(prompt.bucket),
+          watchFor: bucketWatchFor(prompt.bucket),
+          scoring: bucketScoring(prompt.bucket),
+          applicableAxes: axesForBucket(prompt.bucket),
+          reference,
+          outputA: { id: outputA.id, text: outputA.outputText },
+          outputB: { id: outputB.id, text: outputB.outputText },
+        },
+      });
     }
   }
 
