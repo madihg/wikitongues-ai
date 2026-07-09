@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface Annotator {
+  id: string;
   name: string;
   pairwiseCount: number;
   rubricCount: number;
@@ -80,9 +82,14 @@ export function AnnotatorActivity() {
           </thead>
           <tbody>
             {data.map((a) => (
-              <tr key={a.name} className="border-b border-border">
-                <td className="py-3 pr-4 font-medium text-text-primary">
-                  {a.name}
+              <tr key={a.id} className="border-b border-border">
+                <td className="py-3 pr-4 font-medium">
+                  <Link
+                    href={`/admin/annotations?annotator=${a.id}`}
+                    className="text-accent-text underline-offset-2 hover:underline"
+                  >
+                    {a.name}
+                  </Link>
                 </td>
                 <td className="py-3 pr-4 text-right tabular-nums text-text-secondary">
                   {a.pairwiseCount}

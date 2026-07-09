@@ -419,7 +419,17 @@ export function AnnotationInterface() {
         };
       }
     } else if (winner === "both_inadequate") {
-      if (salvage.trim()) {
+      // If the salvage rewrite is identical to the already-locked cold answer,
+      // it's not a second data point - skip it and let coldAuthor (below) carry
+      // it alone, since that row has the stronger provenance (speaker-authored,
+      // source-free, written before reveal). Only send both when the texts
+      // differ, which is legitimate: an initial answer plus a correction made
+      // after seeing why both AI outputs failed.
+      const isDuplicateOfCold =
+        coldLocked &&
+        coldAnswer.trim().length > 0 &&
+        salvage.trim() === coldAnswer.trim();
+      if (salvage.trim() && !isDuplicateOfCold) {
         payload.salvageAnswer = {
           answerText: salvage.trim(),
           consentBenchmark,
@@ -428,7 +438,10 @@ export function AnnotationInterface() {
       }
     }
 
-    if (task.goldFirst && coldAnswer.trim()) {
+    // Included whenever a cold answer was actually locked before reveal -
+    // gold-first buckets require it, but it's equally valid (and equally
+    // valuable) when volunteered on any other bucket.
+    if (coldLocked && coldAnswer.trim()) {
       payload.coldAuthor = {
         answerText: coldAnswer.trim(),
         consentBenchmark,
@@ -444,16 +457,27 @@ export function AnnotationInterface() {
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || "Submission failed");
+      // A cold answer is the single highest-value artifact this episode can
+      // produce, so it gets its own acknowledgement rather than being folded
+      // into a generic "extras" list. Fall back to client-side knowledge
+      // (coldLocked) if the API response ever omits coldSaved.
+      const gotColdAnswer = data.coldSaved ?? (coldLocked && coldAnswer.trim());
       const extras: string[] = [];
       if (data.editsSaved) extras.push("a correction");
-      if (data.coldSaved) extras.push("your own answer");
       if (data.salvageSaved) extras.push("a rewrite");
-      showToast(
-        extras.length
-          ? `Saved — including ${extras.join(" and ")}.`
-          : "Annotation submitted.",
-        "success",
-      );
+      if (gotColdAnswer) {
+        showToast(
+          "Gold answer saved - this is what teaches the model real Igala.",
+          "success",
+        );
+      } else {
+        showToast(
+          extras.length
+            ? `Saved - including ${extras.join(" and ")}.`
+            : "Annotation submitted.",
+          "success",
+        );
+      }
       clearDraft();
       await fetchNext();
     } catch (err) {
@@ -712,10 +736,44 @@ export function AnnotationInterface() {
       {/* STEP: prompt / cold-authoring */}
       {step === "prompt" && (
         <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-          {task.goldFirst ? (
+          {coldLocked ? (
+            // Reached via the pairwise step's Back button (or a restored draft
+            // with coldLocked already true): the annotator has now SEEN both AI
+            // outputs, so the textarea and lock/skip buttons must not reappear -
+            // editing here would silently break the source-free guarantee.
             <>
               <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                Before you see the AI answers — how would you say this?
+                First - how would YOU say it?
+              </h3>
+              {coldAnswer.trim() ? (
+                <div className="mt-3 rounded-md border border-border bg-surface-sunken px-4 py-2 text-xs text-text-tertiary">
+                  <span className="font-medium text-text-secondary">
+                    Your locked answer:
+                  </span>{" "}
+                  <span className={textFont}>{coldAnswer}</span>
+                  <p className="mt-2 text-text-muted">
+                    Your answer is locked - it was written before you saw the AI
+                    outputs, which is exactly what makes it valuable.
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-text-secondary">
+                  You skipped writing your own answer, and you&apos;ve already
+                  seen the AI outputs - writing one now wouldn&apos;t be
+                  source-free, so it&apos;s no longer offered here.
+                </p>
+              )}
+              <button
+                onClick={() => setStep("pairwise")}
+                className="mt-4 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+              >
+                Back to the AI outputs
+              </button>
+            </>
+          ) : task.goldFirst ? (
+            <>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                First - how would YOU say it?
                 <InfoTip width="w-80">
                   Your own answer, written without any model in view, is
                   source-free gold: it doesn&apos;t inherit the translationese
@@ -723,6 +781,11 @@ export function AnnotationInterface() {
                   highest-value record on this bucket.
                 </InfoTip>
               </h3>
+              <p className="mt-1 text-sm text-text-secondary">
+                Your own answer is the most valuable thing you can give: the
+                model can only learn real Igala from real speakers. Even one
+                sentence helps.
+              </p>
               <textarea
                 ref={coldRef}
                 value={coldAnswer}
@@ -750,16 +813,51 @@ export function AnnotationInterface() {
             </>
           ) : (
             <>
-              <p className="text-sm text-text-secondary">
-                You&apos;ll compare two AI answers blind, pick the better Igala
-                (or say both are wrong), score it, and optionally correct it.
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                First - how would YOU say it?
+                <InfoTip width="w-80">
+                  Your own answer, written without any model in view, is
+                  source-free gold: it doesn&apos;t inherit the translationese
+                  of an AI answer the way an edit does. Optional here, but still
+                  the most valuable thing you can leave on this prompt.
+                </InfoTip>
+              </h3>
+              <p className="mt-1 text-sm text-text-secondary">
+                Your own answer is the most valuable thing you can give: the
+                model can only learn real Igala from real speakers. Even one
+                sentence helps.
               </p>
-              <button
-                onClick={revealModels}
-                className="mt-4 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
-              >
-                Reveal the two AI outputs
-              </button>
+              <textarea
+                ref={coldRef}
+                value={coldAnswer}
+                onChange={(e) => setColdAnswer(e.target.value)}
+                rows={3}
+                placeholder="Optional - write the ideal Igala answer in your own words…"
+                className={`mt-3 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:border-accent ${textFont}`}
+              />
+              <ToneKeyboard
+                targetRef={coldRef}
+                value={coldAnswer}
+                onValueChange={setColdAnswer}
+              />
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button
+                  onClick={revealModels}
+                  disabled={!coldAnswer.trim()}
+                  className="cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Lock my answer &amp; reveal the AI outputs
+                </button>
+                <button
+                  onClick={revealModels}
+                  className="cursor-pointer rounded-md border border-border-strong bg-surface px-6 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
+                >
+                  Skip - just show me the outputs
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-text-muted">
+                Once revealed, your answer is locked so it stays source-free.
+              </p>
             </>
           )}
         </div>
