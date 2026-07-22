@@ -44,7 +44,7 @@ const prompts: SeedPrompt[] = [
   {
     promptId: "ig_lex_001",
     bucket: "lexicon_disambig",
-    text: "Give the Igala word for 'vehicle' and explain how tone distinguishes it from 'farm'.",
+    text: "Give the Igala word for 'vehicle', making sure it is the true Igala word and not a borrowing.",
     difficultyLevel: "advanced",
     split: "dev",
     isHoldout: false,

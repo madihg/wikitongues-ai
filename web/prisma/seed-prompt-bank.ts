@@ -622,7 +622,7 @@ const lexicon_disambig: BankPrompt[] = [
   // advanced
   {
     bucket: "lexicon_disambig",
-    text: "In Igala, give a word whose meaning changes with tone, list both meanings, and mark the tone on each.",
+    text: "Give the Igala words for 'to borrow' and 'to lend', and confirm they are not the same word.",
     difficultyLevel: "advanced",
   },
   {
