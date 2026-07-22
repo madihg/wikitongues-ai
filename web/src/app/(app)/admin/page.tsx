@@ -4,6 +4,7 @@ import { CategoryBreakdown } from "@/components/admin/category-breakdown";
 import { AgreementStats } from "@/components/admin/agreement-stats";
 import { GapDashboard } from "@/components/admin/gap-dashboard";
 import { AnnotatorActivity } from "@/components/admin/annotator-activity";
+import { TimeSpent } from "@/components/admin/time-spent";
 import { ExportPanel } from "@/components/admin/export-panel";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
@@ -66,7 +67,10 @@ export default function AdminDashboard() {
           <GapDashboard />
         </div>
 
-        <AnnotatorActivity />
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AnnotatorActivity />
+          <TimeSpent />
+        </div>
         <ExportPanel />
       </div>
 

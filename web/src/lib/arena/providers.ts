@@ -2,6 +2,10 @@ import { generateText, type LanguageModel } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { openai, createOpenAI } from "@ai-sdk/openai";
 import { google } from "@ai-sdk/google";
+import {
+  IGALA_FORCING_INSTRUCTION,
+  buildFewShotTurns,
+} from "@/lib/generation-prompt";
 
 /**
  * Model-swapping core. Resolves any registered candidate configuration to a
@@ -57,11 +61,6 @@ interface Decoding {
   maxTokens: number;
 }
 
-const DEFAULT_IGALA_INSTRUCTION =
-  "You are conversing in Igala, a tonal West Benue-Congo language spoken in Kogi State, Nigeria. " +
-  "Respond authentically in Igala. If you are unsure of vocabulary, grammar, tone, or cultural context, " +
-  "say so rather than guessing. Do not invent words or confuse Igala with neighboring languages.";
-
 export function resolveModel(candidate: CandidateLike): LanguageModel {
   const provider = candidate.provider as CandidateProvider;
   switch (provider) {
@@ -107,11 +106,20 @@ export function buildSystemPrompt(
   ragContext?: RagChunk[],
   override?: string,
 ): string {
-  const base =
+  const custom =
     override ??
     (candidate.useSystemPrompt && candidate.systemPrompt
       ? candidate.systemPrompt
-      : DEFAULT_IGALA_INSTRUCTION);
+      : undefined);
+
+  // Always lead with the hard Igala-forcing instruction, whether or not a
+  // candidate carries its own custom system prompt (e.g. the RAG variants'
+  // seed-arena.ts config) or a caller passes systemPromptOverride. This is
+  // what stops generation from drifting into English scaffolding or the
+  // wrong language entirely - see src/lib/generation-prompt.ts.
+  const base = custom
+    ? `${IGALA_FORCING_INSTRUCTION}\n\n${custom}`
+    : IGALA_FORCING_INSTRUCTION;
 
   if (candidate.ragEnabled && ragContext && ragContext.length > 0) {
     const formatted = ragContext
@@ -140,6 +148,9 @@ export async function generateForCandidate(
   );
 
   const messages: { role: "user" | "assistant"; content: string }[] = [];
+  // Few-shot exemplars (empty today - see generation-prompt.ts) go first, as
+  // priming turns ahead of any real conversation history.
+  messages.push(...buildFewShotTurns(args.userMessage));
   if (args.conversationHistory) {
     for (const msg of args.conversationHistory) {
       if (msg.role === "user" || msg.role === "assistant") {

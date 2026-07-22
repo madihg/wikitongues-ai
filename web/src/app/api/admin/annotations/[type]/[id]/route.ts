@@ -188,9 +188,19 @@ async function pairwiseDetail(id: string) {
 // ─── cold (editable: answerText, verificationStatus) ─────────────────────────
 
 async function coldDetail(id: string) {
+  // Explicit select (not include) - prod may lag the client on newly added
+  // nullable columns (e.g. instructionIg), and an unscoped include RETURNS
+  // all scalars, which 500s. List exactly what the response below consumes.
   const a = await prisma.coldAuthorAnswer.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true,
+      createdAt: true,
+      answerText: true,
+      provenance: true,
+      consentBenchmark: true,
+      consentTraining: true,
+      verificationStatus: true,
       annotator: { select: { id: true, name: true, email: true } },
       prompt: { select: { promptId: true, text: true, bucket: true } },
     },

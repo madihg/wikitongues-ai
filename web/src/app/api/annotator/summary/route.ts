@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isResearcher } from "@/lib/personas";
-import { firstPairs, MAX_SHOWS_PER_PROMPT } from "@/lib/pairing";
+import { computeQueueState, type QueuePrompt } from "@/lib/pairing";
 
 /**
  * Real numbers for the annotator dashboard. Everything here is scoped to the
@@ -18,44 +18,43 @@ export async function GET() {
   const annotatorId = session.user.id;
   const researcher = isResearcher(session.user.role, session.user.email);
 
-  // Queue remaining — mirrors /api/annotations/next: eligible prompts (2+ model
-  // outputs), capped pairs per prompt, minus the pairs this user already did.
-  const promptsWithOutputs = await prisma.prompt.findMany({
-    where: { modelOutputs: { some: {} } },
-    select: {
-      promptId: true,
-      // Same deterministic order as /api/annotations/next so the pending count
-      // here can never drift from what the queue actually serves.
-      modelOutputs: {
-        select: { id: true },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  // Queue remaining — mirrors /api/annotations/next via the shared
+  // computeQueueState(): eligible prompts (2+ model outputs) minus prompts
+  // this user has already compared (any pair, including old-scheme history)
+  // or skipped. Same query shape and ordering as /api/annotations/next so
+  // "Queue Remaining" here can never drift from what the queue actually
+  // serves.
+  const [promptsWithOutputs, doneRows, skipRows] = await Promise.all([
+    prisma.prompt.findMany({
+      where: { modelOutputs: { some: {} } },
+      select: {
+        promptId: true,
+        modelOutputs: { select: { id: true } },
       },
-    },
-  });
-  const eligible = promptsWithOutputs.filter((p) => p.modelOutputs.length >= 2);
+    }),
+    prisma.pairwiseComparison.findMany({
+      where: { annotatorId, isDemo: false },
+      select: { promptId: true },
+    }),
+    prisma.promptFlag.findMany({
+      where: { annotatorId, reason: "skip" },
+      select: { prompt: { select: { promptId: true } } },
+    }),
+  ]);
 
-  const doneRows = await prisma.pairwiseComparison.findMany({
-    where: { annotatorId, isDemo: false },
-    select: { modelOutputAId: true, modelOutputBId: true, promptId: true },
-  });
-  const donePairs = new Set(
-    doneRows.map(
-      (c) =>
-        `${c.promptId}:${[c.modelOutputAId, c.modelOutputBId].sort().join(":")}`,
-    ),
+  const queuePrompts: QueuePrompt[] = promptsWithOutputs.map((p) => ({
+    promptId: p.promptId,
+    outputCount: p.modelOutputs.length,
+  }));
+  const donePromptIds = new Set(doneRows.map((r) => r.promptId));
+  const skippedPromptIds = new Set(skipRows.map((r) => r.prompt.promptId));
+
+  const { remaining } = computeQueueState(
+    queuePrompts,
+    donePromptIds,
+    skippedPromptIds,
   );
-
-  let total = 0;
-  for (const p of eligible) {
-    for (const [i, j] of firstPairs(
-      p.modelOutputs.length,
-      MAX_SHOWS_PER_PROMPT,
-    )) {
-      const key = `${p.promptId}:${[p.modelOutputs[i].id, p.modelOutputs[j].id].sort().join(":")}`;
-      if (!donePairs.has(key)) total++;
-    }
-  }
-  const pending = total;
+  const pending = remaining.length;
 
   const [completed, rubricScores, coldAnswers] = await Promise.all([
     prisma.pairwiseComparison.count({ where: { annotatorId, isDemo: false } }),

@@ -316,6 +316,13 @@ model ColdAuthorAnswer {
   promptId           String
   bucket             EvalBucket?
   answerText         String
+  // Plain-English "what it means / why" gloss for the Igala answer. Training
+  // metadata (audit/filter) only — never merged into the Igala answer itself.
+  englishGloss       String?
+  // The prompt/instruction itself rewritten in Igala by the speaker, so one
+  // episode can mint two training rows (English-instruction -> Igala and
+  // Igala-instruction -> Igala). Optional, never blocks locking.
+  instructionIg      String?
   provenance         String             @default("speaker_authored_sourcefree")
   consentBenchmark   Boolean            @default(true)
   consentTraining    Boolean            @default(true)

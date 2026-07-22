@@ -1,9 +1,11 @@
 import { PromptList } from "@/components/prompt-list";
+import { PromptsLeadBanner } from "@/components/prompts-lead-banner";
 import { HelpButton } from "@/components/help-button";
 
 export default function PromptsPage() {
   return (
     <>
+      <PromptsLeadBanner />
       <PromptList />
       <HelpButton
         title="Prompts"

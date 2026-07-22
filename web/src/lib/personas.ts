@@ -51,6 +51,7 @@ export function navForRole(
       { href: "/annotator/prompts", label: "Prompts" },
       { href: "/annotator/annotate", label: "Annotate" },
       { href: "/annotator/history", label: "My Work" },
+      { href: "/annotator/rubric", label: "Rubric" },
       { href: "/annotator/review", label: "Review queue" },
       { href: "/admin/annotations", label: "Annotations" },
       { href: "/admin", label: "Researcher Dashboard" },
@@ -62,6 +63,7 @@ export function navForRole(
     { href: "/annotator", label: "Dashboard" },
     { href: "/annotator/annotate", label: "Annotate" },
     { href: "/annotator/history", label: "My Work" },
+    { href: "/annotator/rubric", label: "Rubric" },
   ];
 }
 
