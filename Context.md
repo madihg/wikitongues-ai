@@ -285,3 +285,83 @@ Ran a 13-agent review (5 finders + adversarial verifiers), wf_4136135d-53e. Fixe
 - Shared `withApiErrors()` wrapper for all annotations+arena GET routes (annotations/next + arena reads can 500 non-JSON on DB error). Client `safeJson()` already degrades these gracefully; the wrapper is the clean fix.
 - Orphaned legacy `RubricScore` model + RUBRIC_AXES/RUBRIC_KEYS exports in buckets.ts - no writer; delete in a cleanup pass.
 - LOW cosmetic: contested-items shows tie/both_inadequate in pick-B color; agreement-stats has a dead DIMENSION_LABELS map (falls through to correct label).
+
+## Session State (2026-07-07 pm) - Go-live prep
+
+**Data IS persisting** (answered Halim's "is nothing saving?" - it is). Live prod: 10 real pairwise (9 both_inadequate + 1 'a'), 3 cold answers, 2 annotators. `RubricAxisScore=0` is EXPECTED, not a bug: both_inadequate skips the winner-rubric, so no axis rows until someone picks a clear winner. Only 1 real ANNOTATOR account (annotator@test.com); other "annotators" were owner/researcher.
+
+**Shipped in PR #7** (branch halim-bot/fervent-jemison-b6bb05, commit d982973, pushed) - AWAITING MERGE (classifier blocks agent self-merge of PR into main; Halim must merge PR #7, then re-alias public URL):
+
+- **Prompt-show cap = 2/prompt/annotator.** `web/src/lib/pairing.ts` (`firstPairs`, `MAX_SHOWS_PER_PROMPT=2`) + `pairing.test.ts` (5 tests). Wired into BOTH count+serve loops of `api/annotations/next/route.ts` (refactored 2 nested loops -> 1 for-of). Live proof: 8 prompts x3 outputs, queue 24->16 (each prompt 3x->2x). firstPairs(3,2)=[[0,1],[0,2]] covers all 3 models (1v2 intentionally unmatched).
+- **Real annotator dashboard.** `api/annotator/summary/route.ts` (NEW) returns per-user pending/completed/coldAnswers + recent activity, isDemo excluded, researcher-only promptsInCatalogue+pendingReviews. `app/(app)/annotator/page.tsx` was 100% HARDCODED MOCK ("12/3/47" + fake activity table) -> now fetches real data + loading/empty/error states. Pending calc mirrors /next exactly (same firstPairs + same deterministic modelOutput order `[{createdAt asc},{id asc}]` - tiebreak added to BOTH so counts can't drift).
+- **admin/activity** now counts with explicit `.count({isDemo:false})` (was un-filterable `_count` incl. demo). HandoffItem has no isDemo (unfiltered, correct).
+- **leaderboard** "Best" badge guarded `bestScore>0` (was tagging every model at score 0).
+- **Tone keyboard caps toggle** (`tone-keyboard.tsx`): ⇧ Aa button uppercases special letters via toUpperCase() (handles precomposed + combining marks).
+- **Account tool** `prisma/create-annotators.ts` + npm script `create:annotators`. `npm run create:annotators -- "a@x.com:Name" b@y.com` -> ANNOTATOR accounts, strong bcrypt(12) pw, Igala native lang, skips existing unless `--reset`, prints creds table. AWAITING Halim's list of emails.
+
+**Verified:** vitest 5/5, tsc, eslint, `next build` all pass. 2 review agents (dashboard audit + diff review) - no shipping blockers; hardened the 2 worthwhile findings (order tiebreak, dashboard error state).
+
+### Go-live SHIPPED + 6 real accounts (2026-07-08)
+
+PR #7 MERGED to main (merge commit d7c78d9); Vercel production build dpl_BamBpkd2 READY. Two follow-up commits rode in on the same branch before merge: b7bbf7a (create-annotators --role flag) and 5e9cb62 (auth email-normalization + friendlier passwords).
+
+**auth.ts:** login now lowercases+trims the email before lookup (findUnique is exact-match; stored emails are lowercased). Prevents "invalid email or password" when someone types a stray capital (e.g. Ibrahim's email was shared with a capital I) or trailing space. Passwords stay verbatim.
+
+**create-annotators.ts password style CHANGED:** was random 14-char mixed-case (real annotators kept mistyping on phones -> Sarah hit "invalid email or password"); now pronounceable all-lowercase CV-syllable + 2-digit (e.g. "tukabeni47"), ~31 bits. `--role researcher` flag added.
+
+**6 accounts created on PROD (all verified: bcrypt match=true, igala native lang), current passwords:**
+
+- ANNOTATOR agadasarah03@gmail.com (Sarah Agada) = finagoni82
+- ANNOTATOR charityogali0@gmail.com (Charity Ogali) = totawobo29
+- ANNOTATOR ibrahimabdulraheem24@gmail.com (Abdulraheem Ibrahim) = guwumaro33
+- ANNOTATOR blessingbenjamin40.bb@gmail.com (Blessing Benjamin) = bakifupa48
+- ANNOTATOR amoduaustine04@gmail.com (Austine Amodu) = konasudi98
+- RESEARCHER ajben12@gmail.com (Agnes, community lead - email found in Gmail) = hojibeni88
+
+Login VERIFIED end-to-end live: POSTed Sarah's creds to wikitongues-ai-web.vercel.app/api/auth/callback/credentials -> valid session returned. Sign-in link for annotators: https://wikitongues-ai-web.vercel.app/login. Password reset is a DB change so it's effective immediately regardless of the alias. No self-serve password reset in-app; reset via `npm run create:annotators -- --reset <email>` (add `--role researcher` to keep a researcher's role).
+
+**STILL MANUAL:** re-alias wikitongues-ai-web.vercel.app to the newest wikitongues-ai build to serve the new UI (dashboard/cap/email-norm); or permanently move that domain onto the wikitongues-ai project so it auto-tracks. Login already works on the current alias.
+
+**NEXT ACTIONS:** (1) Halim merges PR #7. [DONE] (2) Vercel auto-deploys wikitongues-ai; re-alias https://wikitongues-ai-web.vercel.app to newest build (manual - see Deploy section). (3) Halim sends annotator emails -> run create:annotators, hand out passwords privately. (4) Still open from before: rotate Anthropic+OpenAI keys; build prompt bank to ~30-50/category.
+
+## Session State (2026-07-08 pm) - Scale-up: prompt bank x37, annotation review UI, cold-answer UX
+
+Orchestrated session (Fable planning, Opus/Sonnet/Haiku subagent execution): 8 agents - recon (haiku), prompt-bank (opus), review-surface (opus), ux-flow (sonnet), ui-reviewer (opus, verdict SAFE TO SHIP), fixer (sonnet), content-reviewer (opus, verdict ACCEPTABLE FOR PILOT), bank-editor (opus).
+
+**1. PROMPT BANK 8 -> 300 (the binding constraint, now resolved).** prisma/seed-prompt-bank.ts + npm run seed:prompt-bank: 292 claude-authored prompts (40/category core, 20 dialectal_fidelity experimental), all split=train isHoldout=false provenance=claude_authored_v1, promptId namespace ig_bank_<short>_NNN, create-only upserts (update:{}). Seeded to PROD; 300/300 prompts have >=2 outputs (annotatable). Content-reviewed independently: zero cultural-fact violations (uncertain specifics deferred to annotator via expectedCulturalContext - keep this convention). ~24 prompts revised post-review (degenerate idiom template block de-templated, orthography strays rewritten in place, metalinguistic lexicon asks made concrete, dial model-framing removed); 34 stale outputs deleted+regenerated; zero annotated prompts modified (verified). Held-out/test expansion stays community-authored (Agnes) - NOT claude-authored, by design.
+
+**2. GEMINI KEY DEAD.** Google rejects the key ("API key not valid") - likely revoked after chat exposure. New bank prompts have 2 outputs each (gpt-4.1 + gpt-4.1-mini) = 1 pair per prompt per annotator (~308 pairs/annotator total, >1500 episodes capacity across 5). ACTION Halim: new Gemini key into web/.env + Vercel env, then `set -a; source .env; set +a; npm run seed:outputs` (idempotent, fills missing only; needs env sourced - tsx does not auto-load .env). Backfilling Gemini doubles pairs/prompt to the cap of 2. NOTE: seed-outputs does NOT write CostEntry rows (cost ledger gap, minor).
+
+**3. ANNOTATION REVIEW SURFACE (researcher).** New /admin/annotations (page + component annotations-review.tsx): unified pairwise/cold/edit event list, filters (annotator/type/bucket/include-demo default-off), detail drawer (pairwise shows both outputs + model identity + winner rubric axes + related edits/cold answers), inline researcher corrections (cold answerText, edit correctedText, verificationStatus promote via PATCH; pairwise READ-ONLY by design - 405). APIs: GET /api/admin/annotations (+facets, total), GET+PATCH /api/admin/annotations/[type]/[id], all requireResearcher()-gated. Deep-link contract: ?annotator=<userId>&type=pairwise|cold|edit. src/lib/annotations-query.ts (+12 tests) is the param parser. /api/admin/activity now returns user id; annotator-activity rows link to the filtered view (Sarah's work = click her row). admin/page.tsx has cards linking Annotations + Prompt Catalogue (/annotator/prompts - the pre-existing full edit UI w/ PromptEdit audit; verified working, was a discoverability gap). KNOWN DEBT (LOW): list API loads matching tables fully into memory before paging - fix with DB-side take/cursor when volume grows.
+
+**4. DASHBOARD ACTIONABLE + MY WORK.** StatCards are links (Queue->/annotator/annotate, Comparisons+Gold->/annotator/history, Reviews->/annotator/review, Prompts->/annotator/prompts); activity rows -> history; researcher extra link -> /admin/annotations. New /annotator/history + /api/annotator/history: session-scoped own-work list (pairwise w/ both outputs, cold, edits), expandable, paginated, isDemo excluded. Nav (personas.ts): "My Work" all roles; "Annotations" researcher-only.
+
+**5. COLD ANSWERS ON ALL 8 CATEGORIES (was 2).** annotation-interface.tsx: optional cold-author step before reveal on non-goldFirst buckets ("First - how would YOU say it?" + value framing), primary "Lock my answer & reveal", secondary skip. Submit sends coldAuthor whenever coldLocked && coldAnswer.trim() (server accepted any bucket all along). Integrity fixes from review: (a) lock survives Back - after reveal the cold answer renders read-only (source-free guarantee; also holds across draft restore); (b) both_inadequate: if salvage text == cold text, only the cold row is sent (provenance speaker_authored_sourcefree wins, no dup gold). Success toast acknowledges saved gold answers.
+
+**GATES (final, central):** typecheck 0, lint 0, tests 46/46 (12 new), next build clean (65 routes).
+
+**NEXT:** (1) merge PR (this branch), re-alias wikitongues-ai-web.vercel.app (or move domain to auto-track - still manual). (2) Halim: new Gemini key -> backfill outputs. (3) Community-authored held-out prompts w/ Agnes (30-50/category test split). (4) Deferred: list-API pagination at scale; CostEntry rows for seed-outputs; rotate Anthropic+OpenAI keys (still open).
+
+## Session State (2026-07-22) - Data-quality overhaul from the Jul 15 Agnes/Lydia call
+
+Orchestrated (Fable lead, Opus/Sonnet/Haiku executors, ~12 agents): call analysis, literature research, 5 builders, 2 adversarial reviewers, fixers.
+
+**RESEARCH VERDICT (data-researcher, cited):** cold-authored native Igala answers = top value/hour (post-editese literature validates cold-first); English rationale goes in METADATA never SFT completions (else model learns to emit English commentary); 500-1K LoRA SFT steers language-selection/orthography/register, does NOT create fluency (CPT deferred - cold corpus is the seed); expect Yoruba contamination + tone-mark drift (make contamination+diacritics HARD filters at export); mixed-language training targets teach code-switching (exclude); add Igala instruction paraphrases (one episode -> 2 SFT rows); base-model choice (Aya-101/African lineage) dominates outcome - probe before fine-tune.
+
+**SHIPPED THIS BATCH (all in working tree, PR pending):**
+1. Queue: assignedPair() FNV-1a hash in pairing.ts - each annotator sees each prompt ONCE, different annotators get different pairs, full C(n,2) team coverage, every model in every queue; computeQueueState() shared by /next+/summary (no drift). firstPairs/MAX_SHOWS_PER_PROMPT deleted.
+2. Skip: POST /api/annotations/skip -> PromptFlag reason="skip" (no admin UI reads PromptFlag, no collision); excluded from queue, not counted completed.
+3. Episode UX (annotation-interface.tsx): step bar "1 Your answer -> 2 Compare -> 3 Why -> 4 Score"; teaching-frame explainer; TWO-BOX gold (Igala required + englishGloss optional; Lydia's design) + collapsed instructionIg bonus box; redundancy killed (cold answer = the correction; optional "small fixable error" toggle); "Why? Explain in English" + Sarah's odudu example, REQUIRED >=10 chars on both_inadequate; per-category goldHint in buckets.ts (proverb ambiguity answered in-flow); confidence never preselected + nudge copy ("honest 1 or 2 is just as useful as a 4" - live data showed 95% pinned at 4, habitual); skip button; draft autosave covers new fields; cold-lock survives Back (source-free guarantee).
+4. Generation: IGALA_FORCING_INSTRUCTION in src/lib/generation-prompt.ts (explicitly NOT Yoruba/Igbo/Pidgin; English only if prompt asks; wired via arena providers), empty vetted-only IGALA_FEW_SHOT_EXAMPLES array ready; ~600 unjudged outputs regenerated (frozen = annotation-referenced, never deleted). Old English-mixed outputs are GONE for new work.
+5. Rubric page /annotator/rubric (all roles): 8 axes + 0/3/5 anchors + category-scoping matrix + "appears after you pick a winner" callout; renders from buckets.ts config. Nav: My Work, Rubric (all), Annotations (researcher).
+6. Time on Platform (admin dashboard): sessionize() in time-sessions.ts (30-min gap, 5-min lead-in, 14 tests), /api/admin/time-spent, per-user total/7-day/sessions/last-active. ESTIMATE from submission timestamps; non-submitting browsing invisible.
+7. Lead banner on /annotator/prompts (Agnes's confusion). Agnes DEMOTED to ANNOTATOR in prod (her ask-driven; same password).
+8. MIGRATION: ColdAuthorAnswer.englishGloss + instructionIg (both applied to prod + verified; migration 20260715120000 + apply_migration cold_author_instruction_ig; prisma ledger resolved). Submit stores gloss inline, instructionIg via guarded post-commit update. Review fixes: select:{id:true} on cold creates (RETURNING-all-scalars 500 hazard), explicit select on admin coldDetail.
+
+**REVIEWS:** seam-reviewer (opus): found the RETURNING blocker pre-ship (fixed); all 5 agent seams clean. Earlier ui review + content review from prior batch also clean.
+
+**LIVE DATA ANALYSIS (Jul 17-21, old flow):** ~140 pairwise, 99% both_inadequate conf 4 (benchmark headline: frontier models fail Igala essentially always; only 1 decided winner - no model ranking possible). ~140 gold/salvage answers (~100 deduped = 10-20% of SFT target in 4 days). FREE calibration finding for Lydia: lexical agreement near-perfect across 4 annotators (odudu unanimous), orthographic conventions DIVERGE (Ọdudu/Òdúdú/ódùdù; spacing/elision variants of "Ọma lẹ a jẹ ñwu") -> week-1 calibration = spelling conventions, not vocabulary. Data-quality: "Wrong output" copy-paste explanations ~80% (fix ships), confidence habit-pinned at 4, Austine not started (flag to Agnes). Igala answers appearing in Why field (Charity/Abdulraheem) = recoverable gold.
+
+**IN FLIGHT at commit time:** lex-rewriter (ig_lex_001 + ig_bank_lex_030 -> pure-vocab per Lydia's one-target rule; PromptEdit audit; frozen outputs preserved) - seed.ts/seed-prompt-bank.ts edits land as follow-up commit. generation-fixer verification report (report-only).
+
+**NEXT:** (1) merge PR, re-alias wikitongues-ai-web.vercel.app (or move domain to auto-track). (2) Follow-up commit for lex rewrites. (3) SFT export shape per research spec (Igala-only completions, rationale_en/gloss metadata, contamination+diacritics hard gates) + auto language-ID check - next batch. (4) Fine-tune base-model probe (Aya/African lineage). (5) Task chip open: draft-restore key A/B-order bug. (6) Gemini key still dead; few-shot exemplars await Agnes-vetted examples. (7) 105/70 hours discrepancy - Halim aligns w/ Daniel.

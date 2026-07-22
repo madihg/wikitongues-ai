@@ -26,6 +26,13 @@ export interface BucketDef {
   scoring: "subjective" | "factual";
   /** The single fail-mode the annotator should watch for on this category. */
   watchFor: string;
+  /**
+   * A one-line, plain-English hint shown in the "your answer" step telling the
+   * annotator what a good gold answer looks like for THIS category — e.g. that a
+   * proverb prompt wants the proverb an Igala speaker would actually use, not a
+   * word-for-word translation (the confusion Agnes hit on the call).
+   */
+  goldHint: string;
   /** RUBRIC_V2 axis keys that are in-scope for prompts in this category. */
   axes: string[];
 }
@@ -42,6 +49,8 @@ export const BUCKETS: BucketDef[] = [
     scoring: "subjective",
     watchFor:
       "Wrong or missing tone marks / dotted vowels, or English-influenced spelling.",
+    goldHint:
+      "Spelling and tone marks matter most here - write the exact letters, dotted vowels (ẹ, ọ), and tone marks.",
     axes: ["spelling", "diacritics", "lexicon"],
   },
   {
@@ -55,6 +64,8 @@ export const BUCKETS: BucketDef[] = [
     scoring: "subjective",
     watchFor:
       "Wrong word order, tense, or agreement — even when the individual words are right.",
+    goldHint:
+      "Give a full, natural Igala sentence - correct word order, tense, and agreement, not just the right words.",
     axes: ["syntax", "semantics", "lexicon"],
   },
   {
@@ -68,6 +79,8 @@ export const BUCKETS: BucketDef[] = [
     scoring: "factual",
     watchFor:
       "A wrong word, or one that bled in from Idoma / Yoruba / Igbo / English instead of true Igala.",
+    goldHint:
+      "Use the true Igala word for this - not one borrowed from Idoma, Yoruba, Igbo, or English.",
     axes: ["lexicon", "contamination", "semantics", "diacritics"],
   },
   {
@@ -81,6 +94,8 @@ export const BUCKETS: BucketDef[] = [
     scoring: "subjective",
     watchFor:
       "Wrong level of deference or tone-of-voice for who is speaking to whom.",
+    goldHint:
+      "Say it the way you would to THAT person - match the respect level and tone of voice for who is speaking to whom.",
     axes: ["authenticity", "cultural_relevance", "semantics"],
   },
   {
@@ -93,6 +108,8 @@ export const BUCKETS: BucketDef[] = [
     family: "cultural",
     scoring: "factual",
     watchFor: "Is the proverb read literally instead of for its real meaning?",
+    goldHint:
+      "Give the proverb an Igala speaker would actually use in this situation - not a word-for-word translation.",
     axes: ["semantics", "cultural_relevance", "authenticity", "contamination"],
   },
   {
@@ -106,6 +123,8 @@ export const BUCKETS: BucketDef[] = [
     scoring: "factual",
     watchFor:
       "Plausible-but-invented detail about Igala people, places, lineage, or taboo.",
+    goldHint:
+      "Answer from real Igala knowledge - if you are not sure of a detail, say so rather than inventing one.",
     axes: ["cultural_relevance", "contamination", "authenticity", "semantics"],
   },
   {
@@ -119,6 +138,8 @@ export const BUCKETS: BucketDef[] = [
     scoring: "subjective",
     watchFor:
       "Reads translated-from-English rather than how an Igala speaker would actually say it.",
+    goldHint:
+      "Write it the way a real Igala speaker would actually say it, not translated word-for-word from English.",
     axes: ["authenticity", "cultural_relevance", "contamination"],
   },
   {
@@ -135,6 +156,8 @@ export const BUCKETS: BucketDef[] = [
     scoring: "subjective",
     watchFor:
       "Collapse to one prestige standard, or unnatural mixing of dialect forms.",
+    goldHint:
+      "Write it in your own natural Igala - your everyday dialect is exactly what we want here.",
     axes: ["contamination", "authenticity"],
   },
 ];
@@ -162,6 +185,12 @@ export function bucketShort(key: EvalBucket | null | undefined): string {
 export function bucketWatchFor(key: EvalBucket | null | undefined): string {
   if (!key) return "";
   return BUCKET_BY_KEY[key]?.watchFor ?? "";
+}
+
+/** One-line plain-English guidance for the "your answer" step, per category. */
+export function bucketGoldHint(key: EvalBucket | null | undefined): string {
+  if (!key) return "";
+  return BUCKET_BY_KEY[key]?.goldHint ?? "";
 }
 
 /** "factual" buckets show a RAG reference for fact-checking; "subjective" stay blind. */

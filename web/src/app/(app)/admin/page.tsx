@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { Leaderboard } from "@/components/admin/leaderboard";
 import { CategoryBreakdown } from "@/components/admin/category-breakdown";
 import { AgreementStats } from "@/components/admin/agreement-stats";
 import { GapDashboard } from "@/components/admin/gap-dashboard";
 import { AnnotatorActivity } from "@/components/admin/annotator-activity";
+import { TimeSpent } from "@/components/admin/time-spent";
 import { ExportPanel } from "@/components/admin/export-panel";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
@@ -25,6 +27,38 @@ export default function AdminDashboard() {
       </div>
 
       <div className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Link
+            href="/admin/annotations"
+            className="group rounded-lg border border-border bg-surface p-6 shadow-sm transition-colors hover:bg-surface-sunken"
+          >
+            <h2 className="text-base font-semibold text-text-primary">
+              Annotations
+            </h2>
+            <p className="mt-1 text-sm text-text-tertiary">
+              Read every annotator&apos;s pairwise picks, cold answers, and
+              edits. Correct and mark reviewed.
+            </p>
+            <span className="mt-3 inline-block text-sm font-medium text-accent-text">
+              Open review surface →
+            </span>
+          </Link>
+          <Link
+            href="/annotator/prompts"
+            className="group rounded-lg border border-border bg-surface p-6 shadow-sm transition-colors hover:bg-surface-sunken"
+          >
+            <h2 className="text-base font-semibold text-text-primary">
+              Prompt Catalogue
+            </h2>
+            <p className="mt-1 text-sm text-text-tertiary">
+              Browse and edit the prompt bank. Changes are audited per field.
+            </p>
+            <span className="mt-3 inline-block text-sm font-medium text-accent-text">
+              Browse and edit →
+            </span>
+          </Link>
+        </div>
+
         <Leaderboard />
         <CategoryBreakdown />
 
@@ -33,7 +67,10 @@ export default function AdminDashboard() {
           <GapDashboard />
         </div>
 
-        <AnnotatorActivity />
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AnnotatorActivity />
+          <TimeSpent />
+        </div>
         <ExportPanel />
       </div>
 

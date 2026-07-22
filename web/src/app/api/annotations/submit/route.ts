@@ -33,6 +33,12 @@ interface AxisScoreInput {
 
 interface AuthoredInput {
   answerText: string;
+  // Plain-English "what it means / why" gloss (Lydia's two-box design). Training
+  // metadata only - never merged into the Igala answer.
+  englishGloss?: string;
+  // The prompt/instruction itself rewritten in Igala, so one episode can mint two
+  // training rows (English-instruction and Igala-instruction, both -> the answer).
+  instructionIg?: string;
   consentBenchmark?: boolean;
   consentTraining?: boolean;
 }
@@ -65,8 +71,18 @@ function parseAuthored(raw: unknown): AuthoredInput | null {
   const o = raw as Record<string, unknown>;
   if (typeof o.answerText !== "string" || o.answerText.trim().length === 0)
     return null;
+  const gloss =
+    typeof o.englishGloss === "string" && o.englishGloss.trim()
+      ? o.englishGloss.trim()
+      : undefined;
+  const instructionIg =
+    typeof o.instructionIg === "string" && o.instructionIg.trim()
+      ? o.instructionIg.trim()
+      : undefined;
   return {
     answerText: o.answerText.trim(),
+    englishGloss: gloss,
+    instructionIg,
     consentBenchmark: o.consentBenchmark !== false,
     consentTraining: o.consentTraining !== false,
   };
@@ -283,17 +299,30 @@ export async function POST(req: Request) {
     }
   }
 
+  // The prompt-in-Igala rewrite is the same value for whichever gold rows this
+  // episode creates. It's persisted after the transaction (best-effort) because
+  // its column is applied additively and may not yet exist on the target DB -
+  // see migration 20260715120000. coldIdx/salvageIdx locate the created rows in
+  // the transaction results so we can attach it without risking the whole write.
+  let instructionIgValue: string | null = null;
+  let coldIdx = -1;
+  let salvageIdx = -1;
+
   // Cold-authored source-free gold (authored before models were shown).
   let coldSaved = false;
   const cold = parseAuthored(coldAuthor);
   if (cold) {
     coldSaved = true;
+    if (cold.instructionIg) instructionIgValue = cold.instructionIg;
+    coldIdx = ops.length;
     ops.push(
+      // select only id - prod may lag the client on newly added nullable columns, and RETURNING all scalars would 500
       prisma.coldAuthorAnswer.create({
         data: {
           promptId: promptDbId,
           bucket,
           answerText: cold.answerText,
+          englishGloss: cold.englishGloss ?? null,
           provenance: "speaker_authored_sourcefree",
           consentBenchmark: cold.consentBenchmark ?? true,
           consentTraining: cold.consentTraining ?? true,
@@ -301,6 +330,7 @@ export async function POST(req: Request) {
           isDemo,
           demoSessionId: isDemo ? demoSessionId : null,
         },
+        select: { id: true },
       }),
     );
   }
@@ -312,12 +342,16 @@ export async function POST(req: Request) {
     const salvage = parseAuthored(salvageAnswer);
     if (salvage) {
       salvageSaved = true;
+      if (salvage.instructionIg) instructionIgValue = salvage.instructionIg;
+      salvageIdx = ops.length;
       ops.push(
+        // select only id - prod may lag the client on newly added nullable columns, and RETURNING all scalars would 500
         prisma.coldAuthorAnswer.create({
           data: {
             promptId: promptDbId,
             bucket,
             answerText: salvage.answerText,
+            englishGloss: salvage.englishGloss ?? null,
             provenance: "corrected_from_inadequate",
             consentBenchmark: salvage.consentBenchmark ?? true,
             consentTraining: salvage.consentTraining ?? true,
@@ -325,13 +359,15 @@ export async function POST(req: Request) {
             isDemo,
             demoSessionId: isDemo ? demoSessionId : null,
           },
+          select: { id: true },
         }),
       );
     }
   }
 
+  let results: unknown[];
   try {
-    await prisma.$transaction(ops);
+    results = await prisma.$transaction(ops);
   } catch (e) {
     // Always return JSON — a bare 500 with an empty/HTML body makes the client's
     // response.json() throw the cryptic "Unexpected end of JSON input".
@@ -340,6 +376,26 @@ export async function POST(req: Request) {
       { error: "Could not save your annotation. Please try again." },
       { status: 500 },
     );
+  }
+
+  // Attach the Igala prompt-rewrite to the gold row(s) just created. Best-effort
+  // and isolated: the answer, gloss, and scores are already committed, so a
+  // pending `instructionIg` column (additive migration 20260715120000) can never
+  // fail a submission - it's simply skipped until the column exists.
+  if (instructionIgValue) {
+    const ids: string[] = [];
+    if (coldIdx >= 0) ids.push((results[coldIdx] as { id: string }).id);
+    if (salvageIdx >= 0) ids.push((results[salvageIdx] as { id: string }).id);
+    if (ids.length > 0) {
+      try {
+        await prisma.coldAuthorAnswer.updateMany({
+          where: { id: { in: ids } },
+          data: { instructionIg: instructionIgValue },
+        });
+      } catch (e) {
+        console.error("instructionIg not stored (column pending?):", e);
+      }
+    }
   }
 
   return NextResponse.json({

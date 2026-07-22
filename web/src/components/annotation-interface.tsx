@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { EvalBucket } from "@prisma/client";
 import {
   bucketLabel,
+  bucketGoldHint,
   RUBRIC_V2,
   RUBRIC_ANCHORS,
   axisAnchors,
@@ -69,10 +70,14 @@ interface Progress {
   total: number;
 }
 
+// When both AI answers are inadequate, the written "why" is where the teaching
+// signal lives, so it becomes required (this minimum char count) on that path.
+const EXPLANATION_MIN = 10;
+
 const WINNER_OPTIONS: { value: Winner; label: string; hint: string }[] = [
   { value: "a", label: "Output A", hint: "1" },
   { value: "b", label: "Output B", hint: "2" },
-  { value: "tie", label: "Tie — both adequate", hint: "3" },
+  { value: "tie", label: "Tie - both adequate", hint: "3" },
   { value: "both_inadequate", label: "Both inadequate", hint: "4" },
 ];
 
@@ -84,6 +89,8 @@ const emptyAxisVals = (): Record<string, AxisVal> =>
 interface EpisodeDraft {
   step: Step;
   coldAnswer: string;
+  englishGloss: string;
+  instructionIg: string;
   coldLocked: boolean;
   winner: Winner | null;
   confidence: number | null;
@@ -117,6 +124,7 @@ export function AnnotationInterface() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [skipping, setSkipping] = useState(false);
   const [demoSessionId, setDemoSessionId] = useState<string | null>(null);
 
   const [step, setStep] = useState<Step>("prompt");
@@ -124,8 +132,16 @@ export function AnnotationInterface() {
   // Cold authoring (gold-first): the annotator's own answer, written before the
   // models are revealed. Locked the moment AI answers are shown.
   const [coldAnswer, setColdAnswer] = useState("");
+  // Lydia's two-box design: a plain-English "what it means / why" gloss that
+  // travels with the Igala answer as training metadata (never merged into it).
+  const [englishGloss, setEnglishGloss] = useState("");
+  // Bonus (collapsed by default): the prompt/instruction itself rewritten in
+  // Igala, so one episode can mint two training rows.
+  const [instructionIg, setInstructionIg] = useState("");
+  const [instructionOpen, setInstructionOpen] = useState(false);
   const [coldLocked, setColdLocked] = useState(false);
   const coldRef = useRef<HTMLTextAreaElement>(null);
+  const instructionRef = useRef<HTMLTextAreaElement>(null);
 
   // Pairwise
   const [winner, setWinner] = useState<Winner | null>(null);
@@ -140,6 +156,10 @@ export function AnnotationInterface() {
   // Which winner (a|b) editWinner was seeded from, so switching the pick re-seeds
   // instead of leaving the LOSING output's text staged as a "correction".
   const [editSeededFor, setEditSeededFor] = useState<"a" | "b" | null>(null);
+  // When a locked cold answer already exists, the winner-edit box is hidden by
+  // default (the cold answer IS the correction) and revealed only for a targeted
+  // "small fixable error" fix. Reset per episode; a made edit re-reveals itself.
+  const [winnerFixOpen, setWinnerFixOpen] = useState(false);
   const editRef = useRef<HTMLTextAreaElement>(null);
 
   // Tie: optionally correct one side
@@ -180,7 +200,11 @@ export function AnnotationInterface() {
   const resetEpisode = useCallback(() => {
     setStep("prompt");
     setColdAnswer("");
+    setEnglishGloss("");
+    setInstructionIg("");
+    setInstructionOpen(false);
     setColdLocked(false);
+    setWinnerFixOpen(false);
     setWinner(null);
     setConfidence(null);
     setExplanation("");
@@ -200,6 +224,9 @@ export function AnnotationInterface() {
   const restoreDraft = useCallback((d: EpisodeDraft) => {
     setStep(d.step);
     setColdAnswer(d.coldAnswer);
+    setEnglishGloss(d.englishGloss ?? "");
+    setInstructionIg(d.instructionIg ?? "");
+    setInstructionOpen(Boolean(d.instructionIg?.trim()));
     setColdLocked(d.coldLocked);
     setWinner(d.winner);
     setConfidence(d.confidence);
@@ -265,6 +292,8 @@ export function AnnotationInterface() {
     const draft: EpisodeDraft = {
       step,
       coldAnswer,
+      englishGloss,
+      instructionIg,
       coldLocked,
       winner,
       confidence,
@@ -280,12 +309,14 @@ export function AnnotationInterface() {
     try {
       sessionStorage.setItem(draftKeyFor(task), JSON.stringify(draft));
     } catch {
-      // storage full/unavailable — non-fatal
+      // storage full/unavailable - non-fatal
     }
   }, [
     task,
     step,
     coldAnswer,
+    englishGloss,
+    instructionIg,
     coldLocked,
     winner,
     confidence,
@@ -340,8 +371,14 @@ export function AnnotationInterface() {
     setStep("pairwise");
   }
 
+  // On the "both inadequate" path the explanation is required (that is where the
+  // teaching signal lives), so it gates both Continue and Submit.
+  const explanationOk =
+    winner !== "both_inadequate" ||
+    explanation.trim().length >= EXPLANATION_MIN;
+
   function proceedToScore() {
-    if (!winner || confidence === null) return;
+    if (!winner || confidence === null || !explanationOk) return;
     // Seed the edit box with the CURRENT winner's text whenever the pick changed
     // (or on first entry). If the annotator already edited this same winner, keep
     // their text. This prevents the losing output's text from being saved as a
@@ -373,6 +410,7 @@ export function AnnotationInterface() {
 
   const canSubmit = () => {
     if (!winner) return false;
+    if (!explanationOk) return false; // both_inadequate requires a written why
     if (winner === "a" || winner === "b") return rubricComplete();
     return true; // tie / both_inadequate: pairwise + optional authoring is enough
   };
@@ -419,18 +457,35 @@ export function AnnotationInterface() {
         };
       }
     } else if (winner === "both_inadequate") {
-      if (salvage.trim()) {
+      // If the salvage rewrite is identical to the already-locked cold answer,
+      // it's not a second data point - skip it and let coldAuthor (below) carry
+      // it alone, since that row has the stronger provenance (speaker-authored,
+      // source-free, written before reveal). Only send both when the texts
+      // differ, which is legitimate: an initial answer plus a correction made
+      // after seeing why both AI outputs failed.
+      const isDuplicateOfCold =
+        coldLocked &&
+        coldAnswer.trim().length > 0 &&
+        salvage.trim() === coldAnswer.trim();
+      if (salvage.trim() && !isDuplicateOfCold) {
         payload.salvageAnswer = {
           answerText: salvage.trim(),
+          englishGloss: englishGloss.trim() || undefined,
+          instructionIg: instructionIg.trim() || undefined,
           consentBenchmark,
           consentTraining,
         };
       }
     }
 
-    if (task.goldFirst && coldAnswer.trim()) {
+    // Included whenever a cold answer was actually locked before reveal -
+    // gold-first buckets require it, but it's equally valid (and equally
+    // valuable) when volunteered on any other bucket.
+    if (coldLocked && coldAnswer.trim()) {
       payload.coldAuthor = {
         answerText: coldAnswer.trim(),
+        englishGloss: englishGloss.trim() || undefined,
+        instructionIg: instructionIg.trim() || undefined,
         consentBenchmark,
         consentTraining,
       };
@@ -444,16 +499,27 @@ export function AnnotationInterface() {
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || "Submission failed");
+      // A cold answer is the single highest-value artifact this episode can
+      // produce, so it gets its own acknowledgement rather than being folded
+      // into a generic "extras" list. Fall back to client-side knowledge
+      // (coldLocked) if the API response ever omits coldSaved.
+      const gotColdAnswer = data.coldSaved ?? (coldLocked && coldAnswer.trim());
       const extras: string[] = [];
       if (data.editsSaved) extras.push("a correction");
-      if (data.coldSaved) extras.push("your own answer");
       if (data.salvageSaved) extras.push("a rewrite");
-      showToast(
-        extras.length
-          ? `Saved — including ${extras.join(" and ")}.`
-          : "Annotation submitted.",
-        "success",
-      );
+      if (gotColdAnswer) {
+        showToast(
+          "Gold answer saved - this is what teaches the model real Igala.",
+          "success",
+        );
+      } else {
+        showToast(
+          extras.length
+            ? `Saved - including ${extras.join(" and ")}.`
+            : "Annotation submitted.",
+          "success",
+        );
+      }
       clearDraft();
       await fetchNext();
     } catch (err) {
@@ -484,6 +550,32 @@ export function AnnotationInterface() {
       await fetchNext();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Flag failed", "error");
+    }
+  }
+
+  // Skip this prompt entirely (no judgement recorded). Contract with the
+  // in-parallel endpoint: POST /api/annotations/skip { promptId } -> 200.
+  async function skipPrompt() {
+    if (!task || skipping || submitting) return;
+    setSkipping(true);
+    try {
+      const res = await fetch("/api/annotations/skip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ promptId: task.prompt.promptId }),
+      });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || "Could not skip this prompt.");
+      showToast("Skipped - loading the next prompt.", "success");
+      clearDraft();
+      await fetchNext();
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Could not skip this prompt.",
+        "error",
+      );
+    } finally {
+      setSkipping(false);
     }
   }
 
@@ -530,11 +622,147 @@ export function AnnotationInterface() {
 
   const textFont = "font-mono"; // renders Igala tone diacritics cleanly
 
+  // Persistent numbered step bar. The three-state machine (prompt/pairwise/score)
+  // maps onto four plain-English stages; on the pairwise screen the highlight
+  // advances from "Compare" to "Why" once a winner is picked.
+  const STAGES = ["Your answer", "Compare", "Why", "Score"] as const;
+  const activeStage =
+    step === "prompt" ? 0 : step === "pairwise" ? (winner ? 2 : 1) : 3;
+
+  const goldHint = bucketGoldHint(task.prompt.bucket);
+
+  // The winner-edit box on the score step is hidden by default when a locked cold
+  // answer already exists (it IS the correction). A made edit re-reveals itself so
+  // it survives navigation and draft restore even without persisting the toggle.
+  const hasColdGold = coldLocked && coldAnswer.trim().length > 0;
+  const winnerEdited = !!(
+    winnerOutput &&
+    editWinner.trim() &&
+    editWinner.trim() !== winnerOutput.text.trim()
+  );
+  const showWinnerEdit = !hasColdGold || winnerFixOpen || winnerEdited;
+
+  // The two labeled boxes (Lydia's design) plus the collapsed bonus field,
+  // shared by the gold-first and optional authoring branches of the first step.
+  const authoringBoxes = (
+    <>
+      {goldHint && (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-accent/30 bg-accent-subtle px-3 py-2 text-xs text-accent-text">
+          <span className="shrink-0 font-semibold">For this one:</span>
+          <span>{goldHint}</span>
+        </div>
+      )}
+
+      {/* Box 1 - the Igala answer (prominent, required to lock) */}
+      <label className="mt-4 block text-sm font-medium text-text-secondary">
+        Your answer in Igala
+      </label>
+      <textarea
+        ref={coldRef}
+        value={coldAnswer}
+        onChange={(e) => setColdAnswer(e.target.value)}
+        rows={3}
+        placeholder="Write the ideal Igala answer in your own words…"
+        className={`mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:border-accent ${textFont}`}
+      />
+      <ToneKeyboard
+        targetRef={coldRef}
+        value={coldAnswer}
+        onValueChange={setColdAnswer}
+      />
+
+      {/* Box 2 - plain-English gloss (secondary, optional) */}
+      <label className="mt-4 block text-sm font-medium text-text-secondary">
+        What it means / why, in English{" "}
+        <span className="font-normal text-text-muted">(optional)</span>
+      </label>
+      <textarea
+        value={englishGloss}
+        onChange={(e) => setEnglishGloss(e.target.value)}
+        rows={2}
+        placeholder="In plain English - what your answer means, or why you'd say it this way."
+        className="mt-2 w-full rounded-md border border-border px-3 py-2 text-sm text-text-secondary placeholder:text-text-muted focus-visible:border-accent"
+      />
+
+      {/* Bonus - collapsed by default: the question itself, in Igala */}
+      {instructionOpen ? (
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-text-secondary">
+            How would an Igala speaker ask this question?{" "}
+            <span className="font-normal text-text-muted">(optional)</span>
+          </label>
+          <p className="mt-1 text-xs text-text-muted">
+            This doubles what the AI learns from your answer.
+          </p>
+          <textarea
+            ref={instructionRef}
+            value={instructionIg}
+            onChange={(e) => setInstructionIg(e.target.value)}
+            rows={2}
+            placeholder="The question itself, in Igala…"
+            className={`mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:border-accent ${textFont}`}
+          />
+          <ToneKeyboard
+            targetRef={instructionRef}
+            value={instructionIg}
+            onValueChange={setInstructionIg}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setInstructionOpen(true)}
+          className="mt-3 cursor-pointer text-xs font-medium text-accent-text underline-offset-2 hover:underline"
+        >
+          Bonus - write the question itself in Igala (optional)
+        </button>
+      )}
+    </>
+  );
+
+  const stepBar = (
+    <div className="mb-6 flex flex-wrap items-center gap-x-2 gap-y-2">
+      {STAGES.map((label, i) => {
+        const done = i < activeStage;
+        const current = i === activeStage;
+        return (
+          <div key={label} className="flex items-center gap-2">
+            <div
+              className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
+                current
+                  ? "bg-accent text-accent-contrast"
+                  : done
+                    ? "bg-accent-subtle text-accent-text"
+                    : "bg-surface-sunken text-text-muted"
+              }`}
+            >
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
+                  current
+                    ? "bg-accent-contrast text-accent"
+                    : done
+                      ? "bg-accent-text text-accent-subtle"
+                      : "bg-border text-text-tertiary"
+                }`}
+              >
+                {done ? "✓" : i + 1}
+              </span>
+              {label}
+            </div>
+            {i < STAGES.length - 1 && (
+              <span className="hidden text-text-muted sm:inline">&rarr;</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   const axisButtons = (axisKey: string) => (
     <div className="flex flex-wrap gap-2">
       <button
         onClick={() => setAxisVals((p) => ({ ...p, [axisKey]: "na" }))}
-        title="Not applicable — this axis is not relevant to this prompt"
+        title="Not applicable - this axis is not relevant to this prompt"
         className={`flex h-9 cursor-pointer items-center justify-center rounded-md px-3 text-xs font-medium transition-colors ${
           axisVals[axisKey] === "na"
             ? "bg-info text-white"
@@ -601,7 +829,7 @@ export function AnnotationInterface() {
             onChange={(e) =>
               setAxisNotes((p) => ({ ...p, [a.key]: e.target.value }))
             }
-            placeholder="Optional note — what exactly is right or wrong…"
+            placeholder="Optional note - what exactly is right or wrong…"
             rows={1}
             className="mt-2 w-full rounded-md border border-border px-2 py-1.5 text-xs text-text-secondary placeholder:text-text-muted focus-visible:border-accent"
           />
@@ -628,7 +856,7 @@ export function AnnotationInterface() {
         <div className="mb-4 flex items-center gap-2 rounded-md border border-warning/40 bg-warning-subtle px-4 py-2 text-sm text-warning">
           <span className="font-semibold">Demo mode</span>
           <span className="text-text-secondary">
-            Nothing here is saved to training data or the benchmark — it&apos;s
+            Nothing here is saved to training data or the benchmark - it&apos;s
             a walkthrough.
           </span>
         </div>
@@ -658,7 +886,23 @@ export function AnnotationInterface() {
         </div>
       )}
 
-      {/* Prompt card — bucket label, the task, and the watch-for line. */}
+      {stepBar}
+
+      {/* First screen only: plain-English framing of the whole episode. */}
+      {step === "prompt" && !coldLocked && (
+        <div className="mb-6 rounded-lg border border-accent/30 bg-accent-subtle p-5">
+          <p className="text-sm leading-relaxed text-accent-text">
+            <span className="font-semibold">
+              You are teaching an AI to speak Igala.
+            </span>{" "}
+            Each round: write how YOU would say it, compare two AI attempts, and
+            explain what is right or wrong. Your Igala and your explanations are
+            the lessons the AI learns from.
+          </p>
+        </div>
+      )}
+
+      {/* Prompt card - bucket label, the task, and the watch-for line. */}
       <div className="mb-6 rounded-lg border border-border bg-surface p-6 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -709,13 +953,60 @@ export function AnnotationInterface() {
         )}
       </div>
 
-      {/* STEP: prompt / cold-authoring */}
+      {/* STEP: prompt / cold-authoring (two-box gold answer) */}
       {step === "prompt" && (
         <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-          {task.goldFirst ? (
+          {coldLocked ? (
+            // Reached via the pairwise step's Back button (or a restored draft
+            // with coldLocked already true): the annotator has now SEEN both AI
+            // outputs, so the textareas and lock/skip buttons must not reappear -
+            // editing here would silently break the source-free guarantee.
             <>
               <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                Before you see the AI answers — how would you say this?
+                First - how would YOU say it?
+              </h3>
+              {coldAnswer.trim() ? (
+                <div className="mt-3 rounded-md border border-border bg-surface-sunken px-4 py-2 text-xs text-text-tertiary">
+                  <span className="font-medium text-text-secondary">
+                    Your locked answer:
+                  </span>{" "}
+                  <span className={textFont}>{coldAnswer}</span>
+                  {englishGloss.trim() && (
+                    <p className="mt-2 text-text-secondary">
+                      <span className="font-medium">Means:</span> {englishGloss}
+                    </p>
+                  )}
+                  {instructionIg.trim() && (
+                    <p className="mt-2 text-text-secondary">
+                      <span className="font-medium">
+                        In Igala, the question:
+                      </span>{" "}
+                      <span className={textFont}>{instructionIg}</span>
+                    </p>
+                  )}
+                  <p className="mt-2 text-text-muted">
+                    Your answer is locked - it was written before you saw the AI
+                    outputs, which is exactly what makes it valuable.
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-text-secondary">
+                  You skipped writing your own answer, and you&apos;ve already
+                  seen the AI outputs - writing one now wouldn&apos;t be
+                  source-free, so it&apos;s no longer offered here.
+                </p>
+              )}
+              <button
+                onClick={() => setStep("pairwise")}
+                className="mt-4 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+              >
+                Back to the AI outputs
+              </button>
+            </>
+          ) : task.goldFirst ? (
+            <>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                First - how would YOU say it?
                 <InfoTip width="w-80">
                   Your own answer, written without any model in view, is
                   source-free gold: it doesn&apos;t inherit the translationese
@@ -723,22 +1014,15 @@ export function AnnotationInterface() {
                   highest-value record on this bucket.
                 </InfoTip>
               </h3>
-              <textarea
-                ref={coldRef}
-                value={coldAnswer}
-                onChange={(e) => setColdAnswer(e.target.value)}
-                rows={3}
-                placeholder="Write the ideal Igala answer in your own words…"
-                className={`mt-3 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:border-accent ${textFont}`}
-              />
-              <ToneKeyboard
-                targetRef={coldRef}
-                value={coldAnswer}
-                onValueChange={setColdAnswer}
-              />
+              <p className="mt-1 text-sm text-text-secondary">
+                Your own answer is the most valuable thing you can give: the
+                model can only learn real Igala from real speakers. Even one
+                sentence helps.
+              </p>
+              {authoringBoxes}
               <button
                 onClick={revealModels}
-                className="mt-4 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+                className="mt-5 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
               >
                 {coldAnswer.trim()
                   ? "Lock my answer & reveal the AI outputs"
@@ -750,17 +1034,53 @@ export function AnnotationInterface() {
             </>
           ) : (
             <>
-              <p className="text-sm text-text-secondary">
-                You&apos;ll compare two AI answers blind, pick the better Igala
-                (or say both are wrong), score it, and optionally correct it.
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                First - how would YOU say it?
+                <InfoTip width="w-80">
+                  Your own answer, written without any model in view, is
+                  source-free gold: it doesn&apos;t inherit the translationese
+                  of an AI answer the way an edit does. Optional here, but still
+                  the most valuable thing you can leave on this prompt.
+                </InfoTip>
+              </h3>
+              <p className="mt-1 text-sm text-text-secondary">
+                Your own answer is the most valuable thing you can give: the
+                model can only learn real Igala from real speakers. Even one
+                sentence helps.
               </p>
-              <button
-                onClick={revealModels}
-                className="mt-4 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
-              >
-                Reveal the two AI outputs
-              </button>
+              {authoringBoxes}
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <button
+                  onClick={revealModels}
+                  disabled={!coldAnswer.trim()}
+                  className="cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Lock my answer &amp; reveal the AI outputs
+                </button>
+                <button
+                  onClick={revealModels}
+                  className="cursor-pointer rounded-md border border-border-strong bg-surface px-6 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
+                >
+                  Skip - just show me the outputs
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-text-muted">
+                Once revealed, your answer is locked so it stays source-free.
+              </p>
             </>
+          )}
+
+          {/* Quiet secondary action: skip this prompt entirely (first step only) */}
+          {!coldLocked && (
+            <div className="mt-6 border-t border-border pt-4">
+              <button
+                onClick={skipPrompt}
+                disabled={skipping}
+                className="cursor-pointer text-xs text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline disabled:opacity-40"
+              >
+                {skipping ? "Skipping…" : "Skip this prompt"}
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -810,7 +1130,7 @@ export function AnnotationInterface() {
 
           {/* Winner choice incl. tie / both-inadequate */}
           <div className="mt-6 text-sm font-medium text-text-secondary">
-            Which is the better Igala — or is neither good?
+            Which is the better Igala - or is neither good?
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {WINNER_OPTIONS.map((opt) => (
@@ -830,12 +1150,14 @@ export function AnnotationInterface() {
             <InfoTip width="w-80">
               On a base that can&apos;t yet spell Igala both answers are often
               wrong; forcing a winner manufactures noise. &quot;Both
-              inadequate&quot; is honest data — and lets you write the correct
+              inadequate&quot; is honest data - and lets you write the correct
               version.
             </InfoTip>
           </div>
 
-          {/* Confidence */}
+          {/* Confidence. Starts unselected on purpose - live data showed a
+              habitual 4, which kills the signal. Picking one gates Continue
+              (same pattern as explanationOk). */}
           <div className="mt-6">
             <div className="text-sm font-medium text-text-secondary">
               How confident are you?
@@ -858,20 +1180,49 @@ export function AnnotationInterface() {
                 1 = guess · 4 = certain
               </span>
             </div>
+            {winner !== null && confidence === null && (
+              <p className="mt-1 text-xs text-text-tertiary">
+                Pick how sure you are - an honest 1 or 2 is just as useful as a
+                4.
+              </p>
+            )}
           </div>
 
-          {/* Explanation — encouraged, never required */}
+          {/* The "why" step - explicit and in English. Required when both AI
+              answers are inadequate (that is where the teaching signal lives),
+              encouraged otherwise. */}
           <div className="mt-6">
             <label className="block text-sm font-medium text-text-secondary">
-              Why? <span className="text-text-muted">(optional)</span>
+              Why? Explain in English{" "}
+              {winner === "both_inadequate" ? (
+                <span className="text-accent-text">(required)</span>
+              ) : (
+                <span className="text-text-muted">(encouraged)</span>
+              )}
             </label>
+            <p className="mt-1 text-sm text-text-secondary">
+              Write in English - you are teaching the AI what good Igala looks
+              like. Name the wrong words and give the right ones.
+            </p>
+            <div className="mt-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
+              <span className="font-medium text-text-primary">Example:</span>{" "}
+              <span className="italic">
+                In Igala, the word for &apos;morning&apos; is &apos;odudu&apos;.
+              </span>
+            </div>
             <textarea
               value={explanation}
               onChange={(e) => setExplanation(e.target.value)}
-              placeholder="What makes the Igala better — or both inadequate? Even a few words help."
+              placeholder="Name what is wrong and give the right Igala. Even a sentence helps."
               rows={3}
               className="mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:border-accent"
             />
+            {winner === "both_inadequate" && !explanationOk && (
+              <p className="mt-1 text-xs text-text-tertiary">
+                A short explanation is required when both answers are inadequate
+                - it is the most useful thing you can leave here.
+              </p>
+            )}
           </div>
 
           <div className="mt-6 flex items-center gap-3">
@@ -883,7 +1234,7 @@ export function AnnotationInterface() {
             </button>
             <button
               onClick={proceedToScore}
-              disabled={!winner || confidence === null}
+              disabled={!winner || confidence === null || !explanationOk}
               className="cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               Continue
@@ -907,7 +1258,7 @@ export function AnnotationInterface() {
             <div className="space-y-6">
               <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-text-secondary">
-                  You picked {winner === "a" ? "Output A" : "Output B"} — score
+                  You picked {winner === "a" ? "Output A" : "Output B"} - score
                   it
                   <InfoTip width="w-80">
                     0 = completely wrong, 5 = you&apos;d say it exactly like
@@ -926,7 +1277,7 @@ export function AnnotationInterface() {
                 {task.scoring === "factual" && task.reference && (
                   <div className="mb-4 rounded-md border border-info/30 bg-info-subtle p-3">
                     <div className="flex items-center gap-2 text-xs font-semibold text-info">
-                      Reference — fact-check against this
+                      Reference - fact-check against this
                       <InfoTip width="w-80">
                         This is a factual bucket. A fluent-sounding answer that
                         invents a fact should still score low on meaning and
@@ -949,7 +1300,7 @@ export function AnnotationInterface() {
                     {task.reference.entries.length === 0 &&
                       !task.reference.note && (
                         <p className="mt-2 text-xs text-text-muted">
-                          No reference material on file — score on your own
+                          No reference material on file - score on your own
                           knowledge.
                         </p>
                       )}
@@ -968,7 +1319,7 @@ export function AnnotationInterface() {
                   </>
                 )}
 
-                {/* Pass 2: pragmatics — the reflective second pass (in-scope) */}
+                {/* Pass 2: pragmatics - the reflective second pass (in-scope) */}
                 {inScopePragmatics.length > 0 && (
                   <>
                     <div className="mb-1 mt-7 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
@@ -985,7 +1336,7 @@ export function AnnotationInterface() {
                 {offScopeAxes.length > 0 && (
                   <details className="mt-6 rounded-md border border-border bg-surface-sunken px-3 py-2">
                     <summary className="cursor-pointer text-xs font-medium text-text-tertiary">
-                      Other rubric axes (not usually relevant to this prompt) —
+                      Other rubric axes (not usually relevant to this prompt) -
                       score only if they apply
                     </summary>
                     <div className="mt-4 space-y-5">
@@ -1000,60 +1351,82 @@ export function AnnotationInterface() {
                 </p>
               </div>
 
-              {/* Inline edit of the winner, with a tone-aware diff */}
+              {/* Correction of the winner. If a cold answer was already written,
+                  it IS the correction - so we don't re-ask (the redundancy Agnes
+                  hit). We show a one-liner and only reveal the edit box for a
+                  targeted small fix. With no cold answer, the box shows as usual. */}
               <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-                <label className="flex items-center gap-2 text-sm font-medium text-text-secondary">
-                  Correct this response (optional)
-                  <InfoTip width="w-80">
-                    Rewriting the winner the way a fluent speaker would creates
-                    a gold SFT target. You edit only the winner — least work,
-                    cleanest target.
-                  </InfoTip>
-                </label>
-                <textarea
-                  ref={editRef}
-                  value={editWinner}
-                  onChange={(e) => setEditWinner(e.target.value)}
-                  rows={3}
-                  className={`mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary focus-visible:border-accent ${textFont}`}
-                />
-                <ToneKeyboard
-                  targetRef={editRef}
-                  value={editWinner}
-                  onValueChange={setEditWinner}
-                />
-                {editWinner.trim() &&
-                  editWinner.trim() !== winnerOutput.text.trim() && (
-                    <div className="mt-3">
-                      <div className="mb-1 text-xs font-medium text-text-tertiary">
-                        Your changes:
+                {hasColdGold && !showWinnerEdit ? (
+                  <div className="text-sm text-text-secondary">
+                    <p>
+                      Your Igala answer from step 1 is already saved as the
+                      correction.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setWinnerFixOpen(true)}
+                      className="mt-2 cursor-pointer text-xs font-medium text-accent-text underline-offset-2 hover:underline"
+                    >
+                      The winner has a small fixable error
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <label className="flex items-center gap-2 text-sm font-medium text-text-secondary">
+                      {hasColdGold
+                        ? "Fix a small error in the winner (optional)"
+                        : "Correct this response (optional)"}
+                      <InfoTip width="w-80">
+                        Rewriting the winner the way a fluent speaker would
+                        creates a gold SFT target. You edit only the winner -
+                        least work, cleanest target.
+                      </InfoTip>
+                    </label>
+                    <textarea
+                      ref={editRef}
+                      value={editWinner}
+                      onChange={(e) => setEditWinner(e.target.value)}
+                      rows={3}
+                      className={`mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary focus-visible:border-accent ${textFont}`}
+                    />
+                    <ToneKeyboard
+                      targetRef={editRef}
+                      value={editWinner}
+                      onValueChange={setEditWinner}
+                    />
+                    {winnerEdited && (
+                      <div className="mt-3">
+                        <div className="mb-1 text-xs font-medium text-text-tertiary">
+                          Your changes:
+                        </div>
+                        <p
+                          className={`rounded bg-surface-sunken p-3 text-sm leading-relaxed ${textFont}`}
+                        >
+                          {wordDiff(winnerOutput.text, editWinner).map(
+                            (seg, i) =>
+                              seg.type === "same" ? (
+                                <span key={i}>{seg.value}</span>
+                              ) : seg.type === "added" ? (
+                                <span
+                                  key={i}
+                                  className="rounded bg-success-subtle text-success"
+                                >
+                                  {seg.value}
+                                </span>
+                              ) : (
+                                <span
+                                  key={i}
+                                  className="rounded bg-danger-subtle text-danger line-through"
+                                >
+                                  {seg.value}
+                                </span>
+                              ),
+                          )}
+                        </p>
                       </div>
-                      <p
-                        className={`rounded bg-surface-sunken p-3 text-sm leading-relaxed ${textFont}`}
-                      >
-                        {wordDiff(winnerOutput.text, editWinner).map(
-                          (seg, i) =>
-                            seg.type === "same" ? (
-                              <span key={i}>{seg.value}</span>
-                            ) : seg.type === "added" ? (
-                              <span
-                                key={i}
-                                className="rounded bg-success-subtle text-success"
-                              >
-                                {seg.value}
-                              </span>
-                            ) : (
-                              <span
-                                key={i}
-                                className="rounded bg-danger-subtle text-danger line-through"
-                              >
-                                {seg.value}
-                              </span>
-                            ),
-                        )}
-                      </p>
-                    </div>
-                  )}
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1108,7 +1481,7 @@ export function AnnotationInterface() {
                 Write the correct version (strongly encouraged)
                 <InfoTip width="w-80">
                   Both AI answers were inadequate, so the most valuable thing
-                  you can leave is the right answer in your own words — a clean
+                  you can leave is the right answer in your own words - a clean
                   gold target with no model text to inherit.
                 </InfoTip>
               </label>
@@ -1128,7 +1501,7 @@ export function AnnotationInterface() {
             </div>
           )}
 
-          {/* Consent — only shown when something was authored */}
+          {/* Consent - only shown when something was authored */}
           {(coldAnswer.trim() ||
             (winner === "both_inadequate" && salvage.trim()) ||
             (winner === "tie" && tieEdit.trim()) ||

@@ -62,6 +62,7 @@ export async function GET() {
           : null;
 
       return {
+        id: user.id,
         name: user.name ?? user.email,
         pairwiseCount,
         rubricCount,

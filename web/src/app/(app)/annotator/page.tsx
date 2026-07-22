@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { HelpButton } from "@/components/help-button";
 import { isResearcher } from "@/lib/personas";
@@ -25,17 +27,39 @@ function StatCard({
   title,
   value,
   description,
+  href,
 }: {
   title: string;
   value: string;
   description: string;
+  href?: string;
 }) {
-  return (
-    <div className="rounded-lg border border-border bg-surface p-6">
+  const content = (
+    <>
       <h3 className="text-sm font-medium text-text-tertiary">{title}</h3>
       <p className="mt-2 text-3xl font-semibold text-text-primary">{value}</p>
       <p className="mt-1 text-sm text-text-tertiary">{description}</p>
-    </div>
+    </>
+  );
+
+  if (!href) {
+    return (
+      <div className="rounded-lg border border-border bg-surface p-6">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      className="group relative block cursor-pointer rounded-lg border border-border bg-surface p-6 transition-colors hover:border-accent/40 hover:bg-surface-sunken"
+    >
+      {content}
+      <span className="absolute right-6 top-6 text-text-muted opacity-0 transition-opacity group-hover:opacity-100">
+        &rarr;
+      </span>
+    </Link>
   );
 }
 
@@ -60,6 +84,7 @@ function statusClass(status: string): string {
 
 export default function AnnotatorDashboard() {
   const { data: session } = useSession();
+  const router = useRouter();
   const researcher = isResearcher(session?.user?.role, session?.user?.email);
 
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -103,16 +128,19 @@ export default function AnnotatorDashboard() {
           title="Queue Remaining"
           value={num(summary?.pending)}
           description="Pairwise comparisons still waiting for your input"
+          href="/annotator/annotate"
         />
         <StatCard
           title="Comparisons Completed"
           value={num(summary?.completed)}
           description="Blind pairwise judgments you've submitted"
+          href="/annotator/history"
         />
         <StatCard
           title="Gold Answers Written"
           value={num(summary?.coldAnswers)}
           description="Your own Igala answers authored before seeing any model"
+          href="/annotator/history"
         />
         {researcher && (
           <>
@@ -120,11 +148,13 @@ export default function AnnotatorDashboard() {
               title="Reviews Pending"
               value={num(summary?.pendingReviews)}
               description="Handoff items flagged for human review"
+              href="/annotator/review"
             />
             <StatCard
               title="Prompts in Catalogue"
               value={num(summary?.promptsInCatalogue)}
               description="Total prompts in the Igala catalogue"
+              href="/annotator/prompts"
             />
           </>
         )}
@@ -168,7 +198,19 @@ export default function AnnotatorDashboard() {
               </thead>
               <tbody className="divide-y divide-border">
                 {recent.map((row, i) => (
-                  <tr key={i} className="hover:bg-surface-sunken">
+                  <tr
+                    key={i}
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => router.push("/annotator/history")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        router.push("/annotator/history");
+                      }
+                    }}
+                    className="cursor-pointer hover:bg-surface-sunken focus-visible:bg-surface-sunken focus-visible:outline-none"
+                  >
                     <td className="px-4 py-3 text-text-primary max-w-xs truncate">
                       {row.prompt}
                     </td>
@@ -191,6 +233,16 @@ export default function AnnotatorDashboard() {
             </table>
           )}
         </div>
+        {researcher && (
+          <div className="mt-3 text-right">
+            <Link
+              href="/admin/annotations"
+              className="text-sm text-text-tertiary hover:text-text-secondary hover:underline"
+            >
+              Review all annotators&apos; work &rarr;
+            </Link>
+          </div>
+        )}
       </div>
       <HelpButton
         title="Dashboard"
