@@ -24,8 +24,14 @@ import type { EvalBucket, Prisma } from "@prisma/client";
  * tables have different promptId semantics — PairwiseComparison.promptId is the
  * PUBLIC prompt string (e.g. "ig_orth_001"), while ColdAuthorAnswer.promptId and
  * OutputEdit.promptId are cuid FKs. Reconciling that in a single query would be
- * brittle; the data is tiny (tens of rows) so fetching each type and merging in
- * memory is clean and correct.
+ * brittle; instead we fetch each type's own top `offset + limit` rows (same
+ * bounded-fetch pattern as /api/annotator/history), merge-sort by createdAt
+ * desc, and slice the requested window — never loading a full table into
+ * memory. Fetching each type's own top-K is sufficient to correctly compute the
+ * merged top-K: any row inside the global top K must also be inside its own
+ * table's top K, since every same-table row that outranks it globally also
+ * outranks it within that table. `total` comes from three cheap count()
+ * queries (already true before this fix), summed.
  */
 
 interface AnnotatorLite {
@@ -62,6 +68,10 @@ export async function GET(req: Request) {
   const wantCold = !type || type === "cold";
   const wantEdit = !type || type === "edit";
 
+  // Bound each per-type fetch to its own top `offset + limit` rows (newest
+  // first) rather than loading the whole matching table — see file header.
+  const fetchCap = offset + limit;
+
   // Resolve prompt text/bucket for pairwise rows, whose promptId is the PUBLIC
   // string. One lookup keyed by that string; cold/edit use their FK relation.
   const events: EventRow[] = [];
@@ -77,6 +87,7 @@ export async function GET(req: Request) {
       prisma.pairwiseComparison.findMany({
         where,
         orderBy: { createdAt: "desc" },
+        take: fetchCap,
         select: {
           id: true,
           promptId: true,
@@ -130,6 +141,7 @@ export async function GET(req: Request) {
       prisma.coldAuthorAnswer.findMany({
         where,
         orderBy: { createdAt: "desc" },
+        take: fetchCap,
         select: {
           id: true,
           answerText: true,
@@ -171,6 +183,7 @@ export async function GET(req: Request) {
       prisma.outputEdit.findMany({
         where,
         orderBy: { createdAt: "desc" },
+        take: fetchCap,
         select: {
           id: true,
           correctedText: true,
@@ -206,7 +219,10 @@ export async function GET(req: Request) {
     }
   }
 
-  // Merge the type streams into one createdAt-desc list, then page in memory.
+  // Merge the (already-bounded) type streams into one createdAt-desc list,
+  // then slice the requested window. `events` holds each type's own top
+  // `fetchCap` rows, which is provably sufficient to compute the correct
+  // merged top `fetchCap` — see file header.
   events.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const page = events.slice(offset, offset + limit);
 
@@ -224,7 +240,9 @@ export async function GET(req: Request) {
     total,
     limit,
     offset,
-    hasMore: offset + page.length < events.length,
+    // total (not events.length) is the true count, since events is bounded to
+    // fetchCap per type rather than the full matching set.
+    hasMore: offset + page.length < total,
     annotators,
   });
 }
