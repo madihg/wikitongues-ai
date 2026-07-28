@@ -107,6 +107,7 @@ export function AnnotationsReview({
   const [type, setType] = useState<string>(initialType);
   const [bucket, setBucket] = useState<string>("");
   const [includeDemo, setIncludeDemo] = useState(false);
+  const [offset, setOffset] = useState(0);
 
   const [data, setData] = useState<ListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,6 +122,7 @@ export function AnnotationsReview({
     if (type) params.set("type", type);
     if (bucket) params.set("bucket", bucket);
     if (includeDemo) params.set("includeDemo", "true");
+    if (offset > 0) params.set("offset", String(offset));
     try {
       const res = await fetch(`/api/admin/annotations?${params.toString()}`);
       if (!res.ok) {
@@ -133,11 +135,32 @@ export function AnnotationsReview({
     } finally {
       setLoading(false);
     }
-  }, [annotatorId, type, bucket, includeDemo]);
+  }, [annotatorId, type, bucket, includeDemo, offset]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Any filter change resets to page 1. Setting offset in the same handler as
+  // the filter (rather than in a separate effect keyed off the filters) keeps
+  // it a single batched state update, so `load` only ever fires once per
+  // change instead of once with the stale offset and once with the reset one.
+  function updateAnnotator(v: string) {
+    setAnnotatorId(v);
+    setOffset(0);
+  }
+  function updateType(v: string) {
+    setType(v);
+    setOffset(0);
+  }
+  function updateBucket(v: string) {
+    setBucket(v);
+    setOffset(0);
+  }
+  function updateIncludeDemo(v: boolean) {
+    setIncludeDemo(v);
+    setOffset(0);
+  }
 
   // Keep the deep-link in the address bar in sync with the annotator/type
   // filters, so a researcher can copy the URL and it reproduces the view.
@@ -165,7 +188,7 @@ export function AnnotationsReview({
           Annotator
           <select
             value={annotatorId}
-            onChange={(e) => setAnnotatorId(e.target.value)}
+            onChange={(e) => updateAnnotator(e.target.value)}
             className="min-w-48 rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary"
           >
             <option value="">All annotators</option>
@@ -185,7 +208,7 @@ export function AnnotationsReview({
           Type
           <select
             value={type}
-            onChange={(e) => setType(e.target.value)}
+            onChange={(e) => updateType(e.target.value)}
             className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary"
           >
             <option value="">All types</option>
@@ -199,7 +222,7 @@ export function AnnotationsReview({
           Prompt category
           <select
             value={bucket}
-            onChange={(e) => setBucket(e.target.value)}
+            onChange={(e) => updateBucket(e.target.value)}
             className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary"
           >
             <option value="">All categories</option>
@@ -215,7 +238,7 @@ export function AnnotationsReview({
           <input
             type="checkbox"
             checked={includeDemo}
-            onChange={(e) => setIncludeDemo(e.target.checked)}
+            onChange={(e) => updateIncludeDemo(e.target.checked)}
             className="h-4 w-4 accent-[var(--accent)]"
           />
           Include demo sessions
@@ -237,8 +260,27 @@ export function AnnotationsReview({
         <div className="rounded-lg border border-border bg-surface shadow-sm">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <span className="text-sm text-text-secondary">
+              Showing {data.offset + 1}-{data.offset + data.events.length} of{" "}
               {data.total} event{data.total === 1 ? "" : "s"}
             </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setOffset(Math.max(0, offset - data.limit))}
+                disabled={loading || data.offset === 0}
+                className="rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => setOffset(offset + data.limit)}
+                disabled={loading || !data.hasMore}
+                className="rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -594,7 +636,7 @@ function PairwiseBody({ detail }: { detail: PairwiseDetail }) {
         </section>
       )}
 
-      {detail.context.rubricAxes.length > 0 && (
+      {detail.context.rubricAxes.length > 0 ? (
         <section>
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-text-tertiary">
             Rubric on the winner
@@ -613,6 +655,13 @@ function PairwiseBody({ detail }: { detail: PairwiseDetail }) {
             ))}
           </div>
         </section>
+      ) : (
+        (detail.winner === "tie" || detail.winner === "both_inadequate") && (
+          <p className="text-xs text-text-tertiary">
+            No rubric scores - the rubric scores the winning output, and this
+            comparison had no winner.
+          </p>
+        )
       )}
 
       {detail.context.edits.length > 0 && (
