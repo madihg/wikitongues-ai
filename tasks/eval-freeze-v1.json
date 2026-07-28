@@ -1,0 +1,409 @@
+{
+  "version": "eval-freeze-v1",
+  "frozenAt": "2026-07-28",
+  "language": "igala",
+  "invariant": "every benchmark prompt has split='test' AND isHoldout=true; the SFT/DPO dataset builder hard-excludes any prompt with isHoldout=true",
+  "rationale": "First held-out benchmark for the 'did our data produce a better Igala model' experiment. Gold (483 ColdAuthorAnswer rows, isDemo=false) is concentrated: only orthography (39), grammar_tone (39) and lexicon_disambig (25) have multi-prompt gold pools; dialectal_fidelity, register_honorifics, idioms_metaphor, cultural_values and authenticity have a single gold prompt each. register/idioms/cultural were already the 3 pre-existing test prompts. We therefore freeze a stratified 40 new prompts weighted to the three data-rich buckets (15/15/8) plus the two remaining single-gold buckets (dialectal ig_dial_001, authenticity ig_auth_001) to give the benchmark coverage of all 8 buckets. Every frozen prompt has >=1 gold answer (so exclusion is meaningful) and >=1 stored baseline ModelOutput (so blind tuned-vs-baseline pairs and Rung-A baseline metrics are available). The three high-gold 'mega seed' prompts (ig_orth_001, ig_gram_001, ig_lex_001) are deliberately KEPT in training so their rich multi-annotator gold trains the model rather than sitting idle in the benchmark.",
+  "selectionMethod": "Deterministic: within ig_bank_orth_* / ig_bank_gram_* / ig_bank_lex_*, take the first 15/15/8 distinct gold promptIds sorted ascending; plus ig_dial_001 and ig_auth_001 (their buckets' only gold prompt).",
+  "totalBenchmarkPrompts": 43,
+  "bucketCoverage": {
+    "register_honorifics": 1,
+    "idioms_metaphor": 1,
+    "cultural_values": 1,
+    "authenticity": 1,
+    "grammar_tone": 15,
+    "lexicon_disambig": 8,
+    "orthography": 15,
+    "dialectal_fidelity": 1
+  },
+  "newlyFrozen": [
+    {
+      "promptId": "ig_auth_001",
+      "id": "cmqpwyfey000kjpl2wtdbli6w",
+      "bucket": "authenticity",
+      "goldCount": 7,
+      "trainableGold": 7,
+      "baselineOutputs": 2,
+      "text": "Write a short, natural Igala blessing as a community member would say it, not back-translated from English."
+    },
+    {
+      "promptId": "ig_bank_gram_001",
+      "id": "cmrcurglp0027jp06xril45pd",
+      "bucket": "grammar_tone",
+      "goldCount": 7,
+      "trainableGold": 7,
+      "baselineOutputs": 2,
+      "text": "Translate 'The woman cooks food' into Igala, keeping correct word order."
+    },
+    {
+      "promptId": "ig_bank_gram_002",
+      "id": "cmrcurh2l0029jp06viha8yx2",
+      "bucket": "grammar_tone",
+      "goldCount": 5,
+      "trainableGold": 5,
+      "baselineOutputs": 2,
+      "text": "Translate 'The man goes to the farm' into Igala with correct sentence structure."
+    },
+    {
+      "promptId": "ig_bank_gram_003",
+      "id": "cmrcurhje002bjp06prxpzk5g",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 4,
+      "baselineOutputs": 2,
+      "text": "Translate 'I drink water' into Igala."
+    },
+    {
+      "promptId": "ig_bank_gram_004",
+      "id": "cmrcuri0h002djp060fn6j6ml",
+      "bucket": "grammar_tone",
+      "goldCount": 5,
+      "trainableGold": 5,
+      "baselineOutputs": 2,
+      "text": "Translate 'The child sleeps' into Igala."
+    },
+    {
+      "promptId": "ig_bank_gram_005",
+      "id": "cmrcurih9002fjp06gxihplu3",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 3,
+      "baselineOutputs": 2,
+      "text": "Translate 'We eat yam' into Igala, keeping correct word order."
+    },
+    {
+      "promptId": "ig_bank_gram_006",
+      "id": "cmrcuriy2002hjp06jnkcdv61",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 4,
+      "baselineOutputs": 2,
+      "text": "Translate 'The dog runs' into Igala."
+    },
+    {
+      "promptId": "ig_bank_gram_007",
+      "id": "cmrcurjf2002jjp06gbdnhl46",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 4,
+      "baselineOutputs": 2,
+      "text": "Translate 'She sells fish in the market' into Igala."
+    },
+    {
+      "promptId": "ig_bank_gram_008",
+      "id": "cmrcurjvy002ljp06x206vqqm",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 4,
+      "baselineOutputs": 2,
+      "text": "Translate 'They are singing' into Igala."
+    },
+    {
+      "promptId": "ig_bank_gram_009",
+      "id": "cmrcurkcu002njp06x9te72me",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 3,
+      "baselineOutputs": 2,
+      "text": "Translate 'My father works' into Igala."
+    },
+    {
+      "promptId": "ig_bank_gram_010",
+      "id": "cmrcurktt002pjp0607rmbr4t",
+      "bucket": "grammar_tone",
+      "goldCount": 5,
+      "trainableGold": 5,
+      "baselineOutputs": 2,
+      "text": "Translate 'The children play' into Igala with correct agreement."
+    },
+    {
+      "promptId": "ig_bank_gram_011",
+      "id": "cmrcurlcg002rjp06u2lj9wng",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 4,
+      "baselineOutputs": 2,
+      "text": "Translate 'I am hungry' into Igala."
+    },
+    {
+      "promptId": "ig_bank_gram_012",
+      "id": "cmrcurltt002tjp06k04lbyr5",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 4,
+      "baselineOutputs": 2,
+      "text": "Translate 'The water is cold' into Igala."
+    },
+    {
+      "promptId": "ig_bank_gram_013",
+      "id": "cmrcurman002vjp065kkz1s8n",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 4,
+      "baselineOutputs": 2,
+      "text": "Translate 'The child ate the food yesterday' into Igala, using the correct past tense."
+    },
+    {
+      "promptId": "ig_bank_gram_014",
+      "id": "cmrcurmrc002xjp06pj0i4cil",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 4,
+      "baselineOutputs": 2,
+      "text": "Translate 'The woman will go to the market tomorrow' into Igala, using the correct future form."
+    },
+    {
+      "promptId": "ig_bank_gram_015",
+      "id": "cmrcurn85002zjp06gjdz1ih1",
+      "bucket": "grammar_tone",
+      "goldCount": 4,
+      "trainableGold": 4,
+      "baselineOutputs": 2,
+      "text": "Translate 'The man who farms yam is my uncle' into Igala, keeping the relative clause natural."
+    },
+    {
+      "promptId": "ig_bank_lex_001",
+      "id": "cmrcurz07004djp06semwmug8",
+      "bucket": "lexicon_disambig",
+      "goldCount": 1,
+      "trainableGold": 1,
+      "baselineOutputs": 2,
+      "text": "Give the Igala word for 'head' (the body part), making sure it is the true Igala word and not a borrowing."
+    },
+    {
+      "promptId": "ig_bank_lex_002",
+      "id": "cmrcurzh0004fjp06bj5b7del",
+      "bucket": "lexicon_disambig",
+      "goldCount": 1,
+      "trainableGold": 1,
+      "baselineOutputs": 2,
+      "text": "Give the Igala word for 'fire', and confirm it is Igala rather than a neighbouring language."
+    },
+    {
+      "promptId": "ig_bank_lex_003",
+      "id": "cmrcurzxw004hjp06vb2i1rfo",
+      "bucket": "lexicon_disambig",
+      "goldCount": 1,
+      "trainableGold": 1,
+      "baselineOutputs": 2,
+      "text": "Give the Igala word for 'hand'."
+    },
+    {
+      "promptId": "ig_bank_lex_004",
+      "id": "cmrcus0er004jjp06zsv20dyd",
+      "bucket": "lexicon_disambig",
+      "goldCount": 1,
+      "trainableGold": 1,
+      "baselineOutputs": 2,
+      "text": "Give the Igala word for 'sun'."
+    },
+    {
+      "promptId": "ig_bank_lex_005",
+      "id": "cmrcus0vm004ljp062i1pzkhx",
+      "bucket": "lexicon_disambig",
+      "goldCount": 1,
+      "trainableGold": 1,
+      "baselineOutputs": 2,
+      "text": "Give the Igala word for 'goat'."
+    },
+    {
+      "promptId": "ig_bank_lex_006",
+      "id": "cmrcus1cf004njp06dmj22o55",
+      "bucket": "lexicon_disambig",
+      "goldCount": 1,
+      "trainableGold": 1,
+      "baselineOutputs": 2,
+      "text": "Give the Igala word for 'tree'."
+    },
+    {
+      "promptId": "ig_bank_lex_007",
+      "id": "cmrcus1td004pjp06t6suy4x0",
+      "bucket": "lexicon_disambig",
+      "goldCount": 1,
+      "trainableGold": 1,
+      "baselineOutputs": 2,
+      "text": "Give the Igala word for 'friend'."
+    },
+    {
+      "promptId": "ig_bank_lex_008",
+      "id": "cmrcus2a4004rjp06nh6nlhm1",
+      "bucket": "lexicon_disambig",
+      "goldCount": 1,
+      "trainableGold": 1,
+      "baselineOutputs": 2,
+      "text": "Give the Igala word for 'road' or 'path'."
+    },
+    {
+      "promptId": "ig_bank_orth_001",
+      "id": "cmrcuqy5a0001jp06bl880pwt",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'water' with correct spelling and tone marks."
+    },
+    {
+      "promptId": "ig_bank_orth_002",
+      "id": "cmrcuqyn30003jp06r8ausrd7",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'child' with correct spelling and any tone marks."
+    },
+    {
+      "promptId": "ig_bank_orth_003",
+      "id": "cmrcuqz3w0005jp06at5omz6h",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'house' with correct spelling and diacritics."
+    },
+    {
+      "promptId": "ig_bank_orth_004",
+      "id": "cmrcuqzko0007jp067x9c4qds",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'food' with correct spelling and tone marks."
+    },
+    {
+      "promptId": "ig_bank_orth_005",
+      "id": "cmrcur01j0009jp06l1ak97k1",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'yam' with correct spelling and any dotted vowels."
+    },
+    {
+      "promptId": "ig_bank_orth_006",
+      "id": "cmrcur0ij000bjp06wazqpn2t",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'market' with correct spelling and tone marks."
+    },
+    {
+      "promptId": "ig_bank_orth_007",
+      "id": "cmrcur0zg000djp069d8nvqrj",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'mother' with correct spelling and diacritics."
+    },
+    {
+      "promptId": "ig_bank_orth_008",
+      "id": "cmrcur1gb000fjp064twkq66v",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'father' with correct spelling and tone marks."
+    },
+    {
+      "promptId": "ig_bank_orth_009",
+      "id": "cmrcur1x2000hjp068aglojx8",
+      "bucket": "orthography",
+      "goldCount": 7,
+      "trainableGold": 7,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'money' with correct spelling and any tone marks."
+    },
+    {
+      "promptId": "ig_bank_orth_010",
+      "id": "cmrcur2dw000jjp06fzm78gp9",
+      "bucket": "orthography",
+      "goldCount": 7,
+      "trainableGold": 7,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'god' or 'the supreme being' with correct spelling and tone marks."
+    },
+    {
+      "promptId": "ig_bank_orth_011",
+      "id": "cmrcur2ut000ljp061i5q1hqp",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'name' with correct spelling and diacritics."
+    },
+    {
+      "promptId": "ig_bank_orth_012",
+      "id": "cmrcur3br000njp062lbzu859",
+      "bucket": "orthography",
+      "goldCount": 8,
+      "trainableGold": 8,
+      "baselineOutputs": 2,
+      "text": "Write the Igala numbers one to five, each spelled correctly with tone marks."
+    },
+    {
+      "promptId": "ig_bank_orth_013",
+      "id": "cmrcur3sq000pjp066a6m1ap5",
+      "bucket": "orthography",
+      "goldCount": 6,
+      "trainableGold": 6,
+      "baselineOutputs": 2,
+      "text": "Write the Igala word for 'morning' and the word for 'night', showing how the tone marks differ."
+    },
+    {
+      "promptId": "ig_bank_orth_014",
+      "id": "cmrcur49j000rjp06zcb6tzv5",
+      "bucket": "orthography",
+      "goldCount": 5,
+      "trainableGold": 5,
+      "baselineOutputs": 2,
+      "text": "Spell the Igala word for 'king' or 'ruler', paying attention to dotted vowels and tone."
+    },
+    {
+      "promptId": "ig_bank_orth_015",
+      "id": "cmrcur4qv000tjp06zv636z6m",
+      "bucket": "orthography",
+      "goldCount": 7,
+      "trainableGold": 7,
+      "baselineOutputs": 2,
+      "text": "Write two Igala words that use a dotted vowel (such as ẹ or ọ) and spell them correctly."
+    },
+    {
+      "promptId": "ig_dial_001",
+      "id": "cmqpwydn9000cjpl241tj8kja",
+      "bucket": "dialectal_fidelity",
+      "goldCount": 16,
+      "trainableGold": 15,
+      "baselineOutputs": 3,
+      "text": "Provide a greeting that varies across Igala dialects and note the differences."
+    }
+  ],
+  "preexistingTest": [
+    {
+      "promptId": "ig_cult_001",
+      "id": "cmqpwyez2000ijpl29d6c7ut7",
+      "bucket": "cultural_values",
+      "goldCount": 7,
+      "text": "Describe the cultural significance of Egwu masquerade festivals in Igala society."
+    },
+    {
+      "promptId": "ig_idiom_001",
+      "id": "cmqpwyej9000gjpl23egg53n8",
+      "bucket": "idioms_metaphor",
+      "goldCount": 8,
+      "text": "Explain the meaning of a common Igala proverb about legacy and the value of stories."
+    },
+    {
+      "promptId": "ig_reg_001",
+      "id": "cmqpwye3d000ejpl2lrat2g58",
+      "bucket": "register_honorifics",
+      "goldCount": 20,
+      "text": "Show how a younger person should respectfully greet an elder in Igala."
+    }
+  ],
+  "trainingImpact": {
+    "totalTrainableGoldRows": 477,
+    "trainableGoldRowsRemovedByNewFreeze": 188,
+    "note": "Rows on the 3 pre-existing test prompts were already excluded before this freeze."
+  }
+}

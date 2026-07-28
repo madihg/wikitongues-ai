@@ -1,0 +1,401 @@
+{
+  "version": "rung-a-v1",
+  "generatedAt": "2026-07-28",
+  "model": "gpt-4.1",
+  "decoding": {
+    "temperature": 0,
+    "maxTokens": 1024
+  },
+  "systemPrompt": "IGALA_FORCING_INSTRUCTION (src/lib/generation-prompt.ts)",
+  "metricDefinitions": {
+    "englishFnWordShare": "share of outputs whose first 8 words contain any of {the,is,are,you,would,for,to} (LOWER is better)",
+    "toneShare": "share of outputs containing any combining tone mark / dotted vowel after NFD (HIGHER is better)",
+    "meanChars": "mean output length in characters",
+    "meanWords": "mean output length in whitespace words"
+  },
+  "note": "Generations were NOT written to ModelOutput (arena kept clean). 43 frozen/test prompts.",
+  "fewShotExemplars": [
+    {
+      "question": "Write the Igala word for 'morning' with correct spelling and diacritics.",
+      "answer": "ọdudu",
+      "from": "ig_orth_001"
+    },
+    {
+      "question": "Translate 'The child eats food' into Igala, keeping correct SVO word order.",
+      "answer": "Ọma lẹ aj'ẹñwu",
+      "from": "ig_gram_001"
+    },
+    {
+      "question": "Give the Igala word for 'vehicle', making sure it is the true Igala word and not a borrowing.",
+      "answer": "Imọtọ",
+      "from": "ig_lex_001"
+    },
+    {
+      "question": "Write the Igala word for 'to eat' and mark the tone correctly.",
+      "answer": "ẹ'jẹñwu",
+      "from": "ig_bank_orth_016"
+    },
+    {
+      "question": "Spell the Igala greeting used to say 'welcome', with correct tone marks.",
+      "answer": "wọla'ule",
+      "from": "ig_bank_orth_017"
+    },
+    {
+      "question": "Write the Igala word for 'farm' with full tone marking, then note which vowel carries the tone.",
+      "answer": "ọkọ",
+      "from": "ig_bank_orth_018"
+    },
+    {
+      "question": "Write the Igala word for 'river' or 'stream' with correct spelling and diacritics.",
+      "answer": "Ájì",
+      "from": "ig_bank_orth_019"
+    },
+    {
+      "question": "Spell the Igala word for 'elder' with correct tone marks and dotted vowels.",
+      "answer": "Ògìjò",
+      "from": "ig_bank_orth_020"
+    }
+  ],
+  "metrics": {
+    "zeroShot_gpt41": {
+      "n": 43,
+      "englishFnWordShare": 0,
+      "toneShare": 1,
+      "meanChars": 86.8,
+      "meanWords": 15.1
+    },
+    "fewShot8_gpt41": {
+      "n": 43,
+      "englishFnWordShare": 0,
+      "toneShare": 1,
+      "meanChars": 65.9,
+      "meanWords": 9.7
+    },
+    "storedBaseline_all": {
+      "n": 88,
+      "englishFnWordShare": 0.023,
+      "toneShare": 0.977,
+      "meanChars": 69,
+      "meanWords": 12.3
+    },
+    "storedBaseline_byModel": {
+      "gpt": {
+        "n": 86,
+        "englishFnWordShare": 0.023,
+        "toneShare": 0.977,
+        "meanChars": 67.6,
+        "meanWords": 12.1
+      },
+      "gemini": {
+        "n": 2,
+        "englishFnWordShare": 0,
+        "toneShare": 1,
+        "meanChars": 127,
+        "meanWords": 20.5
+      }
+    }
+  },
+  "perPrompt": [
+    {
+      "promptId": "ig_auth_001",
+      "bucket": "authenticity",
+      "text": "Write a short, natural Igala blessing as a community member would say it, not back-translated from English.",
+      "zeroShot": "Ọjọ́ á kpẹ̀ ẹ́, Ọjọ́ á kpẹ̀ ẹ́ n’ọ́jọ́, ẹ́nyí á dọ́, ẹ́nyí á gọ̀, ẹ́nyí á chọ́, ẹ́nyí á wù, ẹ́nyí á bọ̀, ẹ́nyí á yí ẹ́ n’ọ́jọ́. Ọjọ́ á kpẹ̀ ẹ́!",
+      "fewShot": "Ọjọ́ á kpà ányí nẹ́, Ọlọ́jọ́ á bọ́ ányí nẹ́, ẹ́jọ́ á wù ányí."
+    },
+    {
+      "promptId": "ig_bank_gram_001",
+      "bucket": "grammar_tone",
+      "text": "Translate 'The woman cooks food' into Igala, keeping correct word order.",
+      "zeroShot": "Ọmẹ nẹ ẹ́chọ́ ọ́nyí.",
+      "fewShot": "Obí lẹ aj'ẹñwu"
+    },
+    {
+      "promptId": "ig_bank_gram_002",
+      "bucket": "grammar_tone",
+      "text": "Translate 'The man goes to the farm' into Igala with correct sentence structure.",
+      "zeroShot": "Ọmọkùnẹ́ chẹ́ lọ́ n’ugbó.",
+      "fewShot": "Ọkọ́lẹ́ á lọ ọkọ́"
+    },
+    {
+      "promptId": "ig_bank_gram_003",
+      "bucket": "grammar_tone",
+      "text": "Translate 'I drink water' into Igala.",
+      "zeroShot": "Mẹ chọ omi.",
+      "fewShot": "Ami lẹ omi"
+    },
+    {
+      "promptId": "ig_bank_gram_004",
+      "bucket": "grammar_tone",
+      "text": "Translate 'The child sleeps' into Igala.",
+      "zeroShot": "Ọmọ kẹ́ chẹ.",
+      "fewShot": "Ọma lẹ chẹ"
+    },
+    {
+      "promptId": "ig_bank_gram_005",
+      "bucket": "grammar_tone",
+      "text": "Translate 'We eat yam' into Igala, keeping correct word order.",
+      "zeroShot": "Ànyị nẹ́ ji.",
+      "fewShot": "Anẹ lẹ ẹ'jẹñwu ìnyọ"
+    },
+    {
+      "promptId": "ig_bank_gram_006",
+      "bucket": "grammar_tone",
+      "text": "Translate 'The dog runs' into Igala.",
+      "zeroShot": "Ẹnyí kẹ́ lẹ.",
+      "fewShot": "Ẹkú lẹ gbalẹ"
+    },
+    {
+      "promptId": "ig_bank_gram_007",
+      "bucket": "grammar_tone",
+      "text": "Translate 'She sells fish in the market' into Igala.",
+      "zeroShot": "Ó dẹ́gá ẹ́nyí n’úkwù.",
+      "fewShot": "Ọ́ lẹ ẹjù ẹnyí n'úkwù"
+    },
+    {
+      "promptId": "ig_bank_gram_008",
+      "bucket": "grammar_tone",
+      "text": "Translate 'They are singing' into Igala.",
+      "zeroShot": "Wọ́n nẹ́ lẹ́.",
+      "fewShot": "Wọ́n lẹ ábẹ"
+    },
+    {
+      "promptId": "ig_bank_gram_009",
+      "bucket": "grammar_tone",
+      "text": "Translate 'My father works' into Igala.",
+      "zeroShot": "Àbẹ mi kẹ́lẹ́.",
+      "fewShot": "Àbẹ mi lẹ ọ́mẹ"
+    },
+    {
+      "promptId": "ig_bank_gram_010",
+      "bucket": "grammar_tone",
+      "text": "Translate 'The children play' into Igala with correct agreement.",
+      "zeroShot": "Ŋwẹ́nẹ́ á gbọ́.",
+      "fewShot": "Ọmábọ́ á gbọ́"
+    },
+    {
+      "promptId": "ig_bank_gram_011",
+      "bucket": "grammar_tone",
+      "text": "Translate 'I am hungry' into Igala.",
+      "zeroShot": "Ami chẹ́ ẹ́nyẹ.",
+      "fewShot": "Ami kpàlẹ anwu"
+    },
+    {
+      "promptId": "ig_bank_gram_012",
+      "bucket": "grammar_tone",
+      "text": "Translate 'The water is cold' into Igala.",
+      "zeroShot": "Ọmí kẹ́ dẹ́.",
+      "fewShot": "Amụ nọ kẹ́lẹ́"
+    },
+    {
+      "promptId": "ig_bank_gram_013",
+      "bucket": "grammar_tone",
+      "text": "Translate 'The child ate the food yesterday' into Igala, using the correct past tense.",
+      "zeroShot": "Ọmọ kẹ́ chọ́lú ọ́nyí ẹ́nyẹ́.",
+      "fewShot": "Ọma lẹ aj'ẹñwu nọ́lọ́jọ́ anwụ́la"
+    },
+    {
+      "promptId": "ig_bank_gram_014",
+      "bucket": "grammar_tone",
+      "text": "Translate 'The woman will go to the market tomorrow' into Igala, using the correct future form.",
+      "zeroShot": "Ọmẹ nẹ́ gà lọ́ n’úkwùchẹ́ ọla.",
+      "fewShot": "Obínyọ á má lọ n'úkwù l'ẹnyọ."
+    },
+    {
+      "promptId": "ig_bank_gram_015",
+      "bucket": "grammar_tone",
+      "text": "Translate 'The man who farms yam is my uncle' into Igala, keeping the relative clause natural.",
+      "zeroShot": "Ọmọkùnẹ́ chẹ́ kẹ́ gbọ̀ yán, ọ́lẹ́ mi lẹ.",
+      "fewShot": "Ọkọ́ni kẹ́ lẹ́kọ́ ọnyá, ọ́mi ẹ́."
+    },
+    {
+      "promptId": "ig_bank_lex_001",
+      "bucket": "lexicon_disambig",
+      "text": "Give the Igala word for 'head' (the body part), making sure it is the true Igala word and not a borrowing.",
+      "zeroShot": "úkwù",
+      "fewShot": "úkwú"
+    },
+    {
+      "promptId": "ig_bank_lex_002",
+      "bucket": "lexicon_disambig",
+      "text": "Give the Igala word for 'fire', and confirm it is Igala rather than a neighbouring language.",
+      "zeroShot": "Ọjọn.",
+      "fewShot": "Ọkụ"
+    },
+    {
+      "promptId": "ig_bank_lex_003",
+      "bucket": "lexicon_disambig",
+      "text": "Give the Igala word for 'hand'.",
+      "zeroShot": "Ọ́wó",
+      "fewShot": "ọ́kpá"
+    },
+    {
+      "promptId": "ig_bank_lex_004",
+      "bucket": "lexicon_disambig",
+      "text": "Give the Igala word for 'sun'.",
+      "zeroShot": "Ọnyí.",
+      "fewShot": "Ọnyí"
+    },
+    {
+      "promptId": "ig_bank_lex_005",
+      "bucket": "lexicon_disambig",
+      "text": "Give the Igala word for 'goat'.",
+      "zeroShot": "Ẹwú.",
+      "fewShot": "Ẹwú"
+    },
+    {
+      "promptId": "ig_bank_lex_006",
+      "bucket": "lexicon_disambig",
+      "text": "Give the Igala word for 'tree'.",
+      "zeroShot": "ọ́jị́",
+      "fewShot": "ọ́jị́"
+    },
+    {
+      "promptId": "ig_bank_lex_007",
+      "bucket": "lexicon_disambig",
+      "text": "Give the Igala word for 'friend'.",
+      "zeroShot": "Ọmẹjọ.",
+      "fewShot": "Ọmẹnyọ"
+    },
+    {
+      "promptId": "ig_bank_lex_008",
+      "bucket": "lexicon_disambig",
+      "text": "Give the Igala word for 'road' or 'path'.",
+      "zeroShot": "Ọ́nọ́.",
+      "fewShot": "úkwú"
+    },
+    {
+      "promptId": "ig_bank_orth_001",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'water' with correct spelling and tone marks.",
+      "zeroShot": "ámẹ",
+      "fewShot": "ámẹ"
+    },
+    {
+      "promptId": "ig_bank_orth_002",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'child' with correct spelling and any tone marks.",
+      "zeroShot": "ọmọ́",
+      "fewShot": "ọ́mà"
+    },
+    {
+      "promptId": "ig_bank_orth_003",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'house' with correct spelling and diacritics.",
+      "zeroShot": "úlé",
+      "fewShot": "úlé"
+    },
+    {
+      "promptId": "ig_bank_orth_004",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'food' with correct spelling and tone marks.",
+      "zeroShot": "ọ́nyà",
+      "fewShot": "ẹ́ñwú"
+    },
+    {
+      "promptId": "ig_bank_orth_005",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'yam' with correct spelling and any dotted vowels.",
+      "zeroShot": "ìnyá",
+      "fewShot": "ìnyá"
+    },
+    {
+      "promptId": "ig_bank_orth_006",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'market' with correct spelling and tone marks.",
+      "zeroShot": "úkwù",
+      "fewShot": "úkwú"
+    },
+    {
+      "promptId": "ig_bank_orth_007",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'mother' with correct spelling and diacritics.",
+      "zeroShot": "nẹnyẹ",
+      "fewShot": "Ẹnyá"
+    },
+    {
+      "promptId": "ig_bank_orth_008",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'father' with correct spelling and tone marks.",
+      "zeroShot": "àbó",
+      "fewShot": "Àbẹ"
+    },
+    {
+      "promptId": "ig_bank_orth_009",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'money' with correct spelling and any tone marks.",
+      "zeroShot": "ọ́là",
+      "fewShot": "owó"
+    },
+    {
+      "promptId": "ig_bank_orth_010",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'god' or 'the supreme being' with correct spelling and tone marks.",
+      "zeroShot": "Ọjọ́",
+      "fewShot": "Ọjọ"
+    },
+    {
+      "promptId": "ig_bank_orth_011",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'name' with correct spelling and diacritics.",
+      "zeroShot": "ẹ́nyí",
+      "fewShot": "ẹnyí"
+    },
+    {
+      "promptId": "ig_bank_orth_012",
+      "bucket": "orthography",
+      "text": "Write the Igala numbers one to five, each spelled correctly with tone marks.",
+      "zeroShot": "ọ́nẹ̀, ẹ́jì, ẹ́tà, ẹ́nẹ̀, ísún",
+      "fewShot": "ọ́nẹ́, éjì, ẹ́tà, ínè, ísì"
+    },
+    {
+      "promptId": "ig_bank_orth_013",
+      "bucket": "orthography",
+      "text": "Write the Igala word for 'morning' and the word for 'night', showing how the tone marks differ.",
+      "zeroShot": "ùjò (morning), òjò (night)",
+      "fewShot": "ọ̀dúdú (morning), ọ̀fù (night)"
+    },
+    {
+      "promptId": "ig_bank_orth_014",
+      "bucket": "orthography",
+      "text": "Spell the Igala word for 'king' or 'ruler', paying attention to dotted vowels and tone.",
+      "zeroShot": "Àtá",
+      "fewShot": "Àtá"
+    },
+    {
+      "promptId": "ig_bank_orth_015",
+      "bucket": "orthography",
+      "text": "Write two Igala words that use a dotted vowel (such as ẹ or ọ) and spell them correctly.",
+      "zeroShot": "ẹ́kpẹ́  \nọ́jọ́",
+      "fewShot": "ẹkpẹ, ọbẹ"
+    },
+    {
+      "promptId": "ig_cult_001",
+      "bucket": "cultural_values",
+      "text": "Describe the cultural significance of Egwu masquerade festivals in Igala society.",
+      "zeroShot": "Ẹgwú ẹkpẹ́ ẹ́jò k’Igálá chẹ́, ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. \n\nẸgwú ẹkpẹ́ ẹ́jò k’Igálá chẹ́, ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. \n\nẸgwú ẹkpẹ́ ẹ́jò k’Igálá chẹ́, ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. Ẹgwú ẹkpẹ́ ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. \n\nẸgwú ẹkpẹ́ ẹ́jò k’Igálá chẹ́, ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. \n\nẸgwú ẹkpẹ́ ẹ́jò k’Igálá chẹ́, ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. \n\nẸgwú ẹkpẹ́ ẹ́jò k’Igálá chẹ́, ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. \n\nẸgwú ẹkpẹ́ ẹ́jò k’Igálá chẹ́, ẹ́jò k’ọ́kpá ákpá, ẹ́jò k’ọ́kpá àlú, ẹ́jò k’ọ́kpá ẹ́dú. \n\nẸgwú ẹkpẹ́ ẹ́jò k’Igálá chẹ́, ẹ́jò k’",
+      "fewShot": "Egwú ẹkpẹ́ n’Igálá k’ọ́kpá kpá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. Ẹgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. Ẹgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. Ẹgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. Ẹgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. Ẹgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. Ẹgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. \n\nẸgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. Ẹgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. Ẹgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. \n\nẸgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. Ẹgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá. \n\nẸgwú ẹkpẹ́ k’ọ́kpá kpá n’ọ́ma Igálá, ẹ́jé ẹ́kpẹ́ n’ọ́ma Igálá."
+    },
+    {
+      "promptId": "ig_dial_001",
+      "bucket": "dialectal_fidelity",
+      "text": "Provide a greeting that varies across Igala dialects and note the differences.",
+      "zeroShot": "Ẹ́núwẹ́! (Central Igala)  \nẸ́núwẹ́ o! (Eastern Igala, often with \"o\" for emphasis)  \nẸ́núwẹ́ ẹ! (Western Igala, sometimes with \"ẹ\" for politeness)  \n\nỌmọ Igala k’ẹ́núwẹ́! (Dekina/Anyigba area, sometimes with \"Ọmọ Igala\" as a prefix)",
+      "fewShot": "Ẹkpẹlẹ (Central Igala)  \nẸkpẹlẹ́ (Eastern Igala, with higher tone)  \nẸkpẹlẹ̀ (Western Igala, with lower tone)"
+    },
+    {
+      "promptId": "ig_idiom_001",
+      "bucket": "idioms_metaphor",
+      "text": "Explain the meaning of a common Igala proverb about legacy and the value of stories.",
+      "zeroShot": "Ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k’ọ́ma kẹ́, ẹnyí k",
+      "fewShot": "Ẹ́nyí kẹ́ wùlù, ẹ́nyí kẹ́ chẹ́, ẹ́nyí kẹ́ gẹ́dẹ́, ẹ́nyí kẹ́ lùkù, ẹ́nyí kẹ́ nyá, ẹ́nyí kẹ́ kpá, ẹ́nyí kẹ́ kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́.\n\nẸ́nyí kẹ́ wùlù, ẹ́nyí kẹ́ chẹ́, ẹ́nyí kẹ́ gẹ́dẹ́, ẹ́nyí kẹ́ lùkù, ẹ́nyí kẹ́ nyá, ẹ́nyí kẹ́ kpá, ẹ́nyí kẹ́ kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́.\n\nẸ́nyí kẹ́ wùlù, ẹ́nyí kẹ́ chẹ́, ẹ́nyí kẹ́ gẹ́dẹ́, ẹ́nyí kẹ́ lùkù, ẹ́nyí kẹ́ nyá, ẹ́nyí kẹ́ kpá, ẹ́nyí kẹ́ kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́, ẹ́nyí kẹ́ kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́kpẹ́.\n\nẸ́nyí kẹ́ wùlù, ẹ́nyí kẹ́ chẹ́, ẹ́nyí kẹ́ gẹ́dẹ́, ẹ́nyí kẹ́ lùkù, ẹ́nyí kẹ́ nyá, ẹ́nyí kẹ́ kpá, ẹ́nyí kẹ́ kpẹ́, ẹ́"
+    },
+    {
+      "promptId": "ig_reg_001",
+      "bucket": "register_honorifics",
+      "text": "Show how a younger person should respectfully greet an elder in Igala.",
+      "zeroShot": "Ẹ́kpẹ́lẹ́ ọ́, ẹ́jọ́.  \nẸ́kpẹ́lẹ́, ẹ́jọ́, ẹ́nyẹ́ mi.  \nẸ́kpẹ́lẹ́, ẹ́jọ́, ẹ́dá mi.",
+      "fewShot": "Ẹkpẹlẹ ọjọ, ògìjò."
+    }
+  ]
+}

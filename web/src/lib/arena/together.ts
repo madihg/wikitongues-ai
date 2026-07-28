@@ -86,15 +86,23 @@ export interface TogetherStartArgs {
 
 /** Start a fine-tune job. Returns Together's job id (used for polling). */
 export async function startFineTune(args: TogetherStartArgs): Promise<string> {
+  // Together's current API expects `training_method` as an OBJECT ({ method: ... })
+  // and defaults `training_type` to LoRA when omitted. Sending the bare string form
+  // 400s with "Could not create the FineTune object (Binding)".
+  const trainingMethod: Record<string, unknown> =
+    args.method === "dpo"
+      ? {
+          method: "dpo",
+          ...(args.dpoBeta != null ? { dpo_beta: args.dpoBeta } : {}),
+        }
+      : { method: "sft" };
   const body: Record<string, unknown> = {
     training_file: args.fileId,
     model: args.model,
-    training_method: args.method,
+    training_method: trainingMethod,
     n_epochs: args.nEpochs ?? 3,
     learning_rate: args.learningRate ?? 1e-5,
   };
-  if (args.method === "dpo" && args.dpoBeta != null)
-    body.dpo_beta = args.dpoBeta;
   if (args.batchSize != null) body.batch_size = args.batchSize;
 
   const res = await fetch(`${TOGETHER_API}/fine-tunes`, {

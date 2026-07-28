@@ -5,9 +5,9 @@ import {
   buildSftExamples,
   toJsonl,
   type DpoSourceRow,
-  type SftSourceRow,
   type ExportFilters,
 } from "@/lib/arena/training-export";
+import { loadSftSourceRows } from "@/lib/arena/sft-source";
 import { estimateFineTuneCostUsd, roundUsd } from "@/lib/arena/pricing";
 import {
   togetherConfigured,
@@ -145,32 +145,10 @@ async function buildTogetherJsonl(job: FineTuneJob): Promise<string> {
     );
   }
 
-  // sft / continued_pretrain both train off edits as gold targets.
-  const edits = await prisma.outputEdit.findMany({
-    where: {
-      isDemo: false,
-      ...(job.sourceEditIds.length > 0
-        ? { id: { in: job.sourceEditIds } }
-        : {}),
-    },
-    include: {
-      modelOutput: {
-        select: {
-          prompt: {
-            select: { id: true, text: true, isHoldout: true, bucket: true },
-          },
-        },
-      },
-    },
-  });
-  const rows: SftSourceRow[] = edits.map((e) => ({
-    promptId: e.modelOutput.prompt.id,
-    promptText: e.modelOutput.prompt.text,
-    correctedText: e.correctedText,
-    bucket: e.bucket ?? e.modelOutput.prompt.bucket,
-    isHoldout: e.modelOutput.prompt.isHoldout,
-    verificationStatus: e.verificationStatus,
-  }));
+  // sft / continued_pretrain train off the platform's Igala gold: cold author
+  // answers (source-free, the bulk) plus annotator edits. Same loader as the
+  // build route, so the reported row count and the uploaded JSONL never diverge.
+  const rows = await loadSftSourceRows(job);
   const examples = buildSftExamples(rows, filters);
   return toJsonl(
     examples.map((e) => ({ messages: [...sysMsg, ...e.messages] })),
