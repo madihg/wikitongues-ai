@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   parseAnnotationsQuery,
   excerpt,
+  foldIgala,
   DEFAULT_LIMIT,
   MAX_LIMIT,
+  MAX_QUERY_LENGTH,
+  MIN_QUERY_LENGTH,
 } from "./annotations-query";
 
 function q(s: string): URLSearchParams {
@@ -19,6 +22,7 @@ describe("parseAnnotationsQuery", () => {
       includeDemo: false,
       limit: DEFAULT_LIMIT,
       offset: 0,
+      q: null,
     });
   });
 
@@ -73,6 +77,44 @@ describe("parseAnnotationsQuery", () => {
   it("prefers offset over the cursor alias", () => {
     expect(parseAnnotationsQuery(q("offset=10&cursor=99")).offset).toBe(10);
   });
+
+  it("returns null q when absent", () => {
+    expect(parseAnnotationsQuery(q("")).q).toBeNull();
+  });
+
+  it("trims a search query", () => {
+    expect(
+      parseAnnotationsQuery(q("q=" + encodeURIComponent("  odudu  "))).q,
+    ).toBe("odudu");
+  });
+
+  it("ignores a query shorter than MIN_QUERY_LENGTH after trim", () => {
+    expect(parseAnnotationsQuery(q("q=a")).q).toBeNull();
+    expect(
+      parseAnnotationsQuery(q("q=" + encodeURIComponent(" a "))).q,
+    ).toBeNull();
+    expect(parseAnnotationsQuery(q("q=" + " ".repeat(5))).q).toBeNull();
+  });
+
+  it("keeps a query exactly MIN_QUERY_LENGTH chars long", () => {
+    const raw = "x".repeat(MIN_QUERY_LENGTH);
+    expect(parseAnnotationsQuery(q(`q=${raw}`)).q).toBe(raw);
+  });
+
+  it("caps a search query at MAX_QUERY_LENGTH chars", () => {
+    const long = "x".repeat(150);
+    const parsed = parseAnnotationsQuery(q(`q=${long}`));
+    expect(parsed.q).toHaveLength(MAX_QUERY_LENGTH);
+    expect(parsed.q).toBe("x".repeat(MAX_QUERY_LENGTH));
+  });
+
+  it("trims after capping, so trailing whitespace inside the cap is dropped", () => {
+    // 98 x's + 2 spaces = 100 chars once capped; trimming then drops the
+    // trailing spaces, leaving 98 chars rather than an off-by-one at 100.
+    const raw = "x".repeat(98) + "  " + "y".repeat(20);
+    const parsed = parseAnnotationsQuery(q(`q=${raw}`));
+    expect(parsed.q).toBe("x".repeat(98));
+  });
 });
 
 describe("excerpt", () => {
@@ -89,5 +131,31 @@ describe("excerpt", () => {
     const out = excerpt(long, 80);
     expect(out).toHaveLength(81); // 80 chars + ellipsis
     expect(out.endsWith("…")).toBe(true);
+  });
+});
+
+describe("foldIgala", () => {
+  it("folds a precomposed dotted vowel + lowercases", () => {
+    // "Ọ" (U+1ECD, LATIN CAPITAL LETTER O WITH DOT BELOW) - the shape most
+    // Igala orthography in the data uses for this sound.
+    expect(foldIgala("Ọdudu")).toBe("odudu");
+  });
+
+  it("folds precomposed tone marks", () => {
+    // "ó" (U+00F3, o + acute) and "ù" (U+00F9, u + grave).
+    expect(foldIgala("ódùdù")).toBe("odudu");
+  });
+
+  it("folds a mixed sequence: precomposed dot-below base + standalone combining mark", () => {
+    // Production ColdAuthorAnswer rows store toned dotted vowels this way
+    // (e.g. "ẹ́gẹ") because Unicode has no single precomposed codepoint for
+    // "dot-below e + acute tone": "ẹ" (U+1EB9, precomposed dot-below e)
+    // immediately followed by a bare combining acute (U+0301).
+    expect(foldIgala("ẹ́gbe")).toBe("egbe");
+    expect(foldIgala("ẹ́gẹ")).toBe("ege"); // "ẹ́gẹ" itself
+  });
+
+  it("leaves plain ASCII unchanged aside from case", () => {
+    expect(foldIgala("hello world")).toBe("hello world");
   });
 });

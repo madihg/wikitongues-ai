@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BUCKETS } from "@/lib/buckets";
+import { MAX_QUERY_LENGTH, MIN_QUERY_LENGTH } from "@/lib/annotations-query";
 
 /**
  * Researcher annotation-review surface. Lists every annotation event (pairwise,
@@ -109,6 +110,12 @@ export function AnnotationsReview({
   const [includeDemo, setIncludeDemo] = useState(false);
   const [offset, setOffset] = useState(0);
 
+  // `searchInput` is the live textbox value; `search` is the debounced value
+  // that actually drives the fetch + pagination reset + "Showing..." label,
+  // so typing doesn't fire a request (and reset to page 1) per keystroke.
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+
   const [data, setData] = useState<ListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +130,7 @@ export function AnnotationsReview({
     if (bucket) params.set("bucket", bucket);
     if (includeDemo) params.set("includeDemo", "true");
     if (offset > 0) params.set("offset", String(offset));
+    if (search.trim()) params.set("q", search.trim());
     try {
       const res = await fetch(`/api/admin/annotations?${params.toString()}`);
       if (!res.ok) {
@@ -135,7 +143,7 @@ export function AnnotationsReview({
     } finally {
       setLoading(false);
     }
-  }, [annotatorId, type, bucket, includeDemo, offset]);
+  }, [annotatorId, type, bucket, includeDemo, offset, search]);
 
   useEffect(() => {
     load();
@@ -161,6 +169,26 @@ export function AnnotationsReview({
     setIncludeDemo(v);
     setOffset(0);
   }
+
+  // Search is debounced 300ms: `updateSearch` only updates the live textbox
+  // value, and the effect below commits it to `search` (which resets
+  // pagination, same as the other updateX handlers) once typing pauses -
+  // so a fetch + page reset only fires once per pause, not per keystroke.
+  function updateSearch(v: string) {
+    setSearchInput(v);
+  }
+  function clearSearch() {
+    setSearchInput("");
+    setSearch("");
+    setOffset(0);
+  }
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setSearch(searchInput);
+      setOffset(0);
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
 
   // Keep the deep-link in the address bar in sync with the annotator/type
   // filters, so a researcher can copy the URL and it reproduces the view.
@@ -243,6 +271,30 @@ export function AnnotationsReview({
           />
           Include demo sessions
         </label>
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-text-tertiary">
+          Search
+          <div className="relative">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => updateSearch(e.target.value)}
+              maxLength={MAX_QUERY_LENGTH}
+              placeholder="Search text, answers, explanations..."
+              className="w-64 rounded-md border border-border-strong bg-surface px-3 py-2 pr-7 text-sm text-text-primary"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-tertiary transition-colors hover:text-text-primary"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </label>
       </div>
 
       {/* Event table */}
@@ -255,13 +307,25 @@ export function AnnotationsReview({
           {error}
         </div>
       ) : !data || data.events.length === 0 ? (
-        <EmptyState hasFilters={!!(annotatorId || type || bucket)} />
+        <EmptyState
+          hasFilters={
+            !!(
+              annotatorId ||
+              type ||
+              bucket ||
+              search.trim().length >= MIN_QUERY_LENGTH
+            )
+          }
+        />
       ) : (
         <div className="rounded-lg border border-border bg-surface shadow-sm">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <span className="text-sm text-text-secondary">
               Showing {data.offset + 1}-{data.offset + data.events.length} of{" "}
               {data.total} event{data.total === 1 ? "" : "s"}
+              {search.trim().length >= MIN_QUERY_LENGTH && (
+                <> for &quot;{search.trim()}&quot;</>
+              )}
             </span>
             <div className="flex items-center gap-2">
               <button

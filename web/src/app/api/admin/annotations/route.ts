@@ -5,20 +5,35 @@ import { bucketLabel } from "@/lib/buckets";
 import {
   parseAnnotationsQuery,
   excerpt,
+  foldIgala,
   type AnnotationType,
 } from "@/lib/annotations-query";
-import type { EvalBucket, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { EvalBucket } from "@prisma/client";
 
 /**
  * GET /api/admin/annotations — researcher-gated, unified list of annotation
  * events across the three annotator-authored tables, newest first.
  *
  * Query: annotatorId?, type? (pairwise|cold|edit), bucket?, includeDemo?
- *        (default false), offset? / cursor?, limit? (default 25, max 100).
+ *        (default false), offset? / cursor?, limit? (default 25, max 100),
+ *        q? (free-text search, 2-100 chars after trim; see below).
  *
  * Row shape: { type, id, createdAt, annotator, prompt|null, summary } where
  * summary is type-specific. Also returns `total` for the current filter so the
  * UI can paginate.
+ *
+ * Free-text search (`q`): matches prompt text (all three types) plus each
+ * type's own free-text fields (pairwise.explanation; cold.answerText,
+ * englishGloss, instructionIg; edit.correctedText, originalText, rationale).
+ * Matching is case- and diacritic-insensitive — see `foldIgala` in
+ * annotations-query.ts and `FOLD_FROM`/`FOLD_TO` below, which must fold text
+ * identically so a plain-ASCII query finds accented Igala text. Prisma's
+ * `contains` can't diacritic-fold, so the search itself runs as `$queryRaw`
+ * id-lookups (one per table, plus one against Prompt for prompt-text hits),
+ * and the resulting id sets are merged into the normal Prisma `where` as an
+ * `OR` branch alongside the existing filters — the bounded-fetch/count
+ * pattern above is otherwise unchanged, so counts stay correct under search.
  *
  * Why we build the unified list in JS rather than one SQL union: the three
  * tables have different promptId semantics — PairwiseComparison.promptId is the
@@ -72,6 +87,13 @@ export async function GET(req: Request) {
   // first) rather than loading the whole matching table — see file header.
   const fetchCap = offset + limit;
 
+  // Free-text search: resolve every matching id up front (a handful of
+  // bounded $queryRaw lookups), then fold the result into each type's
+  // `where` below as an OR branch. `search` is null when there's no active
+  // query, so the filter is a no-op in that case.
+  const foldedQ = query.q ? foldIgala(query.q) : null;
+  const search = foldedQ ? await resolveSearchMatches(foldedQ) : null;
+
   // Resolve prompt text/bucket for pairwise rows, whose promptId is the PUBLIC
   // string. One lookup keyed by that string; cold/edit use their FK relation.
   const events: EventRow[] = [];
@@ -82,6 +104,16 @@ export async function GET(req: Request) {
       ...demoFilter,
       ...annotatorFilter,
       ...bucketFilter,
+      // PairwiseComparison.promptId is the PUBLIC prompt string (see file
+      // header), so prompt-text hits join on `search.promptPublicIds`.
+      ...(search
+        ? {
+            OR: [
+              { promptId: { in: search.promptPublicIds } },
+              { id: { in: search.pairwiseIds } },
+            ],
+          }
+        : {}),
     };
     const [rows, count] = await Promise.all([
       prisma.pairwiseComparison.findMany({
@@ -136,6 +168,16 @@ export async function GET(req: Request) {
       ...demoFilter,
       ...annotatorFilter,
       ...bucketFilter,
+      // ColdAuthorAnswer.promptId is a cuid FK to Prompt.id, so prompt-text
+      // hits join on `search.promptCuids`.
+      ...(search
+        ? {
+            OR: [
+              { promptId: { in: search.promptCuids } },
+              { id: { in: search.coldIds } },
+            ],
+          }
+        : {}),
     };
     const [rows, count] = await Promise.all([
       prisma.coldAuthorAnswer.findMany({
@@ -178,6 +220,17 @@ export async function GET(req: Request) {
       ...demoFilter,
       ...annotatorFilter,
       ...bucketFilter,
+      // OutputEdit reaches its prompt via modelOutput (see file header) —
+      // its own `promptId` column is a denormalized copy we don't rely on —
+      // so prompt-text hits join through that relation on `search.promptCuids`.
+      ...(search
+        ? {
+            OR: [
+              { modelOutput: { promptId: { in: search.promptCuids } } },
+              { id: { in: search.editIds } },
+            ],
+          }
+        : {}),
     };
     const [rows, count] = await Promise.all([
       prisma.outputEdit.findMany({
@@ -296,6 +349,83 @@ async function distinctAnnotators(opts: {
     orderBy: { name: "asc" },
   });
   return users;
+}
+
+// ─── Free-text search ───────────────────────────────────────────────────
+//
+// Diacritic fold for the SQL side: lower() the column (Postgres's built-in
+// lower() correctly downcases the Latin Extended-A/B codepoints below — this
+// was verified against this database, not assumed), then translate() every
+// precomposed accented letter actually used across ColdAuthorAnswer.
+// {answerText,englishGloss,instructionIg}, PairwiseComparison.explanation,
+// OutputEdit.{correctedText,originalText,rationale}, and Prompt.text (all
+// rows scanned, not sampled) to its plain ASCII base, and delete the
+// standalone combining marks that show up trailing a dot-below vowel + tone
+// (Unicode has no single codepoint for e.g. "dot-below e + acute", so it's
+// stored as the precomposed dot-below letter followed by a bare combining
+// acute — confirmed present in production ColdAuthorAnswer rows). Must fold
+// identically to `foldIgala` in annotations-query.ts, which folds the query
+// string on the JS side — see that function's doc comment for the full
+// data-shape writeup.
+const FOLD_FROM = "àáãāèéẹẽìíîīòóõọùúụñǹṅ" + "̣̀́̃̄̇";
+const FOLD_TO = "aaaaeeeeiiiioooouuunnn";
+
+interface SearchMatches {
+  promptCuids: string[]; // Prompt.id hits — join target for cold + edit
+  promptPublicIds: string[]; // Prompt.promptId hits — join target for pairwise
+  pairwiseIds: string[];
+  coldIds: string[];
+  editIds: string[];
+}
+
+/** Resolve every id a free-text search matches, across the Prompt table and
+ * each annotation type's own free-text columns. Called once per request
+ * (not once per type) since Prompt is shared across all three. */
+async function resolveSearchMatches(foldedQ: string): Promise<SearchMatches> {
+  const [promptRows, pairwiseIds, coldIds, editIds] = await Promise.all([
+    prisma.$queryRaw<{ id: string; promptId: string }[]>(
+      Prisma.sql`SELECT id, "promptId" FROM wikitongues."Prompt" WHERE translate(lower("text"), ${FOLD_FROM}, ${FOLD_TO}) LIKE '%' || ${foldedQ} || '%'`,
+    ),
+    searchIds('wikitongues."PairwiseComparison"', ["explanation"], foldedQ),
+    searchIds(
+      'wikitongues."ColdAuthorAnswer"',
+      ["answerText", "englishGloss", "instructionIg"],
+      foldedQ,
+    ),
+    searchIds(
+      'wikitongues."OutputEdit"',
+      ["correctedText", "originalText", "rationale"],
+      foldedQ,
+    ),
+  ]);
+
+  return {
+    promptCuids: promptRows.map((p) => p.id),
+    promptPublicIds: promptRows.map((p) => p.promptId),
+    pairwiseIds,
+    coldIds,
+    editIds,
+  };
+}
+
+/** Diacritic-folded, case-insensitive `id` lookup across one or more text
+ * columns on a single table. `table` and `columns` are always literals
+ * hardcoded in this file (never request-derived) so splicing them as raw SQL
+ * is safe; `foldedQ` is the only untrusted value and is always passed as a
+ * bound parameter, never interpolated into the query text. */
+async function searchIds(
+  table: string,
+  columns: readonly string[],
+  foldedQ: string,
+): Promise<string[]> {
+  const perColumn = columns.map(
+    (col) =>
+      Prisma.sql`translate(lower(coalesce(${Prisma.raw(`"${col}"`)}, '')), ${FOLD_FROM}, ${FOLD_TO}) LIKE '%' || ${foldedQ} || '%'`,
+  );
+  const rows = await prisma.$queryRaw<{ id: string }[]>(
+    Prisma.sql`SELECT id FROM ${Prisma.raw(table)} WHERE ${Prisma.join(perColumn, " OR ")}`,
+  );
+  return rows.map((r) => r.id);
 }
 
 function pairwiseSummary(winner: string, confidence: number | null): string {
