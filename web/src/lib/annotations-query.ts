@@ -16,6 +16,8 @@ export type AnnotationType = (typeof ANNOTATION_TYPES)[number];
 
 export const DEFAULT_LIMIT = 25;
 export const MAX_LIMIT = 100;
+export const MAX_QUERY_LENGTH = 100;
+export const MIN_QUERY_LENGTH = 2;
 
 export interface AnnotationsQuery {
   annotatorId: string | null;
@@ -24,6 +26,10 @@ export interface AnnotationsQuery {
   includeDemo: boolean;
   limit: number;
   offset: number;
+  /** Free-text search, already capped/trimmed; null when absent or too short
+   * to be worth searching (see `parseSearchQuery`). Matching against stored
+   * text still needs diacritic folding — see `foldIgala` below. */
+  q: string | null;
 }
 
 export function isAnnotationType(value: unknown): value is AnnotationType {
@@ -72,7 +78,17 @@ export function parseAnnotationsQuery(
     includeDemo,
     limit,
     offset,
+    q: parseSearchQuery(params.get("q")),
   };
+}
+
+/** Cap at MAX_QUERY_LENGTH chars, trim, then drop anything left shorter than
+ * MIN_QUERY_LENGTH — a 1-char search is too broad to be useful and would
+ * force a full-table LIKE scan on every keystroke. */
+function parseSearchQuery(raw: string | null): string | null {
+  if (typeof raw !== "string") return null;
+  const capped = raw.slice(0, MAX_QUERY_LENGTH).trim();
+  return capped.length >= MIN_QUERY_LENGTH ? capped : null;
 }
 
 function clampInt(
@@ -92,4 +108,29 @@ export function excerpt(text: string, n = 80): string {
   const flat = text.replace(/\s+/g, " ").trim();
   if (flat.length <= n) return flat;
   return flat.slice(0, n).trimEnd() + "…";
+}
+
+/**
+ * Diacritic-fold Igala/Latin text for search, e.g. "Ọdudu" / "ódùdù" /
+ * "ọdúdù" all fold to "odudu" so a researcher typing plain "odudu" finds
+ * them all.
+ *
+ * NFD-decomposes the string (splitting every precomposed accented letter
+ * into a plain base letter + one or more combining marks), strips every
+ * Unicode combining diacritical mark (U+0300-U+036F), then lowercases.
+ * Checked against production annotation text (ColdAuthorAnswer.answerText,
+ * PairwiseComparison.explanation, Prompt.text): diacritics there are a mix
+ * of precomposed letters (e.g. "ẹ" U+1EB9, "ọ" U+1ECD, "á" U+00E1) AND, for
+ * toned dotted vowels that have no single precomposed codepoint (e.g. "ẹ"
+ * with an acute tone), a precomposed base followed by a standalone
+ * combining mark (e.g. "ẹ" + U+0301). NFD-then-strip handles both shapes
+ * uniformly: a precomposed letter decomposes into base + mark before
+ * stripping, and an already-standalone mark is stripped directly.
+ *
+ * Must fold identically to the `translate()` SQL expression the annotations
+ * route runs against the database columns, so both sides of the search
+ * agree — see src/app/api/admin/annotations/route.ts.
+ */
+export function foldIgala(text: string): string {
+  return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
