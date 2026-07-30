@@ -15,6 +15,7 @@
     "db:sql": "prisma migrate diff --from-empty --to-schema-datamodel ./prisma/schema.prisma --script",
     "seed": "tsx prisma/seed.ts",
     "seed:prompt-bank": "tsx prisma/seed-prompt-bank.ts",
+    "seed:longform": "tsx prisma/seed-prompt-longform.ts",
     "seed:rag": "tsx prisma/seed-rag.ts",
     "seed:arena": "tsx prisma/seed-arena.ts",
     "seed:outputs": "tsx prisma/seed-outputs.ts",
