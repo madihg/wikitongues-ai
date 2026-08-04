@@ -10,6 +10,8 @@
  * Env: TOGETHER_API_KEY.
  */
 
+import { createHash } from "crypto";
+
 const TOGETHER_API = "https://api.together.xyz/v1";
 
 /** Open-weights base models Together can fine-tune (SFT + DPO). */
@@ -34,22 +36,30 @@ function apiKey(): string {
 }
 
 /**
- * Upload a JSONL training file. Together responds to the POST with a 302 whose
- * Location is a presigned R2 URL and whose `x-together-file-id` header is the file
- * id; we then PUT the bytes directly to that URL. Returns the Together file id.
+ * Upload a JSONL training file, matching Together's current 3-step flow (as the
+ * official SDK does it):
+ *   1. POST /files with {purpose, file_name, file_type, sha256 checksum}; Together
+ *      302s to a presigned R2 URL and returns the file id in `x-together-file-id`.
+ *   2. PUT the raw bytes to that presigned URL.
+ *   3. POST /files/{id}/preprocess to FINALIZE — without this the file stays at
+ *      bytes=0 / PENDING and the fine-tune start rejects it with
+ *      "Training file upload did not finish".
+ * Returns the Together file id.
  */
 export async function uploadTrainingFile(
   jsonl: string,
   fileName: string,
 ): Promise<string> {
+  const bytes = Buffer.from(jsonl, "utf8");
+  const checksum = createHash("sha256").update(bytes).digest("hex");
+
+  // 1. Request a presigned upload URL. The POST carries only metadata (no file
+  //    part); the checksum + file_type are required by the current endpoint.
   const form = new FormData();
   form.append("purpose", "fine-tune");
   form.append("file_name", fileName);
-  form.append(
-    "file",
-    new Blob([jsonl], { type: "application/jsonl" }),
-    fileName,
-  );
+  form.append("file_type", "jsonl");
+  form.append("checksum", checksum);
 
   const res = await fetch(`${TOGETHER_API}/files`, {
     method: "POST",
@@ -57,6 +67,16 @@ export async function uploadTrainingFile(
     body: form,
     redirect: "manual", // we need to read the 302 Location + file-id headers
   });
+
+  // Together dedupes by checksum: an identical dataset returns 409 with the id of
+  // the already-uploaded file. Reuse it (it is already stored) rather than failing.
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => ({}))) as { file_id?: string };
+    if (body.file_id) {
+      await waitForFileProcessed(body.file_id);
+      return body.file_id;
+    }
+  }
 
   const fileId = res.headers.get("x-together-file-id");
   const location = res.headers.get("location");
@@ -67,11 +87,54 @@ export async function uploadTrainingFile(
     );
   }
 
-  const put = await fetch(location, { method: "PUT", body: jsonl });
+  // 2. PUT the raw bytes to the presigned URL.
+  const put = await fetch(location, { method: "PUT", body: bytes });
   if (!put.ok) {
     throw new Error(`Together presigned upload failed: ${put.status}`);
   }
+
+  // 3. Finalize so Together ingests the R2 object.
+  const pre = await fetch(`${TOGETHER_API}/files/${fileId}/preprocess`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey()}` },
+  });
+  if (!pre.ok) {
+    const text = await pre.text().catch(() => "");
+    throw new Error(
+      `Together file preprocess/finalize failed (${pre.status}): ${text}`,
+    );
+  }
+
+  // 4. Wait for Together to finish line-counting the file. Processing goes
+  //    PENDING -> QUEUED -> RUNNING -> COMPLETED, and LineCount is only known at
+  //    COMPLETED. Starting a fine-tune before then fails with "batch size is zero".
+  await waitForFileProcessed(fileId);
+
   return fileId;
+}
+
+/** Poll a file until Together has processed it (COMPLETED with a line count). */
+async function waitForFileProcessed(fileId: string): Promise<void> {
+  const deadline = Date.now() + 300_000; // 5 min ceiling; training files are small
+  let last = "";
+  while (Date.now() < deadline) {
+    const res = await fetch(`${TOGETHER_API}/files/${fileId}`, {
+      headers: { Authorization: `Bearer ${apiKey()}` },
+    });
+    if (res.ok) {
+      const d = (await res.json()) as {
+        processing_status?: string;
+        LineCount?: number;
+      };
+      last = d.processing_status ?? "";
+      if (last === "COMPLETED" && (d.LineCount ?? 0) > 0) return;
+      if (last === "FAILED" || last === "ERROR") {
+        throw new Error(`Together file processing failed (status ${last})`);
+      }
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  throw new Error(`Together file not processed in time (last status: ${last})`);
 }
 
 export interface TogetherStartArgs {
@@ -102,30 +165,50 @@ export async function startFineTune(args: TogetherStartArgs): Promise<string> {
     training_method: trainingMethod,
     n_epochs: args.nEpochs ?? 3,
     learning_rate: args.learningRate ?? 1e-5,
+    // The raw REST API does NOT resolve batch_size:"max" (the SDK computes that
+    // client-side from model limits); omitting it or sending "max" fails with
+    // "batch size is zero". Send a concrete integer. Likewise the API applies no
+    // client-side defaults, so send the scalars it validates (checkpoints/evals).
+    batch_size: args.batchSize ?? 8,
+    n_checkpoints: 1,
+    n_evals: 0,
   };
-  if (args.batchSize != null) body.batch_size = args.batchSize;
 
-  const res = await fetch(`${TOGETHER_API}/fine-tunes`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
+  // The uploaded training file is validated asynchronously by Together; starting
+  // the job too soon 400s with "Training file upload did not finish". Retry that
+  // one transient case with backoff (a 400 creates no job, so retrying is safe).
+  const MAX_ATTEMPTS = 8;
+  let lastErr = "";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const res = await fetch(`${TOGETHER_API}/fine-tunes`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { id?: string };
+      if (!data.id)
+        throw new Error("Together fine-tune start returned no job id");
+      return data.id;
+    }
     const text = await res.text().catch(() => "");
-    throw new Error(`Together fine-tune start failed (${res.status}): ${text}`);
+    lastErr = `Together fine-tune start failed (${res.status}): ${text}`;
+    const transient = res.status === 400 && /upload did not finish/i.test(text);
+    if (!transient || attempt === MAX_ATTEMPTS) break;
+    await new Promise((r) => setTimeout(r, 5000)); // let file validation settle
   }
-  const data = (await res.json()) as { id?: string };
-  if (!data.id) throw new Error("Together fine-tune start returned no job id");
-  return data.id;
+  throw new Error(lastErr);
 }
 
 export interface TogetherPollResult {
   status: "running" | "succeeded" | "failed";
   outputModelId?: string;
   error?: string;
+  /** Real billed cost in USD, when Together reports one. Beats our estimate. */
+  costUsd?: number;
 }
 
 const TERMINAL_OK = new Set(["completed"]);
@@ -144,10 +227,20 @@ export async function pollFineTune(jobId: string): Promise<TogetherPollResult> {
     status?: string;
     output_name?: string;
     error?: string;
+    total_price?: number;
   };
   const status = (data.status ?? "").toLowerCase();
   if (TERMINAL_OK.has(status)) {
-    return { status: "succeeded", outputModelId: data.output_name };
+    return {
+      status: "succeeded",
+      outputModelId: data.output_name,
+      // Together bills total_price in nano-USD (1e-9 USD): a $4.00 run comes
+      // back as 4000000000. Convert here so callers only ever see dollars.
+      costUsd:
+        typeof data.total_price === "number"
+          ? data.total_price / 1_000_000_000
+          : undefined,
+    };
   }
   if (TERMINAL_BAD.has(status)) {
     return {

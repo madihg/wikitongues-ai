@@ -180,6 +180,7 @@ const togetherProvider: FineTuneProvider = {
       nEpochs: hpNumber(job, "nEpochs"),
       learningRate: hpNumber(job, "learningRate"),
       dpoBeta: hpNumber(job, "dpoBeta"),
+      batchSize: hpNumber(job, "batchSize"),
     });
     return { providerJobId, providerFileId };
   },
@@ -191,12 +192,15 @@ const togetherProvider: FineTuneProvider = {
     if (r.status !== "succeeded") {
       return { status: r.status, error: r.error };
     }
+    // Prefer Together's real billed amount (already converted to USD by the
+    // adapter); fall back to the estimate only when they do not report one.
     const costUsd = roundUsd(
-      estimateFineTuneCostUsd({
-        baseModelId: job.baseModelId,
-        nRows: job.nTrainingRows ?? 0,
-        nEpochs: hpNumber(job, "nEpochs") ?? 3,
-      }),
+      r.costUsd ??
+        estimateFineTuneCostUsd({
+          baseModelId: job.baseModelId,
+          nRows: job.nTrainingRows ?? 0,
+          nEpochs: hpNumber(job, "nEpochs") ?? 3,
+        }),
     );
     return { status: "succeeded", outputModelId: r.outputModelId, costUsd };
   },
