@@ -226,6 +226,8 @@ export async function pollFineTune(jobId: string): Promise<TogetherPollResult> {
   const data = (await res.json()) as {
     status?: string;
     output_name?: string;
+    model_output_name?: string;
+    adapter_output_name?: string;
     error?: string;
     total_price?: number;
   };
@@ -233,7 +235,12 @@ export async function pollFineTune(jobId: string): Promise<TogetherPollResult> {
   if (TERMINAL_OK.has(status)) {
     return {
       status: "succeeded",
-      outputModelId: data.output_name,
+      // The servable model id comes back as `model_output_name` (e.g.
+      // "acct/Qwen3-14B-92ef7bd3"); `output_name` is not returned by the current
+      // API. Falling through to undefined here makes the caller register a
+      // synthetic id that no inference endpoint can serve, so read all spellings.
+      outputModelId:
+        data.model_output_name ?? data.output_name ?? data.adapter_output_name,
       // Together bills total_price in nano-USD (1e-9 USD): a $4.00 run comes
       // back as 4000000000. Convert here so callers only ever see dollars.
       costUsd:
