@@ -1,0 +1,141 @@
+{
+  "version": "rung-c-v1",
+  "generatedAt": "2026-07-29",
+  "fineTune": {
+    "dbJobId": "cms6ponqh0000jp43wsp1j7c8",
+    "togetherJobId": "ft-e63efcfc-8670",
+    "baseModel": "Qwen/Qwen3-14B",
+    "outputModelId": "madihalim_2eb2/Qwen3-14B-92ef7bd3",
+    "method": "sft",
+    "trainingType": "LoRA (r=64, alpha=128)",
+    "trainingRows": 318,
+    "trainingTokens": 71041,
+    "epochs": 3,
+    "batchSize": 8,
+    "billedCostUsd": 4,
+    "heldOutLeakage": 0
+  },
+  "candidate": {
+    "id": "cms6q30qh0001jp8v820l2ta8",
+    "name": "Qwen3-14B SFT (Igala cold-gold)",
+    "provider": "openai-compatible",
+    "apiEndpoint": "https://api.together.xyz/v1",
+    "baseModelId": "madihalim_2eb2/Qwen3-14B-92ef7bd3",
+    "archived": false
+  },
+  "inference": {
+    "serverless": false,
+    "blocked": true,
+    "blocker": "Cannot serve the tuned model on Together at all right now, so zero tuned outputs exist.",
+    "evidence": [
+      "Serverless merged model madihalim_2eb2/Qwen3-14B-92ef7bd3 -> 400 model_not_available: 'Unable to access non-serverless model ... create and start a new dedicated endpoint'.",
+      "Serverless adapter madihalim(-|_)2eb2/Qwen3-14B-92ef7bd3-adapter -> 404 Unable to access model.",
+      "Dedicated Endpoints v1 create -> 403 endpoints_v1_create_access_disabled: 'legacy v1 API no longer supports creating or restarting endpoints; migrate to v2'.",
+      "Dedicated Endpoints v2 deployment create -> 400 'deployment.config (or deployment.config_id) is required'.",
+      "No config revision exists to satisfy that requirement: GET /v2/projects/{proj}/configs?referenceModel=... returns an empty list for the tuned model, for its public base model, and for the previously deployed singulars model; the official CLI agrees ('tg beta models configs ml_CdXDyQ1cCsmwYSAtydfYV' -> 'No model configs found') and 'tg beta endpoints deploy' fails with 'No configs found for model'.",
+      "The v2 configs resource is read-only in the official SDK and REST API (retrieve/list only), so a config cannot be created from the API."
+    ],
+    "note": "This is a Together platform-side gap (v1 creation disabled, v2 config catalogue empty for this project), not an application bug. No GPU was ever provisioned and nothing is billing: a v1 endpoint object was created then immediately deleted, and 'tg beta endpoints ls' reports no dedicated inference endpoints.",
+    "hardwareIfItHadWorked": "1x_nvidia_h100_80gb_sxm at 549 cents/hour (~$1.40 for a 15 minute generation window)",
+    "endpoint": {
+      "created": false,
+      "tornDown": true,
+      "minutesUp": 0,
+      "estCostUsd": 0,
+      "note": "v1 endpoint was created then immediately deleted during the failed attempt; verified zero endpoints remain."
+    }
+  },
+  "generation": {
+    "generated": 0,
+    "failed": 43,
+    "decoding": {
+      "temperature": 0,
+      "maxTokens": 1024
+    }
+  },
+  "metricDefinitions": {
+    "englishFnWordShare": "share of outputs whose first 8 words contain any of {the,is,are,you,would,for,to} (LOWER is better)",
+    "toneShare": "share of outputs containing a combining tone mark / dotted vowel after NFD (HIGHER is better)"
+  },
+  "metrics": {
+    "tuned_qwen3_14b_sft": {
+      "n": 0
+    },
+    "baseline_all": {
+      "n": 88,
+      "englishFnWordShare": 0.023,
+      "toneShare": 0.977,
+      "meanChars": 69,
+      "meanWords": 12.3
+    },
+    "baseline_byModel": {
+      "gpt": {
+        "n": 86,
+        "englishFnWordShare": 0.023,
+        "toneShare": 0.977,
+        "meanChars": 67.6,
+        "meanWords": 12.1
+      },
+      "gemini": {
+        "n": 2,
+        "englishFnWordShare": 0,
+        "toneShare": 1,
+        "meanChars": 127,
+        "meanWords": 20.5
+      }
+    }
+  },
+  "samples": [
+    {
+      "promptId": "ig_bank_orth_001",
+      "bucket": "orthography",
+      "prompt": "Write the Igala word for 'water' with correct spelling and tone marks.",
+      "gold": "Omi",
+      "tuned": null,
+      "baselineGpt": "ámẹ́"
+    },
+    {
+      "promptId": "ig_bank_gram_001",
+      "bucket": "grammar_tone",
+      "prompt": "Translate 'The woman cooks food' into Igala, keeping correct word order.",
+      "gold": "Ònòbulẹ lẹ àyùjẹñwù",
+      "tuned": null,
+      "baselineGpt": "Ọmọ́bìnrin kẹ́ nyá ànyí."
+    },
+    {
+      "promptId": "ig_bank_lex_003",
+      "bucket": "lexicon_disambig",
+      "prompt": "Give the Igala word for 'hand'.",
+      "gold": "Ọwọ",
+      "tuned": null,
+      "baselineGpt": "Ọwó"
+    },
+    {
+      "promptId": "ig_dial_001",
+      "bucket": "dialectal_fidelity",
+      "prompt": "Provide a greeting that varies across Igala dialects and note the differences.",
+      "gold": "Ọ lo’dudu",
+      "tuned": null,
+      "baselineGpt": "N'ime Igala, e nwere ụfọdụ iyọọda n'usoro ikwasi eka. N'ogugu, unu wula:\n\n1. **Ibaji Dialect:** \"Alo!\" - Nke a bụ ụzọ ha si kwasi eka, nnọọ mkpirikpi.\n2. **Idah Dialect:** \"Alo n'omi!\" - Ha na-agbakwunye \"n'omi\" iji kpọọ mmiri, dịkarịsịrị mkpa n'ebe ahụ.\n3. **Dekina Dialect:** \"Alo n'Ọmumu!\" - Ha na-eji \"n'Ọmumu\" maka ikwasi eka, na-egosi ọnọdụ obi ọma.\n\nỌdịiche dị na ebe dị iche iche bụ ihe na-eme ka asụsụ Igala sie ike."
+    },
+    {
+      "promptId": "ig_auth_001",
+      "bucket": "authenticity",
+      "prompt": "Write a short, natural Igala blessing as a community member would say it, not back-translated from English.",
+      "gold": "Ọjọ ki deñyo ñwe",
+      "tuned": null,
+      "baselineGpt": "Ọjọ́ kpá á, Olójo k'ọ́lú ẹ́, kẹ́ gbádú, kẹ́ lùmọ́, kẹ́ chọ́mẹ́. Adu'a mi kpá kẹ́ rọ́bọ́, kẹ́ wùnú, kẹ́ yínyá ányá gbọ́lọ́. Ojo chọ́mẹ́, ẹ́bẹ́ mi kpá kẹ́ yíye kpá, kẹ́ jọ ányá kpá wọ́lọ́."
+    }
+  ],
+  "arena": {
+    "frozenPrompts": 43,
+    "frozenPromptsWithTunedOutput": 0,
+    "outputsPerFrozenPrompt": [2, 3],
+    "annotators": 6,
+    "annotatorPromptAssignments": 0,
+    "assignmentsIncludingTuned": 0,
+    "shareTunedVsBaseline": 0,
+    "promptsWhereEveryAnnotatorSeesTuned": 0,
+    "promptsWhereNoAnnotatorSeesTuned": 0
+  }
+}
