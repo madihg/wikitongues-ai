@@ -3,6 +3,8 @@ import {
   priceForModel,
   estimateGenerationCostUsd,
   estimateFineTuneCostUsd,
+  fineTuneCostFromTokensUsd,
+  fineTuneRatePerMTokens,
 } from "./pricing";
 
 describe("priceForModel", () => {
@@ -57,5 +59,42 @@ describe("estimateFineTuneCostUsd", () => {
       nRows: 500,
     });
     expect(small).toBeLessThan(big);
+  });
+});
+
+describe("fineTuneRatePerMTokens", () => {
+  it("matches the most specific OpenAI snapshot first", () => {
+    // gpt-4.1-mini must not fall through to the (much dearer) gpt-4.1 rate.
+    expect(fineTuneRatePerMTokens("gpt-4.1-mini-2025-04-14")).toBe(5);
+    expect(fineTuneRatePerMTokens("gpt-4.1-nano-2025-04-14")).toBe(1.5);
+    expect(fineTuneRatePerMTokens("gpt-4.1-2025-04-14")).toBe(25);
+    expect(fineTuneRatePerMTokens("gpt-4o-mini-2024-07-18")).toBe(3);
+  });
+
+  it("still resolves a tuned model id back to its base rate", () => {
+    expect(
+      fineTuneRatePerMTokens("ft:gpt-4.1-mini-2025-04-14:personal:igala:abc"),
+    ).toBe(5);
+  });
+});
+
+describe("fineTuneCostFromTokensUsd", () => {
+  it("prices the provider's reported trained tokens", () => {
+    // 200k trained tokens @ $5/M = $1.00
+    expect(
+      fineTuneCostFromTokensUsd({
+        baseModelId: "gpt-4.1-mini-2025-04-14",
+        trainedTokens: 200_000,
+      }),
+    ).toBeCloseTo(1, 5);
+  });
+
+  it("is zero for a zero-token job", () => {
+    expect(
+      fineTuneCostFromTokensUsd({
+        baseModelId: "gpt-4.1-mini-2025-04-14",
+        trainedTokens: 0,
+      }),
+    ).toBe(0);
   });
 });
