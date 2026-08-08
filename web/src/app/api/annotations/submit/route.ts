@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isRubricV2Axis, RUBRIC_VERSION } from "@/lib/buckets";
+import { sanitizeFailureTags, failureTagSides } from "@/lib/failure-tags";
+import { sanitizeDialect } from "@/lib/dialects";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -10,12 +12,19 @@ import type { Prisma } from "@prisma/client";
  * artifacts, each elicited as a separate act so "the signals agree" stays
  * meaningful:
  *   1. PairwiseComparison  — winner (a|b|tie|both_inadequate) + confidence + why
+ *                            + per-output failure tags (see below)
  *   2. RubricAxisScore[]   — rubric v2 (Lydia's axes) on the WINNER only,
  *                            0-5 per axis (0 = completely wrong) or null = N/A
  *   3. OutputEdit          — inline correction of the winner (gold SFT target)
  *   4. ColdAuthorAnswer    — the annotator's own answer, authored before models
  *                            were shown (gold-first), OR a salvage rewrite when
  *                            both outputs were inadequate.
+ *
+ * Failure tags (failureTagsA / failureTagsB) are the cheap diagnostic that fills
+ * the gap the rubric leaves: the rubric only scores a WINNER, and ~99% of live
+ * comparisons end "both inadequate", so almost nothing was being recorded about
+ * HOW models fail. Unknown tag keys are DROPPED rather than rejected - a stale
+ * client must never 500 an annotator's episode.
  *
  * The explanation is encouraged but has NO minimum length (2026-07-02 call).
  * Demo-session submissions are flagged isDemo=true and excluded everywhere
@@ -39,6 +48,9 @@ interface AuthoredInput {
   // The prompt/instruction itself rewritten in Igala, so one episode can mint two
   // training rows (English-instruction and Igala-instruction, both -> the answer).
   instructionIg?: string;
+  // Which Igala variety the answer is written in. Unknown values become null -
+  // the option list is provisional, so a stale client must not fail a write.
+  dialect?: string | null;
   consentBenchmark?: boolean;
   consentTraining?: boolean;
 }
@@ -83,6 +95,7 @@ function parseAuthored(raw: unknown): AuthoredInput | null {
     answerText: o.answerText.trim(),
     englishGloss: gloss,
     instructionIg,
+    dialect: sanitizeDialect(o.dialect),
     consentBenchmark: o.consentBenchmark !== false,
     consentTraining: o.consentTraining !== false,
   };
@@ -108,6 +121,8 @@ export async function POST(req: Request) {
     confidence,
     explanation,
     rubricAxes,
+    failureTagsA,
+    failureTagsB,
     edit,
     coldAuthor,
     salvageAnswer,
@@ -220,7 +235,17 @@ export async function POST(req: Request) {
 
   const winnerOutput = win === "a" ? outputA : win === "b" ? outputB : null;
 
+  // Failure tags. Unknown keys are dropped (never a 400/500), and tags are kept
+  // only for the sides the pick actually offers them on - so a client that
+  // leaves stale chips selected after switching the winner can't record "the
+  // winning output is not Igala".
+  const sides = failureTagSides(win);
+  const tagsA = sides.a ? sanitizeFailureTags(failureTagsA) : [];
+  const tagsB = sides.b ? sanitizeFailureTags(failureTagsB) : [];
+
   const ops: Prisma.PrismaPromise<unknown>[] = [
+    // select only id - RETURNING all scalars 500s whenever the deployed client
+    // knows a column the database hasn't been migrated to yet.
     prisma.pairwiseComparison.create({
       data: {
         promptId,
@@ -230,10 +255,13 @@ export async function POST(req: Request) {
         winner: win,
         confidence: conf,
         explanation: explanationText,
+        failureTagsA: tagsA,
+        failureTagsB: tagsB,
         annotatorId,
         isDemo,
         demoSessionId: isDemo ? demoSessionId : null,
       },
+      select: { id: true },
     }),
   ];
 
@@ -323,6 +351,7 @@ export async function POST(req: Request) {
           bucket,
           answerText: cold.answerText,
           englishGloss: cold.englishGloss ?? null,
+          dialect: cold.dialect ?? null,
           provenance: "speaker_authored_sourcefree",
           consentBenchmark: cold.consentBenchmark ?? true,
           consentTraining: cold.consentTraining ?? true,
@@ -352,6 +381,7 @@ export async function POST(req: Request) {
             bucket,
             answerText: salvage.answerText,
             englishGloss: salvage.englishGloss ?? null,
+            dialect: salvage.dialect ?? null,
             provenance: "corrected_from_inadequate",
             consentBenchmark: salvage.consentBenchmark ?? true,
             consentTraining: salvage.consentTraining ?? true,

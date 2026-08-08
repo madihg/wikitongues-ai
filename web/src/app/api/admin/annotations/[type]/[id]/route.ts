@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
 import { bucketLabel, rubricV2Label } from "@/lib/buckets";
+import { failureTagLabel } from "@/lib/failure-tags";
+import { dialectLabel } from "@/lib/dialects";
 import { isAnnotationType } from "@/lib/annotations-query";
 import { VerificationStatus } from "@prisma/client";
 
@@ -149,17 +151,28 @@ async function pairwiseDetail(id: string) {
     winner: c.winner,
     confidence: c.confidence,
     explanation: c.explanation,
+    // Per-output failure diagnostics, resolved to their plain-English labels so
+    // the reviewer never has to read raw config keys. Empty arrays are normal:
+    // ties carry none, and every comparison recorded before this shipped has none.
     outputA: {
       id: c.modelOutputA.id,
       model: modelIdentity(c.modelOutputA),
       text: c.modelOutputA.outputText,
       isWinner: c.winner === "a",
+      failureTags: c.failureTagsA.map((k) => ({
+        key: k,
+        label: failureTagLabel(k),
+      })),
     },
     outputB: {
       id: c.modelOutputB.id,
       model: modelIdentity(c.modelOutputB),
       text: c.modelOutputB.outputText,
       isWinner: c.winner === "b",
+      failureTags: c.failureTagsB.map((k) => ({
+        key: k,
+        label: failureTagLabel(k),
+      })),
     },
     context: {
       rubricAxes: rubricRows.map((r) => ({
@@ -197,6 +210,11 @@ async function coldDetail(id: string) {
       id: true,
       createdAt: true,
       answerText: true,
+      // The plain-English meaning of the answer. It was collected but never
+      // returned here, so a reviewer reading a cold answer had no way to see
+      // what the Igala actually says.
+      englishGloss: true,
+      dialect: true,
       provenance: true,
       consentBenchmark: true,
       consentTraining: true,
@@ -222,6 +240,9 @@ async function coldDetail(id: string) {
         }
       : null,
     answerText: a.answerText,
+    englishGloss: a.englishGloss,
+    dialect: a.dialect,
+    dialectLabel: a.dialect ? dialectLabel(a.dialect) : null,
     provenance: a.provenance,
     consentBenchmark: a.consentBenchmark,
     consentTraining: a.consentTraining,

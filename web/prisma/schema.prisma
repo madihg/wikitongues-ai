@@ -199,6 +199,13 @@ model PairwiseComparison {
   winner         String // "a" | "b" | "tie" | "both_inadequate"
   confidence     Int? // 1-4 self-reported confidence in the pick
   explanation    String
+  // Failure diagnostics per output — WHY an answer is wrong, as a fast
+  // multi-select. Tag keys are CONFIG (FAILURE_TAGS in src/lib/failure-tags.ts),
+  // not schema, so the set can change without a migration. Collected on the
+  // both-inadequate path (both sides) and on the LOSING side when a winner is
+  // picked; additive to the required written explanation, never a replacement.
+  failureTagsA   String[]   @default([])
+  failureTagsB   String[]   @default([])
   annotatorId    String
   epochId        String?
   evalRunId      String?
@@ -323,6 +330,10 @@ model ColdAuthorAnswer {
   // episode can mint two training rows (English-instruction -> Igala and
   // Igala-instruction -> Igala). Optional, never blocks locking.
   instructionIg      String?
+  // Which Igala variety this answer is written in. Free text, not an enum: the
+  // option list (IGALA_DIALECTS in src/lib/dialects.ts) is PROVISIONAL and
+  // awaiting confirmation from the linguistics and community leads.
+  dialect            String?
   provenance         String             @default("speaker_authored_sourcefree")
   consentBenchmark   Boolean            @default(true)
   consentTraining    Boolean            @default(true)
