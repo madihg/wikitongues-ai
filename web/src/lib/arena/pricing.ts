@@ -51,16 +51,32 @@ export function estimateGenerationCostUsd(args: {
   return (tin / 1_000_000) * p.input + (tout / 1_000_000) * p.output;
 }
 
-// Together fine-tune training rates, USD per 1M training tokens (from singulars).
+// Fine-tune TRAINING rates, USD per 1M training tokens. Together rates come from
+// singulars; OpenAI rates are the published fine-tuning training prices. Matched
+// by substring, most specific first (gpt-4.1-mini must precede gpt-4.1).
 const FINETUNE_PRICE_PER_M: { match: string; rate: number }[] = [
   { match: "llama-3.3-70b", rate: 5 },
   { match: "qwen3-14b", rate: 1 },
   { match: "mistral-nemo", rate: 1 },
+  { match: "gpt-4.1-mini", rate: 5 },
+  { match: "gpt-4.1-nano", rate: 1.5 },
+  { match: "gpt-4.1", rate: 25 },
+  { match: "gpt-4o-mini", rate: 3 },
+  { match: "gpt-4o", rate: 25 },
 ];
 const DEFAULT_FINETUNE_PRICE_PER_M = 2;
 
 // A coarse default for token count per training row (prompt + completion).
 export const APPROX_TOKENS_PER_ROW = 350;
+
+/** USD per 1M training tokens for a base model. */
+export function fineTuneRatePerMTokens(baseModelId: string): number {
+  const id = (baseModelId || "").toLowerCase();
+  return (
+    FINETUNE_PRICE_PER_M.find((r) => id.includes(r.match))?.rate ??
+    DEFAULT_FINETUNE_PRICE_PER_M
+  );
+}
 
 /** Estimate the USD cost of a fine-tune training run from row count + epochs. */
 export function estimateFineTuneCostUsd(args: {
@@ -69,15 +85,25 @@ export function estimateFineTuneCostUsd(args: {
   nEpochs?: number;
   tokensPerRow?: number;
 }): number {
-  const id = (args.baseModelId || "").toLowerCase();
-  const rate =
-    FINETUNE_PRICE_PER_M.find((r) => id.includes(r.match))?.rate ??
-    DEFAULT_FINETUNE_PRICE_PER_M;
   const tokens =
     args.nRows *
     (args.tokensPerRow ?? APPROX_TOKENS_PER_ROW) *
     (args.nEpochs ?? 3);
-  return (tokens / 1_000_000) * rate;
+  return (tokens / 1_000_000) * fineTuneRatePerMTokens(args.baseModelId);
+}
+
+/**
+ * Cost of a fine-tune from the provider's REPORTED trained-token count. Beats
+ * estimateFineTuneCostUsd whenever the provider reports tokens (OpenAI does, as
+ * `trained_tokens`, with epochs already folded in) but not a billed amount.
+ */
+export function fineTuneCostFromTokensUsd(args: {
+  baseModelId: string;
+  trainedTokens: number;
+}): number {
+  return (
+    (args.trainedTokens / 1_000_000) * fineTuneRatePerMTokens(args.baseModelId)
+  );
 }
 
 /** Round a USD amount to cents. */

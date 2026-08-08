@@ -8,13 +8,18 @@ import {
   type ExportFilters,
 } from "@/lib/arena/training-export";
 import { loadSftSourceRows } from "@/lib/arena/sft-source";
-import { estimateFineTuneCostUsd, roundUsd } from "@/lib/arena/pricing";
+import {
+  estimateFineTuneCostUsd,
+  fineTuneCostFromTokensUsd,
+  roundUsd,
+} from "@/lib/arena/pricing";
 import {
   togetherConfigured,
   uploadTrainingFile,
   startFineTune,
   pollFineTune,
 } from "@/lib/arena/together";
+import * as openaiFt from "@/lib/arena/openai-finetune";
 
 /**
  * Provider-adapter interface for the fine-tune flywheel.
@@ -22,10 +27,14 @@ import {
  * The platform collects annotations, builds a training set, and hands it to a
  * provider that actually runs the job. The closed path (a deterministic mock) is
  * fully wired so the whole flow runs on the current stack with NO external calls
- * and NO GPU — this stays the DEFAULT for the Igala pilot. "together" is a REAL
- * adapter (Together AI, the same provider used in singulars) but is OFF until
- * TOGETHER_API_KEY is set; calling it unconfigured throws a clear error. "openai"
- * stays a stub.
+ * and NO GPU — this stays the DEFAULT for dev, CI and demos. Two REAL adapters
+ * sit beside it:
+ *   - "together" (open weights, LoRA). Trains cheaply, but a tuned open-weights
+ *     checkpoint needs a dedicated GPU endpoint to serve, which this account
+ *     cannot create — so its output cannot enter the arena.
+ *   - "openai" (closed weights, hosted). Its output model id is servable on the
+ *     normal OpenAI API the moment the job finishes, with no infrastructure.
+ * Both are OFF until their API key is set; calling one unconfigured throws.
  */
 
 export interface FineTuneLaunchResult {
@@ -84,11 +93,16 @@ const mockProvider: FineTuneProvider = {
 };
 
 /**
- * Build the Together training JSONL for a job, fresh from the collected signal.
- * Reuses the same pure builders as the export path, so the contamination guard
- * (held-out prompts dropped) and the demo guard (isDemo rows excluded) both hold.
+ * Build the training JSONL for a job, fresh from the collected signal. Reuses the
+ * same pure builders as the export path, so the contamination guard (held-out
+ * prompts dropped) and the demo guard (isDemo rows excluded) both hold.
+ *
+ * Provider-agnostic on purpose: Together and OpenAI accept the identical chat
+ * shape for SFT ({"messages":[system,user,assistant]}) and the identical triple
+ * shape for preference data, so one builder feeds both and the two providers can
+ * never drift into training on differently-shaped data.
  */
-async function buildTogetherJsonl(job: FineTuneJob): Promise<string> {
+export async function buildTrainingJsonl(job: FineTuneJob): Promise<string> {
   const system = job.systemPrompt ?? "";
   const sysMsg = system ? [{ role: "system" as const, content: system }] : [];
   const filters: ExportFilters = {
@@ -151,7 +165,18 @@ async function buildTogetherJsonl(job: FineTuneJob): Promise<string> {
   const rows = await loadSftSourceRows(job);
   const examples = buildSftExamples(rows, filters);
   return toJsonl(
-    examples.map((e) => ({ messages: [...sysMsg, ...e.messages] })),
+    examples.map((e) => {
+      const user = e.messages.find((m) => m.role === "user")?.content ?? "";
+      const assistant =
+        e.messages.find((m) => m.role === "assistant")?.content ?? "";
+      // One shared row builder (see openai-finetune.ts) so the system turn is
+      // always present and the assistant turn is the Igala gold and nothing else.
+      return openaiFt.buildOpenAiChatRow({
+        systemPrompt: system,
+        prompt: user,
+        completion: assistant,
+      });
+    }),
   );
 }
 
@@ -164,7 +189,7 @@ const togetherProvider: FineTuneProvider = {
         "Together not configured — set TOGETHER_API_KEY to fine-tune on Together",
       );
     }
-    const jsonl = await buildTogetherJsonl(job);
+    const jsonl = await buildTrainingJsonl(job);
     if (!jsonl.trim()) {
       throw new Error(
         "No eligible (non-held-out, non-demo) training rows to upload",
@@ -206,28 +231,78 @@ const togetherProvider: FineTuneProvider = {
   },
 };
 
-/** A provider that is recognized but not yet wired to a real backend. */
-function makeStubProvider(name: string): FineTuneProvider {
-  const notConfigured = (): never => {
-    throw new Error(
-      `provider ${name} not configured — set credentials and wire the real adapter`,
+/**
+ * The real OpenAI adapter. Off until OPENAI_API_KEY is set.
+ *
+ * Only supervised fine-tuning is wired here: `dpo` and `continued_pretrain` are
+ * rejected rather than silently trained as SFT, since OpenAI's preference method
+ * takes a different job shape and CPT is not offered at all.
+ */
+const openaiProvider: FineTuneProvider = {
+  name: "openai",
+  async launch(job) {
+    if (!openaiFt.openAiFineTuneConfigured()) {
+      throw new Error(
+        "OpenAI not configured - set OPENAI_API_KEY to fine-tune on OpenAI",
+      );
+    }
+    if (job.method !== "sft") {
+      throw new Error(
+        `OpenAI adapter supports method "sft" only (got "${job.method}")`,
+      );
+    }
+    const jsonl = await buildTrainingJsonl(job);
+    if (!jsonl.trim()) {
+      throw new Error(
+        "No eligible (non-held-out, non-demo) training rows to upload",
+      );
+    }
+    // Verify the base snapshot really exists on this account before spending a
+    // file upload on it, and fall back to a known-tunable snapshot if not.
+    const model = await openaiFt.resolveBaseModel(job.baseModelId);
+    const fileName = `wikitongues-${job.method}-${job.id.slice(0, 8)}.jsonl`;
+    const providerFileId = await openaiFt.uploadTrainingFile(jsonl, fileName);
+    const providerJobId = await openaiFt.startFineTune({
+      fileId: providerFileId,
+      model,
+      suffix: `${job.language}-${job.method}`.slice(0, 18),
+      nEpochs: hpNumber(job, "nEpochs"),
+      batchSize: hpNumber(job, "batchSize"),
+      learningRateMultiplier: hpNumber(job, "learningRateMultiplier"),
+    });
+    return { providerJobId, providerFileId };
+  },
+  async poll(job) {
+    if (!job.providerJobId) {
+      throw new Error("Job has no OpenAI job id to poll");
+    }
+    const r = await openaiFt.pollFineTune(job.providerJobId);
+    if (r.status !== "succeeded") {
+      return { status: r.status, error: r.error };
+    }
+    // OpenAI reports billed TOKENS, not dollars, so price the reported tokens at
+    // the published training rate; fall back to the row-count estimate only when
+    // no token count came back.
+    const costUsd = roundUsd(
+      r.trainedTokens != null
+        ? fineTuneCostFromTokensUsd({
+            baseModelId: job.baseModelId,
+            trainedTokens: r.trainedTokens,
+          })
+        : estimateFineTuneCostUsd({
+            baseModelId: job.baseModelId,
+            nRows: job.nTrainingRows ?? 0,
+            nEpochs: hpNumber(job, "nEpochs") ?? 3,
+          }),
     );
-  };
-  return {
-    name,
-    async launch() {
-      return notConfigured();
-    },
-    async poll() {
-      return notConfigured();
-    },
-  };
-}
+    return { status: "succeeded", outputModelId: r.outputModelId, costUsd };
+  },
+};
 
 const PROVIDERS: Record<string, FineTuneProvider> = {
   mock: mockProvider,
   together: togetherProvider,
-  openai: makeStubProvider("openai"),
+  openai: openaiProvider,
 };
 
 /** Known provider names (for UI selectors / validation). */
