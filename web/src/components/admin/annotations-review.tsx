@@ -434,13 +434,26 @@ interface DetailBase {
   annotator: AnnotatorLite;
   prompt: PromptLite | null;
 }
+/** Failure diagnostics recorded against one output, already label-resolved by
+ *  the detail API. Absent on comparisons collected before failure tags shipped. */
+interface FailureTagLite {
+  key: string;
+  label: string;
+}
+interface OutputDetail {
+  id: string;
+  model: string;
+  text: string;
+  isWinner: boolean;
+  failureTags?: FailureTagLite[];
+}
 interface PairwiseDetail extends DetailBase {
   type: "pairwise";
   winner: string;
   confidence: number | null;
   explanation: string;
-  outputA: { id: string; model: string; text: string; isWinner: boolean };
-  outputB: { id: string; model: string; text: string; isWinner: boolean };
+  outputA: OutputDetail;
+  outputB: OutputDetail;
   context: {
     rubricAxes: {
       axis: string;
@@ -466,6 +479,9 @@ interface PairwiseDetail extends DetailBase {
 interface ColdDetail extends DetailBase {
   type: "cold";
   answerText: string;
+  englishGloss?: string | null;
+  dialect?: string | null;
+  dialectLabel?: string | null;
   provenance: string;
   consentBenchmark: boolean;
   consentTraining: boolean;
@@ -622,11 +638,13 @@ function OutputCard({
   model,
   text,
   isWinner,
+  failureTags,
 }: {
   label: string;
   model: string;
   text: string;
   isWinner: boolean;
+  failureTags?: FailureTagLite[];
 }) {
   return (
     <div
@@ -647,6 +665,23 @@ function OutputCard({
         )}
       </div>
       <p className="whitespace-pre-wrap text-sm text-text-primary">{text}</p>
+      {failureTags && failureTags.length > 0 && (
+        <div className="mt-3 border-t border-border pt-2">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+            Marked wrong for
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {failureTags.map((t) => (
+              <span
+                key={t.key}
+                className="rounded-full bg-danger-subtle px-2 py-0.5 text-xs font-medium text-danger"
+              >
+                {t.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -680,12 +715,14 @@ function PairwiseBody({ detail }: { detail: PairwiseDetail }) {
           model={detail.outputA.model}
           text={detail.outputA.text}
           isWinner={detail.outputA.isWinner}
+          failureTags={detail.outputA.failureTags}
         />
         <OutputCard
           label="Output B"
           model={detail.outputB.model}
           text={detail.outputB.text}
           isWinner={detail.outputB.isWinner}
+          failureTags={detail.outputB.failureTags}
         />
       </section>
 
@@ -800,6 +837,10 @@ function ColdBody({
             ? "Salvage rewrite"
             : "Cold-authored (source-free)"}
         </span>
+        {/* Dialect list is provisional - see src/lib/dialects.ts. */}
+        <span className="rounded-full bg-surface-sunken px-2 py-0.5">
+          Dialect: {detail.dialectLabel ?? "not recorded"}
+        </span>
         <span>Benchmark: {detail.consentBenchmark ? "yes" : "no"}</span>
         <span>Training: {detail.consentTraining ? "yes" : "no"}</span>
       </section>
@@ -812,6 +853,21 @@ function ColdBody({
         initial={detail.answerText}
         onSaved={onSaved}
       />
+
+      <section>
+        <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+          English meaning
+        </p>
+        {detail.englishGloss?.trim() ? (
+          <p className="mt-1 whitespace-pre-wrap text-sm text-text-primary">
+            {detail.englishGloss}
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-text-muted">
+            Not given - this answer predates the required English meaning.
+          </p>
+        )}
+      </section>
 
       <VerificationControl
         type="cold"

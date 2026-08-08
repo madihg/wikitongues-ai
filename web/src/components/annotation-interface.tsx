@@ -9,6 +9,12 @@ import {
   RUBRIC_ANCHORS,
   axisAnchors,
 } from "@/lib/buckets";
+import {
+  FAILURE_TAGS,
+  FAILURE_TAG_PROMPT,
+  failureTagSides,
+} from "@/lib/failure-tags";
+import { IGALA_DIALECTS, DIALECT_STORAGE_KEY, isDialect } from "@/lib/dialects";
 import { InfoTip } from "@/components/info-tip";
 import { ToneKeyboard } from "@/components/tone-keyboard";
 import { wordDiff } from "@/lib/diff";
@@ -72,7 +78,16 @@ interface Progress {
 
 // When both AI answers are inadequate, the written "why" is where the teaching
 // signal lives, so it becomes required (this minimum char count) on that path.
+// Failure tags are ADDITIVE to this, never a substitute: the chips give us the
+// shape of the failure, the sentence gives us the fix.
 const EXPLANATION_MIN = 10;
+
+// The plain-English meaning of a gold answer is required to lock it. Adoption
+// was 43% (287 of 666) while it was optional, and an Igala sentence with no
+// gloss can't be used as a lesson - nobody downstream knows what it says.
+const GLOSS_MIN = 3;
+const GLOSS_WHY =
+  "This is what makes your Igala usable as a lesson - it tells us what the words mean.";
 
 const WINNER_OPTIONS: { value: Winner; label: string; hint: string }[] = [
   { value: "a", label: "Output A", hint: "1" },
@@ -95,6 +110,8 @@ interface EpisodeDraft {
   winner: Winner | null;
   confidence: number | null;
   explanation: string;
+  failureTagsA: string[];
+  failureTagsB: string[];
   axisVals: Record<string, AxisVal>;
   axisNotes: Record<string, string>;
   editWinner: string;
@@ -102,6 +119,7 @@ interface EpisodeDraft {
   tieTarget: "a" | "b";
   tieEdit: string;
   salvage: string;
+  salvageGloss: string;
 }
 
 function draftKeyFor(task: TaskData): string {
@@ -139,6 +157,10 @@ export function AnnotationInterface() {
   // Igala, so one episode can mint two training rows.
   const [instructionIg, setInstructionIg] = useState("");
   const [instructionOpen, setInstructionOpen] = useState(false);
+  // The Igala variety this answer is written in. Deliberately NOT reset between
+  // episodes and mirrored to localStorage - an annotator's dialect is a fact
+  // about them, not about the prompt, so re-picking it every round is pure tax.
+  const [dialect, setDialect] = useState("");
   const [coldLocked, setColdLocked] = useState(false);
   const coldRef = useRef<HTMLTextAreaElement>(null);
   const instructionRef = useRef<HTMLTextAreaElement>(null);
@@ -147,6 +169,11 @@ export function AnnotationInterface() {
   const [winner, setWinner] = useState<Winner | null>(null);
   const [confidence, setConfidence] = useState<number | null>(null);
   const [explanation, setExplanation] = useState("");
+  // Per-output failure tags. Kept per side (not per "loser") so switching the
+  // pick doesn't lose work; which sides actually get SENT is decided at submit
+  // time by failureTagSides(winner).
+  const [failureTagsA, setFailureTagsA] = useState<string[]>([]);
+  const [failureTagsB, setFailureTagsB] = useState<string[]>([]);
 
   // Rubric v2 (Lydia's axes): per-axis 0-5 or N/A, on the winner only.
   const [axisVals, setAxisVals] =
@@ -167,8 +194,11 @@ export function AnnotationInterface() {
   const [tieEdit, setTieEdit] = useState("");
   const tieRef = useRef<HTMLTextAreaElement>(null);
 
-  // Both-inadequate salvage rewrite
+  // Both-inadequate salvage rewrite. It has its own English gloss (not shared
+  // with the cold answer's) because it is a DIFFERENT answer whenever it is
+  // saved at all - a salvage identical to the cold answer is never sent.
   const [salvage, setSalvage] = useState("");
+  const [salvageGloss, setSalvageGloss] = useState("");
   const salvageRef = useRef<HTMLTextAreaElement>(null);
 
   // One consent decision covers everything authored this episode.
@@ -197,6 +227,33 @@ export function AnnotationInterface() {
     setDemoSessionId(demo);
   }, []);
 
+  // Remembered dialect, restored once on mount.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DIALECT_STORAGE_KEY);
+      if (saved && isDialect(saved)) setDialect(saved);
+    } catch {
+      // storage unavailable - the select just starts empty
+    }
+  }, []);
+
+  function updateDialect(value: string) {
+    setDialect(value);
+    try {
+      if (value) localStorage.setItem(DIALECT_STORAGE_KEY, value);
+      else localStorage.removeItem(DIALECT_STORAGE_KEY);
+    } catch {
+      // non-fatal - the value still applies to this episode
+    }
+  }
+
+  function toggleFailureTag(side: "a" | "b", key: string) {
+    const setter = side === "a" ? setFailureTagsA : setFailureTagsB;
+    setter((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  }
+
   const resetEpisode = useCallback(() => {
     setStep("prompt");
     setColdAnswer("");
@@ -208,6 +265,8 @@ export function AnnotationInterface() {
     setWinner(null);
     setConfidence(null);
     setExplanation("");
+    setFailureTagsA([]);
+    setFailureTagsB([]);
     setAxisVals(emptyAxisVals());
     setAxisNotes({});
     setEditWinner("");
@@ -215,6 +274,7 @@ export function AnnotationInterface() {
     setTieTarget("a");
     setTieEdit("");
     setSalvage("");
+    setSalvageGloss("");
     setConsentBenchmark(true);
     setConsentTraining(true);
     setFlagOpen(false);
@@ -231,6 +291,8 @@ export function AnnotationInterface() {
     setWinner(d.winner);
     setConfidence(d.confidence);
     setExplanation(d.explanation);
+    setFailureTagsA(d.failureTagsA ?? []);
+    setFailureTagsB(d.failureTagsB ?? []);
     setAxisVals({ ...emptyAxisVals(), ...d.axisVals });
     setAxisNotes(d.axisNotes ?? {});
     setEditWinner(d.editWinner);
@@ -238,6 +300,7 @@ export function AnnotationInterface() {
     setTieTarget(d.tieTarget);
     setTieEdit(d.tieEdit);
     setSalvage(d.salvage);
+    setSalvageGloss(d.salvageGloss ?? "");
   }, []);
 
   const fetchNext = useCallback(async () => {
@@ -298,6 +361,8 @@ export function AnnotationInterface() {
       winner,
       confidence,
       explanation,
+      failureTagsA,
+      failureTagsB,
       axisVals,
       axisNotes,
       editWinner,
@@ -305,6 +370,7 @@ export function AnnotationInterface() {
       tieTarget,
       tieEdit,
       salvage,
+      salvageGloss,
     };
     try {
       sessionStorage.setItem(draftKeyFor(task), JSON.stringify(draft));
@@ -321,6 +387,8 @@ export function AnnotationInterface() {
     winner,
     confidence,
     explanation,
+    failureTagsA,
+    failureTagsB,
     axisVals,
     axisNotes,
     editWinner,
@@ -328,6 +396,7 @@ export function AnnotationInterface() {
     tieTarget,
     tieEdit,
     salvage,
+    salvageGloss,
   ]);
 
   const clearDraft = useCallback(() => {
@@ -377,6 +446,26 @@ export function AnnotationInterface() {
     winner !== "both_inadequate" ||
     explanation.trim().length >= EXPLANATION_MIN;
 
+  // An Igala gold answer is only lockable once its plain-English meaning is
+  // there too. No answer written = nothing to gloss (skipping stays allowed).
+  const glossOk = !coldAnswer.trim() || englishGloss.trim().length >= GLOSS_MIN;
+
+  // A salvage rewrite identical to the already-locked cold answer is not a
+  // second data point and is never sent - so it needs no second gloss either.
+  const salvageDuplicatesCold =
+    coldLocked &&
+    coldAnswer.trim().length > 0 &&
+    salvage.trim() === coldAnswer.trim();
+  const salvageWillSave =
+    winner === "both_inadequate" &&
+    salvage.trim().length > 0 &&
+    !salvageDuplicatesCold;
+  const salvageGlossOk =
+    !salvageWillSave || salvageGloss.trim().length >= GLOSS_MIN;
+
+  // Which outputs are offered failure chips, given the current pick.
+  const tagSides = failureTagSides(winner);
+
   function proceedToScore() {
     if (!winner || confidence === null || !explanationOk) return;
     // Seed the edit box with the CURRENT winner's text whenever the pick changed
@@ -411,6 +500,7 @@ export function AnnotationInterface() {
   const canSubmit = () => {
     if (!winner) return false;
     if (!explanationOk) return false; // both_inadequate requires a written why
+    if (!salvageGlossOk) return false; // a saved rewrite needs its meaning
     if (winner === "a" || winner === "b") return rubricComplete();
     return true; // tie / both_inadequate: pairwise + optional authoring is enough
   };
@@ -426,6 +516,11 @@ export function AnnotationInterface() {
       winner,
       confidence,
       explanation: explanation.trim(),
+      // Only the sides the current pick actually offers chips for. Toggling
+      // between picks keeps the chips on screen, but a side that became the
+      // WINNER must never ship the failure tags it collected as a loser.
+      failureTagsA: tagSides.a ? failureTagsA : [],
+      failureTagsB: tagSides.b ? failureTagsB : [],
       demoSessionId: demoSessionId ?? undefined,
     };
 
@@ -462,16 +557,14 @@ export function AnnotationInterface() {
       // it alone, since that row has the stronger provenance (speaker-authored,
       // source-free, written before reveal). Only send both when the texts
       // differ, which is legitimate: an initial answer plus a correction made
-      // after seeing why both AI outputs failed.
-      const isDuplicateOfCold =
-        coldLocked &&
-        coldAnswer.trim().length > 0 &&
-        salvage.trim() === coldAnswer.trim();
-      if (salvage.trim() && !isDuplicateOfCold) {
+      // after seeing why both AI outputs failed. `salvageWillSave` encodes that
+      // same rule, and is what gates the required gloss.
+      if (salvageWillSave) {
         payload.salvageAnswer = {
           answerText: salvage.trim(),
-          englishGloss: englishGloss.trim() || undefined,
+          englishGloss: salvageGloss.trim(),
           instructionIg: instructionIg.trim() || undefined,
+          dialect: dialect || undefined,
           consentBenchmark,
           consentTraining,
         };
@@ -486,6 +579,7 @@ export function AnnotationInterface() {
         answerText: coldAnswer.trim(),
         englishGloss: englishGloss.trim() || undefined,
         instructionIg: instructionIg.trim() || undefined,
+        dialect: dialect || undefined,
         consentBenchmark,
         consentTraining,
       };
@@ -642,6 +736,15 @@ export function AnnotationInterface() {
   );
   const showWinnerEdit = !hasColdGold || winnerFixOpen || winnerEdited;
 
+  // Shown under the lock/skip buttons when an Igala answer is written but its
+  // English meaning is missing - the one thing that now blocks locking.
+  const glossNeededHint = !glossOk ? (
+    <p className="mt-2 text-xs text-accent-text">
+      Add the English meaning above to lock your answer - a few words is enough.
+      (Or clear the Igala box to skip this one.)
+    </p>
+  ) : null;
+
   // The two labeled boxes (Lydia's design) plus the collapsed bonus field,
   // shared by the gold-first and optional authoring branches of the first step.
   const authoringBoxes = (
@@ -671,18 +774,41 @@ export function AnnotationInterface() {
         onValueChange={setColdAnswer}
       />
 
-      {/* Box 2 - plain-English gloss (secondary, optional) */}
+      {/* Box 2 - plain-English gloss. REQUIRED to lock: an Igala sentence with
+          no meaning attached can't be used as a lesson by anyone downstream. */}
       <label className="mt-4 block text-sm font-medium text-text-secondary">
         What it means / why, in English{" "}
-        <span className="font-normal text-text-muted">(optional)</span>
+        <span className="text-accent-text">(required)</span>
       </label>
+      <p className="mt-1 text-xs text-text-muted">{GLOSS_WHY}</p>
       <textarea
         value={englishGloss}
         onChange={(e) => setEnglishGloss(e.target.value)}
         rows={2}
         placeholder="In plain English - what your answer means, or why you'd say it this way."
-        className="mt-2 w-full rounded-md border border-border px-3 py-2 text-sm text-text-secondary placeholder:text-text-muted focus-visible:border-accent"
+        className="mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-secondary placeholder:text-text-muted focus-visible:border-accent"
       />
+
+      {/* Dialect - remembered across episodes, so this is a one-time pick. */}
+      <label className="mt-4 block text-sm font-medium text-text-secondary">
+        Which Igala is this?{" "}
+        <span className="font-normal text-text-muted">(optional)</span>
+      </label>
+      <select
+        value={dialect}
+        onChange={(e) => updateDialect(e.target.value)}
+        className="mt-2 rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary"
+      >
+        <option value="">Choose your dialect…</option>
+        {IGALA_DIALECTS.map((d) => (
+          <option key={d.key} value={d.key}>
+            {d.label}
+          </option>
+        ))}
+      </select>
+      <p className="mt-1 text-xs text-text-muted">
+        We remember this, so you only pick it once.
+      </p>
 
       {/* Bonus - collapsed by default: the question itself, in Igala */}
       {instructionOpen ? (
@@ -1022,12 +1148,14 @@ export function AnnotationInterface() {
               {authoringBoxes}
               <button
                 onClick={revealModels}
-                className="mt-5 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+                disabled={!glossOk}
+                className="mt-5 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {coldAnswer.trim()
                   ? "Lock my answer & reveal the AI outputs"
                   : "Skip & reveal the AI outputs"}
               </button>
+              {glossNeededHint}
               <p className="mt-2 text-xs text-text-muted">
                 Once revealed, your answer is locked so it stays source-free.
               </p>
@@ -1052,18 +1180,23 @@ export function AnnotationInterface() {
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button
                   onClick={revealModels}
-                  disabled={!coldAnswer.trim()}
+                  disabled={!coldAnswer.trim() || !glossOk}
                   className="cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Lock my answer &amp; reveal the AI outputs
                 </button>
+                {/* Skipping stays available, but not as a side door around the
+                    required meaning: a typed answer would otherwise be locked
+                    and submitted with no gloss at all. */}
                 <button
                   onClick={revealModels}
-                  className="cursor-pointer rounded-md border border-border-strong bg-surface px-6 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
+                  disabled={!glossOk}
+                  className="cursor-pointer rounded-md border border-border-strong bg-surface px-6 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Skip - just show me the outputs
                 </button>
               </div>
+              {glossNeededHint}
               <p className="mt-2 text-xs text-text-muted">
                 Once revealed, your answer is locked so it stays source-free.
               </p>
@@ -1102,28 +1235,67 @@ export function AnnotationInterface() {
               { label: "Output A", output: task.outputA, value: "a" as const },
               { label: "Output B", output: task.outputB, value: "b" as const },
             ].map(({ label, output, value }) => (
-              <div
-                key={value}
-                className={`cursor-pointer rounded-lg border-2 bg-surface p-6 transition-colors ${
-                  winner === value
-                    ? "border-accent ring-1 ring-accent"
-                    : "border-border hover:border-border-strong"
-                }`}
-                onClick={() => setWinner(value)}
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-text-secondary">
-                    {label}
-                  </h3>
-                  <span className="text-xs text-text-muted">
-                    Press {value === "a" ? "1" : "2"}
-                  </span>
-                </div>
+              <div key={value} className="flex flex-col gap-3">
                 <div
-                  className={`whitespace-pre-wrap text-sm leading-relaxed text-text-primary ${textFont}`}
+                  className={`flex-1 cursor-pointer rounded-lg border-2 bg-surface p-6 transition-colors ${
+                    winner === value
+                      ? "border-accent ring-1 ring-accent"
+                      : "border-border hover:border-border-strong"
+                  }`}
+                  onClick={() => setWinner(value)}
                 >
-                  {output.text}
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-text-secondary">
+                      {label}
+                    </h3>
+                    <span className="text-xs text-text-muted">
+                      Press {value === "a" ? "1" : "2"}
+                    </span>
+                  </div>
+                  <div
+                    className={`whitespace-pre-wrap text-sm leading-relaxed text-text-primary ${textFont}`}
+                  >
+                    {output.text}
+                  </div>
                 </div>
+
+                {/* Failure tags for THIS output. Appears once the pick makes it
+                    relevant: both sides on "both inadequate", the losing side
+                    only when a winner was chosen. Outside the card, so tapping
+                    a chip never also re-picks the winner. */}
+                {tagSides[value] && (
+                  <div className="rounded-lg border border-border bg-surface-sunken p-3">
+                    <p className="text-xs font-semibold text-text-secondary">
+                      {label} - what is wrong with it?
+                    </p>
+                    <p className="mt-1 text-xs text-text-muted">
+                      {FAILURE_TAG_PROMPT}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {FAILURE_TAGS.map((t) => {
+                        const on = (
+                          value === "a" ? failureTagsA : failureTagsB
+                        ).includes(t.key);
+                        return (
+                          <button
+                            key={t.key}
+                            type="button"
+                            title={t.hint}
+                            aria-pressed={on}
+                            onClick={() => toggleFailureTag(value, t.key)}
+                            className={`cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                              on
+                                ? "border-accent bg-accent text-accent-contrast"
+                                : "border-border-strong bg-surface text-text-secondary hover:border-accent hover:text-accent-text"
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1203,6 +1375,13 @@ export function AnnotationInterface() {
             <p className="mt-1 text-sm text-text-secondary">
               Write in English - you are teaching the AI what good Igala looks
               like. Name the wrong words and give the right ones.
+              {(tagSides.a || tagSides.b) && (
+                <>
+                  {" "}
+                  The tags above say what KIND of mistake it is; this is where
+                  you give the right Igala. Both matter.
+                </>
+              )}
             </p>
             <div className="mt-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
               <span className="font-medium text-text-primary">Example:</span>{" "}
@@ -1498,6 +1677,40 @@ export function AnnotationInterface() {
                 value={salvage}
                 onValueChange={setSalvage}
               />
+
+              {/* A saved rewrite is a gold answer like any other, so it carries
+                  the same required English meaning. Hidden when the rewrite just
+                  repeats the locked cold answer - that row is never sent, so
+                  asking for its meaning twice would be busywork. */}
+              {salvage.trim() && !salvageDuplicatesCold && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-text-secondary">
+                    What it means in English{" "}
+                    <span className="text-accent-text">(required)</span>
+                  </label>
+                  <p className="mt-1 text-xs text-text-muted">{GLOSS_WHY}</p>
+                  <textarea
+                    value={salvageGloss}
+                    onChange={(e) => setSalvageGloss(e.target.value)}
+                    rows={2}
+                    placeholder="In plain English - what your answer means, or why you'd say it this way."
+                    className="mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-secondary placeholder:text-text-muted focus-visible:border-accent"
+                  />
+                  {!salvageGlossOk && (
+                    <p className="mt-1 text-xs text-accent-text">
+                      Add the English meaning to save your rewrite - a few words
+                      is enough.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {salvage.trim() && salvageDuplicatesCold && (
+                <p className="mt-3 text-xs text-text-muted">
+                  Same as the answer you locked in step 1 - we keep that one,
+                  with the meaning you already gave.
+                </p>
+              )}
             </div>
           )}
 
