@@ -1,5 +1,31 @@
 # Open-weights models: what we can fine-tune AND serve, and the strongest Igala base
 
+> **CORRECTION, added 2026-08-09 after actually running the recommended job.** §4's primary
+> recommendation (full fine-tune `meta-llama/Meta-Llama-3.1-8B-Instruct-Reference`, serve on a v2
+> dedicated endpoint) was **executed and does not work**. The training half is fine: the job ran
+> `training_type: {"type":"Full"}`, 692 rows, 169,281 tokens, $4.00, ~9 minutes. The serving half
+> fails. The output checkpoint inherits `baseModelId` `ml_CcoJYxxyrZAYqyTqDBD6Y` - the
+> **training-only** 8B object, which has zero deployment configs - and Together refuses:
+> `No configs found for model ml_CdseZkgPUsdGz6kYpv85P.` The `-Reference` -> production-architecture
+> mapping inferred in §1e and flagged in "Flags for Halim" #2 is therefore **disproven for 8B**
+> (it does hold for 70B, where one registry entry carries both products).
+>
+> **The correct pre-spend test** is not "does this architecture have a certified config" - the
+> production `meta-llama/Llama-3.1-8B-Instruct` object DOES have one (`cr_Cd35GMEk4PNy5Ly6yMGEK`),
+> and registering a custom model against it inherits that config, which is exactly what made the
+> $0 acceptance test in §1e pass and still mislead. The test that predicts servability is: **does
+> ONE v2 registry entry carry BOTH `PRODUCT_FINE_TUNING` and `PRODUCT_DEDICATED` with a certified
+> config?** Only then are the training object and the deployable object the same object.
+> `meta-llama/Llama-3.1-8B-Instruct` is `PRODUCT_DEDICATED` only, so it never qualified - it is not
+> in the 23-model intersection §1c computed, and the intersection was always the right list.
+>
+> Implemented as `selectDeployableFineTuneBases` in `web/src/lib/arena/together.ts` (unit-tested),
+> and enforced pre-upload by `assertServableAfterTraining` in
+> `web/scripts/together-full-sft-run.ts`. **Smallest base that actually qualifies and supports full
+> fine-tuning: `Qwen/Qwen3.5-9B`** (base `ml_CbuqU8KKAtoGrowco4nqK`, certified
+> `cr_Cd35Fpam3FrMdwHdmroZD`, 1x H100 80GB) - §2 already ranked it third and called it the
+> pragmatic fallback; it is now the only 1x-H100-priced option that reaches production.
+
 Read-only research, 2026-08-09. No training run, no endpoint created, no spend. All Together
 findings below are from **live API/CLI calls on this account** (`TOGETHER_API_KEY` in
 `web/.env.local`, quotes stripped) plus Together's own docs fetched raw (not paraphrased, where

@@ -4,6 +4,7 @@ import type {
   FineTuneMethod,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { TOGETHER_DEDICATED_INFERENCE_API } from "@/lib/arena/together";
 
 /**
  * Where the flywheel closes: a succeeded fine-tune becomes a first-class arena
@@ -38,9 +39,18 @@ const SERVING_PROVIDER: Record<string, string> = {
   fireworks: "openai-compatible",
 };
 
-/** Serving endpoint override, when the serving provider is not the default router. */
+/**
+ * Serving endpoint override, when the serving provider is not the default router.
+ *
+ * Together's tuned checkpoints are NOT reachable on api.together.xyz - that host
+ * serves the serverless catalogue and answers a tuned model id with 400
+ * model_not_available. A tuned checkpoint lives behind a dedicated endpoint,
+ * which is served from api-inference.together.ai and addressed by the endpoint
+ * string rather than the checkpoint name. Pointing at the training host here is
+ * what would silently send generation somewhere that can never answer.
+ */
 const SERVING_ENDPOINT: Record<string, string | null> = {
-  together: "https://api.together.xyz/v1",
+  together: TOGETHER_DEDICATED_INFERENCE_API,
   fireworks: "https://api.fireworks.ai/inference/v1",
 };
 

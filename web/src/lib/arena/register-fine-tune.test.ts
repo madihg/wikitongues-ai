@@ -28,10 +28,12 @@ describe("resolveServingRoute", () => {
     );
   });
 
-  it("serves a Together checkpoint through its OpenAI-compatible endpoint", () => {
+  it("serves a Together checkpoint on the DEDICATED inference host, not the training API", () => {
+    // api.together.xyz answers a tuned model id with 400 model_not_available:
+    // only a dedicated endpoint can serve one, and those live on a different host.
     expect(resolveServingRoute("together")).toEqual({
       provider: "openai-compatible",
-      apiEndpoint: "https://api.together.xyz/v1",
+      apiEndpoint: "https://api-inference.together.ai/v1",
     });
   });
 
