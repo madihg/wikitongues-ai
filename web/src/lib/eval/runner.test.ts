@@ -152,6 +152,74 @@ describe("runEval - shape and honesty invariants", () => {
   });
 });
 
+describe("runEval - sort order is not a ranking", () => {
+  it("marks exactly one leader, and it is the chrF point-estimate top row", () => {
+    const report = runEval({
+      prompts,
+      outputs: [...perfect, ...englishy],
+      langModel,
+    });
+    const leaders = report.candidates.filter((c) => c.isLeader);
+    expect(leaders).toHaveLength(1);
+    expect(leaders[0].candidateId).toBe(report.candidates[0].candidateId);
+    expect(leaders[0].vsLeader).toBeNull();
+  });
+
+  it("tells every other row whether it is actually separated from the leader", () => {
+    // Only 4 shared prompts here, below the bootstrap minimum, so the honest
+    // answer is "not distinguishable" even though the raw gap is huge.
+    const report = runEval({
+      prompts,
+      outputs: [...perfect, ...englishy],
+      langModel,
+    });
+    const challenger = report.candidates.find((c) => !c.isLeader)!;
+    expect(challenger.vsLeader).not.toBeNull();
+    expect(challenger.vsLeader!.nPaired).toBe(4);
+    expect(challenger.vsLeader!.deltaMean).toBeGreaterThan(0.4);
+    expect(challenger.vsLeader!.underpowered).toBe(true);
+    expect(challenger.vsLeader!.distinguishable).toBe(false);
+  });
+
+  it("does separate them once there are enough prompts", () => {
+    const many: EvalPromptInput[] = Array.from({ length: 12 }, (_, i) => ({
+      promptId: `q${i}`,
+      bucket: "orthography",
+      text: "Give the Igala word.",
+      golds: ["ọdudu", "ódùdù"],
+    }));
+    const good = many.map((p) => ({
+      candidateId: "good",
+      candidateName: "good",
+      promptId: p.promptId,
+      text: "ọdudu",
+    }));
+    const bad = many.map((p) => ({
+      candidateId: "bad",
+      candidateName: "bad",
+      promptId: p.promptId,
+      text: "The Igala word for that is a common everyday term.",
+    }));
+    const r = runEval({ prompts: many, outputs: [...good, ...bad], langModel });
+    const challenger = r.candidates.find((c) => !c.isLeader)!;
+    expect(challenger.vsLeader!.distinguishable).toBe(true);
+    expect(challenger.vsLeader!.leaderName).toBe("good");
+  });
+
+  it("leaves vsLeader null when a candidate shares no prompts with the leader", () => {
+    const r = runEval({
+      prompts,
+      outputs: [
+        ...outputsFor("solo-a", "Solo A", { p1: "ọdudu" }),
+        ...outputsFor("solo-b", "Solo B", { p3: "Ọma lẹ a jẹ ñwu" }),
+      ],
+      langModel,
+    });
+    const challenger = r.candidates.find((c) => !c.isLeader)!;
+    expect(challenger.vsLeader).toBeNull();
+  });
+});
+
 describe("runEval - the inter-gold ceiling", () => {
   const report = runEval({ prompts, outputs: perfect, langModel });
 

@@ -42,10 +42,23 @@ interface CategoryReport {
   metrics: MetricCell[];
 }
 
+interface LeaderComparison {
+  leaderId: string;
+  leaderName: string;
+  nPaired: number;
+  deltaMean: number;
+  ciLow: number;
+  ciHigh: number;
+  distinguishable: boolean;
+  underpowered: boolean;
+}
+
 interface CandidateReport {
   candidateId: string;
   candidateName: string;
   n: number;
+  isLeader: boolean;
+  vsLeader: LeaderComparison | null;
   overall: MetricCell[];
   byCategory: CategoryReport[];
   language: {
@@ -167,6 +180,54 @@ function IntervalCell({ i }: { i: Interval }) {
           [{pct(i.ciLow)}–{pct(i.ciHigh)}]
         </span>
       )}
+    </span>
+  );
+}
+
+/**
+ * Every row's own verdict against the top row. The table is sorted by score,
+ * and a sorted table reads as a ranking whether or not the intervals support
+ * one, so the answer travels with the row rather than living in a separate
+ * section a reader may never reach.
+ */
+function LeaderCell({ c }: { c: CandidateReport }) {
+  if (c.isLeader) {
+    return (
+      <span
+        className="text-text-tertiary"
+        title="Highest chrF point estimate. Not a claim that it is the best model."
+      >
+        top row
+      </span>
+    );
+  }
+  if (!c.vsLeader) {
+    return (
+      <span
+        className="text-text-muted"
+        title="Too few shared prompts to compare"
+      >
+        no shared prompts
+      </span>
+    );
+  }
+  const v = c.vsLeader;
+  if (!v.distinguishable) {
+    return (
+      <span
+        className="text-text-tertiary"
+        title={`Paired chrF delta against ${v.leaderName} on ${v.nPaired} shared prompts; the 95% interval includes zero.`}
+      >
+        tied at this n
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-text-secondary"
+      title={`Paired chrF delta against ${v.leaderName} on ${v.nPaired} shared prompts; the 95% interval excludes zero.`}
+    >
+      separated
     </span>
   );
 }
@@ -356,6 +417,12 @@ export function AutoEval() {
                     {data.metricLabels[m] ?? m}
                   </th>
                 ))}
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-text-secondary"
+                  title="Paired chrF comparison against the top row. Sort order alone is not a ranking."
+                >
+                  vs top row
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -375,6 +442,9 @@ export function AutoEval() {
                       <IntervalCell i={metricOf(c.overall, m)!.best} />
                     </td>
                   ))}
+                  <td className="px-3 py-3 text-xs">
+                    <LeaderCell c={c} />
+                  </td>
                 </tr>
               ))}
               <tr className="border-t-2 border-border-strong bg-surface-sunken">
@@ -396,10 +466,18 @@ export function AutoEval() {
                     />
                   </td>
                 ))}
+                <td className="px-3 py-3 text-xs text-text-muted">
+                  not a model
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-text-tertiary">
+          Rows are sorted by chrF for readability. That order is{" "}
+          <strong>not</strong> a ranking: a row marked &quot;tied at this
+          n&quot; is not below the top row in any sense the data supports.
+        </p>
         <p className="text-xs text-text-tertiary">
           Ceiling computed on {report.ceiling.nPromptsWithCeiling} prompts that
           have two or more gold answers; {report.ceiling.nPromptsWithoutCeiling}{" "}
