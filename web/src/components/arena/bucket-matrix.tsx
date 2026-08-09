@@ -200,7 +200,7 @@ export function BucketMatrix() {
                     <div className="flex items-center gap-2">
                       {row.candidate.isChampion && (
                         <span
-                          title="Current champion"
+                          title="Designated champion. This is a hand-set reference model, not a result the arena computed. The votes do not currently support ranking any candidate first."
                           className="text-accent-text"
                         >
                           ★

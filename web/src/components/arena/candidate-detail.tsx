@@ -150,8 +150,11 @@ export function CandidateDetail({ id }: { id: string }) {
           </span>
         )}
         {c.isChampion && (
-          <span className="rounded-md bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent-text">
-            champion
+          <span
+            title="Designated champion. This is a hand-set reference model, not a result the arena computed."
+            className="rounded-md bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent-text"
+          >
+            designated champion
           </span>
         )}
         {c.archived && (
