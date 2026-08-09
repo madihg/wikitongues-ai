@@ -117,6 +117,9 @@ export function ScoreExplainer({
           speakers writing the same prompt do not match each other word for
           word, so the agreement between two humans is the practical ceiling
           there, not 100. Only the votes on this page can say a model is better.
+          And where those scores do separate models, read the intervals before
+          crowning anything: two candidates can both clearly beat the untuned
+          baselines while remaining indistinguishable from each other.
         </p>
       </div>
 
