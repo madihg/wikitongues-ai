@@ -17,12 +17,13 @@ export default function ArenaEvalPage() {
           Automatic eval
           <InfoTip label="About the automatic eval" width="w-96">
             Human blind judgment is the ground truth for Igala quality, but it
-            is slow: after 781 comparisons only a handful name a winner. This
-            page gives a fast, defensible signal in the meantime by scoring
-            every candidate&apos;s answers on the frozen prompts against the
-            community gold, and it publishes its own error bars, its own
-            ceiling, and its own measured agreement with the human labels we do
-            hold.
+            is slow: across every comparison collected so far, only a handful
+            name a winner. This page gives a fast, defensible signal in the
+            meantime by scoring every candidate&apos;s answers on the frozen
+            prompts against the community gold, and it publishes its own error
+            bars, its own ceiling, and its own measured agreement with the human
+            labels we do hold. Every count and score on it is computed per
+            request, so nothing here goes stale as the corpus grows.
           </InfoTip>
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-text-secondary">
