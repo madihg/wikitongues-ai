@@ -5,6 +5,8 @@ import {
   crossValidateLangId,
   PROFILE_PROVENANCE,
   ORTHOGRAPHIC_SIGNATURES,
+  SIGNATURE_MEASURED_AT,
+  SIGNATURE_MEASURED_N,
   LANGUAGES,
   ENGLISH_LIKE,
   MIN_RELIABLE_CHARS,
@@ -208,10 +210,18 @@ describe("orthographic signatures", () => {
     expect(r.signals.signatureChars.igbo).toEqual(["ụ"]);
   });
 
-  it("documents each signature with a measured, not assumed, note", () => {
-    expect(ORTHOGRAPHIC_SIGNATURES.yoruba?.note).toMatch(/0\/937/);
-    expect(ORTHOGRAPHIC_SIGNATURES.igbo?.note).toMatch(/1\/937/);
-    expect(ORTHOGRAPHIC_SIGNATURES.igala?.note).toMatch(/226\/937/);
+  it("documents each signature as a DATED measurement, not a live count", () => {
+    // The gold corpus grows every day annotators work, so a bare "N/937" in
+    // shipped copy would silently rot. We assert the shape - a count against a
+    // stated corpus size, stamped with when it was taken - rather than the
+    // exact ratio, so growth does not break the test but the claim stays
+    // auditable.
+    for (const lang of ["igala", "yoruba", "igbo"] as const) {
+      const note = ORTHOGRAPHIC_SIGNATURES[lang]?.note ?? "";
+      expect(note).toContain(String(SIGNATURE_MEASURED_N));
+      expect(note).toContain(SIGNATURE_MEASURED_AT);
+    }
+    expect(SIGNATURE_MEASURED_AT).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("does NOT let one stray character flip a long obviously-Igala passage", () => {

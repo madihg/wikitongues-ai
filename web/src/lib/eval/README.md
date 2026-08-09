@@ -3,6 +3,14 @@
 What each metric in this directory can tell us, what it cannot, and why it
 exists at all.
 
+> **Numbers in this README are a DATED SNAPSHOT (2026-08-09), not live figures.**
+> The gold corpus, the candidate set and the human labels all grow while
+> annotators and other agents work, so treat every figure below as an
+> illustration of what the harness reports and read the current values from
+> `/admin/arena/eval` or `scripts/run-eval.ts`. Where a number is a one-off
+> measurement of a bug or a design decision, it is labelled as such and does not
+> go stale. Nothing in this file is read at runtime.
+
 ## Why this exists
 
 Human blind judgment is the ground truth for Igala quality, and it is the only

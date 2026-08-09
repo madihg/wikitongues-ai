@@ -39,6 +39,12 @@
  * A "yoruba" or "igbo" verdict is a flag for a human to look at, never a
  * finding. Any report built on this module must say so.
  *
+ * COUNTS IN THIS FILE ARE DATED OBSERVATIONS, NOT LIVE FIGURES. The gold corpus
+ * grows every day annotators work, so any "N/937" below is what was measured on
+ * SIGNATURE_MEASURED_AT and nothing more. Re-run scripts/run-eval.ts for current
+ * numbers; the profiles themselves are always rebuilt from whatever gold exists
+ * at call time, so a stale comment never affects behaviour.
+ *
  * ORTHOGRAPHIC SIGNATURES are handled separately from the n-gram model and
  * exposed in `signals`, because they are the one piece of hard evidence here:
  * standard Igala orthography has no ṣ, ị, ụ or ṅ, so those characters are
@@ -135,8 +141,17 @@ dis dat wey wen im nadey too much plenty well well dey go dey come na him
 you don do am make you no vex abeg no wahala i no sabi wetin dey happen`;
 
 /**
- * Orthographic signature characters, MEASURED against the 937 community gold
- * answers in this project rather than assumed:
+ * When the signature counts below were taken. They are a dated observation
+ * against a corpus that keeps growing, not a live count - see the file header.
+ */
+export const SIGNATURE_MEASURED_AT = "2026-08-09";
+
+/** Corpus size at SIGNATURE_MEASURED_AT, so the ratios can be interpreted. */
+export const SIGNATURE_MEASURED_N = 937;
+
+/**
+ * Orthographic signature characters, MEASURED against the community gold rather
+ * than assumed. Counts are as of SIGNATURE_MEASURED_AT (n=937 gold answers):
  *
  *   ṣ  0/937 gold   - Yoruba's s-with-dot-below. Igala does not write it.
  *   ị  0/937 gold   - Igbo dotted i.
@@ -154,15 +169,15 @@ export const ORTHOGRAPHIC_SIGNATURES: Partial<
 > = {
   igala: {
     chars: ["ñ"],
-    note: "n-tilde is Igala orthography (226/937 community gold answers); absent from standard Yoruba and Igbo.",
+    note: `n-tilde is Igala orthography (226 of ${SIGNATURE_MEASURED_N} community gold answers as of ${SIGNATURE_MEASURED_AT}); absent from standard Yoruba and Igbo.`,
   },
   yoruba: {
     chars: ["ṣ"],
-    note: "s-with-dot-below is Yoruba orthography; 0/937 Igala gold answers use it.",
+    note: `s-with-dot-below is Yoruba orthography; 0 of ${SIGNATURE_MEASURED_N} Igala gold answers used it as of ${SIGNATURE_MEASURED_AT}.`,
   },
   igbo: {
     chars: ["ị", "ụ", "ṅ"],
-    note: "dotted i/u and n-with-dot-above are Igbo orthography; 1/937 Igala gold answers use any of them.",
+    note: `dotted i/u and n-with-dot-above are Igbo orthography; 1 of ${SIGNATURE_MEASURED_N} Igala gold answers used any of them as of ${SIGNATURE_MEASURED_AT}.`,
   },
 };
 
@@ -299,7 +314,8 @@ export function buildProfile(
  * per-profile smoothing the tiny profile gets a small denominator, so every
  * n-gram it happens to contain is assigned a HIGH probability and it wins
  * comparisons it has no right to win. Measured on production data, per-profile
- * smoothing classified only 488 of 937 Igala gold answers as Igala even with
+ * smoothing classified only 488 of 937 Igala gold answers (measured 2026-08-09)
+ * as Igala even with
  * the Igala profile trained on those very answers. A shared vocabulary makes a
  * data-poor profile produce diffuse, weak evidence - which is exactly what a
  * data-poor profile should produce.
