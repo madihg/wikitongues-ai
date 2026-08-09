@@ -105,10 +105,38 @@ export interface LanguageReport {
   signatureFlagged: number;
 }
 
+/**
+ * How a candidate stands against the current chrF point-estimate leader.
+ *
+ * This exists because a table SORTED by score reads as a RANKING even when the
+ * intervals do not support one, and a reader who scans the top row is exactly
+ * the reader who will not check the head-to-head section further down. Every
+ * row therefore carries its own verdict against the leader.
+ */
+export interface LeaderComparison {
+  leaderId: string;
+  leaderName: string;
+  nPaired: number;
+  deltaMean: number;
+  ciLow: number;
+  ciHigh: number;
+  /** True only when the paired interval excludes zero. */
+  distinguishable: boolean;
+  underpowered: boolean;
+}
+
 export interface CandidateReport {
   candidateId: string;
   candidateName: string;
   n: number;
+  /** Highest chrF POINT ESTIMATE. Not a claim that it is the best model. */
+  isLeader: boolean;
+  /**
+   * Null for the leader itself, and for any candidate sharing too few prompts
+   * with the leader to compare at all. Otherwise the paired verdict: when
+   * `distinguishable` is false, this row and the top row are NOT ranked.
+   */
+  vsLeader: LeaderComparison | null;
   /** Overall metrics across every scored prompt. */
   overall: MetricCell[];
   byCategory: CategoryReport[];
@@ -154,7 +182,7 @@ export const REPORT_CAVEATS = [
   "No automatic metric here measures Igala FLUENCY. chrF measures character overlap with what a handful of speakers happened to write; a fluent, correct answer that uses different words scores low, and a nonsense string that reuses the gold's characters scores high.",
   "Read every model score against the inter-gold ceiling on the same row, never against 1.0. The ceiling is how well native speakers match EACH OTHER; it is the resolution limit of the metric.",
   "The language gate distinguishes Igala from English with a measured accuracy (see the validation block). Its Yoruba / Igbo / Pidgin verdicts come from hardcoded seed lexicons with NO validation data and are triage flags only.",
-  "Where a head-to-head interval includes zero we print 'not distinguishable'. That is the finding: the sample cannot support a ranking.",
+  "Where a head-to-head interval includes zero we print 'not distinguishable'. That is the finding: the sample cannot support a ranking. The candidate table is SORTED by score for readability; that sort order is not itself a ranking, which is why every row carries its own verdict against the top row.",
   "A model fine-tuned on community gold is being scored against community gold written by the same annotators. The frozen prompts themselves were excluded from training, so this is not leakage - but chrF rewards matching this community's orthographic habits, and a tuned model has been taught exactly those habits. Read a tuned model's chrF lead as 'writes more like these speakers write', which is necessary for good Igala and nowhere near sufficient.",
 ] as const;
 
@@ -279,6 +307,9 @@ function scoreCandidate(
     candidateId,
     candidateName,
     n: perPrompt.length,
+    // Filled in by runEval once every candidate has been scored.
+    isLeader: false,
+    vsLeader: null,
     overall: buildCells(overallBest, overallMean, seedFor(candidateId)),
     byCategory,
     language: {
@@ -416,6 +447,32 @@ export function runEval(input: RunEvalInput): EvalReport {
       if (i === j) continue;
       const pair = headToHead(candidates[i], candidates[j]);
       if (pair.nPaired >= 2) h2h.push(pair);
+    }
+  }
+
+  // Annotate every row with its verdict against the leader, so the sort order
+  // can never be mistaken for a ranking the data supports.
+  const leader = candidates[0];
+  if (leader) {
+    leader.isLeader = true;
+    for (const c of candidates) {
+      if (c.candidateId === leader.candidateId) continue;
+      const pair = h2h.find(
+        (h) =>
+          h.candidateA === leader.candidateId && h.candidateB === c.candidateId,
+      );
+      if (!pair) continue;
+      const d = pair.cells.find((x) => x.metric === "chrf")!.delta;
+      c.vsLeader = {
+        leaderId: leader.candidateId,
+        leaderName: leader.candidateName,
+        nPaired: pair.nPaired,
+        deltaMean: d.mean,
+        ciLow: d.ciLow,
+        ciHigh: d.ciHigh,
+        distinguishable: d.distinguishable,
+        underpowered: d.underpowered,
+      };
     }
   }
 

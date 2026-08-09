@@ -183,6 +183,12 @@ accuracy from 49.5% to 81.4%.
   the normal interval leaves [0, 1] and is nonsense.
 - Whenever a delta's interval contains zero, the report prints **"not
   distinguishable"**. That is the finding. Do not replace it with a rank.
+- The candidate table is **sorted** by chrF for readability, and a sorted table
+  reads as a ranking whether or not the intervals support one. So every row
+  carries its own `vsLeader` verdict against the top row — `top row`, `tied at
+this n`, `separated`, or `no shared prompts` — rather than leaving that answer
+  in a head-to-head section further down the page that a reader may never reach.
+  Today the tuned SFT model reads **"tied at this n"** against the RAG leader.
 
 ## The autorater and what its agreement number is worth
 

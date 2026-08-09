@@ -122,21 +122,37 @@ async function main() {
     pad("candidate", nameW) +
       padLeft("n", 4) +
       "  " +
-      HEADLINE_METRICS.map((m) => pad(METRIC_LABELS[m], 22)).join(""),
+      HEADLINE_METRICS.map((m) => pad(METRIC_LABELS[m], 22)).join("") +
+      "vs top row",
   );
-  console.log(rule(140));
+  console.log(rule(160));
   for (const c of report.candidates) {
     const n = c.overall.find((x) => x.metric === "chrf")!.best.n;
+    // Sorted by score for readability - so every row states whether it is
+    // actually separated from the top row, or merely printed below it.
+    const versus = c.isLeader
+      ? "(top row)"
+      : !c.vsLeader
+        ? "no shared prompts"
+        : c.vsLeader.distinguishable
+          ? "SEPARATED"
+          : "tied at this n";
     console.log(
       pad(c.candidateName.slice(0, nameW - 1), nameW) +
         padLeft(String(n), 4) +
         "  " +
         HEADLINE_METRICS.map((m) =>
           pad(fmt(c.overall.find((x) => x.metric === m)!.best), 22),
-        ).join(""),
+        ).join("") +
+        versus,
     );
   }
-  console.log(rule(140));
+  console.log(rule(160));
+  console.log(
+    "  Rows are SORTED by chrF for readability. That order is not a ranking:\n" +
+      "  a row marked 'tied at this n' is not below the top row in any sense the\n" +
+      "  data supports.",
+  );
 
   // ── 3. language gate ─────────────────────────────────────────────────────
   console.log(`\n\nLANGUAGE GATE (share of outputs the gate calls Igala)`);
