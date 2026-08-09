@@ -13,9 +13,10 @@ export default function JobsPage() {
             frozen benchmark. Training is only half of it: a tuned model also
             needs somewhere to be served. An OpenAI-tuned model is servable the
             moment the job finishes. A tuned open-weights model on Together
-            needs a dedicated GPU endpoint, because serverless LoRA inference is
-            no longer offered - which is why runs that trained equally well have
-            ended up with very different fates.
+            needs a dedicated GPU endpoint: as of August 2026, checked against
+            the live API, Together offers no serverless path for tuned
+            checkpoints. That is why runs that trained equally well have ended
+            up with very different fates.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
