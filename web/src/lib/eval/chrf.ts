@@ -25,14 +25,27 @@
  * gracefully on both counts, which is why chrF is the standard for
  * low-resource MT.
  *
- * IMPLEMENTATION NOTES (matching sacrebleu's CHRF so numbers are comparable to
- * published ones):
+ * IMPLEMENTATION NOTES. This follows the algorithm sacrebleu's CHRF documents,
+ * so the conventions below are the ones published chrF numbers assume:
  *   - whitespace is removed before extracting CHARACTER n-grams;
  *   - matches are CLIPPED (min of hypothesis and reference counts);
  *   - an F-score is computed PER ORDER and then averaged over the "effective"
  *     orders - those where both sides have at least one n-gram of that order -
  *     rather than averaging precision and recall first;
  *   - with multiple references, the score is the MAX over references.
+ *
+ * WHAT HAS AND HAS NOT BEEN VERIFIED - do not upgrade this claim without doing
+ * the work. The implementation is checked against values computed BY HAND in
+ * chrf.test.ts (both the beta=1 and beta=2 cases are worked through digit by
+ * digit in the test comments), plus the usual identity/disjoint/symmetry
+ * properties. It has NOT been diffed against an actual sacrebleu run, and this
+ * repo has no Python toolchain to do so. So: "implements the documented
+ * sacrebleu algorithm", NOT "verified byte-identical to sacrebleu". If someone
+ * needs the stronger claim - e.g. before putting a chrF figure in a paper
+ * alongside numbers from other systems - the closing step is to run sacrebleu
+ * over the same hypothesis/reference pairs and diff, and to record the
+ * sacrebleu version when doing it, since this convention is a property of that
+ * tool's current implementation rather than of the 2015 paper.
  *
  * SCALE: this module returns [0, 1]. The literature and sacrebleu report
  * chrF x 100; multiply at the display layer, never inside the maths.

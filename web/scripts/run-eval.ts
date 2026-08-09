@@ -133,7 +133,7 @@ async function main() {
     const versus = c.isLeader
       ? "(top row)"
       : !c.vsLeader
-        ? "no shared prompts"
+        ? "too few shared prompts"
         : c.vsLeader.distinguishable
           ? "SEPARATED"
           : "tied at this n";
