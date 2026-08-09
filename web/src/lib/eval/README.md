@@ -151,6 +151,14 @@ reference and as training text for the Igala language profile. The profile is a
 component of the benchmark, so a speaker who withheld benchmark consent should
 not be inside it either.
 
+The rule is enforced by a test, not just by a comment: `collect.test.ts` injects
+a recorder in place of Prisma and asserts on the WHERE clauses the module
+actually issues — that gold is read with `consentBenchmark: true`, that there is
+exactly **one** gold query so a second unfiltered read cannot sneak the exclusion
+back in, and that the excluded count is still taken. It was verified to fail by
+deleting the filter and watching the guard fire; a guard nobody has seen fail is
+not a guard.
+
 Excluded answers are counted and reported
 (`corpus.goldExcludedNoBenchmarkConsent`, shown in the CLI and in the page's stat
 strip) rather than silently dropped. As of 2026-08-09 that is 8 answers, all on
