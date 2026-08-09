@@ -45,15 +45,34 @@ describe("buildSystemPrompt", () => {
     const ragContext: RagChunk[] = [
       {
         id: "1",
-        content: "verified fact",
+        content: "a retrieved chunk body",
         topic: "greetings",
         chunkType: "note",
       },
     ];
     const system = buildSystemPrompt(candidate, ragContext);
     expect(system.startsWith(IGALA_FORCING_INSTRUCTION)).toBe(true);
-    expect(system).toContain("verified fact");
-    expect(system).toContain("Use the following verified Igala knowledge");
+    expect(system).toContain("a retrieved chunk body");
+    // The chunk is introduced by some framing, whatever its wording.
+    expect(system).toMatch(/reference material/i);
+  });
+
+  it("never tells the model the retrieved material is verified", () => {
+    // None of the live Igala entries are community-verified - they come from
+    // Wikipedia, Wiktionary, an 1854 wordlist and a machine-derived lexicon,
+    // and several carry warnings in their own body text. Claiming otherwise
+    // invites the model to state a machine-derived gloss as fact to a native
+    // speaker, and the same string is shown on the annotator reference panel.
+    // Asserted as a property, not a fixed sentence, so rewording the framing
+    // cannot quietly reintroduce the claim.
+    const candidate: CandidateLike = { ...baseCandidate, ragEnabled: true };
+    const system = buildSystemPrompt(candidate, [
+      { id: "1", content: "chunk", topic: "t", chunkType: "note" },
+    ]);
+    expect(system).not.toMatch(/verified (igala )?(knowledge|material|fact)/i);
+    expect(system).not.toMatch(/authoritative(?!,? and do not| source)/i);
+    // and it must actively warn the model instead
+    expect(system).toMatch(/not community-verified|may be wrong/i);
   });
 
   it("does not include RAG grounding when ragEnabled is false, even with context passed", () => {

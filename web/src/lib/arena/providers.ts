@@ -168,7 +168,13 @@ export function buildSystemPrompt(
           `[${i + 1}] (${e.chunkType ?? "note"} — ${e.topic ?? ""})\n${e.content}`,
       )
       .join("\n\n");
-    return `${base}\n\nUse the following verified Igala knowledge to ground your response:\n\n${formatted}`;
+    // NOT "verified". Of the live Igala entries, none are community-verified:
+    // they are externally sourced from Wikipedia, Wiktionary, an 1854 wordlist
+    // and a machine-derived lexicon, and several carry written warnings in
+    // their own body text. Telling the model this material is verified invites
+    // it to state a machine-derived gloss as fact to a native speaker, and this
+    // same string is what an annotator sees on the reference panel.
+    return `${base}\n\nReference material of mixed reliability, from open sources. It is NOT community-verified: some entries are machine-derived, use non-standard transcription, or may be wrong. Prefer it over guessing, but do not treat it as authoritative, and do not copy a form you have reason to doubt:\n\n${formatted}`;
   }
   return base;
 }
