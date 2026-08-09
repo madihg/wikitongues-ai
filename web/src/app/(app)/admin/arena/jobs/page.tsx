@@ -8,20 +8,17 @@ export default function JobsPage() {
         <div>
           <h1 className="text-2xl text-text-primary">Fine-tune Jobs</h1>
           <p className="mt-2 max-w-2xl text-sm text-text-secondary">
-            The flywheel: collected pairwise and edit annotations become
-            training sets, run through a provider, and land back in the arena as
-            new candidates ready for a held-out eval. The closed (mock) path
-            runs offline; open-weights providers are stubbed until credentials
-            are wired.
+            Collected annotations become training sets, run through a provider,
+            and land back in the arena as new candidates queued for a run on the
+            frozen benchmark. Training is only half of it: a tuned model also
+            needs somewhere to be served. An OpenAI-tuned model is servable the
+            moment the job finishes. A tuned open-weights model on Together
+            needs a dedicated GPU endpoint, because serverless LoRA inference is
+            no longer offered - which is why two successful tuning runs here
+            ended up with very different fates.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Link
-            href="/admin/arena"
-            className="rounded-md border border-border-strong px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-sunken"
-          >
-            Back to Arena
-          </Link>
           <Link
             href="/admin/arena/jobs/new"
             className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-contrast transition-colors hover:bg-accent-hover"

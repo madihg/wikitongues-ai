@@ -45,12 +45,22 @@ export async function GET() {
     },
   });
 
+  // Outcome mix, counted before the Bradley-Terry fit folds "both_inadequate"
+  // and "tie" into the same bucket. The UI needs the distinction: a decided
+  // winner is evidence, a rejection of both answers is not.
+  let decided = 0;
+  let ties = 0;
+  let bothInadequate = 0;
+
   const pairwise: PairwiseRow[] = [];
   for (const c of comparisons) {
     const a = c.modelOutputA?.candidateModelId;
     const b = c.modelOutputB?.candidateModelId;
     if (!a || !b || a === b) continue;
     if (!candidateById.has(a) || !candidateById.has(b)) continue;
+    if (c.winner === "a" || c.winner === "b") decided += 1;
+    else if (c.winner === "both_inadequate") bothInadequate += 1;
+    else ties += 1;
     pairwise.push({
       candidateA: a,
       candidateB: b,
@@ -58,6 +68,11 @@ export async function GET() {
       bucket: c.bucket ?? c.modelOutputA?.bucket ?? null,
     });
   }
+
+  // The frozen benchmark: prompts whose community gold never enters training.
+  const heldOutPrompts = await prisma.prompt.count({
+    where: { language: "igala", split: "test" },
+  });
 
   // Rubric v2: one row per scored axis. N/A (null) scores are stored but
   // excluded from ranking math.
@@ -140,6 +155,14 @@ export async function GET() {
       pairwise: pairwise.length,
       rubric: rubric.length,
       overallDistinguishable: matrix.overall.distinguishable,
+      // Live inputs for the leaderboard explainer.
+      signal: {
+        comparisons: pairwise.length,
+        decided,
+        ties,
+        bothInadequate,
+        heldOutPrompts,
+      },
     },
   });
 }

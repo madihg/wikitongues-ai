@@ -122,7 +122,7 @@ export function TrainingBuilder() {
       const { nTrainingRows } = await buildRes.json();
       log(`Dataset built: ${nTrainingRows} training rows.`);
       if (nTrainingRows === 0) {
-        log("No usable rows for this filter — nothing to launch.");
+        log("No usable rows for this filter - nothing to launch.");
         return;
       }
 
@@ -186,15 +186,18 @@ export function TrainingBuilder() {
           <span className="flex items-center gap-2 text-text-secondary">
             Method
             <InfoTip width="w-80">
-              Build a training set from collected annotations and launch a
-              fine-tune. DPO uses winner/loser pairs from pairwise comparisons;
-              SFT uses annotator corrections and cold-authored gold as
-              completions. Target specific <strong>prompt categories</strong>{" "}
-              (the same categories annotators work in) with the filter below;
-              the per-axis rubric scores are the evaluation signal, not a
-              training target yet. Held-out (test-split) prompts are always
-              excluded. The &quot;mock&quot; provider simulates training; wire
-              Together (or another provider) to train for real.
+              The method ladder is{" "}
+              <strong>benchmark, then SFT, then DPO</strong>.{" "}
+              <strong>SFT</strong> is the teacher: annotator corrections and
+              cold-authored gold become completions, which is how missing Igala
+              actually enters the weights. <strong>DPO</strong> is the finisher:
+              it needs winner/loser pairs from pairwise comparisons, and we
+              barely have any, because nearly every comparison so far came back
+              &quot;both inadequate&quot; rather than picking a side. Target
+              specific <strong>prompt categories</strong> (the ones annotators
+              work in) with the filter below; per-axis rubric scores are an
+              evaluation signal, not a training target. Held-out prompts are
+              always excluded. The &quot;mock&quot; provider simulates training.
             </InfoTip>
           </span>
           <select
@@ -232,7 +235,7 @@ export function TrainingBuilder() {
             onChange={(e) => setBaseCandidateId(e.target.value)}
             className={field}
           >
-            <option value="">— none / use provider default —</option>
+            <option value="">none / use provider default</option>
             {candidates.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} ({c.baseModelId})

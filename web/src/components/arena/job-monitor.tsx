@@ -92,12 +92,17 @@ export function JobMonitor() {
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-2 text-sm text-text-secondary">
           Each job turns collected annotations into a training set, runs it
-          through a provider, and (on success) auto-registers the result as a
-          new candidate with a queued held-out eval.
+          through a provider, and on success auto-registers the result as a new
+          candidate with a queued run on the frozen benchmark.
           <InfoTip width="w-80">
-            Fine-tune jobs and their status. On success a job auto-registers its
-            output as a new candidate and queues an evaluation against the
-            held-out bank — closing the loop.
+            A finished job is not automatically a usable model. It also has to
+            be servable. OpenAI serves a tuned model as soon as the job
+            completes. Together requires a dedicated GPU endpoint for any tuned
+            checkpoint, because it no longer offers serverless LoRA inference,
+            so the Qwen3-14B run here trained successfully and still cannot
+            answer a prompt. The OpenAI SFT run on the same dataset went
+            straight into the arena. Costs shown are the provider&apos;s real
+            billed amount where it reports one, estimates otherwise.
           </InfoTip>
         </p>
         <button
@@ -164,7 +169,7 @@ export function JobMonitor() {
                     {j.provider}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-text-secondary">
-                    {j.nTrainingRows ?? "—"}
+                    {j.nTrainingRows ?? "-"}
                   </td>
                   <td className="px-3 py-2 text-text-secondary">
                     <div className="flex items-center gap-1.5">
@@ -188,12 +193,12 @@ export function JobMonitor() {
                           {j.outputCandidate.name}
                         </span>
                       ) : (
-                        <span className="text-text-muted">—</span>
+                        <span className="text-text-muted">-</span>
                       )}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-text-secondary">
-                    {j.costUsd != null ? `$${j.costUsd.toFixed(2)}` : "—"}
+                    {j.costUsd != null ? `$${j.costUsd.toFixed(2)}` : "-"}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {(j.status === "running" || j.status === "queued") && (

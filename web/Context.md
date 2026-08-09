@@ -1,3 +1,21 @@
+## Together serverless-LoRA verification: STOPPED before training, no such product exists (2026-08-09)
+
+TASK: train an open-weights Igala LoRA on Together using a base whose adapters Together serves SERVERLESSLY (no dedicated endpoint), because open weights matter independently for community release + interpretability, and the Qwen3-14B run ($4.00, `ft-e63efcfc-8670`) proved un-servable. STOPPED at step 1 (verification) per the task's explicit gate - did not spend the $10 budget, did not touch `fine-tune-providers.ts`/`together.ts`, did not create any endpoint.
+
+VERDICT: Together currently has **no serverless LoRA inference product at all** - every fine-tuned checkpoint (LoRA or full, any base model) requires either a dedicated endpoint (billable, GPU-reserved, this account cannot create one) or a local download. The Dec-2024 "Serverless Multi-LoRA" feature (the togethercompute launch tweet/blog people still cite) is gone from the current docs; multi-adapter serving now lives under Dedicated Endpoints ("Serve multiple LoRA adapters on one endpoint" - explicitly: "Only dedicated endpoints, not serverless, can be used as adapter targets").
+
+EVIDENCE (4 independent sources, all fetched live 2026-08-09):
+
+1. `docs.together.ai/docs/fine-tuning/deployment.md` - "Once a fine-tuning job completes, your model is available for inference in two ways: hosted on a dedicated endpoint at Together AI, or downloaded as a standalone checkpoint." No serverless path mentioned.
+2. `docs.together.ai/docs/dedicated-endpoints/lora-adapter.md` - "Only dedicated endpoints, not serverless, can be used as adapter targets. Only private endpoints can be used as adapter targets."
+3. `docs.together.ai/docs/fine-tuning/supported-models.md` - full LoRA-fine-tunable list (29 bases incl. `Meta Llama 3.1 8B Instruct Reference`, `Llama 3.3 70B Instruct Reference`, `Qwen3.5` family, `Mixtral 8x7B`, `GPT-OSS`, `GLM 5.1`, `Kimi K2.x`, `Gemma 4`) carries no serverless-after-tuning marker anywhere.
+4. **Empirical, on THIS account**: called `POST /v1/chat/completions` with `model: "madihalim_2eb2/Qwen3-14B-92ef7bd3"` (the real registered adapter id from the earlier Qwen3-14B run) - live response today: `400 model_not_available` - `"Unable to access non-serverless model madihalim_2eb2/Qwen3-14B-92ef7bd3. Please visit https://api.together.ai/models/... to create and start a new dedicated endpoint for the model."` Same wall as before, confirmed still standing.
+5. Cross-checked programmatically: `tg beta models public --product fine-tuning` (23 models) vs `--product serverless` (2 models: `deepseek-ai/DeepSeek-V4-Flash-0731`, `thinkingmachines/Inkling-Small`) - **zero overlap**. Nothing fine-tunable on this account's catalog is also serverless-tagged.
+
+Also fixed in passing: `tg`/curl auth was silently failing (`403`/`401`) because `.env.local`'s `TOGETHER_API_KEY` is double-quoted (`TOGETHER_API_KEY="tgp_v1_..."`) and naive `cut`/`xargs` parsing leaves the quotes in the header value. Strip with `tr -d '"'` (or load via the app's own dotenv, which already handles this correctly) before any raw curl/`tg --api-key` use outside the Next.js runtime.
+
+NEXT: no open-weights Together candidate is achievable without the account owner (Halim) either (a) enabling dedicated-endpoint creation and accepting the per-GPU-hour bill, or (b) self-hosting a downloaded checkpoint outside Together entirely. Until one of those is decided, the arena's only open-weights-adjacent story stays what it already is: the untrainable-but-inspectable base models themselves (not a tuned checkpoint). OpenAI-tuned `gpt-4.1-mini` (Rung C, below) remains the only servable fine-tune in the arena.
+
 ## Rung C LANDED: OpenAI-tuned Igala model is live in the arena (2026-08-08)
 
 THE UNBLOCK: the Together LoRA (Qwen3-14B, ft-e63efcfc-8670, $4.00) trained but could never be SERVED - tuned Qwen needs a dedicated GPU endpoint and this Together account cannot create one. Retrained the SAME dataset on OpenAI instead, where a tuned model is servable the instant the job finishes. Tuned model now answers all 43 frozen prompts and is in the blind queue.
