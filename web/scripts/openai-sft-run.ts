@@ -435,8 +435,14 @@ async function stepMetrics() {
   // honest anchor for what these proxies look like on real Igala: native writing
   // is routinely less tone-marked than a frontier model's output, so a tuned
   // model moving TOWARD the gold reads as a "regression" on toneShare.
+  // consentBenchmark, enforced in the query - this gold is the reference row
+  // the models are scored against, which is benchmark use.
   const golds = await prisma.coldAuthorAnswer.findMany({
-    where: { promptId: { in: promptIds }, isDemo: false },
+    where: {
+      promptId: { in: promptIds },
+      isDemo: false,
+      consentBenchmark: true,
+    },
     select: { promptId: true, answerText: true },
   });
   const goldBy = new Map<string, string>();

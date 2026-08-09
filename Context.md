@@ -378,12 +378,18 @@ UPDATE (same day): lex rewrites LANDED (ig_lex_001 + ig_bank_lex_030 -> pure voc
 ## STANDING RULE: community consent is enforced in code, not in comments (2026-08-09)
 
 ColdAuthorAnswer carries TWO independent permissions and they are not interchangeable:
-- `consentTraining` - may this answer be used to train a model. Honoured by src/lib/arena/sft-source.ts and src/lib/arena/gold-retrieval.ts.
-- `consentBenchmark` - may this answer be used to benchmark models. Honoured by src/lib/eval/collect.ts ONLY.
 
-`consentBenchmark` had one writer and zero readers until 2026-08-09. Eight production answers were set to false and the language profile the benchmark depends on was training on all gold, so those speakers' text sat inside a benchmark component they had declined. Nobody was harmed (no scoring reference was affected, the ceiling did not move) but the flag was a courtesy that looked like a permission.
+- `consentTraining` - may this answer be used to train a model. Honoured by src/lib/arena/sft-source.ts:58 and src/lib/arena/gold-retrieval.ts:348. NOTE both enforce in application logic, not in the query, which is the opposite of rule 2 below. They are unit-tested, so they are guarded, but they are the pattern to migrate, not to copy.
+- `consentBenchmark` - may this answer be used to benchmark models. Honoured by src/lib/eval/collect.ts, web/scripts/igala-rag-run.ts (both the harness read and the samples read), web/scripts/together-full-sft-run.ts and web/scripts/openai-sft-run.ts.
+
+`consentBenchmark` had one writer and, for benchmark purposes, no reader until 2026-08-09. Eight production answers were set to false and the language profile the benchmark depends on was training on all gold, so those speakers' text sat inside a benchmark component they had declined. All 8 sit on train-split prompts, so no scoring reference was affected and the ceiling did not move - but the flag was a courtesy that looked like a permission.
+
+CORRECTION (2026-08-09, later the same day): the first fix claimed collect.ts was the ONLY benchmark consumer of gold. That was FALSE. An exhaustive sweep of all 14 ColdAuthorAnswer read sites found three more benchmark readers with no consent filter - most importantly scripts/igala-rag-run.ts, which read gold and fed it to BOTH the chrF references and the language profile, i.e. the exact pair of uses collect.ts had just been fixed for, in a file written AFTER that fix landed. All four are now filtered in the query. The lesson is in the shape of the mistake: fixing the instance you found and declaring the class closed. Sweep the class.
+
+Separately: `consentTraining` is withheld on 10 answers, `consentBenchmark` on 8, and the two sets are DISJOINT - nobody withheld both, 919 granted both. Annotators are exercising the two permissions independently, so treating them as interchangeable would be a substantive wrong, not a technicality.
 
 THE RULE FOR ANYONE ADDING A SURFACE THAT READS ColdAuthorAnswer:
+
 1. Decide which permission your surface needs. Training consumer -> consentTraining. Benchmark, eval, leaderboard, public metric, published figure -> consentBenchmark. A surface that does both needs both.
 2. Enforce it IN THE QUERY, not in application logic downstream, so no code path in the module can reach a non-consented row.
 3. Count and surface the exclusions. Never drop them silently: a number computed over fewer rows than the reader assumes is a quiet lie.
