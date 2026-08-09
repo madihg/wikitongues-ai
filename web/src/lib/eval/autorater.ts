@@ -8,15 +8,20 @@
  *   3. else the higher-scoring side wins.
  *
  * Both constants are fixed A PRIORI from the inter-gold ceiling, never tuned to
- * maximise agreement - tuning a threshold on the same 781 labels you then report
+ * maximise agreement - tuning a threshold on the same labels you then report
  * agreement against is how autoraters get to claim numbers they have not earned.
  * The inadequacy threshold is a low quantile of the human-vs-human chrF
  * distribution: "further from the gold than all but the least typical native
  * speaker".
  *
  * ============ WHY THIS VALIDATION IS WEAK, IN NUMBERS ============
- * Of 781 blind comparisons, 775 are "both inadequate", 5 name a winner and 1 is
- * a tie. Two consequences we refuse to paper over:
+ * Figures below are a DATED OBSERVATION (2026-08-09) of a label set that grows
+ * as annotators work; validateAutorater() always recomputes them from whatever
+ * labels exist at call time, so these comments illustrate the shape of the
+ * problem and are never read as data.
+ *
+ * As of that date: of 781 blind comparisons, 775 are "both inadequate", 5 name
+ * a winner and 1 is a tie. Two consequences we refuse to paper over:
  *
  *   - The DECIDED set (n = 5) cannot support any accuracy claim. A 95% Wilson
  *     interval on 5 trials spans roughly 40 percentage points whatever the
@@ -144,7 +149,7 @@ export interface AutoraterValidation {
    * it as a hit would flatter it. We report it separately.
    */
   decidedScorable: SubsetAgreement;
-  /** The ~775 both-inadequate comparisons. */
+  /** Comparisons where the human rejected both sides (the large majority). */
   bothInadequate: SubsetAgreement;
   ties: SubsetAgreement;
   /** What a constant predictor of the most common label would score. */
