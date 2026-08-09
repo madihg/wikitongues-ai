@@ -151,10 +151,10 @@ export function CostLedger() {
           <InfoTip width="w-72">
             What each training run actually cost, taken from the provider rather
             than guessed. Together reports its price in nano-USD (billionths of
-            a dollar) and we convert on the way in, so its $4.00 Qwen3-14B run
-            arrives from the API as 4,000,000,000. OpenAI reports no price on
-            the job, so its runs are priced from the trained-token count it does
-            report, at the published training rate. Rows from the{" "}
+            a dollar) and we convert on the way in, so a $4.00 run arrives from
+            the API as 4,000,000,000. OpenAI reports no price on the job, so its
+            runs are priced from the trained-token count it does report, at the
+            published training rate. Rows from the{" "}
             <span className="font-mono">mock</span> provider are simulated: no
             money changed hands.
           </InfoTip>

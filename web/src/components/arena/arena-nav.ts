@@ -25,7 +25,7 @@ export const ARENA_TABS: ArenaTab[] = [
   {
     href: "/admin/arena/jobs",
     label: "Fine-tune jobs",
-    hint: "Turn collected annotations into training sets and launch fine-tunes. A tuned model also needs somewhere to be served, which is why two tuned models here ended up with different fates.",
+    hint: "Turn collected annotations into training sets and launch fine-tunes. A tuned model also needs somewhere to be served, which is why tuning runs here have ended up with very different fates.",
   },
   {
     href: "/admin/arena/compare",

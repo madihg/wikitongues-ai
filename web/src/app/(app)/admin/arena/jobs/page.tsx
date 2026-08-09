@@ -14,7 +14,7 @@ export default function JobsPage() {
             needs somewhere to be served. An OpenAI-tuned model is servable the
             moment the job finishes. A tuned open-weights model on Together
             needs a dedicated GPU endpoint, because serverless LoRA inference is
-            no longer offered - which is why two successful tuning runs here
+            no longer offered - which is why runs that trained equally well have
             ended up with very different fates.
           </p>
         </div>

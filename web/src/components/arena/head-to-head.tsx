@@ -72,11 +72,11 @@ export function ComparePicker({ a, b }: { a: string; b: string }) {
       <p className="flex items-center gap-2 text-sm text-text-secondary">
         Pick two candidates to compare on the frozen benchmark.
         <InfoTip width="w-80">
-          The frozen (held-out) set is 43 prompts whose community gold is never
+          The frozen (held-out) set is the prompts whose community gold is never
           exported into any training set. Because no candidate can have been
           trained on the answers, a difference on these prompts is a difference
           in ability rather than a memory of the training data. That is what
-          makes the comparison fair.
+          makes the comparison fair. The Overview tab shows the current count.
         </InfoTip>
       </p>
       <div className="grid gap-4 sm:grid-cols-2">

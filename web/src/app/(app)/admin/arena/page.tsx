@@ -34,7 +34,7 @@ export default function ArenaPage() {
 
       <HelpButton
         title="Model Arena"
-        description="Candidate models compared per prompt category using blind human pairwise judgments, converted to a 0-100 Bradley-Terry arena strength. 50 means no evidence either way, not a score of 50 percent. The arena cannot rank the models today: almost every comparison so far came back 'both inadequate', so 'ns' cells are reporting an absence of evidence rather than a tie. That changes as decided winners accumulate on the 43 frozen benchmark prompts, whose community gold never enters training. No model grades the Igala here: a model that cannot speak Igala cannot judge it. Automatic metrics (chrF, language identity, diacritic checks) are triage and gating only."
+        description="Candidate models compared per prompt category using blind human pairwise judgments, converted to a 0-100 Bradley-Terry arena strength. 50 means no evidence either way, not a score of 50 percent. The arena cannot rank the models today: almost every comparison so far came back 'both inadequate', so 'ns' cells are reporting an absence of evidence rather than a tie. That changes as decided winners accumulate on the frozen benchmark prompts, whose community gold never enters training. No model grades the Igala here: a model that cannot speak Igala cannot judge it. Automatic metrics (chrF, language identity, diacritic checks) are triage and gating only."
       />
     </div>
   );
