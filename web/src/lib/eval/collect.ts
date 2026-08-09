@@ -7,7 +7,21 @@
  * WHAT IT READS, and why each choice matters:
  *   - Prompt where isHoldout = true. The frozen benchmark (tasks/eval-freeze-v1.json,
  *     43 prompts). Never the training split.
- *   - ColdAuthorAnswer where isDemo = false. Community gold, the references.
+ *   - ColdAuthorAnswer where isDemo = false AND consentBenchmark = true.
+ *     Community gold, the references.
+ *
+ *     CONSENT. `consentBenchmark` is a per-answer flag an annotator sets when
+ *     they author gold: it means "you may use my answer to benchmark models".
+ *     It is a SEPARATE permission from `consentTraining`, which is what
+ *     sft-source.ts and gold-retrieval.ts honour. This harness is a benchmark,
+ *     so it is the consumer `consentBenchmark` was written for - and until this
+ *     module existed, nothing in the codebase read that flag at all. We honour
+ *     it for BOTH uses of gold here: as a scoring reference, and as training
+ *     text for the Igala language profile. The profile is a component of the
+ *     benchmark, so a speaker who withheld benchmark consent should not be in
+ *     it either. Excluded answers are COUNTED and reported (see
+ *     `corpus.goldExcludedNoBenchmarkConsent`) rather than silently dropped, so
+ *     the number is auditable instead of invisible.
  *   - ModelOutput where isDemo = false and the prompt is held out. Candidate
  *     answers.
  *   - PairwiseComparison where isDemo = false. Human labels for autorater
@@ -53,6 +67,11 @@ export interface EvalBundle {
     humanComparisons: number;
     /** Comparisons dropped because an output's prompt is not in the holdout set. */
     comparisonsOutsideHoldout: number;
+    /**
+     * Gold answers withheld from this report because their author did not
+     * consent to benchmark use. Reported so the exclusion is auditable.
+     */
+    goldExcludedNoBenchmarkConsent: number;
   };
 }
 
@@ -70,9 +89,14 @@ export async function collectEvalBundle(
     select: { id: true, promptId: true, bucket: true, text: true },
   });
 
+  // Consent is enforced in the QUERY, not downstream, so no code path in this
+  // module can accidentally reach a non-consented answer.
   const allGold = await prisma.coldAuthorAnswer.findMany({
-    where: { isDemo: false },
+    where: { isDemo: false, consentBenchmark: true },
     select: { promptId: true, answerText: true, englishGloss: true },
+  });
+  const goldExcludedNoBenchmarkConsent = await prisma.coldAuthorAnswer.count({
+    where: { isDemo: false, consentBenchmark: false },
   });
 
   const goldByPromptDbId = new Map<string, string[]>();
@@ -221,6 +245,7 @@ export async function collectEvalBundle(
       candidateOutputs: outputs.length,
       humanComparisons: cases.length,
       comparisonsOutsideHoldout: outsideHoldout,
+      goldExcludedNoBenchmarkConsent,
     },
   };
 }

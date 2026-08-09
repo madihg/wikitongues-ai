@@ -87,6 +87,12 @@ async function main() {
       `${corpus.candidateOutputs} candidate outputs, ` +
       `${corpus.humanComparisons} human comparisons.`,
   );
+  if (corpus.goldExcludedNoBenchmarkConsent > 0) {
+    console.log(
+      `consent: ${corpus.goldExcludedNoBenchmarkConsent} gold answer(s) excluded ` +
+        `because their author did not consent to benchmark use.`,
+    );
+  }
 
   // ── 1. the ceiling, printed FIRST so no model number is read without it ──
   console.log(
