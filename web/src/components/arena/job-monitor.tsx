@@ -98,11 +98,12 @@ export function JobMonitor() {
             A finished job is not automatically a usable model. It also has to
             be servable. OpenAI serves a tuned model as soon as the job
             completes. Together requires a dedicated GPU endpoint for any tuned
-            checkpoint, because it no longer offers serverless LoRA inference,
-            so the Qwen3-14B run here trained successfully and still cannot
-            answer a prompt. The OpenAI SFT run on the same dataset went
-            straight into the arena. Costs shown are the provider&apos;s real
-            billed amount where it reports one, estimates otherwise.
+            checkpoint: as of August 2026, checked against the live API, it
+            offers no serverless path for them. That is why the Qwen3-14B run
+            here trained successfully and still cannot answer a prompt, while
+            the OpenAI SFT run on the same dataset went straight into the arena.
+            Costs shown are the provider&apos;s real billed amount where it
+            reports one, estimates otherwise.
           </InfoTip>
         </p>
         <button
