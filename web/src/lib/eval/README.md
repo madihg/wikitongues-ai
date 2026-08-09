@@ -39,7 +39,7 @@ something is badly wrong, and poor at telling you that something is right.
 | File            | What it is                                                                                                           |
 | --------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `normalize.ts`  | Unicode handling for Igala's two kinds of diacritic (segmental ẹ/ọ vs tonal). Tokenisation, folding, char sequences. |
-| `chrf.ts`       | chrF and chrF++ (Popović 2015, 2017), following sacrebleu's documented algorithm.                                           |
+| `chrf.ts`       | chrF and chrF++ (Popović 2015, 2017), following sacrebleu's documented algorithm.                                    |
 | `similarity.ts` | Diacritic-exact match, tone-insensitive match, fully folded match, token edit similarity.                            |
 | `reference.ts`  | Multi-gold scoring (best and mean over references) and the **inter-gold ceiling**.                                   |
 | `langid.ts`     | The language-identity gate: Igala / Yoruba / Igbo / English / Pidgin, plus its own cross-validation.                 |
@@ -136,6 +136,27 @@ can accuse us of inflating.
 
 Prompts with fewer than two golds have **no** ceiling and are excluded from it.
 The report says how many.
+
+## Consent
+
+`ColdAuthorAnswer.consentBenchmark` is a per-answer permission an annotator sets
+when authoring gold: _you may use my answer to benchmark models_. It is separate
+from `consentTraining`, which is what `sft-source.ts` and `gold-retrieval.ts`
+honour. This harness is a benchmark, so it is the consumer that flag was written
+for — and until this module existed, **nothing in the codebase read it**.
+
+`collect.ts` enforces it in the query, so no code path here can reach a
+non-consented answer, and it applies to _both_ uses of gold: as a scoring
+reference and as training text for the Igala language profile. The profile is a
+component of the benchmark, so a speaker who withheld benchmark consent should
+not be inside it either.
+
+Excluded answers are counted and reported
+(`corpus.goldExcludedNoBenchmarkConsent`, shown in the CLI and in the page's stat
+strip) rather than silently dropped. As of 2026-08-09 that is 8 answers, all on
+non-holdout prompts — so no scoring reference changes today, and the guard exists
+because a frozen prompt could gain a non-consented answer at any time while
+annotators are working.
 
 ## The language-identity gate
 

@@ -146,7 +146,13 @@ you don do am make you no vex abeg no wahala i no sabi wetin dey happen`;
  */
 export const SIGNATURE_MEASURED_AT = "2026-08-09";
 
-/** Corpus size at SIGNATURE_MEASURED_AT, so the ratios can be interpreted. */
+/**
+ * Corpus size at SIGNATURE_MEASURED_AT, so the ratios can be interpreted. Basis
+ * is all non-demo gold on that date. The harness now scores against the
+ * benchmark-CONSENTED subset (929 of those 937), which is a smaller corpus; the
+ * ratios below are not re-derived from it, which is another reason they are
+ * labelled as a dated observation rather than a live count.
+ */
 export const SIGNATURE_MEASURED_N = 937;
 
 /**

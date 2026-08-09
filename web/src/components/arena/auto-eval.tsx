@@ -96,6 +96,7 @@ interface EvalData {
     candidateOutputs: number;
     humanComparisons: number;
     comparisonsOutsideHoldout: number;
+    goldExcludedNoBenchmarkConsent: number;
   };
   report: {
     generatedAt: string;
@@ -353,6 +354,12 @@ export function AutoEval() {
           <span>{corpus.goldAnswersOnHoldout} gold answers on them</span>
           <span>{corpus.candidateOutputs} candidate outputs</span>
           <span>{corpus.humanComparisons} human comparisons</span>
+          {corpus.goldExcludedNoBenchmarkConsent > 0 ? (
+            <span title="These speakers did not consent to their answers being used for benchmarking, so they are excluded from both the scoring references and the language profile.">
+              {corpus.goldExcludedNoBenchmarkConsent} gold excluded (no
+              benchmark consent)
+            </span>
+          ) : null}
           <span className="font-mono">computed {data.computedAt}</span>
         </div>
         <button
