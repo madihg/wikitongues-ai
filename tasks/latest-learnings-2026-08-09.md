@@ -14,17 +14,17 @@ We fine-tuned a model on community-authored Igala. It beats untuned frontier mod
 
 Live harness output, frozen 43-prompt benchmark, run 2026-08-09:
 
-| Candidate | n | chrF [95% CI] |
-|---|---|---|
-| GPT-4.1 + Igala RAG | 43 | **26.8** [22.5-31.2] |
-| GPT-4.1 mini SFT (community cold-gold) | 43 | **25.4** [18.0-34.4] |
-| Gemma 4 31B + RAG | 41 | 25.0 [19.7-31.0] |
-| Llama 3.3 70B + RAG | 43 | 20.7 [16.3-25.4] |
-| Gemma 4 31B IT | 35 | 15.6 |
-| Gemini 2.5 Flash | 22 | 12.7 |
-| GPT-4.1 | 43 | 10.4 |
-| GPT-4.1 mini | 43 | 9.0 |
-| Llama 3.3 70B Instruct | 43 | 8.1 |
+| Candidate                              | n   | chrF [95% CI]        |
+| -------------------------------------- | --- | -------------------- |
+| GPT-4.1 + Igala RAG                    | 43  | **26.8** [22.5-31.2] |
+| GPT-4.1 mini SFT (community cold-gold) | 43  | **25.4** [18.0-34.4] |
+| Gemma 4 31B + RAG                      | 41  | 25.0 [19.7-31.0]     |
+| Llama 3.3 70B + RAG                    | 43  | 20.7 [16.3-25.4]     |
+| Gemma 4 31B IT                         | 35  | 15.6                 |
+| Gemini 2.5 Flash                       | 22  | 12.7                 |
+| GPT-4.1                                | 43  | 10.4                 |
+| GPT-4.1 mini                           | 43  | 9.0                  |
+| Llama 3.3 70B Instruct                 | 43  | 8.1                  |
 
 **Three corrections to what was previously circulated:**
 
@@ -42,19 +42,19 @@ The ceiling is computed leave-one-out: hold out one gold answer, score it agains
 
 So the "agreement between two speakers" number is partly one speaker agreeing with themselves. Re-running the repo's own function with duplicates handled:
 
-| Basis | Ceiling |
-|---|---|
-| As shipped | 63.2 |
+| Basis                                                | Ceiling  |
+| ---------------------------------------------------- | -------- |
+| As shipped                                           | 63.2     |
 | One answer per speaker (keep each annotator's first) | **46.0** |
-| Full string deduplication | 39.7 |
+| Full string deduplication                            | 39.7     |
 
-This changes the story in both directions and neither is flattering. The honest ceiling is around **46**, which means 25.4 chrF is roughly 55 percent of human agreement rather than 40 percent - the model looks *better*. But the project's flagship methodological contribution, the thing most worth publishing, was measuring something other than what it claimed. **A ceiling that counts a repeat submission as a second speaker is not a measure of inter-speaker agreement.**
+This changes the story in both directions and neither is flattering. The honest ceiling is around **46**, which means 25.4 chrF is roughly 55 percent of human agreement rather than 40 percent - the model looks _better_. But the project's flagship methodological contribution, the thing most worth publishing, was measuring something other than what it claimed. **A ceiling that counts a repeat submission as a second speaker is not a measure of inter-speaker agreement.**
 
 That the error makes our results look worse when corrected is precisely why it needed to be caught by someone trying to break it, not by someone confirming it.
 
 ### What chrF measures, and the circularity in it
 
-chrF is character n-gram overlap with a human answer, 0 to 100. It is not fluency and not correctness. It measures resemblance to *this* community's writing: their tone-marking habits, their spelling, their dialect.
+chrF is character n-gram overlap with a human answer, 0 to 100. It is not fluency and not correctness. It measures resemblance to _this_ community's writing: their tone-marking habits, their spelling, their dialect.
 
 Supervised fine-tuning on their gold teaches exactly those habits. A chrF gain from SFT is therefore partly circular - we trained on proximity to the thing we then measured proximity to. The gain is still real (going from "produces Yoruba" to "overlaps community Igala" is genuine), but "higher chrF" means "writes more like these six speakers", not "speaks Igala well".
 
@@ -68,15 +68,15 @@ Difference between GPT-4.1+RAG and the tuned model: **+1.4 [-6.8, 9.0], n=43. No
 
 And retrieval helps every base model it is applied to, paired against that model's own untuned self:
 
-| Base model | plain → +RAG |
-|---|---|
-| GPT-4.1 | **+16.4** [11.7, 21.1] |
-| Llama 3.3 70B | **+12.6** [7.6, 17.7] |
-| Gemma 4 31B | **+10.4** [2.4, 17.8] |
+| Base model    | plain → +RAG           |
+| ------------- | ---------------------- |
+| GPT-4.1       | **+16.4** [11.7, 21.1] |
+| Llama 3.3 70B | **+12.6** [7.6, 17.7]  |
+| Gemma 4 31B   | **+10.4** [2.4, 17.8]  |
 
 All three exclude zero.
 
-Both methods do the same underlying thing: put real Igala in front of the model. Fine-tuning puts ~900 examples in the weights, once, expensively. Retrieval puts three or four in the prompt at question time. The tie says that for a language the base knows essentially nothing about, seeing a few real examples *now* is about as good as having been trained on all of them.
+Both methods do the same underlying thing: put real Igala in front of the model. Fine-tuning puts ~900 examples in the weights, once, expensively. Retrieval puts three or four in the prompt at question time. The tie says that for a language the base knows essentially nothing about, seeing a few real examples _now_ is about as good as having been trained on all of them.
 
 The implication is uncomfortable and worth stating: **the model has not learned Igala. It is copying** - orthography, vocabulary, sentence shape - from whatever real Igala is nearest to hand. Fine-tuning does not change that behaviour, it relocates the examples.
 
@@ -84,21 +84,21 @@ The cost asymmetry makes the point sharper. The retrieval arm cost **$0.48** in 
 
 ### Two things that complicate the tie
 
-**Retrieval and fine-tuning win different things.** On the language gate, the fine-tune identifies as Igala 90.7% of the time against GPT-4.1+RAG's 39.5%. RAG makes a model *match gold characters*; SFT makes it *stay in the language*. chrF conflates these. A model that combines both is the obvious untried experiment.
+**Retrieval and fine-tuning win different things.** On the language gate, the fine-tune identifies as Igala 90.7% of the time against GPT-4.1+RAG's 39.5%. RAG makes a model _match gold characters_; SFT makes it _stay in the language_. chrF conflates these. A model that combines both is the obvious untried experiment.
 
 **Split design flatters RAG.** Frozen prompt `ig_bank_orth_013` ("morning" and "night") has a near-duplicate in train (`ig_orth_001`, "morning"). Retrieval legitimately finds it, and no held-out gold leaked, but part of the RAG gain reflects how the split was drawn rather than retrieval generality. The frozen prompts are template instances - `ig_bank_gram_003` is "Translate 'I drink water' into Igala", `ig_bank_lex_003` is "Give the Igala word for 'hand'" - so the training set teaches the answer key by construction, not by ID leakage.
 
-**Open weights are closer than the plain scores suggest.** Llama 3.3 70B is *last* untuned at 8.1, but Llama+RAG at 20.7 beats GPT-4.1 plain at 10.4, and Gemma 31B+RAG at 25.0 is level with the fine-tune. Retrieval closes the open/closed gap more than model scale does.
+**Open weights are closer than the plain scores suggest.** Llama 3.3 70B is _last_ untuned at 8.1, but Llama+RAG at 20.7 beats GPT-4.1 plain at 10.4, and Gemma 31B+RAG at 25.0 is level with the fine-tune. Retrieval closes the open/closed gap more than model scale does.
 
 ### A concrete example, which is more persuasive than the table
 
 Prompt: the Igala word for water. Gold: **Omi**.
 
-- Every plain model: *ámẹ́*, *amá*, *màíí* - Yoruba-flavoured, wrong.
+- Every plain model: _ámẹ́_, _amá_, _màíí_ - Yoruba-flavoured, wrong.
 - Every RAG variant: **Ómi**.
 - The fine-tune: **Omi**.
 
-Same pattern for "husband" (gold *Oji*; plain models give *úchu*, *Ǹdá*, *Àgbá*). On one register prompt GPT-4.1 plain answered in English; with RAG it produced *"Wọla ọdudu"* exactly. On a dialect prompt, GPT-4.1 plain answered **in Igbo**.
+Same pattern for "husband" (gold _Oji_; plain models give _úchu_, _Ǹdá_, _Àgbá_). On one register prompt GPT-4.1 plain answered in English; with RAG it produced _"Wọla ọdudu"_ exactly. On a dialect prompt, GPT-4.1 plain answered **in Igbo**.
 
 ---
 
@@ -129,7 +129,7 @@ The generalisable lesson: **for a very low-resource language, an LLM autorater m
 Verified detail matters here in both directions:
 
 - The harm was narrower than first reported. All 8 sit on train-split prompts, so they never entered the scoring references. The actual exposure was the Igala language-identification profile, which trains on all non-demo gold.
-- The problem was **wider** than first reported. The claim that `collect.ts` was the only benchmark consumer of gold was **false**. An exhaustive sweep of 14 read sites found three more benchmark readers with no consent filter, including `igala-rag-run.ts`, which reads gold and feeds it to *both* the chrF references and the language profile - the exact pair of uses the original fix addressed, in a file written after that fix landed. All four are now filtered in the query.
+- The problem was **wider** than first reported. The claim that `collect.ts` was the only benchmark consumer of gold was **false**. An exhaustive sweep of 14 read sites found three more benchmark readers with no consent filter, including `igala-rag-run.ts`, which reads gold and feeds it to _both_ the chrF references and the language profile - the exact pair of uses the original fix addressed, in a file written after that fix landed. All four are now filtered in the query.
 - `consentTraining` is separately withheld on **10** answers. The two sets are **disjoint**: nobody withheld both, 919 granted both. Real annotators are exercising the two permissions independently, which is the strongest argument that treating them as interchangeable would be a substantive wrong rather than a technicality.
 
 The rule this produced, now standing: **community consent is enforced in code, not in comments.** Pick the right permission for the use, enforce it in the query rather than downstream, count and surface what was excluded, and document any carve-out. A permission nothing reads is worse than none, because it looks like it works.
@@ -148,7 +148,7 @@ For a project whose loudest ethical finding is that a consent checkbox had no re
 
 - **Igala Wikipedia is CC BY-SA 4.0** - confirmed directly from the MediaWiki API (`rightsinfo`), not inferred.
 - **It went live 23 April 2024** - confirmed from log entry 1 on the wiki itself.
-- **Wikitongues helped create it.** The Igala Wikimedia Community's own post says: "We express our deepest gratitude to the Wikitongues team for selecting Igala as one of the languages for the Language Accelerator Program in 2023." (Note: *Accelerator*, not *Acceleration*, which our documents get wrong in two places.)
+- **Wikitongues helped create it.** The Igala Wikimedia Community's own post says: "We express our deepest gratitude to the Wikitongues team for selecting Igala as one of the languages for the Language Accelerator Program in 2023." (Note: _Accelerator_, not _Acceleration_, which our documents get wrong in two places.)
 - **Igala is absent from FLORES-200/NLLB, MADLAD-400, Glot500, all four Masakhane benchmarks, Common Voice and Tatoeba** - all six re-verified with positive controls passing. Two of these had previously been asserted without checking; they hold.
 
 ### Not verified
@@ -168,7 +168,7 @@ Both predate our first fine-tune. The cause is a method flaw, not bad luck: the 
 
 We already knew the Bible dataset existed - it appears in our own contamination warnings - while the notebook simultaneously claimed no such dataset existed. Two parts of the record contradicting each other is the failure mode to watch for.
 
-A useful corollary: our corpus notes treat the Igala Bible as a permission target of *estimated* size. 31,085 aligned verse pairs are already public. Whether that upload is a licensed use of the Bible Society text is the real question, and a sharper one.
+A useful corollary: our corpus notes treat the Igala Bible as a permission target of _estimated_ size. 31,085 aligned verse pairs are already public. Whether that upload is a licensed use of the Bible Society text is the real question, and a sharper one.
 
 ### Lexical coverage is the binding constraint, and it is worse than assumed
 
@@ -192,6 +192,7 @@ Yoruba is Igala's nearest well-resourced relative. It is why a Yoruba-exposed ba
 We hit this in our own data. Thirteen seed reference entries shown to annotators as authoritative Igala were **Yoruba** (`Okpa` for 1, `Eje` for 7, `Egbon`/`Aburo` for siblings). They were quarantined.
 
 Two caveats on that quarantine, both found today:
+
 1. **It exists only in production Postgres.** A repo-wide search finds no migration, no script, no changelog entry. If the database is rebuilt from the repo, all thirteen Yoruba rows return as `language='igala'` and re-enter the annotator reference set.
 2. It was applied by **raw SQL with no audit trail** - `updatedAt` is identical to `createdAt` to the millisecond, so Prisma never touched it and nothing records when the change happened.
 
@@ -199,20 +200,20 @@ Two caveats on that quarantine, both found today:
 
 ## 6. What the collected data actually looks like
 
-| Measure | Value |
-|---|---|
-| Community gold answers | 937 (933 from 6 real contributors, 4 from a seed account) |
-| Prompts | 465 (421 train, 43 test, 1 dev) |
-| Prompts with any gold | 177 of 465 (38.1%) |
-| Prompts with zero gold | 288 (62%) |
-| Pairwise comparisons | 781 |
-| Rubric scores recorded | 13 axis rows, 2 score rows (both from a seed account) |
+| Measure                                         | Value                                                     |
+| ----------------------------------------------- | --------------------------------------------------------- |
+| Community gold answers                          | 937 (933 from 6 real contributors, 4 from a seed account) |
+| Prompts                                         | 465 (421 train, 43 test, 1 dev)                           |
+| Prompts with any gold                           | 177 of 465 (38.1%)                                        |
+| Prompts with zero gold                          | 288 (62%)                                                 |
+| Pairwise comparisons                            | 781                                                       |
+| Rubric scores recorded                          | 13 axis rows, 2 score rows (both from a seed account)     |
 | Exact-duplicate gold answers on the same prompt | 328 of 937 (35%), 157 of them across different annotators |
-| Prompts authored by an LLM | 457 of 465 (98%); 38 of the 43 frozen benchmark prompts |
+| Prompts authored by an LLM                      | 457 of 465 (98%); 38 of the 43 frozen benchmark prompts   |
 
 Three things in that table deserve attention:
 
-**The benchmark is 88% written by Claude.** A language-preservation organisation's Igala benchmark - the artifact defining what is worth asking an Igala speaker - was overwhelmingly written by the class of system it evaluates. The 165 long-form community-relevant prompts added in wave 2 are *entirely* in train, so the frozen benchmark is 100% short-form.
+**The benchmark is 88% written by Claude.** A language-preservation organisation's Igala benchmark - the artifact defining what is worth asking an Igala speaker - was overwhelmingly written by the class of system it evaluates. The 165 long-form community-relevant prompts added in wave 2 are _entirely_ in train, so the frozen benchmark is 100% short-form.
 
 **Elicitation ran out before the benchmark did.** 62% of prompts have no gold at all. The binding constraint was not corpus design; it was that six volunteers' time ran out around prompt 177.
 
@@ -238,7 +239,7 @@ But that total is a **floor, not the bill**. A purpose-built `CostEntry` table e
 
 **Silent fallbacks hide broken systems.** Semantic retrieval had been degrading to near-arbitrary keyword matching because pgvector lives in the `extensions` schema while `search_path` was `wikitongues` only, and the error was caught and swallowed. The fix qualifies both the cast and the operator: `ORDER BY embedding OPERATOR(extensions.<=>) $2::extensions.vector`. An earlier note claiming the `<=>` operator "cannot be schema-qualified" is **wrong** - `OPERATOR(extensions.<=>)` works, bare `<=>` raises 42883 - and its recommended alternative of widening `search_path` is unsafe under Supabase connection pooling.
 
-**A real bug that had been silently zeroing the open-weights arm:** the model resolver sent OpenAI-*compatible* providers to the Responses API, which only OpenAI implements. Together rejected every call. Open weights were unreachable until this was fixed, which means earlier open-model comparisons were measuring nothing.
+**A real bug that had been silently zeroing the open-weights arm:** the model resolver sent OpenAI-_compatible_ providers to the Responses API, which only OpenAI implements. Together rejected every call. Open weights were unreachable until this was fixed, which means earlier open-model comparisons were measuring nothing.
 
 **Key state:** the Anthropic key is out of credit, so Claude Opus 4.8 could not be measured at all. The Google key is valid but free-tier at roughly 20 requests/day, which is why Gemini 2.5 Flash has n=22 and Gemini 2.5 Pro has none.
 
@@ -256,7 +257,7 @@ But that total is a **floor, not the bill**. A purpose-built `CostEntry` table e
 
 **Adversarial verification finds what confirmation cannot.** Five verifiers confirmed the 63.2 ceiling to the decimal. Not one asked what it was made of. A sixth agent, tasked only with attacking, found the duplicate-inflation in minutes. Confirmation and refutation are different jobs and need different instructions.
 
-**Beware corrections that flatter you.** Three of the four fixes to our headline paragraph make the model look *better* on paper - a lower ceiling raises the percentage-of-human figure. That is exactly why a writer optimising for a good headline would leave the inflated ceiling in place.
+**Beware corrections that flatter you.** Three of the four fixes to our headline paragraph make the model look _better_ on paper - a lower ceiling raises the percentage-of-human figure. That is exactly why a writer optimising for a good headline would leave the inflated ceiling in place.
 
 ---
 
