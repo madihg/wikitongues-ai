@@ -101,11 +101,11 @@ export function ScoreExplainer({
           What would change it: <strong>decided winners accumulating</strong>,
           especially on the{" "}
           {copy ? <Num>{copy.heldOutPrompts}</Num> : "held-out"} frozen
-          benchmark prompts, where the fine-tuned model now answers alongside
-          the baselines. The community gold for those prompts never enters any
-          training set, so a win there is a genuine win rather than a model
-          reciting what it was trained on. That is what makes the comparison
-          fair.
+          benchmark prompts, where the adapted candidates now answer alongside
+          the untuned baselines. The community gold for those prompts never
+          enters any training set, so a win there is a genuine win rather than a
+          model reciting what it was trained on. That is what makes the
+          comparison fair.
         </p>
 
         <p>
