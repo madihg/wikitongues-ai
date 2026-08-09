@@ -39,10 +39,28 @@ export interface RagChunk {
   chunkType?: string | null;
 }
 
+/**
+ * A community gold (question, answer) pair to prepend as an in-context
+ * demonstration. Produced by src/lib/arena/gold-retrieval.ts, which owns the
+ * retrieval and the contamination guard; this module only formats and sends.
+ */
+export interface GoldExample {
+  /** ColdAuthorAnswer.id, recorded on the output so retrieval is auditable. */
+  id?: string;
+  question: string;
+  answer: string;
+}
+
 export interface GenerateArgs {
   userMessage: string;
   conversationHistory?: { role: string; content: string }[];
   ragContext?: RagChunk[];
+  /**
+   * Retrieved community gold, best match LAST. Only used when the candidate has
+   * ragEnabled, exactly like ragContext, so a plain baseline can never
+   * accidentally be handed exemplars and stop being a baseline.
+   */
+  goldExamples?: GoldExample[];
   systemPromptOverride?: string;
 }
 
@@ -79,7 +97,12 @@ export function resolveModel(candidate: CandidateLike): LanguageModel {
           process.env.OPENAI_API_KEY ??
           "not-needed",
       });
-      return client(candidate.baseModelId);
+      // .chat(), NOT client(...). The bare call resolves to OpenAI's RESPONSES
+      // API, which only OpenAI itself implements - Together answers it with
+      // "The requested model does not support the Responses api" and every
+      // generation fails. Third-party OpenAI-compatible hosts implement
+      // /v1/chat/completions, which is what .chat() targets.
+      return client.chat(candidate.baseModelId);
     }
     default:
       // Unknown provider — fall back to Anthropic default so the app never hard-crashes.
@@ -101,10 +124,23 @@ function parseDecoding(raw: unknown): Decoding {
   };
 }
 
+/**
+ * Instruction attached when community gold exemplars are in the message list.
+ * It has to say "match the FORM, do not reuse the CONTENT", because the failure
+ * mode of demonstrations on a tiny corpus is a model that answers the exemplar
+ * instead of the question in front of it.
+ */
+export const GOLD_EXAMPLE_INSTRUCTION =
+  "The conversation begins with real question-and-answer pairs written by Igala speakers themselves. " +
+  "Study them for FORM: the orthography and tone-marking they actually use, the register, and above all the LENGTH " +
+  "(a one-word question gets a one-word answer, with no explanation attached). " +
+  "Match that form in your own answer. Do NOT reuse their content, and do not answer their questions - answer only the final question asked of you.";
+
 export function buildSystemPrompt(
   candidate: CandidateLike,
   ragContext?: RagChunk[],
   override?: string,
+  goldExampleCount = 0,
 ): string {
   const custom =
     override ??
@@ -117,9 +153,13 @@ export function buildSystemPrompt(
   // seed-arena.ts config) or a caller passes systemPromptOverride. This is
   // what stops generation from drifting into English scaffolding or the
   // wrong language entirely - see src/lib/generation-prompt.ts.
-  const base = custom
+  let base = custom
     ? `${IGALA_FORCING_INSTRUCTION}\n\n${custom}`
     : IGALA_FORCING_INSTRUCTION;
+
+  if (candidate.ragEnabled && goldExampleCount > 0) {
+    base = `${base}\n\n${GOLD_EXAMPLE_INSTRUCTION}`;
+  }
 
   if (candidate.ragEnabled && ragContext && ragContext.length > 0) {
     const formatted = ragContext
@@ -141,16 +181,32 @@ export async function generateForCandidate(
   const start = Date.now();
   const decoding = parseDecoding(candidate.decodingParams);
   const ragContext = candidate.ragEnabled ? (args.ragContext ?? []) : [];
+  // Retrieved community gold is gated on ragEnabled for the same reason
+  // ragContext is: a candidate registered as a plain baseline must stay plain.
+  const goldExamples = candidate.ragEnabled ? (args.goldExamples ?? []) : [];
   const system = buildSystemPrompt(
     candidate,
     ragContext,
     args.systemPromptOverride,
+    goldExamples.length,
   );
 
   const messages: { role: "user" | "assistant"; content: string }[] = [];
   // Few-shot exemplars (empty today - see generation-prompt.ts) go first, as
   // priming turns ahead of any real conversation history.
   messages.push(...buildFewShotTurns(args.userMessage));
+  // Retrieved community gold next, modeled as real prior chat turns. Every
+  // provider wired here (Anthropic, OpenAI, Google, OpenAI-compatible) takes
+  // multi-turn messages through the AI SDK, so this one path is
+  // provider-agnostic - no per-provider formatting fallback is needed.
+  const current = args.userMessage.trim();
+  for (const ex of goldExamples) {
+    // Never echo the answer to the exact question being graded. The promptId
+    // guard in gold-retrieval.ts is the real defence; this is belt and braces.
+    if (ex.question.trim() === current) continue;
+    messages.push({ role: "user", content: ex.question });
+    messages.push({ role: "assistant", content: ex.answer });
+  }
   if (args.conversationHistory) {
     for (const msg of args.conversationHistory) {
       if (msg.role === "user" || msg.role === "assistant") {
@@ -177,6 +233,12 @@ export async function generateForCandidate(
     latencyMs: Date.now() - start,
     tokensIn: usage?.inputTokens,
     tokensOut: usage?.outputTokens,
-    ragContextIds: ragContext.map((c) => c.id),
+    // Full retrieval provenance: RagEntry chunk ids plus the ColdAuthorAnswer
+    // ids used as exemplars, prefixed so the two corpora stay distinguishable
+    // when the row is read back months later.
+    ragContextIds: [
+      ...ragContext.map((c) => c.id),
+      ...goldExamples.filter((g) => g.id).map((g) => `gold:${g.id}`),
+    ],
   };
 }

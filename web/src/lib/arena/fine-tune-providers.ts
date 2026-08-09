@@ -65,6 +65,23 @@ function hpNumber(job: FineTuneJob, key: string): number | undefined {
 }
 
 /**
+ * Read a boolean hyperparameter. Distinguishes "absent" from false, because for
+ * `lora` those mean different things on Together: absent lets the provider pick
+ * (LoRA), false explicitly requests a full fine-tune.
+ */
+export function hpBoolean(
+  job: Pick<FineTuneJob, "hyperparameters">,
+  key: string,
+): boolean | undefined {
+  const hp = job.hyperparameters;
+  if (hp && typeof hp === "object" && !Array.isArray(hp)) {
+    const v = (hp as Record<string, unknown>)[key];
+    if (typeof v === "boolean") return v;
+  }
+  return undefined;
+}
+
+/**
  * Deterministic, offline mock. Makes no network calls. Given the same job it
  * always returns the same synthetic ids and a small synthetic cost, so the
  * flywheel can be exercised end-to-end in dev, CI, and demos.
@@ -206,6 +223,11 @@ const togetherProvider: FineTuneProvider = {
       learningRate: hpNumber(job, "learningRate"),
       dpoBeta: hpNumber(job, "dpoBeta"),
       batchSize: hpNumber(job, "batchSize"),
+      // Opt-in per job. Set hyperparameters.lora=false to get a full fine-tune,
+      // whose output is standalone weights that a dedicated endpoint can serve;
+      // leaving it unset keeps Together's LoRA default and the adapter-only
+      // output that this account cannot serve.
+      lora: hpBoolean(job, "lora"),
     });
     return { providerJobId, providerFileId };
   },
