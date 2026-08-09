@@ -35,7 +35,7 @@ export const ARENA_TABS: ArenaTab[] = [
   {
     href: "/admin/arena/eval",
     label: "Automatic eval",
-    hint: "Fast automatic signal while human judgment accumulates: character-overlap scores against community gold, a language-identity gate, the ceiling set by how much the speakers themselves differ, and the autorater's measured agreement with the human labels we hold.",
+    hint: "Fast automatic signal while human judgment accumulates: character-overlap scores against community gold, a language-identity gate, and the ceiling set by how much the speakers themselves differ. Triage only, never a quality verdict. Any autorater agreement figure here is shown against the always-guess-the-majority baseline, because raw agreement looks high when almost every human label is 'both inadequate'.",
   },
   {
     href: "/admin/arena/trajectory",
