@@ -39,7 +39,7 @@ something is badly wrong, and poor at telling you that something is right.
 | File            | What it is                                                                                                           |
 | --------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `normalize.ts`  | Unicode handling for Igala's two kinds of diacritic (segmental ẹ/ọ vs tonal). Tokenisation, folding, char sequences. |
-| `chrf.ts`       | chrF and chrF++ (Popović 2015, 2017), matching sacrebleu's implementation.                                           |
+| `chrf.ts`       | chrF and chrF++ (Popović 2015, 2017), following sacrebleu's documented algorithm.                                           |
 | `similarity.ts` | Diacritic-exact match, tone-insensitive match, fully folded match, token edit similarity.                            |
 | `reference.ts`  | Multi-gold scoring (best and mean over references) and the **inter-gold ceiling**.                                   |
 | `langid.ts`     | The language-identity gate: Igala / Yoruba / Igbo / English / Pidgin, plus its own cross-validation.                 |
@@ -64,6 +64,16 @@ match counts, an F-score computed per order and averaged over the orders where
 both sides have n-grams, and the max taken over multiple references. chrF++ adds
 word n-gram orders 1..2 to the same average. This module returns `[0, 1]`;
 multiply by 100 for the conventional score.
+
+**What is and is not verified.** The implementation is checked against values
+computed by hand in `chrf.test.ts` (both the beta=1 and beta=2 cases are worked
+through digit by digit), plus identity, disjoint and symmetry properties. It has
+**not** been diffed against an actual sacrebleu run — this repo has no Python
+toolchain. So the honest claim is "implements the documented sacrebleu
+algorithm", not "verified byte-identical to sacrebleu". Before putting a chrF
+figure in a paper next to numbers from other systems, run sacrebleu over the same
+pairs, diff, and record the sacrebleu version: the effective-order convention is
+a property of that tool's implementation, not of the 2015 paper.
 
 **Why chrF and not BLEU.** Gold answers in this bank have a median length of
 around 5 characters. Word-level BLEU with 4-grams scores 0 almost everywhere, and
@@ -162,6 +172,14 @@ tie-break on a zero-evidence input reported them as Igala, and that candidate's
 apparent Igala share was 84.6%; with the guard it is 24.0%. An output with no
 letters is neither Igala nor English, and is counted as neither.
 
+**Only half of each orthographic-signature claim is measured.** "This character
+is near-absent from Igala gold" is counted against our own corpus, so a hit is
+solid evidence of _not Igala_. "This character belongs to Yoruba / Igbo" is
+background knowledge — we hold no Yoruba or Igbo corpus and no speaker of either
+has checked it. So a hit is trustworthy as _not Igala_ and merely suggestive as
+_therefore Yoruba_. Same asymmetry as the profiles, and the reason a hit is a
+bounded nudge rather than an override.
+
 **Orthographic signatures**, measured against the 937 gold answers rather than
 assumed: ṣ appears 0/937 (Yoruba), ị 0/937 and ṅ 0/937 and ụ 1/937 (Igbo), and ñ
 226/937 (Igala's velar nasal, the one _positive_ signature we have). They are
@@ -194,7 +212,8 @@ accuracy from 49.5% to 81.4%.
 - The candidate table is **sorted** by chrF for readability, and a sorted table
   reads as a ranking whether or not the intervals support one. So every row
   carries its own `vsLeader` verdict against the top row — `top row`, `tied at
-this n`, `separated`, or `no shared prompts` — rather than leaving that answer
+this n`, `separated`, or `too few shared prompts` — rather than leaving that
+  answer
   in a head-to-head section further down the page that a reader may never reach.
   Today the tuned SFT model reads **"tied at this n"** against the RAG leader.
 

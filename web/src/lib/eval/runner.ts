@@ -132,8 +132,9 @@ export interface CandidateReport {
   /** Highest chrF POINT ESTIMATE. Not a claim that it is the best model. */
   isLeader: boolean;
   /**
-   * Null for the leader itself, and for any candidate sharing too few prompts
-   * with the leader to compare at all. Otherwise the paired verdict: when
+   * Null for the leader itself, and for any candidate sharing fewer than 2
+   * prompts with the leader (the minimum for a paired comparison) - which is a
+   * statement about COVERAGE, not about the candidate being bad. Otherwise the paired verdict: when
    * `distinguishable` is false, this row and the top row are NOT ranked.
    */
   vsLeader: LeaderComparison | null;

@@ -150,17 +150,34 @@ export const SIGNATURE_MEASURED_AT = "2026-08-09";
 export const SIGNATURE_MEASURED_N = 937;
 
 /**
- * Orthographic signature characters, MEASURED against the community gold rather
- * than assumed. Counts are as of SIGNATURE_MEASURED_AT (n=937 gold answers):
+ * Orthographic signature characters.
+ *
+ * ONLY HALF OF EACH CLAIM IS MEASURED, and the halves are not equally strong:
+ *
+ *   MEASURED - "this character is (near-)absent from Igala gold". Counted
+ *     directly against our own corpus, so a hit is solid evidence of NOT Igala.
+ *   NOT MEASURED - "this character belongs to Yoruba / Igbo". That attribution
+ *     is background knowledge about those orthographies; we hold no Yoruba or
+ *     Igbo corpus to check it against, and nobody on this project has verified
+ *     it with a speaker of either language.
+ *
+ * So a signature hit is trustworthy as "not Igala orthography" and merely
+ * suggestive as "therefore Yoruba" or "therefore Igbo". That is the same
+ * asymmetry the profiles have (real Igala data, seed-lexicon everything else)
+ * and it is why a hit is a bounded nudge rather than an override.
+ *
+ * Counts are as of SIGNATURE_MEASURED_AT (n=937 gold answers):
  *
  *   ṣ  0/937 gold   - Yoruba's s-with-dot-below. Igala does not write it.
  *   ị  0/937 gold   - Igbo dotted i.
  *   ṅ  0/937 gold   - Igbo n-with-dot-above.
  *   ụ  1/937 gold   - Igbo dotted u. NOT absolute: one speaker used it. This is
  *                     why signatures are a bounded nudge, never an override.
- *   ñ  226/937 gold - Igala's n-tilde (velar nasal). Standard Yoruba and Igbo
- *                     orthographies do not use it, so it is POSITIVE evidence
- *                     of Igala - the only positive signature we have.
+ *   ñ  226/937 gold - Igala's n-tilde (velar nasal). The only POSITIVE
+ *                     signature we have. Its value depends on the unverified
+ *                     half above: we know Igala writers use it, we have not
+ *                     confirmed against data that Yoruba and Igbo writers do
+ *                     not.
  *
  * Igala shares ẹ and ọ (dot-below e/o) with Yoruba, so those carry no signal.
  */
@@ -169,15 +186,15 @@ export const ORTHOGRAPHIC_SIGNATURES: Partial<
 > = {
   igala: {
     chars: ["ñ"],
-    note: `n-tilde is Igala orthography (226 of ${SIGNATURE_MEASURED_N} community gold answers as of ${SIGNATURE_MEASURED_AT}); absent from standard Yoruba and Igbo.`,
+    note: `n-tilde is Igala orthography (226 of ${SIGNATURE_MEASURED_N} community gold answers as of ${SIGNATURE_MEASURED_AT}). Believed absent from Yoruba and Igbo, but we hold no corpus of either to confirm that.`,
   },
   yoruba: {
     chars: ["ṣ"],
-    note: `s-with-dot-below is Yoruba orthography; 0 of ${SIGNATURE_MEASURED_N} Igala gold answers used it as of ${SIGNATURE_MEASURED_AT}.`,
+    note: `0 of ${SIGNATURE_MEASURED_N} Igala gold answers used s-with-dot-below as of ${SIGNATURE_MEASURED_AT}, so it is solid evidence of NOT Igala. Attributing it to Yoruba specifically is background knowledge we have not checked against a Yoruba corpus.`,
   },
   igbo: {
     chars: ["ị", "ụ", "ṅ"],
-    note: `dotted i/u and n-with-dot-above are Igbo orthography; 1 of ${SIGNATURE_MEASURED_N} Igala gold answers used any of them as of ${SIGNATURE_MEASURED_AT}.`,
+    note: `1 of ${SIGNATURE_MEASURED_N} Igala gold answers used dotted i/u or n-with-dot-above as of ${SIGNATURE_MEASURED_AT}, so a hit is good evidence of NOT Igala. Attributing it to Igbo specifically is background knowledge we have not checked against an Igbo corpus.`,
   },
 };
 

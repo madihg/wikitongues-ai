@@ -205,9 +205,9 @@ function LeaderCell({ c }: { c: CandidateReport }) {
     return (
       <span
         className="text-text-muted"
-        title="Too few shared prompts to compare"
+        title="Fewer than 2 prompts in common with the top row, which is below the minimum for a paired comparison. Not the same as scoring badly."
       >
-        no shared prompts
+        too few shared prompts
       </span>
     );
   }
