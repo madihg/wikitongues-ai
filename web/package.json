@@ -17,6 +17,7 @@
     "seed:prompt-bank": "tsx prisma/seed-prompt-bank.ts",
     "seed:longform": "tsx prisma/seed-prompt-longform.ts",
     "seed:rag": "tsx prisma/seed-rag.ts",
+    "seed:rag-igala": "tsx prisma/seed-rag-igala.ts",
     "seed:arena": "tsx prisma/seed-arena.ts",
     "seed:outputs": "tsx prisma/seed-outputs.ts",
     "create:annotators": "tsx prisma/create-annotators.ts"

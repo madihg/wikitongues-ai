@@ -44,12 +44,18 @@ async function searchRagVector(
   const queryEmbedding = await embedText(query);
   const vectorLiteral = `[${queryEmbedding.join(",")}]`;
 
+  // pgvector lives in the `extensions` schema while our search_path is just
+  // `wikitongues`, so a bare `::vector` cast and a bare `<=>` both fail at
+  // runtime. Casts can be schema-qualified directly; infix operators cannot,
+  // hence the explicit OPERATOR(extensions.<=>) form. We qualify rather than
+  // widening search_path because Supabase pools connections - a session-level
+  // SET is not guaranteed to survive between statements, but this SQL is.
   const results = await prisma.$queryRawUnsafe<RagEntry[]>(
     `SELECT id, language, "chunkType", topic, content, source,
             "verificationStatus", "annotatorId", "createdAt", "updatedAt"
      FROM "RagEntry"
-     WHERE language = $1
-     ORDER BY embedding <=> $2::vector
+     WHERE language = $1 AND embedding IS NOT NULL
+     ORDER BY embedding OPERATOR(extensions.<=>) $2::extensions.vector
      LIMIT $3`,
     language,
     vectorLiteral,
@@ -109,19 +115,25 @@ export async function ingestRagEntry(data: {
 
   if (embeddingVector) {
     const vectorLiteral = `[${embeddingVector.join(",")}]`;
-    const [entry] = await prisma.$queryRawUnsafe<RagEntry[]>(
-      `INSERT INTO "RagEntry" (id, language, "chunkType", topic, content, source, "verificationStatus", "annotatorId", embedding, "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, 'seed', $6, $7::vector, now(), now())
-       RETURNING id, language, "chunkType", topic, content, source, "verificationStatus", "annotatorId", "createdAt", "updatedAt"`,
-      data.language,
-      data.chunkType,
-      data.topic,
-      data.content,
-      data.source,
-      data.annotatorId ?? null,
-      vectorLiteral,
-    );
-    return entry;
+    try {
+      const [entry] = await prisma.$queryRawUnsafe<RagEntry[]>(
+        `INSERT INTO "RagEntry" (id, language, "chunkType", topic, content, source, "verificationStatus", "annotatorId", embedding, "createdAt", "updatedAt")
+         VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, 'seed', $6, $7::extensions.vector, now(), now())
+         RETURNING id, language, "chunkType", topic, content, source, "verificationStatus", "annotatorId", "createdAt", "updatedAt"`,
+        data.language,
+        data.chunkType,
+        data.topic,
+        data.content,
+        data.source,
+        data.annotatorId ?? null,
+        vectorLiteral,
+      );
+      return entry;
+    } catch {
+      // Never lose the entry over a vector problem: fall back to a plain
+      // create (no embedding) the way searchRag() degrades to keyword search.
+      // The row can be re-embedded later; a thrown error would lose it now.
+    }
   }
 
   return prisma.ragEntry.create({ data });
@@ -157,16 +169,20 @@ export async function updateRagEntry(
 
   if (embeddingVector) {
     const vectorLiteral = `[${embeddingVector.join(",")}]`;
-    const [updated] = await prisma.$queryRawUnsafe<RagEntry[]>(
-      `UPDATE "RagEntry"
-       SET content = $1, embedding = $2::vector, "updatedAt" = now()
-       WHERE id = $3
-       RETURNING id, language, "chunkType", topic, content, source, "verificationStatus", "annotatorId", "createdAt", "updatedAt"`,
-      content,
-      vectorLiteral,
-      id,
-    );
-    return updated;
+    try {
+      const [updated] = await prisma.$queryRawUnsafe<RagEntry[]>(
+        `UPDATE "RagEntry"
+         SET content = $1, embedding = $2::extensions.vector, "updatedAt" = now()
+         WHERE id = $3
+         RETURNING id, language, "chunkType", topic, content, source, "verificationStatus", "annotatorId", "createdAt", "updatedAt"`,
+        content,
+        vectorLiteral,
+        id,
+      );
+      return updated;
+    } catch {
+      // Same rule as ingest: the edit must land even if the embedding cannot.
+    }
   }
 
   return prisma.ragEntry.update({

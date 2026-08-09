@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { bucketLabel, bucketShort, BUCKETS } from "@/lib/buckets";
+import { InfoTip } from "@/components/info-tip";
 import type { EvalBucket } from "@prisma/client";
 
 interface PickerCandidate {
@@ -68,8 +69,15 @@ export function ComparePicker({ a, b }: { a: string; b: string }) {
 
   return (
     <div className="max-w-2xl space-y-4 rounded-lg border border-border bg-surface p-5 shadow-sm">
-      <p className="text-sm text-text-secondary">
-        Pick two candidates to compare on the held-out bank.
+      <p className="flex items-center gap-2 text-sm text-text-secondary">
+        Pick two candidates to compare on the frozen benchmark.
+        <InfoTip width="w-80">
+          The frozen (held-out) set is 43 prompts whose community gold is never
+          exported into any training set. Because no candidate can have been
+          trained on the answers, a difference on these prompts is a difference
+          in ability rather than a memory of the training data. That is what
+          makes the comparison fair.
+        </InfoTip>
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
@@ -245,8 +253,9 @@ export function HeadToHead({ a, b }: { a: string; b: string }) {
 
       {data.rows.length === 0 ? (
         <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-text-tertiary shadow-sm">
-          No overlapping held-out outputs for these two candidates yet. Generate
-          both candidates&apos; answers on the test bank to compare them.
+          No overlapping answers on the frozen benchmark for these two
+          candidates yet. Generate both candidates&apos; answers on the frozen
+          set to compare them.
         </div>
       ) : visibleRows.length === 0 ? (
         <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-text-tertiary shadow-sm">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { InfoTip } from "@/components/info-tip";
 
 interface Lineage {
   id: string;
@@ -262,7 +263,20 @@ export function CandidateDetail({ id }: { id: string }) {
               <tr className="border-y border-border text-left text-text-secondary">
                 <th className="px-5 py-2 font-medium">Prompt set</th>
                 <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Judge</th>
+                <th className="px-3 py-2 font-medium">
+                  <span className="inline-flex items-center gap-1">
+                    Judge
+                    <InfoTip width="w-80">
+                      Who decided the outcome of the run. Expect{" "}
+                      <span className="font-mono">human-only</span>: we do not
+                      use a model judge to grade Igala quality, because a model
+                      that cannot speak Igala cannot grade it. Automatic metrics
+                      (chrF, language identity, diacritic checks) are used to
+                      triage and gate work, never to score it. Native human
+                      judgment decides.
+                    </InfoTip>
+                  </span>
+                </th>
                 <th className="px-3 py-2 text-right font-medium">Prompts</th>
                 <th className="px-3 py-2 text-right font-medium">Win rate</th>
                 <th className="px-3 py-2 text-right font-medium">Scores</th>
@@ -318,7 +332,7 @@ export function CandidateDetail({ id }: { id: string }) {
                     <td className="px-3 py-2 text-right tabular-nums text-text-secondary">
                       {run.winRate != null
                         ? `${Math.round(run.winRate * 100)}%`
-                        : "—"}
+                        : "-"}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-text-secondary">
                       {run._count.scores}

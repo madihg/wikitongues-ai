@@ -135,12 +135,15 @@ export function CandidateRegistry() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-2 text-sm text-text-secondary">
-          A candidate is a reproducible recipe: base model + optional RAG,
-          system prompt, or fine-tune artifact.
+          A candidate is a reproducible recipe: base model plus optional
+          retrieval, system prompt, or fine-tune artifact.
           <InfoTip width="w-80">
             A candidate is a fully-specified, reproducible generation recipe, so
             &quot;Claude baseline&quot;, &quot;Gemma + RAG&quot;, and a
             fine-tuned variant are all just rows that differ by one ingredient.
+            A candidate has to be <strong>servable</strong> to compete: a tuned
+            model with no live endpoint cannot answer a prompt, so it never
+            reaches an annotator and never gets a score.
           </InfoTip>
         </p>
         <button
@@ -208,10 +211,17 @@ export function CandidateRegistry() {
             <span className="flex items-center gap-2 text-text-secondary">
               Kind
               <InfoTip width="w-80">
-                baseline = frontier API, no adaptation. rag = base + retrieval.
-                sft = supervised fine-tune from edits. dpo = preference
-                fine-tune from pairwise picks. continued_pretrain = a CPT
-                checkpoint. composite = a stack of these.
+                The rungs of the method ladder. <strong>baseline</strong> =
+                frontier API, no adaptation, the thing to beat.{" "}
+                <strong>rag</strong> = base plus retrieval over community gold,
+                so the knowledge arrives in context. <strong>sft</strong> =
+                supervised fine-tune from corrections and cold-authored gold,
+                where the knowledge arrives in the weights. This is the teacher.{" "}
+                <strong>dpo</strong> = preference fine-tune from decided
+                pairwise winners. This is the finisher, and it is not usable
+                until annotators are picking sides rather than rejecting both
+                answers. <strong>continued_pretrain</strong> = a CPT checkpoint.{" "}
+                <strong>composite</strong> = a stack of these.
               </InfoTip>
             </span>
             <select
@@ -342,7 +352,7 @@ export function CandidateRegistry() {
                     <span className="font-mono text-xs">{c.baseModelId}</span>
                   </td>
                   <td className="px-3 py-2 text-text-secondary">
-                    {c.ragEnabled ? "yes" : "—"}
+                    {c.ragEnabled ? "yes" : "-"}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-text-secondary">
                     {c._count?.evalRuns ?? 0}

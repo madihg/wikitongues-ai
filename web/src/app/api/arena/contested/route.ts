@@ -8,6 +8,15 @@ import type { VerificationStatus } from "@prisma/client";
  * group can resolve them) and edits pending verification (so they can be
  * promoted single_annotator -> multi_annotator_verified). This turns lonely
  * labeling into the community feedback loop.
+ *
+ * "Contested" here means one narrow thing: two annotators picked DIFFERENT
+ * WINNERS on the same prompt. That is nearly always empty, and the reason is
+ * structural rather than a bug - while the models fail almost every prompt,
+ * everyone marks "both inadequate" and there is no winner to disagree about.
+ * `winnerCounts` is returned so the page can show that plainly instead of
+ * leaving a bare "no disagreements yet". The disagreement that DOES have data
+ * in it - annotators writing the same word different ways - lives in the
+ * sibling route, /api/arena/contested/answers.
  */
 export async function GET() {
   const guard = await requireResearcher();
@@ -72,7 +81,26 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json({ contested, pendingEdits });
+  // Why the contested list is empty: the tally of what annotators actually
+  // picked. Shown as copy on the page, not as a chart.
+  const winnerRows = await prisma.pairwiseComparison.groupBy({
+    by: ["winner"],
+    where: { isDemo: false },
+    _count: { _all: true },
+  });
+  const winnerCounts: Record<string, number> = {};
+  let judgedTotal = 0;
+  for (const row of winnerRows) {
+    winnerCounts[row.winner] = row._count._all;
+    judgedTotal += row._count._all;
+  }
+
+  return NextResponse.json({
+    contested,
+    pendingEdits,
+    winnerCounts,
+    judgedTotal,
+  });
 }
 
 const VALID: VerificationStatus[] = [

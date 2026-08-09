@@ -1,32 +1,27 @@
-import Link from "next/link";
 import { CostLedger } from "@/components/arena/cost-ledger";
 import { InfoTip } from "@/components/info-tip";
 
 export default function CostsPage() {
   return (
     <div>
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl text-text-primary">
-            Cost ledger
-            <InfoTip width="w-80">
-              Every dollar the instrument spends, in one place: inference
-              (estimated from token counts), and fine-tune training runs
-              including the cost of Together sessions. Figures are estimates
-              against a published-rate table.
-            </InfoTip>
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-text-secondary">
-            A holistic view of spend across providers — inference for eval and
-            arena generations, and fine-tune training (Together).
-          </p>
-        </div>
-        <Link
-          href="/admin/arena"
-          className="shrink-0 rounded-md border border-border-strong px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-sunken"
-        >
-          Back to Arena
-        </Link>
+      <div className="mb-8">
+        <h1 className="flex items-center gap-2 text-2xl text-text-primary">
+          Cost ledger
+          <InfoTip width="w-80">
+            Every dollar the instrument spends, in one place: inference for eval
+            and arena generations, and fine-tune training runs. Where the
+            provider reports what it actually billed, that is the number shown -
+            Together returns its price in nano-USD (billionths of a dollar) and
+            we convert, so a $4.00 run arrives as 4,000,000,000. Where no
+            provider figure exists, the line is an estimate from token counts
+            against a published-rate table, and it is labelled as an estimate.
+          </InfoTip>
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-text-secondary">
+          Spend across providers: inference for eval and arena generations, and
+          fine-tune training. Real billed amounts where the provider reports
+          them, estimates otherwise, each one labelled.
+        </p>
       </div>
       <CostLedger />
     </div>

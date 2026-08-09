@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { InfoTip } from "@/components/info-tip";
+import { ScoreExplainer } from "./score-explainer";
+import type { ArenaSignal } from "./signal-copy";
 
 interface Cell {
   bucket: string;
@@ -51,6 +52,7 @@ interface LeaderboardData {
     pairwise: number;
     rubric: number;
     overallDistinguishable: boolean;
+    signal?: ArenaSignal;
   };
 }
 
@@ -103,169 +105,184 @@ export function BucketMatrix() {
       .finally(() => setLoading(false));
   }, []);
 
+  const explainer = (
+    <ScoreExplainer
+      signal={data?.totals.signal ?? null}
+      distinguishable={data?.totals.overallDistinguishable ?? false}
+    />
+  );
+
   if (loading) {
     return (
-      <div className="space-y-2">
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="h-12 animate-pulse rounded-md bg-surface-sunken"
-            style={{ animationDelay: `${i * 80}ms` }}
-          />
-        ))}
+      <div className="space-y-6">
+        {explainer}
+        <div className="space-y-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="h-12 animate-pulse rounded-md bg-surface-sunken"
+              style={{ animationDelay: `${i * 80}ms` }}
+            />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-md border border-danger/30 bg-danger-subtle p-4 text-sm text-danger">
-        {error}
+      <div className="space-y-6">
+        {explainer}
+        <div className="rounded-md border border-danger/30 bg-danger-subtle p-4 text-sm text-danger">
+          {error}
+        </div>
       </div>
     );
   }
 
   if (!data || data.rows.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-surface p-8 text-center">
-        <p className="text-sm text-text-secondary">
-          No arena data yet. Register candidate models and run an evaluation to
-          populate the leaderboard.
-        </p>
+      <div className="space-y-6">
+        {explainer}
+        <div className="rounded-lg border border-border bg-surface p-8 text-center">
+          <p className="text-sm text-text-secondary">
+            No arena data yet. Register candidate models and run an evaluation
+            to populate the leaderboard.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-tertiary">
-        <span>{data.totals.candidates} candidates</span>
-        <span>{data.totals.pairwise} pairwise judgments</span>
-        <span>{data.totals.rubric} rubric scores</span>
-        <span className="font-mono">
-          human pairwise · Bradley-Terry per bucket
-        </span>
-        <InfoTip width="w-80">
-          Each cell is a 0-100 Bradley-Terry &quot;arena strength&quot; from
-          human pairwise votes, per bucket. &quot;ns&quot; = not statistically
-          distinguishable at the current sample size (expected while the
-          annotator pool is small). LLM-as-judge is never used to rank here.
-        </InfoTip>
-      </div>
+    <div className="space-y-6">
+      {explainer}
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-sm">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border-strong">
-              <th className="sticky left-0 z-10 bg-surface px-3 py-3 text-left font-medium text-text-secondary">
-                Candidate
-              </th>
-              {data.buckets.map((b) => (
-                <th
-                  key={b.key}
-                  title={b.label}
-                  className="px-2 py-3 text-center text-xs font-medium text-text-secondary"
-                >
-                  <span className="mr-1 text-text-muted">{b.num}</span>
-                  {b.short}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-tertiary">
+          <span>{data.totals.candidates} candidates</span>
+          <span>{data.totals.pairwise} blind comparisons</span>
+          <span>{data.totals.rubric} rubric scores</span>
+          <span className="font-mono">
+            human pairwise · Bradley-Terry per category
+          </span>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-sm">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border-strong">
+                <th className="sticky left-0 z-10 bg-surface px-3 py-3 text-left font-medium text-text-secondary">
+                  Candidate
                 </th>
-              ))}
-              <th className="px-3 py-3 text-center font-medium text-text-primary">
-                Overall
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.rows.map((row) => (
-              <tr
-                key={row.candidate.id}
-                className="border-b border-border last:border-0"
-              >
-                <td className="sticky left-0 z-10 bg-surface px-3 py-3">
-                  <div className="flex items-center gap-2">
-                    {row.candidate.isChampion && (
-                      <span
-                        title="Current champion"
-                        className="text-accent-text"
-                      >
-                        ★
-                      </span>
-                    )}
-                    <div>
-                      <div className="font-medium text-text-primary">
-                        {row.candidate.name}
-                      </div>
-                      <div className="text-xs text-text-tertiary">
-                        {row.candidate.family}
-                        {row.candidate.versionLabel
-                          ? ` · ${row.candidate.versionLabel}`
-                          : ""}
-                        {row.candidate.ragEnabled ? " · RAG" : ""}
+                {data.buckets.map((b) => (
+                  <th
+                    key={b.key}
+                    title={b.label}
+                    className="px-2 py-3 text-center text-xs font-medium text-text-secondary"
+                  >
+                    <span className="mr-1 text-text-muted">{b.num}</span>
+                    {b.short}
+                  </th>
+                ))}
+                <th className="px-3 py-3 text-center font-medium text-text-primary">
+                  Overall
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((row) => (
+                <tr
+                  key={row.candidate.id}
+                  className="border-b border-border last:border-0"
+                >
+                  <td className="sticky left-0 z-10 bg-surface px-3 py-3">
+                    <div className="flex items-center gap-2">
+                      {row.candidate.isChampion && (
+                        <span
+                          title="Current champion"
+                          className="text-accent-text"
+                        >
+                          ★
+                        </span>
+                      )}
+                      <div>
+                        <div className="font-medium text-text-primary">
+                          {row.candidate.name}
+                        </div>
+                        <div className="text-xs text-text-tertiary">
+                          {row.candidate.family}
+                          {row.candidate.versionLabel
+                            ? ` · ${row.candidate.versionLabel}`
+                            : ""}
+                          {row.candidate.ragEnabled ? " · RAG" : ""}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </td>
-                {row.cells.map((cell) => (
-                  <td
-                    key={cell.bucket}
-                    className="px-2 py-3 text-center"
-                    style={{ background: tint(cell.strength) }}
-                    title={
-                      cell.strength !== null
-                        ? `BT ${cell.strength.toFixed(0)} [${cell.ciLow?.toFixed(0)}–${cell.ciHigh?.toFixed(0)}] · ${cell.games} games${cell.distinguishable ? "" : " · not distinguishable"}`
-                        : "no data"
-                    }
-                  >
-                    {cell.strength === null ? (
-                      <span className="text-text-muted">—</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 tabular-nums">
-                        <span className="text-text-muted">
-                          {rankGlyph(cell.rank)}
-                        </span>
-                        <span
-                          className={
-                            cell.distinguishable
-                              ? "font-medium text-text-primary"
-                              : "text-text-tertiary"
-                          }
-                        >
-                          {cell.strength.toFixed(0)}
-                        </span>
-                        {!cell.distinguishable && (
-                          <span
-                            title="Not statistically distinguishable at this sample size"
-                            className="font-mono text-[10px] text-text-muted"
-                          >
-                            ns
+                  </td>
+                  {row.cells.map((cell) => (
+                    <td
+                      key={cell.bucket}
+                      className="px-2 py-3 text-center"
+                      style={{ background: tint(cell.strength) }}
+                      title={
+                        cell.strength !== null
+                          ? `Arena strength ${cell.strength.toFixed(0)} of 100 (plausible range ${cell.ciLow?.toFixed(0)} to ${cell.ciHigh?.toFixed(0)}) from ${cell.games} blind comparisons${cell.distinguishable ? "" : ". Not distinguishable from the other candidates at this sample size."}`
+                          : "No votes in this category yet"
+                      }
+                    >
+                      {cell.strength === null ? (
+                        <span className="text-text-muted">-</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 tabular-nums">
+                          <span className="text-text-muted">
+                            {rankGlyph(cell.rank)}
                           </span>
-                        )}
+                          <span
+                            className={
+                              cell.distinguishable
+                                ? "font-medium text-text-primary"
+                                : "text-text-tertiary"
+                            }
+                          >
+                            {cell.strength.toFixed(0)}
+                          </span>
+                          {!cell.distinguishable && (
+                            <span
+                              title="Not statistically distinguishable at this sample size. Expected while decided winners are rare."
+                              className="font-mono text-[10px] text-text-muted"
+                            >
+                              ns
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                  <td className="px-3 py-3 text-center">
+                    {row.overall.strength === null ? (
+                      <span className="text-text-muted">-</span>
+                    ) : (
+                      <span className="font-mono font-medium tabular-nums text-text-primary">
+                        {row.overall.strength.toFixed(0)}
                       </span>
                     )}
                   </td>
-                ))}
-                <td className="px-3 py-3 text-center">
-                  {row.overall.strength === null ? (
-                    <span className="text-text-muted">—</span>
-                  ) : (
-                    <span className="font-mono font-medium tabular-nums text-text-primary">
-                      {row.overall.strength.toFixed(0)}
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      <p className="text-xs text-text-tertiary">
-        Cells show Bradley-Terry arena strength (0-100) from human pairwise
-        votes, per linguistic bucket. <span className="font-mono">ns</span> =
-        not statistically distinguishable at the current sample size — expected
-        while the annotator pool is small. LLM-as-judge is never used here; it
-        cannot grade a language it is itself poor at.
-      </p>
+        <p className="text-xs text-text-tertiary">
+          Reminder, per the reading guide above:{" "}
+          <span className="font-mono">50</span> means no evidence either way,{" "}
+          <span className="font-mono">ns</span> means not statistically
+          distinguishable at this sample size, and{" "}
+          <span className="font-mono">-</span> means no votes in that category
+          yet.
+        </p>
+      </div>
     </div>
   );
 }
