@@ -107,6 +107,17 @@ export function ScoreExplainer({
           reciting what it was trained on. That is what makes the comparison
           fair.
         </p>
+
+        <p>
+          The <strong>Automatic eval</strong> tab already separates some of
+          these same models. That is not a contradiction with this table. Those
+          scores measure character overlap with community gold, which is a cheap
+          proxy for &quot;looks like Igala&quot;, not a judgment of whether the
+          answer is any good. They also sit on a compressed scale: Igala
+          speakers writing the same prompt do not match each other word for
+          word, so the agreement between two humans is the practical ceiling
+          there, not 100. Only the votes on this page can say a model is better.
+        </p>
       </div>
 
       <div className="mt-4 grid gap-2 border-t border-border pt-4 sm:grid-cols-2">
