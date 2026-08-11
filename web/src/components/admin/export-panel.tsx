@@ -3,23 +3,49 @@
 import { useState } from "react";
 import { InfoTip } from "@/components/info-tip";
 
-type ExportType = "pairwise" | "rubric" | "report";
+type ExportType =
+  "prompts" | "gold" | "edits" | "pairwise" | "rubric" | "readme" | "report";
 
 const EXPORTS: { type: ExportType; label: string; description: string }[] = [
   {
+    type: "prompts",
+    label: "Prompt bank (CSV)",
+    description:
+      "Every question, its category, its train/test split, who authored it, and how many answers and model outputs it has so far.",
+  },
+  {
+    type: "gold",
+    label: "Igala corpus - gold answers (CSV)",
+    description:
+      "Every community-authored Igala answer, with the English translation and dialect where the contributor gave them, the consent flags, and the train/test split.",
+  },
+  {
+    type: "edits",
+    label: "Corrections to model output (CSV)",
+    description:
+      "Annotator corrections, with the original model text beside the corrected Igala.",
+  },
+  {
     type: "pairwise",
-    label: "Export Pairwise Data (CSV)",
-    description: "All pairwise comparison results",
+    label: "Blind comparisons (CSV)",
+    description:
+      "Head-to-head judgements, now carrying both model outputs, confidence and failure tags so a verdict can be re-checked against what was judged.",
   },
   {
     type: "rubric",
-    label: "Export Rubric Scores (CSV)",
-    description: "All rubric scoring data",
+    label: "Rubric scores (CSV)",
+    description: "Per-axis scores, long format, one row per scored axis.",
+  },
+  {
+    type: "readme",
+    label: "Column reference (Markdown)",
+    description:
+      "What every column means, live coverage figures for the optional fields, and the consent and held-out warnings. Send this with the CSVs.",
   },
   {
     type: "report",
-    label: "Export Report (Markdown)",
-    description: "Summary benchmark report",
+    label: "Summary report (Markdown)",
+    description: "Headline counts across prompts, outputs and annotations.",
   },
 ];
 

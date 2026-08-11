@@ -16,6 +16,19 @@ import { buildPublicStats } from "@/lib/public-stats";
  */
 export const revalidate = 300;
 
+/**
+ * Seed accounts created during platform bring-up. They carry real rows (the
+ * test researcher authored 4 cold answers, the test annotator 3 comparisons),
+ * so a naive `distinct annotatorId` counts them as community contributors and
+ * publishes 8 where there are 6 real Igala speakers. Overstating the size of a
+ * language community by a third on a public page is not a rounding error at a
+ * language-preservation organisation, so they are excluded by name.
+ */
+const SEED_ACCOUNT_EMAIL_SUFFIX = "@test.com";
+const REAL_CONTRIBUTOR = {
+  annotator: { email: { not: { endsWith: SEED_ACCOUNT_EMAIL_SUFFIX } } },
+} as const;
+
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -54,17 +67,17 @@ export async function GET() {
     // Distinct contributing annotators per signal type. We select only the id
     // (a cuid, never returned to the client) purely to count distinct people.
     prisma.pairwiseComparison.findMany({
-      where: { isDemo: false },
+      where: { isDemo: false, ...REAL_CONTRIBUTOR },
       distinct: ["annotatorId"],
       select: { annotatorId: true },
     }),
     prisma.coldAuthorAnswer.findMany({
-      where: { isDemo: false },
+      where: { isDemo: false, ...REAL_CONTRIBUTOR },
       distinct: ["annotatorId"],
       select: { annotatorId: true },
     }),
     prisma.outputEdit.findMany({
-      where: { isDemo: false },
+      where: { isDemo: false, ...REAL_CONTRIBUTOR },
       distinct: ["annotatorId"],
       select: { annotatorId: true },
     }),

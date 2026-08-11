@@ -843,8 +843,16 @@ async function stepMetrics() {
       candidateModelId: true,
     },
   });
+  // consentBenchmark, enforced in the query. Today every answer whose author
+  // declined benchmark use happens to sit on a train-split prompt, so none of
+  // them would reach this frozen-43 read anyway - but accidental compliance is
+  // not compliance, and the day a holdout prompt gets one it must not appear.
   const golds = await prisma.coldAuthorAnswer.findMany({
-    where: { promptId: { in: promptIds }, isDemo: false },
+    where: {
+      promptId: { in: promptIds },
+      isDemo: false,
+      consentBenchmark: true,
+    },
     select: { promptId: true, answerText: true },
   });
   const goldsBy = new Map<string, string[]>();

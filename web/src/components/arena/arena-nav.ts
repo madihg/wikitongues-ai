@@ -28,6 +28,11 @@ export const ARENA_TABS: ArenaTab[] = [
     hint: "Turn collected annotations into training sets and launch fine-tunes. A tuned model also needs somewhere to be served, which is why tuning runs here have ended up with very different fates.",
   },
   {
+    href: "/admin/arena/chat",
+    label: "Chat",
+    hint: "Ask several candidates the same question and read their answers side by side. For the judgement no metric can make: whether an answer is usable Igala, whether the register fits, and whether something fluent-looking is actually Yoruba. The model selection lives in the page address, so a curated set can be handed to a speaker as a link.",
+  },
+  {
     href: "/admin/arena/compare",
     label: "Head-to-head",
     hint: "Two candidates side by side on the frozen prompts, with the human verdict and the written reason. This is where a model's failures become concrete.",
