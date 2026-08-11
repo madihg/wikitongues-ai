@@ -90,12 +90,31 @@ export function resolveModel(candidate: CandidateLike): LanguageModel {
       return google(candidate.baseModelId);
     case "openai-compatible": {
       // Self-hosted / open-weights served behind an OpenAI-compatible API.
+      //
+      // NEVER fall back to OPENAI_API_KEY here. "OpenAI-compatible" describes
+      // the wire format, not the vendor: these candidates point at Together,
+      // and handing Together an OpenAI key produces "Invalid API key provided.
+      // You can find your API key at https://api.together.ai/settings/api-keys"
+      // - an error that reads as "the Together key is wrong" when the truth is
+      // that no Together key was ever set. That misdirection cost real time.
+      //
+      // TOGETHER_API_KEY is accepted as well as the generic name because the
+      // scripts and the endpoint cost guard already use it, and requiring the
+      // same secret under two names is how one of them ends up unset.
+      const apiKey =
+        process.env.OPENAI_COMPATIBLE_API_KEY ?? process.env.TOGETHER_API_KEY;
+      if (!apiKey) {
+        throw new Error(
+          `No API key for openai-compatible host ${candidate.apiEndpoint ?? "(default)"}. ` +
+            `Set OPENAI_COMPATIBLE_API_KEY (or TOGETHER_API_KEY) in this environment. ` +
+            `An OpenAI key will NOT work against a third-party host.`,
+        );
+      }
       const client = createOpenAI({
         baseURL: candidate.apiEndpoint ?? undefined,
-        apiKey:
-          process.env.OPENAI_COMPATIBLE_API_KEY ??
-          process.env.OPENAI_API_KEY ??
-          "not-needed",
+        // Strip stray quotes: a quoted value copied out of a .env file 401s in
+        // a way that looks identical to a revoked key.
+        apiKey: apiKey.trim().replace(/^["']|["']$/g, ""),
       });
       // .chat(), NOT client(...). The bare call resolves to OpenAI's RESPONSES
       // API, which only OpenAI itself implements - Together answers it with
