@@ -342,6 +342,19 @@ export function CandidateRegistry() {
                           (archived)
                         </span>
                       )}
+                      {/* Straight from the registry into a conversation with
+                          just this model. An archived candidate cannot be
+                          chatted with - the chat route filters them out - so
+                          the link is not offered for one. */}
+                      {!c.archived && (
+                        <Link
+                          href={`/admin/arena/chat?models=${encodeURIComponent(c.slug)}`}
+                          className="text-xs text-text-tertiary hover:text-accent-text"
+                          title={`Open a chat with ${c.name} only`}
+                        >
+                          chat
+                        </Link>
+                      )}
                     </div>
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-text-secondary">
