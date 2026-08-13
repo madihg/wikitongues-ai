@@ -396,3 +396,69 @@ THE RULE FOR ANYONE ADDING A SURFACE THAT READS ColdAuthorAnswer:
 4. Deliberation surfaces are the one carve-out. /api/arena/contested/answers shows annotators each other's answers to resolve spelling conventions - that is the workflow the answers were authored in, not the public benchmark, so consentBenchmark does not gate it. Document any new carve-out here before shipping it.
 
 There is no shared helper enforcing this and no type-level reminder. If a second benchmark consumer appears, build the helper rather than copying the filter. This is Wikitongues: a speech community deciding what happens to its language is the whole premise, and a permission nothing reads is worse than no permission at all, because it looks like it works.
+
+## Session State (2026-08-12) - Curated LexEntry lexicon built from RagEntry vocab rows
+
+**What landed:** `web/prisma/build-lexicon-curated.ts` (run twice, idempotent: second run inserts 0) + pure parsers in `web/src/lib/lexicon-parse.ts` with 24 tests in `web/src/lib/lexicon-parse.test.ts`. Parsed the 36 cleaned RagEntry vocabulary/historical_wordlist rows into 842 LexEntry rows: wiktionary 136 @ conf 1.0, chikhapo 482 @ 0.8, koelle 224 @ 0.6. 769 distinct headwords, 645 distinct glossFolded keys. The Blench cross-source-variation row is deliberately NOT parsed (prose for speakers, its source string also cites Wiktionary - detectFamily checks Blench first).
+
+**Curation rules enforced in code (tested):** ASJP lines (digit 5 / ~) skipped; >4-word Igala sides skipped as sentences; max 3 senses per headword, senses split on ';' only; Wiktionary template residue cleaned (empty parens, leading commas, dangling truncated clauses dropped); chikhapo flagged mis-glosses excluded (obɪǯɪ́m-emu, ómi-rain line; 'water' removed from óǯí, 'wall' from ɔ̀dɔ̀) - those stay with the community review queue, NOT re-laundered as facts. Koelle 1854 'ṓmi - Rain' kept on purpose at 0.6 (only the chikhapo lines were flagged). Provenance suffix on every row's source: curated under source licence, recorded Halim Madi 2026-08-12, confirm licence terms before public release.
+
+**BASELINE TO BEAT: coverage 0.442 (38/86)** - share of the 43 frozen prompts' distinct stopword-filtered English content words hitting >=1 LexEntry by glossFolded EXACT match (no stemming, deliberately strict). Misses include inflected forms (cooks, goes, sells, sleeps, runs, ate, children) and culture terms (egwu, masquerade, proverb, blessing, greet). The alignment-induced lexicon must beat 0.442 on the same metric (rerun the script to recompute). Gates at ship time: tsc 0, vitest 508/508 green, eslint pending in this session (was still running).
+
+## Session State - RAG v2: parallel corpus, lexicon, adaptive serving (2026-08-12)
+
+**Trigger:** Agnes's live test (2026-08-11 granola): model output is Igala words
+without Igala syntax - "the first sentence is saying three different things",
+"I can't comprehend it". Spelling precision changes meaning (Ojọ/Ojọn nasal,
+Onokotu/Nokotu prefix, oko homographs). Halim's directive: extract lexicon +
+grammar from all permitted sources, restructure the RAG per the research, sniff
+test, recreate the models.
+
+**Permissions landed (Lydia's outreach, per Halim 2026-08-12):** Charipearl,
+Igala Wikimedia, BSN Bible, GRN, Idakwoji lexicon, Scannell/Crubadan, PanLex.
+Written terms held by Wikitongues - CONFIRM BEFORE ANY PUBLIC DATA RELEASE.
+Only the Bible had an artifact we could fetch today; Idakwoji PDF and BSN files
+have not arrived, PanLex API is NXDOMAIN, Crubadan hosts time out.
+
+**Built (all in this branch):**
+- ParallelPair: 30,907 BSN IGL70 verse pairs via HF dalaone/eng_igl_bible
+  (previously refused as unlicensed - the permission is what changed), 98.5%
+  language-ID validated, provenance on every row, FTS (tsvector GIN) for
+  lexical-overlap retrieval on the English side. prisma/ingest-bible-parallel.ts.
+- LexEntry: 2,104 rows = 842 curated (Wiktionary 1.0 / chikhapo 0.8 / Koelle
+  0.6) + 1,262 alignment-induced from the Bible (smoothed Dice, capped 0.7).
+  Frozen-prompt content-word coverage 44.2% -> 46.5%.
+- Serving path v2 (src/lib/arena/retrieval-v2.ts + generation-prompt-v2.ts),
+  keyed on CandidateModel.versionLabel='rag-v2', wired into the chat route and
+  eval-runs generate route; v1 byte-identical otherwise. DiPMT dictionary in
+  the final user turn, parallel examples, gold exemplars, leak guard over every
+  assembled piece, THE METHOD system prompt (procedure, orthography contract,
+  prohibition-only anti-Yoruba, no grammar prose per the ablations).
+- 3 v2 candidates registered and generated on the frozen 43.
+
+**Two defects found by testing our own output, both fixed and pinned by tests:**
+1. The dictionary served PHONEMIC notation (ùǯɛũ, ɔ́kpàkpà) as "copy this
+   exactly" - the models obeyed, emitting ǯ/ɛ. toOrthography() now
+   transliterates at render (ɛ->ẹ ɔ->ọ ǯ->j ŋ->ñ, notation diacritics
+   stripped); stored rows keep source notation for provenance.
+2. Six Bible verses served to one-word lookup prompts cost -6.8/-9.0 chrF and
+   bled Bible register into a farmer story ("Jihofa"). wantsStructureExamples()
+   now gates parallel examples to sentence-building prompts; GOLD_K restored
+   4->8 (halving it was the wrong trade).
+
+**Sniff verdict (leak-free 28, stripped chrF, paired bootstrap):** GPT-4.1 v2
+-6.2 [-11.2,-1.0] vs v1 (still worse); Llama +0.9 (tied); Gemma -1.9 (tied,
+was -9.0 pre-gate). READ THIS RIGHT: the frozen benchmark is 88% single-word
+lookup and cannot measure sentence structure - the thing v2 exists for and the
+thing Agnes judged broken. Qualitatively v2 stories are now 3 short one-thought
+sentences (vs the incoherent mush Agnes saw) and both GPT-4.1 and Llama produce
+"Wọla ọdudu abogijo" for the elder-greeting. Both v1 and v2 stay live in chat
+so Agnes judges structure directly; v1 remains the lookup champion.
+
+**Known issues / next:** ọmọ (prohibited) still slips into stories; Llama v2
+rambles; Bible register bleed possible on story prompts (known, gated but
+present); me- prefix numerals (meji/meta/mele) found by induction need Agnes's
+confirmation as concord forms vs the bare citation forms; "honey" inö vs
+omiŋɔ and "liver" ekpiliwñ vs odo conflicts need a speaker pass; Idakwoji PDF
+slots into LexEntry the day it arrives; Lydia's syntax write-up becomes
+verification data (not prompt prose) when it lands.

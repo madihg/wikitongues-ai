@@ -4,6 +4,8 @@ import { requireResearcher } from "@/lib/api-auth";
 import { generateForCandidate, type RagChunk } from "@/lib/arena/providers";
 import { searchRag } from "@/lib/rag";
 import { estimateGenerationCostUsd, roundUsd } from "@/lib/arena/pricing";
+import { buildRetrievalV2 } from "@/lib/arena/retrieval-v2";
+import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 
 /**
  * Generate the candidate's answers on the frozen held-out bank. Uses the
@@ -32,7 +34,16 @@ export async function POST(
 
   const prompts = await prisma.prompt.findMany({
     where: { id: { in: run.holdoutPromptIds } },
-    select: { id: true, text: true, bucket: true },
+    // promptId + isHoldout feed the v2 retrieval path (leak guard keys on the
+    // slug; isHoldout is read from the row rather than assumed, so a dev-split
+    // run through this route is guarded exactly as strictly as it should be).
+    select: {
+      id: true,
+      promptId: true,
+      text: true,
+      bucket: true,
+      isHoldout: true,
+    },
   });
 
   await prisma.evalRun.update({
@@ -46,21 +57,45 @@ export async function POST(
 
   for (const prompt of prompts) {
     try {
-      let ragContext: RagChunk[] = [];
-      if (candidate.ragEnabled) {
-        const entries = await searchRag(prompt.text, "igala", 5);
-        ragContext = entries.map((e) => ({
-          id: e.id,
-          content: e.content,
-          topic: e.topic,
-          chunkType: e.chunkType,
-        }));
-      }
+      let result;
+      let ragContextIds: string[];
+      if (candidate.versionLabel === "rag-v2") {
+        // The v2 serving path: lexicon + parallel examples appended to the
+        // user turn (dictionary last, immediately above the question), gold
+        // exemplars as prior turns, v2 system prompt, and the leak guard run
+        // inside buildRetrievalV2 against this prompt's own gold. The audit
+        // trail on the ModelOutput is the v2 contextIds (lex:/pp:/gold:), the
+        // complete list of pieces actually served.
+        const v2 = await buildRetrievalV2(prisma, {
+          promptId: prompt.promptId,
+          text: prompt.text,
+          bucket: prompt.bucket,
+          isHoldout: prompt.isHoldout,
+        });
+        result = await generateForCandidate(candidate, {
+          userMessage: buildUserTurnV2(prompt.text, v2, prompt.bucket),
+          goldExamples: v2.exampleTurns,
+          systemPromptOverride: IGALA_SYSTEM_V2,
+        });
+        ragContextIds = v2.contextIds;
+      } else {
+        let ragContext: RagChunk[] = [];
+        if (candidate.ragEnabled) {
+          const entries = await searchRag(prompt.text, "igala", 5);
+          ragContext = entries.map((e) => ({
+            id: e.id,
+            content: e.content,
+            topic: e.topic,
+            chunkType: e.chunkType,
+          }));
+        }
 
-      const result = await generateForCandidate(candidate, {
-        userMessage: prompt.text,
-        ragContext,
-      });
+        result = await generateForCandidate(candidate, {
+          userMessage: prompt.text,
+          ragContext,
+        });
+        ragContextIds = result.ragContextIds;
+      }
 
       await prisma.modelOutput.create({
         data: {
@@ -71,7 +106,7 @@ export async function POST(
           evalRunId: run.id,
           bucket: prompt.bucket,
           outputText: result.text,
-          ragContextIds: result.ragContextIds,
+          ragContextIds,
           tokenCountIn: result.tokensIn ?? null,
           tokenCountOut: result.tokensOut ?? null,
           latencyMs: result.latencyMs,

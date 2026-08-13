@@ -715,3 +715,40 @@ model RagEntryHistory {
 
   ragEntry RagEntry @relation(fields: [ragEntryId], references: [id])
 }
+
+// ── RAG v2 data layer (2026-08-12) ──────────────────────────────────────────
+// Agnes's live test: words are Igala, sentences incoherent. Word lists cannot
+// teach structure; parallel sentences can. BSN Bible permission via Lydia.
+
+model LexEntry {
+  id             String   @id @default(cuid())
+  headword       String // Igala, standard orthography
+  headwordFolded String // fullFold, for lookup
+  gloss          String // English
+  glossFolded    String // fullFold, the retrieval key (English side)
+  pos            String?
+  source         String // provenance + permission trail
+  confidence     Float    @default(1) // 1.0 curated, alignment-induced lower
+  exampleIg      String?
+  exampleEn      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([headword, gloss, source])
+  @@index([glossFolded])
+  @@index([headwordFolded])
+}
+
+model ParallelPair {
+  id        String   @id @default(cuid())
+  igala     String
+  english   String
+  source    String // provenance + permission trail
+  ref       String? // e.g. verse reference
+  createdAt DateTime @default(now())
+
+  // englishTsv (generated tsvector + GIN index) exists in the DB for
+  // lexical-overlap retrieval but is deliberately not mapped here - Prisma
+  // must never try to write a generated column. Query it with $queryRaw.
+  @@unique([source, ref])
+}
