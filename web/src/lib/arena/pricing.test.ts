@@ -14,6 +14,13 @@ describe("priceForModel", () => {
     expect(priceForModel("gemini-2.0-flash").input).toBe(0.1);
   });
 
+  it("prices claude-opus-5 at the Opus 5 rate, not the legacy claude-opus row", () => {
+    // Ordering matters: "claude-opus-5" contains "claude-opus", so the more
+    // specific row must win or Opus 5 spend is over-estimated 3x.
+    expect(priceForModel("claude-opus-5")).toEqual({ input: 5, output: 25 });
+    expect(priceForModel("claude-opus-4-1")).toEqual({ input: 15, output: 75 });
+  });
+
   it("falls back to a default for unknown models", () => {
     const p = priceForModel("some-unknown-model");
     expect(p.input).toBeGreaterThan(0);

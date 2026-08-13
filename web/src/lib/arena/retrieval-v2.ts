@@ -451,7 +451,7 @@ export async function buildRetrievalV2(
   `)
     : [];
 
-  // ── 3. GOLD EXEMPLARS: the existing guarded retrieval, k=4 ───────────────
+  // ── 3. GOLD EXEMPLARS: the existing guarded retrieval, k=GOLD_K ───────────────
   const goldRows = await prisma.coldAuthorAnswer.findMany({
     where: { isDemo: false, consentTraining: true },
     select: {

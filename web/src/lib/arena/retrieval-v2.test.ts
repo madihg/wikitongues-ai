@@ -480,13 +480,19 @@ describe("wantsStructureExamples - the adaptive-assembly gate", () => {
 
   it("decides grammar_tone and bucketless chat by what the text asks for", () => {
     expect(
-      wantsStructureExamples("grammar_tone", "Translate 'The woman cooks food' into Igala"),
+      wantsStructureExamples(
+        "grammar_tone",
+        "Translate 'The woman cooks food' into Igala",
+      ),
     ).toBe(true);
     expect(
-      wantsStructureExamples(null, "Give me a short story in Igala about a farmer"),
+      wantsStructureExamples(
+        null,
+        "Give me a short story in Igala about a farmer",
+      ),
     ).toBe(true);
-    expect(wantsStructureExamples(null, "What is the Igala word for water?")).toBe(
-      false,
-    );
+    expect(
+      wantsStructureExamples(null, "What is the Igala word for water?"),
+    ).toBe(false);
   });
 });

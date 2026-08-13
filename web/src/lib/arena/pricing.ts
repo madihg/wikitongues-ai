@@ -15,6 +15,9 @@ export interface TokenPrice {
 // Matched by substring against the model id (lowercased), most specific first.
 const INFERENCE_PRICE: { match: string; price: TokenPrice }[] = [
   { match: "claude-sonnet-4-5", price: { input: 3, output: 15 } },
+  // Opus 5 is priced at Opus 4.8's rate ($5/$25), NOT the older claude-opus
+  // $15/$75 row below - this entry must stay above that substring match.
+  { match: "claude-opus-5", price: { input: 5, output: 25 } },
   { match: "claude-3-5-sonnet", price: { input: 3, output: 15 } },
   { match: "claude-3-5-haiku", price: { input: 0.8, output: 4 } },
   { match: "claude-opus", price: { input: 15, output: 75 } },
