@@ -60,7 +60,7 @@ export default async function HowItWorksPage() {
   );
 
   return (
-    <div className="max-w-4xl">
+    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
       {/* ── a. What this is ─────────────────────────────────────────────── */}
       <div className="mb-10">
         <h1 className="flex items-center gap-2 text-2xl text-text-primary">
@@ -120,11 +120,9 @@ export default async function HowItWorksPage() {
         <div className="mt-4 overflow-x-auto rounded-md border border-border bg-surface p-4">
           <svg
             viewBox="0 0 940 240"
-            width="940"
-            height="240"
+            className="h-auto w-full min-w-[700px]"
             role="img"
             aria-label="Three stages: v0 plain models, v1 retrieval of community answers, v2 dictionary plus parallel sentences plus a procedure"
-            className="min-w-[940px]"
           >
             {/* stage boxes */}
             {[
