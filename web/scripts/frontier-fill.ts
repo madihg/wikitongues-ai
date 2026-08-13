@@ -311,11 +311,16 @@ async function generate(slugs: string[]) {
       string,
       unknown
     >;
-    if (decoding.temperature !== 0) {
+    if (decoding.temperature !== 0 && decoding.temperature !== null) {
       // Same trust-but-verify as sniff-test-v2: a silently non-zero
       // temperature would make every cross-arm comparison partly a decoding
-      // comparison. Skip this arm rather than abort the run.
-      report.skipped = `temperature is ${String(decoding.temperature)}, expected 0 - re-run the register step`;
+      // comparison. Skip this arm rather than abort the run. null is the one
+      // sanctioned exception: Claude Opus 5 REJECTS the temperature parameter
+      // ("`temperature` is deprecated for this model"), so its rows opt out
+      // explicitly and providers.ts omits the field. Greedy-equivalent
+      // decoding is the provider default there, which is as close to 0 as
+      // that API allows.
+      report.skipped = `temperature is ${String(decoding.temperature)}, expected 0 (or null for models that reject the parameter) - re-run the register step`;
       log(`\n== ${slug}: SKIPPED (${report.skipped})`);
       continue;
     }
@@ -338,7 +343,11 @@ async function generate(slugs: string[]) {
           provider: candidate.provider,
           baseModelId: candidate.baseModelId,
           apiEndpoint: candidate.apiEndpoint,
-          decodingParams: { temperature: 0, maxTokens: 32 },
+          // The probe reuses the CANDIDATE's decoding rather than pinning its
+          // own: hardcoding temperature 0 here made the probe reject Claude
+          // Opus 5 (which refuses the parameter) even after the candidate row
+          // had correctly opted out with temperature null.
+          decodingParams: { ...decoding, maxTokens: 32 },
         },
         { userMessage: "hi" },
       );

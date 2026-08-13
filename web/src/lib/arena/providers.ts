@@ -1,5 +1,5 @@
 import { generateText, type LanguageModel } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { openai, createOpenAI } from "@ai-sdk/openai";
 import { google } from "@ai-sdk/google";
 import {
@@ -74,7 +74,8 @@ export interface CandidateGeneration {
 }
 
 interface Decoding {
-  temperature: number;
+  /** undefined = omit and let the provider default. See parseDecoding. */
+  temperature?: number;
   topP?: number;
   maxTokens: number;
 }
@@ -82,8 +83,20 @@ interface Decoding {
 export function resolveModel(candidate: CandidateLike): LanguageModel {
   const provider = candidate.provider as CandidateProvider;
   switch (provider) {
-    case "anthropic":
-      return anthropic(candidate.baseModelId);
+    case "anthropic": {
+      // baseURL is pinned, never inherited. The SDK honours an ambient
+      // ANTHROPIC_BASE_URL, and this machine's shell profile exports it
+      // WITHOUT the /v1 path (some other tool wants the bare host) - the SDK
+      // then requests /messages instead of /v1/messages and Anthropic answers
+      // 404 "Not Found" regardless of key or model. That 404 spent days
+      // masquerading as a dead API key. candidate.apiEndpoint still wins when
+      // a row sets one explicitly, because that is a deliberate per-candidate
+      // choice rather than ambient shell state.
+      const provider = createAnthropic({
+        baseURL: candidate.apiEndpoint ?? "https://api.anthropic.com/v1",
+      });
+      return provider(candidate.baseModelId);
+    }
     case "openai":
       return openai(candidate.baseModelId);
     case "google":
@@ -124,8 +137,11 @@ export function resolveModel(candidate: CandidateLike): LanguageModel {
       return client.chat(candidate.baseModelId);
     }
     default:
-      // Unknown provider — fall back to Anthropic default so the app never hard-crashes.
-      return anthropic(candidate.baseModelId || "claude-sonnet-4-5-20250929");
+      // Unknown provider — fall back to Anthropic so the app never hard-crashes,
+      // through the same pinned baseURL as the anthropic case above.
+      return createAnthropic({ baseURL: "https://api.anthropic.com/v1" })(
+        candidate.baseModelId || "claude-sonnet-4-5-20250929",
+      );
   }
 }
 
@@ -137,7 +153,13 @@ function parseDecoding(raw: unknown): Decoding {
   const num = (v: unknown, fallback: number) =>
     typeof v === "number" && Number.isFinite(v) ? v : fallback;
   return {
-    temperature: num(d.temperature, 0.7),
+    // null is the explicit opt-out: Claude Opus 5 REJECTS the temperature
+    // parameter outright ("`temperature` is deprecated for this model"), so a
+    // candidate whose decodingParams set temperature to null gets it omitted
+    // entirely. Absence still defaults to 0.7 - changing that default would
+    // silently alter every legacy candidate's sampling and break
+    // comparability with their stored outputs.
+    temperature: d.temperature === null ? undefined : num(d.temperature, 0.7),
     topP: typeof d.topP === "number" ? d.topP : undefined,
     maxTokens: num(d.maxTokens, 1024),
   };
