@@ -8,6 +8,11 @@ import {
   type GoldPoolEntry,
 } from "@/lib/arena/gold-retrieval";
 import { MAX_CHAT_MODELS } from "@/lib/arena/chat-selection";
+import {
+  buildRetrievalV2,
+  type RetrievalV2Result,
+} from "@/lib/arena/retrieval-v2";
+import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 
 /**
  * POST /api/arena/chat - talk to several registered candidates at once.
@@ -128,8 +133,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No such candidates" }, { status: 404 });
   }
 
-  const needsRetrieval = candidates.some((c) => c.ragEnabled);
+  // rag-v2 candidates use the v2 serving path exclusively, so the v1
+  // retrieval below only runs when a v1 RAG candidate is actually selected -
+  // v1 composition for v1 candidates stays byte-identical either way.
+  const needsRetrieval = candidates.some(
+    (c) => c.ragEnabled && c.versionLabel !== "rag-v2",
+  );
   const goldPool = needsRetrieval ? await loadGoldPool() : [];
+
+  // One v2 context per request, shared by every rag-v2 candidate - same
+  // sharing rationale as the v1 pool above. A free-text chat question belongs
+  // to no prompt, so promptId is synthetic and isHoldout is forced true: the
+  // strictest guard, so no frozen-bank answer can ever be displayed to the
+  // very reviewers whose independent judgement the benchmark depends on.
+  let v2: RetrievalV2Result | null = null;
+  if (candidates.some((c) => c.versionLabel === "rag-v2")) {
+    v2 = await buildRetrievalV2(prisma, {
+      promptId: "__chat__",
+      text: userMessage,
+      bucket: null,
+      isHoldout: true,
+    });
+  }
 
   let ragContext: RagChunk[] = [];
   let goldExamples: { id: string; question: string; answer: string }[] = [];
@@ -175,13 +200,27 @@ export async function POST(req: Request) {
   const replies = await Promise.all(
     ordered.map(async (candidate) => {
       const started = Date.now();
+      const isV2 = candidate.versionLabel === "rag-v2" && v2 !== null;
       try {
-        const result = await generateForCandidate(candidate, {
-          userMessage,
-          conversationHistory: history,
-          ragContext,
-          goldExamples,
-        });
+        // The v2 path swaps all three levers at once: dictionary + parallel
+        // examples appended to the user turn (dictionary last, immediately
+        // above the question - the DiPMT position), gold exemplars as prior
+        // turns, and the v2 system prompt. Everything else flows through the
+        // same generateForCandidate call so latency/token accounting and
+        // error handling stay identical across versions.
+        const result = isV2
+          ? await generateForCandidate(candidate, {
+              userMessage: buildUserTurnV2(userMessage, v2!, null),
+              conversationHistory: history,
+              goldExamples: v2!.exampleTurns,
+              systemPromptOverride: IGALA_SYSTEM_V2,
+            })
+          : await generateForCandidate(candidate, {
+              userMessage,
+              conversationHistory: history,
+              ragContext,
+              goldExamples,
+            });
         return {
           slug: candidate.slug,
           name: candidate.name,
@@ -189,8 +228,18 @@ export async function POST(req: Request) {
           latencyMs: result.latencyMs,
           tokensIn: result.tokensIn ?? null,
           tokensOut: result.tokensOut ?? null,
-          retrievedChunks: candidate.ragEnabled ? ragContext.length : 0,
-          retrievedExemplars: candidate.ragEnabled ? goldExamples.length : 0,
+          // For v2, "chunks" is the served lexicon + parallel material - the
+          // audit-trail ids minus the gold exemplars.
+          retrievedChunks: isV2
+            ? v2!.contextIds.filter((id) => !id.startsWith("gold:")).length
+            : candidate.ragEnabled
+              ? ragContext.length
+              : 0,
+          retrievedExemplars: isV2
+            ? v2!.exampleTurns.length
+            : candidate.ragEnabled
+              ? goldExamples.length
+              : 0,
           error: null as string | null,
         };
       } catch (e) {
