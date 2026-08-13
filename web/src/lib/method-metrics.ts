@@ -62,7 +62,12 @@ export interface CeilingResult {
 }
 
 export type Approach =
-  "untouched" | "retrieval v1" | "retrieval v2" | "fine-tuned" | "other";
+  | "untouched"
+  | "retrieval v1"
+  | "retrieval v2"
+  | "retrieval v3"
+  | "fine-tuned"
+  | "other";
 
 /** One scoreboard row: a non-archived candidate scored both ways. */
 export interface CandidateScore {
@@ -97,17 +102,20 @@ export interface MethodMetrics {
 
 /**
  * Human-readable method label from candidate metadata. versionLabel="rag-v2"
- * is how the serving routes themselves distinguish the v2 path (see
- * scripts/register-rag-v2.ts), so the scoreboard branches on the same field
- * rather than on a name convention that could drift.
+ * / "rag-v3" is how the serving routes themselves distinguish those paths
+ * (see scripts/register-rag-v2.ts and scripts/register-rag-v3.ts), so the
+ * scoreboard branches on the same field rather than on a name convention
+ * that could drift.
  */
 export function approachLabel(
   kind: string,
   versionLabel: string | null,
 ): Approach {
   if (kind === "baseline") return "untouched";
-  if (kind === "rag")
+  if (kind === "rag") {
+    if (versionLabel === "rag-v3") return "retrieval v3";
     return versionLabel === "rag-v2" ? "retrieval v2" : "retrieval v1";
+  }
   if (kind === "sft" || kind === "dpo") return "fine-tuned";
   return "other";
 }

@@ -6,6 +6,7 @@ import { searchRag } from "@/lib/rag";
 import { estimateGenerationCostUsd, roundUsd } from "@/lib/arena/pricing";
 import { buildRetrievalV2 } from "@/lib/arena/retrieval-v2";
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
+import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
 
 /**
  * Generate the candidate's answers on the frozen held-out bank. Uses the
@@ -59,13 +60,17 @@ export async function POST(
     try {
       let result;
       let ragContextIds: string[];
-      if (candidate.versionLabel === "rag-v2") {
-        // The v2 serving path: lexicon + parallel examples appended to the
+      if (
+        candidate.versionLabel === "rag-v2" ||
+        candidate.versionLabel === "rag-v3"
+      ) {
+        // The v2/v3 serving path: lexicon + parallel examples appended to the
         // user turn (dictionary last, immediately above the question), gold
-        // exemplars as prior turns, v2 system prompt, and the leak guard run
-        // inside buildRetrievalV2 against this prompt's own gold. The audit
-        // trail on the ModelOutput is the v2 contextIds (lex:/pp:/gold:), the
-        // complete list of pieces actually served.
+        // exemplars as prior turns, the version's system prompt (v3 = v2 plus
+        // the enshrined closed-class grammar; retrieval is identical), and
+        // the leak guard run inside buildRetrievalV2 against this prompt's
+        // own gold. The audit trail on the ModelOutput is the v2 contextIds
+        // (lex:/pp:/gold:), the complete list of pieces actually served.
         const v2 = await buildRetrievalV2(prisma, {
           promptId: prompt.promptId,
           text: prompt.text,
@@ -75,7 +80,10 @@ export async function POST(
         result = await generateForCandidate(candidate, {
           userMessage: buildUserTurnV2(prompt.text, v2, prompt.bucket),
           goldExamples: v2.exampleTurns,
-          systemPromptOverride: IGALA_SYSTEM_V2,
+          systemPromptOverride:
+            candidate.versionLabel === "rag-v3"
+              ? IGALA_SYSTEM_V3
+              : IGALA_SYSTEM_V2,
         });
         ragContextIds = v2.contextIds;
       } else {

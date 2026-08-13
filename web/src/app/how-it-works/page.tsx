@@ -14,8 +14,14 @@
   - src/lib/arena/retrieval-v2.ts: the v2 assembly order, the sentence-building
     gate for parallel examples, the leak guard on every retrieved piece.
   - scripts/register-rag-v2.ts: versionLabel="rag-v2" distinguishes v2 rows.
+  - src/lib/generation-prompt-v3.ts + scripts/register-rag-v3.ts: the v3
+    system prompt (enshrined closed-class grammar; retrieval identical to v2)
+    and versionLabel="rag-v3"; rendered verbatim below, never copied.
   - scripts/leak-audit.ts: the leak-detection composition this page's metrics
     lib mirrors.
+  - The "What changed, when" section carries DATES and fixed historical facts
+    only (corpus sizes at ingestion, the +22 delta as measured that day) -
+    facts about past events, not live numbers that could go stale.
   - The me- concord numerals question (meji/meta beside eji/eta) comes from
     aligning the Bible parallel corpus; the concord entries themselves are
     commit 123a082 (Ejeba 2023, paraphrased into the knowledge base).
@@ -30,6 +36,7 @@ import {
   IGALA_SYSTEM_V2,
   igalaTerminalContract,
 } from "@/lib/generation-prompt-v2";
+import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
 import { InfoTip } from "@/components/info-tip";
 
 /**
@@ -110,7 +117,7 @@ export default async function HowItWorksPage() {
       {/* ── b. The journey ──────────────────────────────────────────────── */}
       <section className="mb-10">
         <h2 className="text-xl text-text-primary">
-          The journey: three versions of the same idea
+          The journey: four versions of the same idea
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
           The models never learn Igala the way a person does. Each version of
@@ -119,10 +126,10 @@ export default async function HowItWorksPage() {
         </p>
         <div className="mt-4 overflow-x-auto rounded-md border border-border bg-surface p-4">
           <svg
-            viewBox="0 0 940 240"
-            className="h-auto w-full min-w-[700px]"
+            viewBox="0 0 1260 240"
+            className="h-auto w-full min-w-[940px]"
             role="img"
-            aria-label="Three stages: v0 plain models, v1 retrieval of community answers, v2 dictionary plus parallel sentences plus a procedure"
+            aria-label="Four stages: v0 plain models, v1 retrieval of community answers, v2 dictionary plus parallel sentences plus a procedure, v3 the same package plus a deduced grammar"
           >
             {/* stage boxes */}
             {[
@@ -157,6 +164,17 @@ export default async function HowItWorksPage() {
                   "Still copying, not speaking.",
                   "v1 and v2 both stay live in chat",
                   "for native structural review.",
+                ],
+              },
+              {
+                x: 970,
+                title: "v3 - a grammar",
+                sub: "v2's package + a grammar deduced from the evidence",
+                fixed: "Pronouns, negation, word order as rules.",
+                missing: [
+                  "Only A/B-grade rules enshrined;",
+                  "greetings stay retrieval-served.",
+                  "Speakers still judge structure.",
                 ],
               },
             ].map((s) => (
@@ -235,7 +253,7 @@ export default async function HowItWorksPage() {
               </g>
             ))}
             {/* arrows */}
-            {[295, 615].map((x) => (
+            {[295, 615, 935].map((x) => (
               <g key={x}>
                 <line
                   x1={x}
@@ -258,15 +276,17 @@ export default async function HowItWorksPage() {
       {/* ── c. How an answer is built ───────────────────────────────────── */}
       <section className="mb-10">
         <h2 className="text-xl text-text-primary">
-          How one answer is built today (v2)
+          How one answer is built today (v2 and v3)
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
           When someone asks a question, the system assembles a package around
-          it, in this order, and sends the whole package to the model. Every
-          piece retrieved for a benchmark question first passes a leak guard: if
-          a piece contains that question&apos;s own community answer, it is
-          dropped and the drop is recorded - otherwise the test would hand the
-          model its answer key.
+          it, in this order, and sends the whole package to the model. v3 uses
+          this exact same package and changes only the first piece - its system
+          prompt adds the deduced grammar - so any difference between v2 and v3
+          scores is attributable to that one change. Every piece retrieved for a
+          benchmark question first passes a leak guard: if a piece contains that
+          question&apos;s own community answer, it is dropped and the drop is
+          recorded - otherwise the test would hand the model its answer key.
         </p>
         <div className="mt-4 overflow-x-auto">
           <ol className="min-w-[560px] space-y-2">
@@ -341,6 +361,16 @@ export default async function HowItWorksPage() {
         <div className="mt-3 overflow-x-auto rounded-md border border-border bg-surface-sunken p-4">
           <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-text-secondary">
             {IGALA_SYSTEM_V2}
+          </pre>
+        </div>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-secondary">
+          And the v3 system prompt - the same skeleton plus the closed-class
+          grammar and register sections, every line traced to an A- or B-grade
+          rule in the grammar deduction (tasks/igala-grammar-deduced.md):
+        </p>
+        <div className="mt-2 overflow-x-auto rounded-md border border-border bg-surface-sunken p-4">
+          <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-text-secondary">
+            {IGALA_SYSTEM_V3}
           </pre>
         </div>
         <p className="mt-3 text-sm text-text-secondary">
@@ -486,10 +516,49 @@ export default async function HowItWorksPage() {
             The Idakwoji lexicon (roughly 5,000 headwords, against the{" "}
             {corpus.lexEntries.toLocaleString()} dictionary lines the system
             serves from today) - lexical coverage, not model architecture, is
-            the binding constraint. Lydia&apos;s syntax write-up, to turn her
-            review into data. And a frontier Claude arm, still unmeasured
-            because the project&apos;s Anthropic API key has no credit.
+            the binding constraint. And Lydia&apos;s syntax write-up, to turn
+            her review into data.
           </li>
+        </ul>
+      </section>
+
+      {/* ── g. What changed, when ───────────────────────────────────────── */}
+      <section className="mb-10">
+        <h2 className="text-xl text-text-primary">What changed, when</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
+          The dates are fixed history - what each day added and what it
+          corrected. Every live number they produced is recomputed above, not
+          repeated here.
+        </p>
+        <ul className="mt-3 max-w-2xl space-y-3">
+          {[
+            {
+              date: "Aug 9, 2026",
+              text: "The automatic eval harness, the honest human ceiling, and the leak guard. The audit that day found the benchmark had served 15+ of its 43 frozen questions their own community answers - those scores measured copying, so every number since is reported on the leak-free subset.",
+            },
+            {
+              date: "Aug 12, 2026",
+              text: "The Bible parallel corpus - 30,907 Igala-English sentence pairs ingested under BSN permission - plus a 2,104-entry lexicon, powering retrieval v2 and THE METHOD.",
+            },
+            {
+              date: "Aug 13, 2026",
+              text: "The frontier arms joined the board. Gemini 3.1 Pro topped it untouched; Claude Opus 5 gained +22 from community retrieval - a clean read on knowledge versus skill. This page was made public and the cost ledger rebuilt.",
+            },
+            {
+              date: "Aug 14, 2026",
+              text: "A working grammar deduced from all the evidence (tasks/igala-grammar-deduced.md) and METHOD v3, which enshrines only its A- and B-grade rules in the system prompt.",
+            },
+          ].map((e) => (
+            <li
+              key={e.date}
+              className="rounded-md border border-border bg-surface p-4 text-sm leading-relaxed text-text-secondary"
+            >
+              <span className="font-mono text-xs text-accent-text">
+                {e.date}
+              </span>
+              <p className="mt-1">{e.text}</p>
+            </li>
+          ))}
         </ul>
       </section>
     </div>

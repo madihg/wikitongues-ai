@@ -13,6 +13,7 @@ import {
   type RetrievalV2Result,
 } from "@/lib/arena/retrieval-v2";
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
+import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
 
 /**
  * POST /api/arena/chat - talk to several registered candidates at once.
@@ -133,21 +134,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No such candidates" }, { status: 404 });
   }
 
-  // rag-v2 candidates use the v2 serving path exclusively, so the v1
+  // rag-v2/rag-v3 candidates use the v2 retrieval path exclusively, so the v1
   // retrieval below only runs when a v1 RAG candidate is actually selected -
   // v1 composition for v1 candidates stays byte-identical either way.
   const needsRetrieval = candidates.some(
-    (c) => c.ragEnabled && c.versionLabel !== "rag-v2",
+    (c) =>
+      c.ragEnabled &&
+      c.versionLabel !== "rag-v2" &&
+      c.versionLabel !== "rag-v3",
   );
   const goldPool = needsRetrieval ? await loadGoldPool() : [];
 
-  // One v2 context per request, shared by every rag-v2 candidate - same
-  // sharing rationale as the v1 pool above. A free-text chat question belongs
-  // to no prompt, so promptId is synthetic and isHoldout is forced true: the
-  // strictest guard, so no frozen-bank answer can ever be displayed to the
-  // very reviewers whose independent judgement the benchmark depends on.
+  // One v2 context per request, shared by every rag-v2 AND rag-v3 candidate -
+  // v3 changes only the system prompt (the enshrined grammar), never the
+  // retrieval composition, so the two labels share one build. A free-text
+  // chat question belongs to no prompt, so promptId is synthetic and
+  // isHoldout is forced true: the strictest guard, so no frozen-bank answer
+  // can ever be displayed to the very reviewers whose independent judgement
+  // the benchmark depends on.
   let v2: RetrievalV2Result | null = null;
-  if (candidates.some((c) => c.versionLabel === "rag-v2")) {
+  if (
+    candidates.some(
+      (c) => c.versionLabel === "rag-v2" || c.versionLabel === "rag-v3",
+    )
+  ) {
     v2 = await buildRetrievalV2(prisma, {
       promptId: "__chat__",
       text: userMessage,
@@ -200,20 +210,27 @@ export async function POST(req: Request) {
   const replies = await Promise.all(
     ordered.map(async (candidate) => {
       const started = Date.now();
-      const isV2 = candidate.versionLabel === "rag-v2" && v2 !== null;
+      const isV2 =
+        (candidate.versionLabel === "rag-v2" ||
+          candidate.versionLabel === "rag-v3") &&
+        v2 !== null;
       try {
-        // The v2 path swaps all three levers at once: dictionary + parallel
-        // examples appended to the user turn (dictionary last, immediately
-        // above the question - the DiPMT position), gold exemplars as prior
-        // turns, and the v2 system prompt. Everything else flows through the
-        // same generateForCandidate call so latency/token accounting and
-        // error handling stay identical across versions.
+        // The v2/v3 path swaps all three levers at once: dictionary +
+        // parallel examples appended to the user turn (dictionary last,
+        // immediately above the question - the DiPMT position), gold
+        // exemplars as prior turns, and the version's system prompt - the
+        // ONLY thing that differs between rag-v2 and rag-v3. Everything else
+        // flows through the same generateForCandidate call so latency/token
+        // accounting and error handling stay identical across versions.
         const result = isV2
           ? await generateForCandidate(candidate, {
               userMessage: buildUserTurnV2(userMessage, v2!, null),
               conversationHistory: history,
               goldExamples: v2!.exampleTurns,
-              systemPromptOverride: IGALA_SYSTEM_V2,
+              systemPromptOverride:
+                candidate.versionLabel === "rag-v3"
+                  ? IGALA_SYSTEM_V3
+                  : IGALA_SYSTEM_V2,
             })
           : await generateForCandidate(candidate, {
               userMessage,
