@@ -76,6 +76,7 @@ enum CostCategory {
   eval_generation // candidate answer generation on the held-out bank
   judge // LLM-as-judge triage calls
   inference // ad-hoc / learner-tutor inference
+  credits // money leaving the card: credit purchases and invoices (receipts)
   other
 }
 

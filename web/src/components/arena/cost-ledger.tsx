@@ -27,12 +27,20 @@ interface LedgerRow {
   estimated: boolean;
   createdAt: string;
 }
+interface BurndownRow {
+  provider: string;
+  purchased: number;
+  consumed: number;
+  remainingEstimate: number;
+}
 interface CostData {
   grandTotal: number;
+  cashTotal: number;
+  burndown: BurndownRow[];
   togetherTotal: number;
   inference: { total: number; calls: number; byProvider: ProviderAmount[] };
   finetune: { total: number; byProvider: ProviderAmount[]; jobs: JobRow[] };
-  ledger: { total: number; entries: LedgerRow[] };
+  ledger: { total: number; cashTotal: number; entries: LedgerRow[] };
 }
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
@@ -65,15 +73,33 @@ export function CostLedger() {
 
   return (
     <div className="space-y-6">
-      {/* Headline totals */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* Headline totals. Cash and consumption are DIFFERENT MONIES and are
+          never summed: cash is what left the card (receipts), consumption is
+          the burn against those credits (billed or estimated). Adding them
+          would count every dollar twice. */}
+      <div className="grid gap-4 sm:grid-cols-4">
         <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
           <div className="flex items-center gap-1 text-xs text-text-tertiary">
-            Total spend
+            Cash spent
             <InfoTip width="w-72">
-              A mixed figure: real billed amounts for fine-tune training,
-              estimates for inference. The breakdown below says which is which
-              line by line.
+              Money that actually left the card: credit purchases and invoices,
+              each backed by a receipt logged in the ledger below. This is the
+              number to give a funder.
+            </InfoTip>
+          </div>
+          <div className="mt-1 text-2xl font-semibold text-text-primary tabular-nums">
+            {usd(data.cashTotal)}
+          </div>
+          <div className="mt-1 text-xs text-text-muted">from receipts</div>
+        </div>
+        <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
+          <div className="flex items-center gap-1 text-xs text-text-tertiary">
+            Compute consumed
+            <InfoTip width="w-72">
+              What the platform has burned through: fine-tune training at the
+              provider&apos;s own billed price, inference estimated from token
+              counts against a published-rate table. Burns down the credits in
+              &quot;Cash spent&quot; - it is not additional money.
             </InfoTip>
           </div>
           <div className="mt-1 text-2xl font-semibold text-text-primary tabular-nums">
@@ -107,6 +133,52 @@ export function CostLedger() {
           </div>
         </div>
       </div>
+
+      {/* Credits burn-down, only for providers with a recorded purchase */}
+      {data.burndown.length > 0 && (
+        <section className="rounded-lg border border-border bg-surface p-5 shadow-sm">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+            Credit burn-down
+            <InfoTip width="w-80">
+              For providers where a credit purchase is on record: what was
+              bought, what has been consumed against it, and the estimated
+              remainder. Consumption is partly estimated, so the remainder is an
+              estimate too. Providers without a logged purchase are not shown -
+              a burn-down against unknown credits would be a made-up number.
+            </InfoTip>
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-text-tertiary">
+                  <th className="pb-2 pr-4">Provider</th>
+                  <th className="pb-2 pr-4 text-right">Credits bought</th>
+                  <th className="pb-2 pr-4 text-right">Consumed</th>
+                  <th className="pb-2 text-right">Est. remaining</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.burndown.map((b) => (
+                  <tr key={b.provider} className="border-b border-border/50">
+                    <td className="py-2 pr-4 text-text-primary">
+                      {b.provider}
+                    </td>
+                    <td className="py-2 pr-4 text-right tabular-nums text-text-primary">
+                      {usd(b.purchased)}
+                    </td>
+                    <td className="py-2 pr-4 text-right tabular-nums text-text-secondary">
+                      {usd(b.consumed)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums text-text-primary">
+                      {usd(b.remainingEstimate)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* Inference by provider */}
       <section className="rounded-lg border border-border bg-surface p-5 shadow-sm">
