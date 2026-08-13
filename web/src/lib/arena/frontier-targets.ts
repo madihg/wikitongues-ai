@@ -24,7 +24,7 @@
 
 import type { CandidateKind } from "@prisma/client";
 
-export type ServingMode = "baseline" | "rag-v1" | "rag-v2";
+export type ServingMode = "baseline" | "rag-v1" | "rag-v2" | "rag-v3";
 
 export interface FrontierTarget {
   slug: string;
@@ -138,15 +138,18 @@ export const FRONTIER_SLUGS = FRONTIER_TARGETS.map((t) => t.slug);
 
 /**
  * Which serving path a candidate gets, mirroring the branch in
- * src/app/api/arena/chat/route.ts: versionLabel 'rag-v2' selects the v2
- * composition unconditionally; otherwise ragEnabled selects v1; otherwise the
- * candidate is a plain baseline. Kept as one function so the runner and any
- * future caller cannot drift from the route's rule.
+ * src/app/api/arena/chat/route.ts: versionLabel 'rag-v3' or 'rag-v2' selects
+ * that composition unconditionally (both share the v2 retrieval; v3 differs
+ * only in its system prompt - the enshrined grammar); otherwise ragEnabled
+ * selects v1; otherwise the candidate is a plain baseline. Kept as one
+ * function so the runner and any future caller cannot drift from the
+ * route's rule.
  */
 export function servingModeFor(candidate: {
   ragEnabled: boolean;
   versionLabel: string | null;
 }): ServingMode {
+  if (candidate.versionLabel === "rag-v3") return "rag-v3";
   if (candidate.versionLabel === "rag-v2") return "rag-v2";
   return candidate.ragEnabled ? "rag-v1" : "baseline";
 }

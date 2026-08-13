@@ -318,10 +318,11 @@ describe("computeMethodMetrics - the two ceilings", () => {
 });
 
 describe("pure helpers", () => {
-  it("approachLabel maps candidate metadata to the four public labels", () => {
+  it("approachLabel maps candidate metadata to the public labels", () => {
     expect(approachLabel("baseline", null)).toBe("untouched");
     expect(approachLabel("rag", null)).toBe("retrieval v1");
     expect(approachLabel("rag", "rag-v2")).toBe("retrieval v2");
+    expect(approachLabel("rag", "rag-v3")).toBe("retrieval v3");
     expect(approachLabel("sft", null)).toBe("fine-tuned");
     expect(approachLabel("dpo", null)).toBe("fine-tuned");
     expect(approachLabel("continued_pretrain", null)).toBe("other");
