@@ -421,6 +421,7 @@ Only the Bible had an artifact we could fetch today; Idakwoji PDF and BSN files
 have not arrived, PanLex API is NXDOMAIN, Crubadan hosts time out.
 
 **Built (all in this branch):**
+
 - ParallelPair: 30,907 BSN IGL70 verse pairs via HF dalaone/eng_igl_bible
   (previously refused as unlicensed - the permission is what changed), 98.5%
   language-ID validated, provenance on every row, FTS (tsvector GIN) for
@@ -437,6 +438,7 @@ have not arrived, PanLex API is NXDOMAIN, Crubadan hosts time out.
 - 3 v2 candidates registered and generated on the frozen 43.
 
 **Two defects found by testing our own output, both fixed and pinned by tests:**
+
 1. The dictionary served PHONEMIC notation (ùǯɛũ, ɔ́kpàkpà) as "copy this
    exactly" - the models obeyed, emitting ǯ/ɛ. toOrthography() now
    transliterates at render (ɛ->ẹ ɔ->ọ ǯ->j ŋ->ñ, notation diacritics

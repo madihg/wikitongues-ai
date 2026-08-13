@@ -56,6 +56,9 @@ export function navForRole(
       { href: "/admin/annotations", label: "Annotations" },
       { href: "/admin", label: "Researcher Dashboard" },
       { href: "/admin/arena", label: "Model Arena" },
+      // Plain-language project explainer for staff, funders and community
+      // members - researcher-gated like its /admin siblings.
+      { href: "/admin/how-it-works", label: "How it works" },
     ];
   }
   // Pure annotator.

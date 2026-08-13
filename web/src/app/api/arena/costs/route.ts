@@ -91,14 +91,32 @@ export async function GET() {
     finetuneByProvider.set(j.provider, cur);
   }
 
-  // Ledger — explicit entries (judge calls, manual).
+  // Ledger — explicit entries. Two different kinds live here and they must
+  // never be summed into one number: category "credits" is CASH leaving the
+  // card (a receipt exists), everything else is CONSUMPTION burning those
+  // credits down. Summing both counts the same dollar twice - once when
+  // bought, once when spent.
   const entries = await prisma.costEntry.findMany({
     orderBy: { createdAt: "desc" },
     take: 200,
   });
-  const ledgerTotal = entries.reduce((s, e) => s + e.amountUsd, 0);
+  const creditEntries = entries.filter((e) => e.category === "credits");
+  const consumptionEntries = entries.filter((e) => e.category !== "credits");
+  const cashTotal = creditEntries.reduce((s, e) => s + e.amountUsd, 0);
+  const ledgerConsumptionTotal = consumptionEntries.reduce(
+    (s, e) => s + e.amountUsd,
+    0,
+  );
 
-  const togetherFromLedger = entries
+  const cashByProvider = new Map<string, number>();
+  for (const e of creditEntries) {
+    cashByProvider.set(
+      e.provider,
+      (cashByProvider.get(e.provider) ?? 0) + e.amountUsd,
+    );
+  }
+
+  const togetherFromLedger = consumptionEntries
     .filter((e) => e.provider === "together")
     .reduce((s, e) => s + e.amountUsd, 0);
   const togetherTotal =
@@ -106,10 +124,35 @@ export async function GET() {
     (inferenceByProvider.get("together")?.amount ?? 0) +
     togetherFromLedger;
 
-  const grandTotal = inferenceTotal + finetuneTotal + ledgerTotal;
+  // Consumption only. Cash is reported beside it, never inside it.
+  const consumptionTotal =
+    inferenceTotal + finetuneTotal + ledgerConsumptionTotal;
+
+  // Per-provider burn-down where we know both sides: credits bought minus
+  // consumption estimated/billed. Only providers with a recorded purchase
+  // appear - a burn-down against unknown credits would be an invented number.
+  const providers = new Set<string>([...cashByProvider.keys()]);
+  const burndown = [...providers].map((provider) => {
+    const purchased = cashByProvider.get(provider) ?? 0;
+    const consumed =
+      (inferenceByProvider.get(provider)?.amount ?? 0) +
+      (finetuneByProvider.get(provider)?.amount ?? 0) +
+      consumptionEntries
+        .filter((e) => e.provider === provider)
+        .reduce((s, e) => s + e.amountUsd, 0);
+    return {
+      provider,
+      purchased: roundUsd(purchased),
+      consumed: roundUsd(consumed),
+      remainingEstimate: roundUsd(purchased - consumed),
+    };
+  });
 
   return NextResponse.json({
-    grandTotal: roundUsd(grandTotal),
+    // Kept for the existing UI: now consumption-only, with cash split out.
+    grandTotal: roundUsd(consumptionTotal),
+    cashTotal: roundUsd(cashTotal),
+    burndown,
     togetherTotal: roundUsd(togetherTotal),
     inference: {
       total: roundUsd(inferenceTotal),
@@ -142,7 +185,8 @@ export async function GET() {
       })),
     },
     ledger: {
-      total: roundUsd(ledgerTotal),
+      total: roundUsd(ledgerConsumptionTotal),
+      cashTotal: roundUsd(cashTotal),
       entries: entries.map((e) => ({
         id: e.id,
         category: e.category,
