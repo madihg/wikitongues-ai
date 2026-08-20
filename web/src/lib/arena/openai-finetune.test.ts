@@ -122,6 +122,7 @@ describe("held-out prompts never reach a training row", () => {
     bucket: "orthography",
     isHoldout: false,
     verificationStatus: "single_annotator",
+    provenance: "cold_sourcefree",
   };
 
   it("drops the benchmark row and keeps the training row", () => {

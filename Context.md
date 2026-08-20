@@ -464,3 +464,107 @@ confirmation as concord forms vs the bare citation forms; "honey" inö vs
 omiŋɔ and "liver" ekpiliwñ vs odo conflicts need a speaker pass; Idakwoji PDF
 slots into LexEntry the day it arrives; Lydia's syntax write-up becomes
 verification data (not prompt prose) when it lands.
+
+## Session State (2026-08-20, annotation pivot implementation)
+
+**Task:** implement tasks/annotation-pivot-decision.md end to end (pairwise +
+corrections on the strong arms, cold-gold spine preserved).
+
+**Shipped (all gates green: tsc 0, eslint 0, vitest 602/602):**
+
+- `CandidateModel.inPairingPool` (migration
+  `20260820120000_candidate_in_pairing_pool`, applied to Supabase via the
+  management API - the DATABASE_URL role does not own the tables). Flags set
+  by `scripts/train-queue-fill.ts pool`: gemini-3-1-pro-rag-v3,
+  gemini-3-1-pro, claude-opus-5-rag.
+- Queue pivot: `src/lib/queue-input.ts` is THE one loader behind
+  /api/annotations/next and /api/annotator/summary (pool-filtered outputs,
+  holdout exclusion, lane metadata). `src/lib/pairing.ts` gained
+  pairingEligibleOutputs / laneFor / goldFirstFor / orderQueueByLane:
+  zero-gold prompts first, then strong-pair vs long-form cold-mandatory
+  interleaved 2:1 (~67/33, inside the decided 60-70/30-40). goldFirst:
+  mandatory on zero-gold + long-form, skipped at >= 2 gold, bucket default at
+  1 gold. Frozen 43 never pairwise-served. Episode UI (inline edit, failure
+  tags) untouched.
+- Provenance precondition closed: `SftSourceRow.provenance`
+  (cold_sourcefree | cold_salvage | edit) carried from both loaders into
+  every SFT example; buildSftExamples is cold-only by DEFAULT, edits enter
+  only behind includeEdits and capped at 30% (DEFAULT_MAX_EDIT_SHARE);
+  /api/arena/export?type=sft now uses loadSftSourceRows + ?includeEdits=1.
+  collect.test.ts has a proxy-recorder guard: the eval collector reads ONLY
+  prompt/coldAuthorAnswer/modelOutput/pairwiseComparison - any OutputEdit
+  read fails loudly.
+- `scripts/train-queue-fill.ts` generate: train prompts (isHoldout=false,
+  422; 233 zero-gold first), slices of 60, measured-spend-from-DB + worst-case
+  stop rule (can never cross $15), CostEntry per candidate per slice,
+  idempotent resume, per-candidate probe. maxTokens is PER PROVIDER: 4096 for
+  Gemini (reasoning trace bills against completion budget - at 1024 outputs
+  truncated at exactly 1020 with trace fragments leaking into text; those 50
+  rows were deleted and regenerated), 1024 for Claude. Truncation guard
+  refuses to store outputs pinned at the cap.
+- `scripts/queue-summary.ts`: end-to-end queue verification per annotator.
+
+**Live state (generation, 2026-08-20 evening):**
+
+- Anthropic key in web/.env.local is INVALID (probe: "API key is invalid") -
+  claude-opus-5-rag skipped per the decision doc's contingency.
+- Google key hit its DAILY QUOTA for gemini-3.1-pro-preview after 145 clean
+  train outputs ("You exceeded your current quota" on every call after that;
+  the run was stopped, and the abandon rule is now slice-local so future runs
+  stop themselves). Coverage at halt: gemini-3-1-pro 96 train outputs,
+  gemini-3-1-pro-rag-v3 59, ALL on zero-gold (tranche 1); 55 train prompts
+  hold a complete strong pair. Measured spend $1.16 of the $15 cap, ledgered
+  to CostEntry (refType train_queue_fill).
+- Queue verified end-to-end (scripts/queue-summary.ts, test + real
+  annotator): pool active, 55 eligible pairs, all lane "both" (zero-gold ->
+  goldFirst mandatory), frozen 43 excluded, every pair =
+  [gemini-3-1-pro vs gemini-3-1-pro-rag-v3] - the METHOD v3-vs-bare test.
+- TO RESUME when quota resets (both idempotent, cap-aware):
+  `npx tsx --env-file=.env.local scripts/train-queue-fill.ts generate`
+  and once a live Anthropic key lands:
+  `npx tsx --env-file=.env.local scripts/train-queue-fill.ts generate claude-opus-5-rag`
+- 5 prompts (dialect/long-form) hit even the 4096 cap with their reasoning
+  trace and were refused by the truncation guard; retries may succeed.
+
+**Next:** after ~100 strong-pair episodes run the checkpoint SQL (decided+tie
+rate on pool-arm comparisons; >= 10% confirms the pivot, both_inadequate
+
+> 90% reverts to cold-primary).
+
+**VERIFICATION PASS (2026-08-20, independent, all four checks + fixes):**
+
+1. Queue (live DB, read-only, all 6 annotator accounts): pool active, 55
+   eligible prompts, all zero-gold lane "both" with goldFirst mandatory, every
+   pair = gemini bare vs rag-v3, all 43 holdout prompts (each with >= 2 pool
+   outputs) excluded, zero repeat-serves against 90-193 prior completions per
+   annotator, lane order never violated. FIXED a real re-serve path: a
+   malformed-prompt flag (/api/annotations/flag, non-"skip" reason) did NOT
+   cull the prompt, so after flagging, fetchNext() served the SAME prompt back
+   to the flagger. /next, /summary and scripts/queue-summary.ts now exclude
+   any prompt the annotator has flagged, any reason (verified live: Charity's
+   flagged ig_bank_orth_010 stays out of her queue).
+2. Provenance (adversarial sweep of every OutputEdit reader): no path into
+   benchmark gold (collect proxy-guard green; eval scripts never read
+   OutputEdit) and no unflagged path into training exports (SFT JSONL carries
+   provenance per row; edits excluded by default, capped behind includeEdits;
+   fine-tune build + JSONL pass NO includeEdits -> cold-only even when a job
+   selects sourceEditIds - silent-drop surprise documented in comments, now
+   accurate; admin edits CSV is a separate, clearly-labeled corrections file).
+3. Score: hand-recomputed from leak-audit strLF / live ceiling 39.514:
+   39.185->99.17, 37.237->94.24, 33.437->84.62; live server-render of the page
+   shows 99.2 / 94.2 / 84.6, ceiling 39.5, 27 leak-free - identical. >100
+   path exercised: CI highs up to 125.9 draw past the 100 line (scale 140),
+   unclamped, per the component test.
+4. Copy (skeptical-funder pass), two fixes on /how-it-works: (a) "reads like
+   any language-model benchmark" -> now states outright it is NOT comparable
+   to MMLU-style general benchmarks and claims nothing beyond Igala; (b) the
+   99.3% both-inadequate rate was quoted beside the leaders' bars though ZERO
+   of the 1,047 comparisons involve pool arms - corpus counts now include
+   live poolComparisons/poolBothInadequate (both-sides-in-pool, per request)
+   and the sentence says which systems the verdict covers, with a computed
+   pool-rate branch once pool comparisons exist (the checkpoint metric, now
+   visible on the page).
+
+Gates after fixes: tsc 0, eslint 0, vitest 604/604 (2 tests added). Not
+committed (verifier holds the no-commit rule); no DB writes, real accounts
+untouched.

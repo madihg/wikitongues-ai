@@ -13,11 +13,13 @@ import {
 import {
   assignedPair,
   computeQueueState,
-  type QueuePrompt,
+  goldFirstFor,
+  laneFor,
 } from "@/lib/pairing";
+import { loadQueueInputs } from "@/lib/queue-input";
 
 /**
- * Serve the next annotation task. The response now carries everything the
+ * Serve the next annotation task. The response carries everything the
  * episode needs:
  *   - goldFirst: ask the annotator to author their own answer before models show
  *   - watchFor:  the per-bucket fail-mode to look for
@@ -29,9 +31,23 @@ import {
  * file for why this spreads C(n,2) coverage across the team instead of every
  * annotator getting the same first couple of pairs.
  *
+ * Since the 2026-08-20 pivot (tasks/annotation-pivot-decision.md), the prompt
+ * catalogue, the pairing-pool output filter and the lane ordering all come
+ * from loadQueueInputs() + computeQueueState(), shared verbatim with
+ * /api/annotator/summary: pairs are drawn only from pool-arm outputs, frozen
+ * prompts stay out of the pairwise queue, zero-gold prompts are served first,
+ * and strong-pair episodes interleave 2:1 against long-form cold-mandatory
+ * ones. goldFirst is mandatory on zero-gold and long-form prompts, optional
+ * (skipped) once a prompt holds >= 2 gold answers, and the per-bucket default
+ * in between. The episode itself - inline edit, failure tags, rubric - is
+ * unchanged.
+ *
  * A prompt is excluded from an annotator's remaining queue once they have ANY
  * non-demo comparison for it (covers history from the old scheme, regardless
- * of which pair was done) or once they've skipped it via /api/annotations/skip.
+ * of which pair was done) or once they've flagged it - either the explicit
+ * skip (reason "skip" via /api/annotations/skip) or a malformed-prompt flag
+ * (/api/annotations/flag): someone who just told us a prompt is broken must
+ * not be served that same prompt again on the next fetch.
  *
  * Demo mode (?demo=<sessionId>) serves the first eligible prompt's pair
  * regardless of history, so a live walkthrough always has something to show.
@@ -46,16 +62,9 @@ export async function GET(req: Request) {
   const demoSessionId = new URL(req.url).searchParams.get("demo");
   const isDemo = !!demoSessionId;
 
-  const promptsWithOutputs = await prisma.prompt.findMany({
-    where: { modelOutputs: { some: {} } },
-    // Deterministic order (id as a tiebreak on equal timestamps) so the
-    // assigned-pair index picked here matches /api/annotator/summary exactly.
-    include: {
-      modelOutputs: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
-    },
-  });
+  const { byPromptId, queuePrompts } = await loadQueueInputs();
 
-  if (promptsWithOutputs.length === 0) {
+  if (queuePrompts.length === 0) {
     return NextResponse.json({
       complete: true,
       message: "No prompts with model outputs available yet.",
@@ -72,8 +81,10 @@ export async function GET(req: Request) {
         where: { annotatorId, isDemo: false },
         select: { promptId: true },
       }),
+      // ANY flag by this annotator excludes the prompt for them - skip flags
+      // and malformed-prompt flags alike (see the route doc above).
       prisma.promptFlag.findMany({
-        where: { annotatorId, reason: "skip" },
+        where: { annotatorId },
         select: { prompt: { select: { promptId: true } } },
       }),
     ]);
@@ -81,24 +92,18 @@ export async function GET(req: Request) {
     skippedPromptIds = new Set(skipRows.map((r) => r.prompt.promptId));
   }
 
-  const queuePrompts: QueuePrompt[] = promptsWithOutputs.map((p) => ({
-    promptId: p.promptId,
-    outputCount: p.modelOutputs.length,
-  }));
   // In demo mode donePromptIds/skippedPromptIds are empty (never fetched
-  // above), so `remaining` already equals every eligible prompt in order -
-  // exactly "serve the first eligible prompt regardless of history".
+  // above), so `remaining` already equals every eligible prompt in lane
+  // order - exactly "serve the first eligible prompt regardless of history".
   const { total, completed, remaining } = computeQueueState(
     queuePrompts,
     donePromptIds,
     skippedPromptIds,
   );
 
-  const byPromptId = new Map(promptsWithOutputs.map((p) => [p.promptId, p]));
-
   for (const candidate of remaining) {
     const prompt = byPromptId.get(candidate.promptId)!;
-    const outputs = prompt.modelOutputs;
+    const outputs = prompt.pairableOutputs;
     const pair = assignedPair(annotatorId, prompt.promptId, outputs.length);
     if (!pair) continue; // defensive: candidates are already >= 2 outputs
     const [i, j] = pair;
@@ -150,7 +155,8 @@ export async function GET(req: Request) {
           targetCulture: prompt.targetCulture,
           expectedCulturalContext: prompt.expectedCulturalContext,
         },
-        goldFirst: isGoldFirstBucket(prompt.bucket),
+        goldFirst: goldFirstFor(candidate, isGoldFirstBucket(prompt.bucket)),
+        lane: laneFor(candidate),
         watchFor: bucketWatchFor(prompt.bucket),
         scoring: bucketScoring(prompt.bucket),
         applicableAxes: axesForBucket(prompt.bucket),

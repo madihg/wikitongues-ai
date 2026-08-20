@@ -6,6 +6,7 @@ import {
   looCeilingChrf,
   onePerAnnotator,
   splitServedIds,
+  toAgreementScore,
   type GoldRow,
 } from "./method-metrics";
 
@@ -39,7 +40,10 @@ interface RecordedCall {
  *       served exemplar G-LEAK whose text IS P1's own gold -> P1 leaks.
  *     "Old broken" (archived): must never appear in the scoreboard.
  */
-function fakePrisma(calls: RecordedCall[]): PrismaClient {
+function fakePrisma(
+  calls: RecordedCall[],
+  { leakP1 = true }: { leakP1?: boolean } = {},
+): PrismaClient {
   const rec = (model: string, args: RecordedCall["args"]) =>
     calls.push({ model, args });
 
@@ -137,7 +141,9 @@ function fakePrisma(calls: RecordedCall[]): PrismaClient {
           {
             promptId: "P1",
             outputText: "Omi",
-            ragContextIds: ["gold:G-LEAK"],
+            // With leakP1 off, P1 is served only an innocuous dictionary
+            // line, so BOTH prompts land in the leak-free subset.
+            ragContextIds: leakP1 ? ["gold:G-LEAK"] : ["lex:L1"],
             candidateModel: ragV2,
           },
           {
@@ -159,6 +165,13 @@ function fakePrisma(calls: RecordedCall[]): PrismaClient {
       count: async (args: RecordedCall["args"]) => {
         rec("pairwise.count", args);
         const where = args.where ?? {};
+        // Pool-scoped counts (both sides must be pool arms) are the pivot's
+        // checkpoint metric - the fixture keeps them strictly smaller than
+        // the corpus-wide counts so a query that dropped the pool filter
+        // would be caught by the numbers, not just the recorded WHERE.
+        if (where.modelOutputA) {
+          return where.winner === "both_inadequate" ? 1 : 3;
+        }
         return where.winner === "both_inadequate" ? 6 : 7;
       },
       findMany: async (args: RecordedCall["args"]) => {
@@ -242,11 +255,33 @@ describe("computeMethodMetrics - corpus and benchmark shape", () => {
       goldAnswers: 4,
       pairwiseComparisons: 7,
       pairwiseBothInadequate: 6,
+      poolComparisons: 3,
+      poolBothInadequate: 1,
       parallelPairs: 10,
       lexEntries: 5,
       // annA appears in two signal types; the union counts people, not rows.
       annotators: 2,
     });
+  });
+
+  it("scopes the pool counts to comparisons where BOTH sides are pool arms", async () => {
+    const { calls } = await run();
+    const poolCounts = calls.filter(
+      (c) => c.model === "pairwise.count" && c.args.where?.modelOutputA,
+    );
+    expect(poolCounts).toHaveLength(2);
+    for (const call of poolCounts) {
+      expect(call.args.where?.isDemo).toBe(false);
+      expect(call.args.where?.modelOutputA).toEqual({
+        candidateModel: { inPairingPool: true },
+      });
+      expect(call.args.where?.modelOutputB).toEqual({
+        candidateModel: { inPairingPool: true },
+      });
+    }
+    expect(
+      poolCounts.filter((c) => c.args.where?.winner === "both_inadequate"),
+    ).toHaveLength(1);
   });
 
   it("derives the leak-free subset from the served context, mechanically", async () => {
@@ -317,7 +352,67 @@ describe("computeMethodMetrics - the two ceilings", () => {
   });
 });
 
+describe("computeMethodMetrics - Community Agreement Score", () => {
+  it("is null for every candidate when the clean ceiling cannot exist", async () => {
+    // Default fixture: P1 leaks, so the leak-free subset is P2 alone - and P2
+    // has a single gold, so there is no inter-speaker ceiling to normalize
+    // against. Honest degradation: no ceiling, no score, never a made-up one.
+    const { metrics } = await run();
+    expect(metrics.agreementCeilingChrf).toBeNull();
+    for (const c of metrics.candidates) {
+      expect(c.agreementScore).toBeNull();
+      expect(c.agreementCiLow).toBeNull();
+      expect(c.agreementCiHigh).toBeNull();
+    }
+  });
+
+  it("anchors 100 to the dedup leak-free ceiling and does NOT cap above it", async () => {
+    const calls: RecordedCall[] = [];
+    const metrics = await computeMethodMetrics(
+      fakePrisma(calls, { leakP1: false }),
+    );
+
+    // No leaks -> both prompts are clean; the dedup ceiling on the clean
+    // subset is P1's Omi-vs-Ọmi leave-one-out chrF, strictly below 100.
+    expect(metrics.benchmark.leakFreePrompts).toBe(2);
+    const ceiling = metrics.agreementCeilingChrf;
+    expect(ceiling).not.toBeNull();
+    expect(ceiling!).toBeGreaterThan(0);
+    expect(ceiling!).toBeLessThan(100);
+    expect(ceiling).toBe(metrics.ceilings.onePerAnnotator.chrfClean);
+
+    // RAG v2 matched the community exactly on both clean prompts (chrF 100),
+    // which is CLOSER to the community than one speaker is to another - so
+    // its score must exceed 100, uncapped, exactly (100 / ceiling) * 100.
+    const ragV2 = metrics.candidates.find((c) => c.name === "GPT + RAG v2")!;
+    expect(ragV2.strippedChrfClean).toBeCloseTo(100, 6);
+    expect(ragV2.agreementScore).toBeGreaterThan(100);
+    expect(ragV2.agreementScore).toBeCloseTo((100 / ceiling!) * 100, 6);
+
+    // Plain GPT is far below the ceiling.
+    const plain = metrics.candidates.find((c) => c.name === "Plain GPT")!;
+    expect(plain.agreementScore).not.toBeNull();
+    expect(plain.agreementScore!).toBeLessThan(ragV2.agreementScore!);
+
+    // nClean = 2 < MIN_BOOTSTRAP_N: the CI must be flagged degenerate, and
+    // its bounds collapse onto the point estimate rather than pretending.
+    expect(ragV2.agreementUnderpowered).toBe(true);
+    expect(ragV2.agreementCiLow).toBeCloseTo(ragV2.agreementScore!, 6);
+    expect(ragV2.agreementCiHigh).toBeCloseTo(ragV2.agreementScore!, 6);
+  });
+});
+
 describe("pure helpers", () => {
+  it("toAgreementScore renormalizes chrF so the ceiling reads 100, uncapped", () => {
+    expect(toAgreementScore(null, 46)).toBeNull();
+    expect(toAgreementScore(40, null)).toBeNull();
+    expect(toAgreementScore(40, 0)).toBeNull(); // no divide-by-zero score
+    expect(toAgreementScore(23, 46)).toBeCloseTo(50, 9);
+    expect(toAgreementScore(46, 46)).toBeCloseTo(100, 9);
+    // Above the ceiling stays above 100 - never silently clamped.
+    expect(toAgreementScore(55.2, 46)).toBeCloseTo(120, 9);
+  });
+
   it("approachLabel maps candidate metadata to the public labels", () => {
     expect(approachLabel("baseline", null)).toBe("untouched");
     expect(approachLabel("rag", null)).toBe("retrieval v1");

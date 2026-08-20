@@ -6,14 +6,17 @@ import {
   buildSftExamples,
   toJsonl,
   type DpoSourceRow,
-  type SftSourceRow,
 } from "@/lib/arena/training-export";
+import { loadSftSourceRows } from "@/lib/arena/sft-source";
 import { isBucket } from "@/lib/buckets";
 import type { EvalBucket, VerificationStatus } from "@prisma/client";
 
 /**
- * Training-set export. `?type=dpo` (from pairwise) or `?type=sft` (from edits).
- * Held-out prompts are excluded in the pure builders — see training-export.ts.
+ * Training-set export. `?type=dpo` (from pairwise) or `?type=sft` (cold gold,
+ * plus edits only behind `?includeEdits=1`, capped — see training-export.ts).
+ * Held-out prompts are excluded in the pure builders, and every SFT example
+ * carries its provenance (cold_sourcefree | cold_salvage | edit) so an
+ * exported set is self-auditing.
  */
 export async function GET(req: Request) {
   const guard = await requireResearcher();
@@ -74,36 +77,16 @@ export async function GET(req: Request) {
   }
 
   if (type === "sft") {
-    const edits = await prisma.outputEdit.findMany({
-      where: { isDemo: false },
-      select: {
-        correctedText: true,
-        bucket: true,
-        verificationStatus: true,
-        modelOutput: {
-          select: {
-            prompt: {
-              select: { id: true, text: true, isHoldout: true, bucket: true },
-            },
-          },
-        },
-      },
-    });
-
-    const rows: SftSourceRow[] = edits.map((e) => ({
-      promptId: e.modelOutput?.prompt?.id ?? "",
-      promptText: e.modelOutput?.prompt?.text ?? "",
-      correctedText: e.correctedText,
-      bucket: (e.bucket ??
-        e.modelOutput?.prompt?.bucket ??
-        null) as EvalBucket | null,
-      isHoldout: e.modelOutput?.prompt?.isHoldout ?? false,
-      verificationStatus: e.verificationStatus,
-    }));
+    // The shared loader (cold gold + edits, provenance carried per row). The
+    // builder excludes edit-provenance rows unless includeEdits is passed,
+    // and caps them even then - the pivot's anti-post-editese default.
+    const rows = await loadSftSourceRows({ sourceEditIds: [] });
+    const includeEdits = url.searchParams.get("includeEdits") === "1";
 
     const examples = buildSftExamples(rows, {
       buckets,
       minVerification: minVerification ?? undefined,
+      includeEdits,
     });
     return new NextResponse(toJsonl(examples), {
       headers: {

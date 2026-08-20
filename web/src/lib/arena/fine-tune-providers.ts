@@ -177,8 +177,11 @@ export async function buildTrainingJsonl(job: FineTuneJob): Promise<string> {
   }
 
   // sft / continued_pretrain train off the platform's Igala gold: cold author
-  // answers (source-free, the bulk) plus annotator edits. Same loader as the
-  // build route, so the reported row count and the uploaded JSONL never diverge.
+  // answers (source-free plus salvage, provenance-tagged). No includeEdits
+  // flag is passed, so buildSftExamples drops every edit-provenance row -
+  // the JSONL is cold-only by default (pivot precondition 1). Same loader as
+  // the build route, so the reported row count and the uploaded JSONL never
+  // diverge.
   const rows = await loadSftSourceRows(job);
   const examples = buildSftExamples(rows, filters);
   return toJsonl(

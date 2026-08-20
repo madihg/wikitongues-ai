@@ -31,6 +31,13 @@ export interface ColdAnswerInput {
   verificationStatus: VerificationStatus;
   consentTraining: boolean;
   isDemo: boolean;
+  /**
+   * ColdAuthorAnswer.provenance as stored ("speaker_authored_sourcefree" or
+   * "corrected_from_inadequate"). Distinguishes true source-free gold from
+   * salvage answers authored AFTER seeing rejected model outputs, so the
+   * export layer can weight them separately (pivot precondition 1).
+   */
+  provenance: string | null;
 }
 
 /** Decoupled-from-Prisma input shape for an annotator edit. */
@@ -49,7 +56,9 @@ export interface EditInput {
 /**
  * ColdAuthorAnswer -> SFT source rows. answerText is the pure Igala completion;
  * the English gloss / Igala-instruction metadata is never carried in. Drops demo
- * rows and rows the speaker did not consent to train on.
+ * rows and rows the speaker did not consent to train on. Carries provenance:
+ * salvage answers (authored after seeing rejected outputs) become
+ * "cold_salvage", everything else "cold_sourcefree".
  */
 export function coldAnswersToSftRows(rows: ColdAnswerInput[]): SftSourceRow[] {
   const out: SftSourceRow[] = [];
@@ -64,12 +73,21 @@ export function coldAnswersToSftRows(rows: ColdAnswerInput[]): SftSourceRow[] {
       bucket: r.bucket ?? r.promptBucket,
       isHoldout: r.isHoldout, // contamination guard applied by buildSftExamples
       verificationStatus: r.verificationStatus,
+      provenance:
+        r.provenance === "corrected_from_inadequate"
+          ? "cold_salvage"
+          : "cold_sourcefree",
     });
   }
   return out;
 }
 
-/** OutputEdit -> SFT source rows. correctedText is the completion; rationale is dropped. */
+/**
+ * OutputEdit -> SFT source rows. correctedText is the completion; rationale is
+ * dropped. Every row is provenance "edit": buildSftExamples EXCLUDES these by
+ * default and caps them behind an explicit flag, so an edit can never be
+ * exported indistinguishable from cold gold.
+ */
 export function editsToSftRows(rows: EditInput[]): SftSourceRow[] {
   const out: SftSourceRow[] = [];
   for (const r of rows) {
@@ -83,6 +101,7 @@ export function editsToSftRows(rows: EditInput[]): SftSourceRow[] {
       bucket: r.bucket ?? r.promptBucket,
       isHoldout: r.isHoldout,
       verificationStatus: r.verificationStatus,
+      provenance: "edit",
     });
   }
   return out;
@@ -132,6 +151,7 @@ export async function loadSftSourceRows(job: {
       verificationStatus: c.verificationStatus,
       consentTraining: c.consentTraining,
       isDemo: c.isDemo,
+      provenance: c.provenance,
     })),
   );
 

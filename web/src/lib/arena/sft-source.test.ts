@@ -18,6 +18,7 @@ describe("coldAnswersToSftRows", () => {
     verificationStatus: "single_annotator",
     consentTraining: true,
     isDemo: false,
+    provenance: "speaker_authored_sourcefree",
   };
 
   it("maps answerText to the completion (pure Igala target)", () => {
@@ -26,6 +27,22 @@ describe("coldAnswersToSftRows", () => {
     expect(out[0].correctedText).toBe("ọ̀mì");
     expect(out[0].promptText).toBe(base.promptText);
     expect(out[0].isHoldout).toBe(false);
+  });
+
+  it("maps source-free rows to provenance 'cold_sourcefree'", () => {
+    expect(coldAnswersToSftRows([base])[0].provenance).toBe("cold_sourcefree");
+    // Unknown/legacy provenance strings default to sourcefree too - only the
+    // salvage marker downgrades a row.
+    expect(
+      coldAnswersToSftRows([{ ...base, provenance: null }])[0].provenance,
+    ).toBe("cold_sourcefree");
+  });
+
+  it("maps salvage rows (authored post-exposure) to provenance 'cold_salvage'", () => {
+    const out = coldAnswersToSftRows([
+      { ...base, provenance: "corrected_from_inadequate" },
+    ]);
+    expect(out[0].provenance).toBe("cold_salvage");
   });
 
   it("NEVER carries English-gloss/metadata into the target", () => {
@@ -88,5 +105,15 @@ describe("editsToSftRows", () => {
     expect(editsToSftRows([{ ...base, consentTraining: false }])).toHaveLength(
       0,
     );
+  });
+
+  it("stamps every edit row with provenance 'edit'", () => {
+    expect(editsToSftRows([base])[0].provenance).toBe("edit");
+  });
+
+  it("edit rows are EXCLUDED from a default (cold-only) export", () => {
+    const rows = editsToSftRows([base]);
+    expect(rows).toHaveLength(1); // the loader carries them
+    expect(buildSftExamples(rows)).toHaveLength(0); // the builder gates them
   });
 });
