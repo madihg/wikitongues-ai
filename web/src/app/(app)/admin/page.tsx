@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import { computeMethodMetrics } from "@/lib/method-metrics";
+import { BenchmarkBars } from "@/components/arena/benchmark-bars";
 import { Leaderboard } from "@/components/admin/leaderboard";
 import { CategoryBreakdown } from "@/components/admin/category-breakdown";
 import { AgreementStats } from "@/components/admin/agreement-stats";
@@ -9,7 +12,13 @@ import { ExportPanel } from "@/components/admin/export-panel";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
 
-export default function AdminDashboard() {
+/** The benchmark card is computed from the database per request - the house
+ * rule: no hardcoded counts or scores anywhere in the UI. */
+export const dynamic = "force-dynamic";
+
+export default async function AdminDashboard() {
+  const metrics = await computeMethodMetrics(prisma);
+
   return (
     <div>
       <div className="mb-8">
@@ -58,6 +67,34 @@ export default function AdminDashboard() {
             </span>
           </Link>
         </div>
+
+        <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-text-primary">
+              Community Agreement Score
+              <InfoTip width="w-80">
+                Leak-free stripped chrF rescaled so that 100 marks how closely
+                one native speaker agrees with another on the same frozen
+                questions. Computed live per request; never capped at 100.
+              </InfoTip>
+            </h2>
+            <Link
+              href="/how-it-works"
+              className="text-sm font-medium text-accent-text"
+            >
+              How this score works →
+            </Link>
+          </div>
+          <p className="mb-3 mt-1 text-sm text-text-tertiary">
+            The frozen-exam benchmark, drawn the way language models are usually
+            compared.
+          </p>
+          <BenchmarkBars
+            candidates={metrics.candidates}
+            ceilingChrf={metrics.agreementCeilingChrf}
+            leakFreePrompts={metrics.benchmark.leakFreePrompts}
+          />
+        </section>
 
         <Leaderboard />
         <CategoryBreakdown />

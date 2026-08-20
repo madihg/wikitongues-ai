@@ -38,6 +38,7 @@ import {
 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
 import { InfoTip } from "@/components/info-tip";
+import { BenchmarkBars } from "@/components/arena/benchmark-bars";
 
 /**
  * "How it works" - the whole project explained for non-ML readers:
@@ -383,102 +384,168 @@ export default async function HowItWorksPage() {
         </div>
       </section>
 
-      {/* ── e. Scoreboard ───────────────────────────────────────────────── */}
+      {/* ── e. The benchmark ────────────────────────────────────────────── */}
       <section className="mb-10">
         <h2 className="flex items-center gap-2 text-xl text-text-primary">
-          Scoreboard
-          <InfoTip label="About these scores" width="w-80">
-            chrF measures character overlap between a model&apos;s answer and
-            the community&apos;s answers, 0 to 100. Scores are computed on the
-            stripped answer (English packaging removed) so a polite English
-            preamble cannot inflate them. Sorted by the leak-free column, which
-            is the honest one.
+          The benchmark: Community Agreement Score
+          <InfoTip label="About this score" width="w-80">
+            Character overlap (chrF) with the community&apos;s answers, rescaled
+            so that 100 marks how closely one native speaker agrees with another
+            on the same questions. Computed live from the database on every page
+            load, on the leak-free subset only, and never capped at 100.
           </InfoTip>
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
-          Every model faces the same {benchmark.frozenPrompts} frozen test
-          questions, and each stored answer is compared with what Igala speakers
-          wrote for that question; where a provider quota cut a run short, the n
-          column shows fewer answers. Recomputed from stored outputs on every
-          page load.
+          Every model faces the same {benchmark.frozenPrompts}-question frozen
+          exam - questions the models never saw during any adaptation step - and
+          each answer is compared with what Igala speakers wrote for that
+          question. The chart borrows the familiar benchmark layout - longer
+          bar, closer to how the community actually writes - but the yardstick
+          is agreement with this one community&apos;s writing, on Igala
+          questions only. It is not comparable to general-knowledge benchmarks
+          like MMLU, and a high bar here claims nothing beyond Igala.
         </p>
-        <div className="mt-4 overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[640px] border-collapse bg-surface text-sm">
-            <thead>
-              <tr className="border-b border-border-strong bg-surface-sunken text-left text-xs uppercase tracking-wide text-text-tertiary">
-                <th className="px-3 py-2 font-medium">Candidate</th>
-                <th className="px-3 py-2 font-medium">Approach</th>
-                <th className="px-3 py-2 text-right font-medium">n</th>
-                <th className="px-3 py-2 text-right font-medium">
-                  All {benchmark.frozenPrompts} prompts
-                </th>
-                <th className="px-3 py-2 text-right font-medium">
-                  Leak-free ({benchmark.leakFreePrompts})
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <CeilingRow
-                label="Human agreement ceiling - one answer per speaker"
-                note="the honest ceiling"
-                ceiling={ceilings.onePerAnnotator}
-              />
-              <CeilingRow
-                label="Human agreement ceiling - as first shipped"
-                note="inflated: counts repeat submissions by the same person as agreement"
-                ceiling={ceilings.asShipped}
-              />
-              {candidates.map((c) => (
-                <ScoreRow key={c.name} candidate={c} />
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4">
+          <BenchmarkBars
+            candidates={candidates}
+            ceilingChrf={m.agreementCeilingChrf}
+            leakFreePrompts={benchmark.leakFreePrompts}
+          />
         </div>
 
         <div className="mt-4 max-w-2xl space-y-3 rounded-md border border-border bg-surface p-4 text-sm leading-relaxed text-text-secondary">
           <p>
-            <strong className="text-text-primary">What chrF is.</strong> A 0-100
-            measure of how much an answer&apos;s characters overlap with the
-            community&apos;s answers. It rewards writing like these speakers
-            write - their spelling, their tone marks. It does not measure
-            fluency or correctness.
+            <strong className="text-text-primary">What the score means.</strong>{" "}
+            Underneath is chrF, the standard character-overlap metric machine
+            translation systems are scored with (the sacrebleu convention):
+            0-100 for how much an answer&apos;s characters overlap with the
+            community&apos;s answers, computed on the stripped answer so an
+            English preamble cannot inflate it. We then rescale it so that the
+            agreement between two native speakers reads exactly 100. A score of
+            85 means: this model&apos;s answers are 85% as close to the
+            community&apos;s writing as one native speaker&apos;s answers are to
+            another&apos;s.
+          </p>
+          <p>
+            <strong className="text-text-primary">A worked example.</strong>{" "}
+            Suppose a test question asks for a word and two speakers wrote the
+            same five letters, differing only in one accent mark - their overlap
+            is high but not perfect, and that speaker-to-speaker overlap is what
+            the 100 line is anchored to. A model whose answer shares four of
+            those five letters in order lands near the line; a model that
+            answers in English shares almost no characters and lands near zero.
           </p>
           <p>
             <strong className="text-text-primary">
-              Why the ceiling is about {fmt(ceilings.onePerAnnotator.chrfAll)},
-              not 100.
+              Why 100 is native agreement, not perfection.
             </strong>{" "}
             Two Igala speakers answering the same question rarely write the
-            identical string, so even a perfect model cannot score 100. We first
-            published a ceiling of {fmt(ceilings.asShipped.chrfAll)}, but that
-            number counted people re-submitting their own answer as two speakers
-            agreeing. One answer per speaker gives{" "}
-            {fmt(ceilings.onePerAnnotator.chrfAll)} - the honest limit, and both
-            versions are shown above so the correction stays visible.
+            identical string - spelling varies, tone marks vary, phrasing
+            varies. So the honest yardstick is not &quot;matched the answer
+            key&quot; (there is no single answer key) but &quot;agreed with the
+            community as much as its own members agree with each other&quot;.
+            That is also why a bar can pass 100: matching the pooled community
+            answers more closely than one speaker matches another is possible,
+            and when it happens the chart shows it rather than clamping it.
           </p>
           <p>
             <strong className="text-text-primary">
-              Why leak-free is the honest column.
+              Why it is measured on the leak-free subset.
             </strong>{" "}
-            {benchmark.leakedPrompts} of {benchmark.frozenPrompts} test
-            questions had one of their own community answers included in the
-            material served to the models. On those questions the models could
-            simply copy, so scores there measure copying, not competence. The
-            leak-free column keeps only the {benchmark.leakFreePrompts}{" "}
-            questions where that never happened.
+            {benchmark.leakedPrompts} of {benchmark.frozenPrompts} frozen
+            questions once had one of their own community answers included in
+            material served to the models; on those, a high score measures
+            copying, not competence. The score therefore uses only the{" "}
+            {benchmark.leakFreePrompts} questions where that never happened, and
+            its ceiling is computed on those same questions with one answer per
+            speaker - repeat submissions by the same person do not count as
+            agreement.
           </p>
           <p>
             <strong className="text-text-primary">
-              What none of this proves.
+              Why we do not call it &quot;% fluent&quot;.
             </strong>{" "}
-            In {corpus.pairwiseComparisons} blind comparisons to date, native
-            speakers found both answers inadequate {noPreferencePct}% of the
-            time - far too often for any ranking by preference to exist. These
-            scores measure progress from &quot;does not speak Igala&quot; toward
-            &quot;speaks it badly&quot;, not toward &quot;speaks it well&quot;.
-            Only the speakers can judge the rest.
+            chrF measures resemblance to how the community writes; only native
+            judgment measures fluency. In {corpus.pairwiseComparisons} blind
+            comparisons to date, speakers found both answers inadequate{" "}
+            {noPreferencePct}% of the time -{" "}
+            {corpus.poolComparisons === 0 ? (
+              <>
+                and none of those comparisons involved the strongest systems on
+                this chart, whose blind test is only beginning
+              </>
+            ) : (
+              <>
+                on the strongest current systems specifically, the no-preference
+                rate so far is{" "}
+                {pct(corpus.poolBothInadequate, corpus.poolComparisons)}% of{" "}
+                {corpus.poolComparisons} comparisons
+              </>
+            )}
+            . So these bars chart progress from &quot;does not speak Igala&quot;
+            toward &quot;speaks it badly&quot;, and the speakers judge the rest.
           </p>
         </div>
+
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm font-medium text-accent-text">
+            Full data: the raw chrF table, both ceilings, all prompts vs
+            leak-free
+          </summary>
+          <div className="mt-3 overflow-x-auto rounded-md border border-border">
+            <table className="w-full min-w-[640px] border-collapse bg-surface text-sm">
+              <thead>
+                <tr className="border-b border-border-strong bg-surface-sunken text-left text-xs uppercase tracking-wide text-text-tertiary">
+                  <th className="px-3 py-2 font-medium">Candidate</th>
+                  <th className="px-3 py-2 font-medium">Approach</th>
+                  <th className="px-3 py-2 text-right font-medium">n</th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    All {benchmark.frozenPrompts} prompts
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium">
+                    Leak-free ({benchmark.leakFreePrompts})
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <CeilingRow
+                  label="Human agreement ceiling - one answer per speaker"
+                  note="the honest ceiling"
+                  ceiling={ceilings.onePerAnnotator}
+                />
+                <CeilingRow
+                  label="Human agreement ceiling - as first shipped"
+                  note="inflated: counts repeat submissions by the same person as agreement"
+                  ceiling={ceilings.asShipped}
+                />
+                {candidates.map((c) => (
+                  <ScoreRow key={c.name} candidate={c} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 max-w-2xl space-y-3 rounded-md border border-border bg-surface p-4 text-sm leading-relaxed text-text-secondary">
+            <p>
+              These are the raw chrF values the agreement score is rescaled from
+              - where a provider quota cut a run short, the n column shows fewer
+              answers.
+            </p>
+            <p>
+              <strong className="text-text-primary">
+                Why the ceiling is about {fmt(ceilings.onePerAnnotator.chrfAll)}
+                , not 100.
+              </strong>{" "}
+              Two Igala speakers answering the same question rarely write the
+              identical string, so even a perfect model cannot score 100 in raw
+              chrF. We first published a ceiling of{" "}
+              {fmt(ceilings.asShipped.chrfAll)}, but that number counted people
+              re-submitting their own answer as two speakers agreeing. One
+              answer per speaker gives {fmt(ceilings.onePerAnnotator.chrfAll)} -
+              the honest limit, and both versions are shown above so the
+              correction stays visible.
+            </p>
+          </div>
+        </details>
       </section>
 
       {/* ── f. What is being tested now ─────────────────────────────────── */}
@@ -547,6 +614,10 @@ export default async function HowItWorksPage() {
             {
               date: "Aug 14, 2026",
               text: "A working grammar deduced from all the evidence (tasks/igala-grammar-deduced.md) and METHOD v3, which enshrines only its A- and B-grade rules in the system prompt.",
+            },
+            {
+              date: "Aug 17, 2026",
+              text: "The benchmark visual and the Community Agreement Score: leak-free stripped chrF rescaled so the deduplicated native-speaker ceiling reads 100, drawn LLM-benchmark style with confidence whiskers. The raw chrF table moved under the chart; nothing was removed and no score is capped.",
             },
           ].map((e) => (
             <li

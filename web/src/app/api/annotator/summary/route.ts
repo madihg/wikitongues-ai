@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isResearcher } from "@/lib/personas";
-import { computeQueueState, type QueuePrompt } from "@/lib/pairing";
+import { computeQueueState } from "@/lib/pairing";
+import { loadQueueInputs } from "@/lib/queue-input";
 
 /**
  * Real numbers for the annotator dashboard. Everything here is scoped to the
@@ -18,34 +19,26 @@ export async function GET() {
   const annotatorId = session.user.id;
   const researcher = isResearcher(session.user.role, session.user.email);
 
-  // Queue remaining — mirrors /api/annotations/next via the shared
-  // computeQueueState(): eligible prompts (2+ model outputs) minus prompts
-  // this user has already compared (any pair, including old-scheme history)
-  // or skipped. Same query shape and ordering as /api/annotations/next so
-  // "Queue Remaining" here can never drift from what the queue actually
-  // serves.
-  const [promptsWithOutputs, doneRows, skipRows] = await Promise.all([
-    prisma.prompt.findMany({
-      where: { modelOutputs: { some: {} } },
-      select: {
-        promptId: true,
-        modelOutputs: { select: { id: true } },
-      },
-    }),
+  // Queue remaining — mirrors /api/annotations/next via the SAME loader
+  // (loadQueueInputs: pairing-pool output filter, holdout exclusion, lane
+  // metadata) and the shared computeQueueState(): eligible prompts (2+
+  // pairing-eligible outputs) minus prompts this user has already compared
+  // (any pair, including old-scheme history) or skipped. Identical input
+  // path, so "Queue Remaining" here can never drift from what the queue
+  // actually serves.
+  const [{ queuePrompts }, doneRows, skipRows] = await Promise.all([
+    loadQueueInputs(),
     prisma.pairwiseComparison.findMany({
       where: { annotatorId, isDemo: false },
       select: { promptId: true },
     }),
+    // ANY flag by this annotator (skip or malformed-prompt) excludes the
+    // prompt for them - mirrors /api/annotations/next exactly.
     prisma.promptFlag.findMany({
-      where: { annotatorId, reason: "skip" },
+      where: { annotatorId },
       select: { prompt: { select: { promptId: true } } },
     }),
   ]);
-
-  const queuePrompts: QueuePrompt[] = promptsWithOutputs.map((p) => ({
-    promptId: p.promptId,
-    outputCount: p.modelOutputs.length,
-  }));
   const donePromptIds = new Set(doneRows.map((r) => r.promptId));
   const skippedPromptIds = new Set(skipRows.map((r) => r.prompt.promptId));
 

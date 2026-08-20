@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { assignedPair, computeQueueState, type QueuePrompt } from "./pairing";
+import {
+  assignedPair,
+  computeQueueState,
+  goldFirstFor,
+  laneFor,
+  orderQueueByLane,
+  pairingEligibleOutputs,
+  type QueuePrompt,
+} from "./pairing";
 
 // Fixed id lists so distribution/coverage assertions are exact re-computations
 // of a pure function, never a statistical gamble - same inputs every run.
@@ -175,5 +183,195 @@ describe("computeQueueState", () => {
       "ig_orth_002",
       "ig_orth_004",
     ]);
+  });
+});
+
+// ─── the 2026-08-20 pivot: pairing pool, lanes, weighting ───────────────────
+
+describe("pairingEligibleOutputs", () => {
+  const outputs = [
+    { id: "o1", inPool: false },
+    { id: "o2", inPool: true },
+    { id: "o3", inPool: true },
+    { id: "o4", inPool: false },
+  ];
+
+  it("with an active pool, only pool-arm outputs survive", () => {
+    expect(pairingEligibleOutputs(outputs, true).map((o) => o.id)).toEqual([
+      "o2",
+      "o3",
+    ]);
+  });
+
+  it("without a pool (pre-pivot), every output is pairable", () => {
+    expect(pairingEligibleOutputs(outputs, false)).toHaveLength(4);
+  });
+});
+
+describe("laneFor / goldFirstFor", () => {
+  it("zero-gold prompts are the 'both' lane and always cold-first", () => {
+    const p = { goldCount: 0, isLongForm: false };
+    expect(laneFor(p)).toBe("both");
+    expect(goldFirstFor(p, false)).toBe(true);
+    expect(goldFirstFor(p, true)).toBe(true);
+  });
+
+  it("long-form prompts stay cold-mandatory regardless of coverage", () => {
+    const p = { goldCount: 5, isLongForm: true };
+    expect(laneFor(p)).toBe("cold_mandatory");
+    expect(goldFirstFor(p, false)).toBe(true);
+  });
+
+  it("prompts with >= 2 gold answers skip straight to the comparison", () => {
+    const p = { goldCount: 2, isLongForm: false };
+    expect(laneFor(p)).toBe("strong_pair");
+    expect(goldFirstFor(p, true)).toBe(false);
+    expect(goldFirstFor(p, false)).toBe(false);
+  });
+
+  it("exactly 1 gold falls back to the per-bucket default", () => {
+    const p = { goldCount: 1, isLongForm: false };
+    expect(goldFirstFor(p, true)).toBe(true);
+    expect(goldFirstFor(p, false)).toBe(false);
+  });
+
+  it("no lane metadata (old scheme) keeps the bucket default", () => {
+    expect(goldFirstFor({}, true)).toBe(true);
+    expect(goldFirstFor({}, false)).toBe(false);
+  });
+});
+
+describe("orderQueueByLane", () => {
+  const mk = (
+    promptId: string,
+    goldCount: number,
+    isLongForm = false,
+  ): QueuePrompt => ({ promptId, outputCount: 3, goldCount, isLongForm });
+
+  it("serves zero-gold prompts first (max-yield episodes)", () => {
+    const ordered = orderQueueByLane([
+      mk("strong_1", 2),
+      mk("zero_1", 0),
+      mk("long_1", 3, true),
+      mk("zero_2", 0),
+    ]);
+    expect(ordered.slice(0, 2).map((p) => p.promptId)).toEqual([
+      "zero_1",
+      "zero_2",
+    ]);
+  });
+
+  it("interleaves strong-pair vs long-form cold at 2:1 (the decided weighting)", () => {
+    const strong = Array.from({ length: 6 }, (_, i) => mk(`s${i}`, 2));
+    const cold = Array.from({ length: 3 }, (_, i) => mk(`c${i}`, 3, true));
+    const ordered = orderQueueByLane([...strong, ...cold]);
+    expect(ordered.map((p) => p.promptId)).toEqual([
+      "s0",
+      "s1",
+      "c0",
+      "s2",
+      "s3",
+      "c1",
+      "s4",
+      "s5",
+      "c2",
+    ]);
+  });
+
+  it("keeps the strong-pair share inside 60-70% over a mixed catalogue", () => {
+    const strong = Array.from({ length: 40 }, (_, i) => mk(`s${i}`, 2));
+    const cold = Array.from({ length: 20 }, (_, i) => mk(`c${i}`, 3, true));
+    const ordered = orderQueueByLane([...strong, ...cold]);
+    // Any leading window an annotator actually works through should hold the
+    // weighting, not just the full list.
+    for (const window of [15, 30, 60]) {
+      const head = ordered.slice(0, window);
+      const strongShare =
+        head.filter((p) => laneFor(p) === "strong_pair").length / head.length;
+      expect(strongShare).toBeGreaterThanOrEqual(0.6);
+      expect(strongShare).toBeLessThanOrEqual(0.7);
+    }
+  });
+
+  it("is deterministic and stable within each lane", () => {
+    const input = [
+      mk("s0", 2),
+      mk("c0", 3, true),
+      mk("s1", 1),
+      mk("z0", 0),
+      mk("s2", 2),
+    ];
+    const a = orderQueueByLane(input).map((p) => p.promptId);
+    const b = orderQueueByLane(input).map((p) => p.promptId);
+    expect(a).toEqual(b);
+    // Within-lane relative order preserved.
+    const strongOrder = a.filter((id) => id.startsWith("s"));
+    expect(strongOrder).toEqual(["s0", "s1", "s2"]);
+  });
+
+  it("drains the leftover lane once the other is exhausted", () => {
+    const ordered = orderQueueByLane([
+      mk("c0", 3, true),
+      mk("c1", 3, true),
+      mk("c2", 3, true),
+    ]);
+    expect(ordered.map((p) => p.promptId)).toEqual(["c0", "c1", "c2"]);
+  });
+});
+
+describe("computeQueueState - pivot behaviour", () => {
+  it("held-out (frozen bank) prompts are never pairwise-eligible", () => {
+    const state = computeQueueState(
+      [
+        { promptId: "frozen_1", outputCount: 5, goldCount: 4, isHoldout: true },
+        { promptId: "train_1", outputCount: 3, goldCount: 0, isHoldout: false },
+      ],
+      new Set(),
+      new Set(),
+    );
+    expect(state.total).toBe(1);
+    expect(state.remaining.map((p) => p.promptId)).toEqual(["train_1"]);
+  });
+
+  it("a completed frozen prompt does not count toward completed either", () => {
+    const state = computeQueueState(
+      [
+        { promptId: "frozen_1", outputCount: 5, goldCount: 4, isHoldout: true },
+        { promptId: "train_1", outputCount: 3, goldCount: 0, isHoldout: false },
+      ],
+      new Set(["frozen_1"]),
+      new Set(),
+    );
+    expect(state.completed).toBe(0);
+  });
+
+  it("with lane metadata, remaining comes back lane-ordered", () => {
+    const state = computeQueueState(
+      [
+        { promptId: "strong_1", outputCount: 3, goldCount: 2 },
+        { promptId: "zero_1", outputCount: 3, goldCount: 0 },
+        {
+          promptId: "long_1",
+          outputCount: 3,
+          goldCount: 3,
+          isLongForm: true,
+        },
+      ],
+      new Set(),
+      new Set(),
+    );
+    expect(state.remaining[0].promptId).toBe("zero_1");
+  });
+
+  it("a prompt whose pool outputs dropped below 2 is not eligible", () => {
+    const state = computeQueueState(
+      // outputCount here is ALREADY pool-filtered by the loader; a prompt
+      // with 5 legacy outputs but 1 pool output must not be served.
+      [{ promptId: "old_only", outputCount: 1, goldCount: 0 }],
+      new Set(),
+      new Set(),
+    );
+    expect(state.total).toBe(0);
+    expect(state.remaining).toEqual([]);
   });
 });

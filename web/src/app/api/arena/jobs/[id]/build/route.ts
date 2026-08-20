@@ -82,9 +82,13 @@ export async function POST(
 
     nTrainingRows = buildDpoExamples(rows, filters).length;
   } else {
-    // sft and continued_pretrain train off the platform's Igala gold: cold author
-    // answers (source-free, the bulk) plus annotator edits. buildSftExamples
-    // hard-excludes any held-out prompt via the carried isHoldout flag.
+    // sft and continued_pretrain train off the platform's Igala gold: cold
+    // author answers (source-free plus salvage, provenance-tagged).
+    // buildSftExamples hard-excludes any held-out prompt via the carried
+    // isHoldout flag, and - because no includeEdits flag is passed here -
+    // drops every edit-provenance row: fine-tune datasets are cold-only by
+    // default (pivot precondition 1), even when the job selected
+    // sourceEditIds. Wire includeEdits deliberately if that ever changes.
     const rows = await loadSftSourceRows(job);
     nTrainingRows = buildSftExamples(rows, filters).length;
   }

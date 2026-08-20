@@ -57,6 +57,7 @@ describe("buildSftExamples", () => {
     bucket: "lexicon_disambig",
     isHoldout: false,
     verificationStatus: "multi_annotator_verified",
+    provenance: "cold_sourcefree",
   };
 
   it("emits a chat-format SFT example", () => {
@@ -86,6 +87,70 @@ describe("buildSftExamples", () => {
       minVerification: "multi_annotator_verified",
     });
     expect(out).toHaveLength(1);
+  });
+
+  // ─── provenance (pivot precondition 1) ────────────────────────────────────
+
+  it("every emitted example carries its provenance flag", () => {
+    const out = buildSftExamples([
+      base,
+      { ...base, promptId: "p2", provenance: "cold_salvage" },
+    ]);
+    expect(out.map((e) => e.provenance)).toEqual([
+      "cold_sourcefree",
+      "cold_salvage",
+    ]);
+  });
+
+  it("EXCLUDES edit-provenance rows by default (cold-only export)", () => {
+    const out = buildSftExamples([
+      base,
+      { ...base, promptId: "p2", provenance: "edit" },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].provenance).toBe("cold_sourcefree");
+  });
+
+  it("admits edits only behind includeEdits, flagged as edits", () => {
+    const out = buildSftExamples(
+      [
+        base,
+        { ...base, promptId: "p2", provenance: "cold_salvage" },
+        { ...base, promptId: "p3", provenance: "cold_sourcefree" },
+        { ...base, promptId: "p4", provenance: "edit" },
+      ],
+      { includeEdits: true },
+    );
+    // 3 cold rows admit exactly 1 edit under the 30% default cap (1/4 = 25%).
+    expect(out).toHaveLength(4);
+    expect(out.filter((e) => e.provenance === "edit")).toHaveLength(1);
+  });
+
+  it("caps the edit share of an includeEdits export at maxEditShare (default 30%)", () => {
+    const cold = Array.from({ length: 7 }, (_, i) => ({
+      ...base,
+      promptId: `cold_${i}`,
+    }));
+    const edits = Array.from({ length: 10 }, (_, i) => ({
+      ...base,
+      promptId: `edit_${i}`,
+      provenance: "edit" as const,
+    }));
+    const out = buildSftExamples([...cold, ...edits], { includeEdits: true });
+    const editCount = out.filter((e) => e.provenance === "edit").length;
+    // 7 cold rows admit at most 3 edits (3/10 = 30%); 4 would be 4/11 > 30%.
+    expect(editCount).toBe(3);
+    expect(out.filter((e) => e.provenance !== "edit")).toHaveLength(7);
+    expect(editCount / out.length).toBeLessThanOrEqual(0.3);
+  });
+
+  it("never drops cold rows to satisfy the cap", () => {
+    const out = buildSftExamples(
+      [{ ...base, promptId: "e1", provenance: "edit" }],
+      { includeEdits: true },
+    );
+    // Zero cold rows -> the cap admits zero edits, not "all edits".
+    expect(out).toHaveLength(0);
   });
 });
 

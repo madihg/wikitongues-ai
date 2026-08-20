@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { chrfMulti } from "@/lib/eval/chrf";
 import { stripAnswer } from "@/lib/eval/answer-strip";
+import { bootstrapMean } from "@/lib/eval/stats";
 import {
   buildProtectedSet,
   filterAssembled,
@@ -35,6 +36,17 @@ export interface CorpusCounts {
   pairwiseComparisons: number;
   /** "Both inadequate" verdicts, for the live no-preference rate. */
   pairwiseBothInadequate: number;
+  /**
+   * Comparisons where BOTH sides are current pairing-pool arms
+   * (CandidateModel.inPairingPool) - the pivot's checkpoint denominator.
+   * Kept separate because the corpus-wide no-preference rate was measured
+   * almost entirely against earlier, weaker arms: quoting it beside the
+   * leaders' bars without this split would smear a verdict on old systems
+   * onto the current ones (tasks/annotation-pivot-decision.md, section 2).
+   */
+  poolComparisons: number;
+  /** "Both inadequate" verdicts within poolComparisons. */
+  poolBothInadequate: number;
   parallelPairs: number;
   lexEntries: number;
   /** Distinct real contributors - seed @test.com accounts excluded, same rule
@@ -80,6 +92,22 @@ export interface CandidateScore {
   strippedChrfAll: number | null;
   /** Stripped chrF x100, leak-free subset only - the honest column. */
   strippedChrfClean: number | null;
+  /**
+   * Community Agreement Score: strippedChrfClean expressed as a percentage of
+   * the deduplicated native-speaker ceiling on the SAME leak-free subset
+   * (MethodMetrics.agreementCeilingChrf = 100). Deliberately NOT capped at
+   * 100 - exceeding it means the model's answers sit closer to the community's
+   * writing than one native speaker sits to another, and clamping would hide
+   * that. Null when the candidate has no clean scores or the ceiling itself
+   * cannot be computed yet.
+   */
+  agreementScore: number | null;
+  /** 95% bootstrap CI for agreementScore, bounds transformed the same way. */
+  agreementCiLow: number | null;
+  agreementCiHigh: number | null;
+  /** True when nClean was too small to bootstrap - the CI is degenerate and
+   * must be rendered as "n too small", never as a tight interval. */
+  agreementUnderpowered: boolean;
 }
 
 export interface MethodMetrics {
@@ -94,6 +122,14 @@ export interface MethodMetrics {
      * inter-SPEAKER ceiling: a repeat submission is not a second speaker. */
     onePerAnnotator: CeilingResult;
   };
+  /**
+   * The chrF value that maps to a Community Agreement Score of 100: the
+   * one-answer-per-annotator inter-gold ceiling on the leak-free subset
+   * (ceilings.onePerAnnotator.chrfClean). Exported so the UI can say exactly
+   * what its 100 line is anchored to. Null until the clean subset contains a
+   * prompt with answers from two different speakers.
+   */
+  agreementCeilingChrf: number | null;
   /** Sorted by leak-free score, best first; unscoreable rows last. */
   candidates: CandidateScore[];
 }
@@ -208,6 +244,23 @@ export function splitServedIds(ids: string[]): {
   return { ragEntryIds, goldIds, lexIds, pairIds };
 }
 
+/**
+ * Community Agreement Score: a chrF value renormalized so the deduplicated
+ * native-speaker ceiling reads 100. A score of 85 means "85% as close to the
+ * community's writing as one native speaker is to another" - the same framing
+ * MT human-parity claims use, with chrF (the sacrebleu character metric) as
+ * the underlying distance. NOT clamped: a model CAN exceed one speaker's
+ * agreement with another, and when that happens the UI shows it honestly
+ * rather than silently flattening it to 100.
+ */
+export function toAgreementScore(
+  chrf: number | null,
+  ceilingChrf: number | null,
+): number | null {
+  if (chrf === null || ceilingChrf === null || ceilingChrf <= 0) return null;
+  return (chrf / ceilingChrf) * 100;
+}
+
 // ─── the computation ────────────────────────────────────────────────────────
 
 /** Same seed-account exclusion, same reason, as /api/public/stats: counting a
@@ -234,6 +287,8 @@ export async function computeMethodMetrics(
     goldAnswers,
     pairwiseComparisons,
     pairwiseBothInadequate,
+    poolComparisons,
+    poolBothInadequate,
     parallelPairs,
     lexEntries,
     pairwiseAnnotators,
@@ -280,6 +335,23 @@ export async function computeMethodMetrics(
     prisma.pairwiseComparison.count({ where: { isDemo: false } }),
     prisma.pairwiseComparison.count({
       where: { isDemo: false, winner: "both_inadequate" },
+    }),
+    // Pool-arm comparisons: BOTH outputs must belong to a current pool arm.
+    // The pool is a DB flag, never a name list, so this is live per request.
+    prisma.pairwiseComparison.count({
+      where: {
+        isDemo: false,
+        modelOutputA: { candidateModel: { inPairingPool: true } },
+        modelOutputB: { candidateModel: { inPairingPool: true } },
+      },
+    }),
+    prisma.pairwiseComparison.count({
+      where: {
+        isDemo: false,
+        winner: "both_inadequate",
+        modelOutputA: { candidateModel: { inPairingPool: true } },
+        modelOutputB: { candidateModel: { inPairingPool: true } },
+      },
     }),
     prisma.parallelPair.count(),
     prisma.lexEntry.count(),
@@ -402,6 +474,34 @@ export async function computeMethodMetrics(
   );
   const cleanSet = new Set(clean);
 
+  // ── the two ceilings ──────────────────────────────────────────────────────
+  // Computed BEFORE the scoreboard because the honest leak-free ceiling is
+  // the denominator of every Community Agreement Score below.
+  const ceilingFor = (rows: GoldRow[]): CeilingResult => {
+    const bySlug = new Map<string, string[]>();
+    for (const g of rows) {
+      const list = bySlug.get(g.promptSlug) ?? [];
+      list.push(g.answerText);
+      bySlug.set(g.promptSlug, list);
+    }
+    const all = looCeilingChrf(bySlug);
+    const cleanOnly = new Map(
+      [...bySlug.entries()].filter(([slug]) => cleanSet.has(slug)),
+    );
+    const cleanRes = looCeilingChrf(cleanOnly);
+    return {
+      chrfAll: all.mean,
+      chrfClean: cleanRes.mean,
+      nPromptsAll: all.nPrompts,
+      nPromptsClean: cleanRes.nPrompts,
+    };
+  };
+  const asShipped = ceilingFor(goldRows);
+  const honest = ceilingFor(onePerAnnotator(goldRows));
+  // One answer per annotator AND leak-free: the only ceiling honest enough to
+  // anchor "100 = native speaker agreement".
+  const agreementCeilingChrf = honest.chrfClean;
+
   // ── per-candidate stripped chrF, both ways ────────────────────────────────
   const byCandidate = new Map<
     string,
@@ -431,13 +531,31 @@ export async function computeMethodMetrics(
   const candidates: CandidateScore[] = [...byCandidate.entries()]
     .map(([name, c]) => {
       const cleanScores = c.scores.filter((s) => cleanSet.has(s.slug));
+      const cleanVals = cleanScores.map((s) => s.str);
+      const strippedChrfClean = avgOrNull(cleanVals);
+      // CI on the raw clean chrF scores, then transformed by the same
+      // ceiling normalization as the point estimate - the bounds of a
+      // rescaled mean are the rescaled bounds.
+      const ci = bootstrapMean(cleanVals);
+      const hasCi = cleanVals.length > 0 && agreementCeilingChrf !== null;
       return {
         name,
         approach: approachLabel(c.kind, c.versionLabel),
         n: c.scores.length,
         nClean: cleanScores.length,
         strippedChrfAll: avgOrNull(c.scores.map((s) => s.str)),
-        strippedChrfClean: avgOrNull(cleanScores.map((s) => s.str)),
+        strippedChrfClean,
+        agreementScore: toAgreementScore(
+          strippedChrfClean,
+          agreementCeilingChrf,
+        ),
+        agreementCiLow: hasCi
+          ? toAgreementScore(ci.ciLow, agreementCeilingChrf)
+          : null,
+        agreementCiHigh: hasCi
+          ? toAgreementScore(ci.ciHigh, agreementCeilingChrf)
+          : null,
+        agreementUnderpowered: ci.underpowered,
       };
     })
     .sort(
@@ -446,33 +564,14 @@ export async function computeMethodMetrics(
         (a.strippedChrfClean ?? Number.NEGATIVE_INFINITY),
     );
 
-  // ── the two ceilings ──────────────────────────────────────────────────────
-  const ceilingFor = (rows: GoldRow[]): CeilingResult => {
-    const bySlug = new Map<string, string[]>();
-    for (const g of rows) {
-      const list = bySlug.get(g.promptSlug) ?? [];
-      list.push(g.answerText);
-      bySlug.set(g.promptSlug, list);
-    }
-    const all = looCeilingChrf(bySlug);
-    const cleanOnly = new Map(
-      [...bySlug.entries()].filter(([slug]) => cleanSet.has(slug)),
-    );
-    const cleanRes = looCeilingChrf(cleanOnly);
-    return {
-      chrfAll: all.mean,
-      chrfClean: cleanRes.mean,
-      nPromptsAll: all.nPrompts,
-      nPromptsClean: cleanRes.nPrompts,
-    };
-  };
-
   return {
     computedAt: new Date().toISOString(),
     corpus: {
       goldAnswers,
       pairwiseComparisons,
       pairwiseBothInadequate,
+      poolComparisons,
+      poolBothInadequate,
       parallelPairs,
       lexEntries,
       annotators,
@@ -484,9 +583,10 @@ export async function computeMethodMetrics(
       leakFreePrompts: clean.length,
     },
     ceilings: {
-      asShipped: ceilingFor(goldRows),
-      onePerAnnotator: ceilingFor(onePerAnnotator(goldRows)),
+      asShipped,
+      onePerAnnotator: honest,
     },
+    agreementCeilingChrf,
     candidates,
   };
 }

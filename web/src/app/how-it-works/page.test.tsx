@@ -71,8 +71,15 @@ vi.mock("@/lib/prisma", () => {
         ],
       },
       pairwiseComparison: {
-        count: async (args: { where?: { winner?: string } }) =>
-          args.where?.winner === "both_inadequate" ? 6 : 7,
+        // Pool-scoped counts (where.modelOutputA present) return 0 so the
+        // page renders its "none of those comparisons involved the strongest
+        // systems" branch - the state production is in at the pivot's start.
+        count: async (args: {
+          where?: { winner?: string; modelOutputA?: unknown };
+        }) => {
+          if (args.where?.modelOutputA) return 0;
+          return args.where?.winner === "both_inadequate" ? 6 : 7;
+        },
         findMany: async () => [],
       },
       outputEdit: { findMany: async () => [] },
@@ -129,6 +136,17 @@ describe("how-it-works page", () => {
     expect(html).toContain(igalaTerminalContract(""));
   });
 
+  it("draws the Community Agreement Score benchmark with its 100 line", async () => {
+    const html = await renderPage();
+    // Fixture: no leaks, and P1 has golds from two different speakers, so the
+    // agreement ceiling exists and the chart must render - anchored to native
+    // speaker agreement, with the raw chrF table folded under a details.
+    expect(html).toContain("Community Agreement Score");
+    expect(html).toContain("native speaker agreement");
+    expect(html).toContain("<details");
+    expect(html).toContain("Full data: the raw chrF table");
+  });
+
   it("shows computed figures, not the retired hardcoded ones", async () => {
     const html = await renderPage();
     // The stale numbers this project shipped before (63.2 ceiling, 46 honest
@@ -140,5 +158,13 @@ describe("how-it-works page", () => {
     // Live-computed counts from the fixture do appear.
     expect(html).toContain(">10<"); // parallel pairs stat
     expect(html).toContain(">5<"); // dictionary entries stat
+  });
+
+  it("never smears the old-arm no-preference rate onto the charted leaders", async () => {
+    const html = await renderPage();
+    // Fixture has zero pool-arm comparisons, so the page must say so right
+    // where the corpus-wide inadequate rate is quoted - a funder must not
+    // read a verdict on retired arms as a verdict on the leaders.
+    expect(html).toContain("none of those comparisons involved the strongest");
   });
 });
