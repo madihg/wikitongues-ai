@@ -359,6 +359,33 @@ export default async function HowItWorksPage() {
           serves the models and rendered verbatim - not a paraphrase, and not a
           copy that could drift out of date.
         </p>
+        {/* Source documents. GitHub links resolve for people with repository
+            access (the team); the prompt itself is already rendered verbatim
+            below for everyone else, so no reader is left without the content. */}
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
+          Source documents for readers with repository access:{" "}
+          <a
+            className="underline decoration-accent underline-offset-2"
+            href="https://github.com/madihg/wikitongues-ai/blob/main/web/src/lib/generation-prompt-v3.ts"
+          >
+            the system prompt in code
+          </a>
+          ,{" "}
+          <a
+            className="underline decoration-accent underline-offset-2"
+            href="https://github.com/madihg/wikitongues-ai/blob/main/tasks/igala-grammar-deduced.md"
+          >
+            the deduced grammar with its evidence
+          </a>
+          , and{" "}
+          <a
+            className="underline decoration-accent underline-offset-2"
+            href="https://github.com/madihg/wikitongues-ai/blob/main/tasks/rag-design.md"
+          >
+            the retrieval design document
+          </a>
+          .
+        </p>
         <div className="mt-3 overflow-x-auto rounded-md border border-border bg-surface-sunken p-4">
           <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-text-secondary">
             {IGALA_SYSTEM_V2}
