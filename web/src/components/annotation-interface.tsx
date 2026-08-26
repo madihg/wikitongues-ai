@@ -17,7 +17,13 @@ import {
 import { IGALA_DIALECTS, DIALECT_STORAGE_KEY, isDialect } from "@/lib/dialects";
 import { InfoTip } from "@/components/info-tip";
 import { ToneKeyboard } from "@/components/tone-keyboard";
-import { wordDiff } from "@/lib/diff";
+import { SuggestingEditor } from "@/components/suggesting-editor";
+import {
+  attachReasons,
+  diffToSegments,
+  nfc,
+  type ReasonMap,
+} from "@/lib/edit-segments";
 
 type Winner = "a" | "b" | "tie" | "both_inadequate";
 type Step = "prompt" | "pairwise" | "score";
@@ -99,8 +105,16 @@ const WINNER_OPTIONS: { value: Winner; label: string; hint: string }[] = [
 const emptyAxisVals = (): Record<string, AxisVal> =>
   Object.fromEntries(RUBRIC_V2.map((a) => [a.key, null]));
 
+/** NFC-aware "was anything actually changed?": production model text arrives
+ *  in both Unicode shapes, and an identical answer retyped on another keyboard
+ *  must not count as an edit (the phantom-diff rule, src/lib/edit-segments.ts). */
+const textDiffers = (a: string, b: string): boolean =>
+  nfc(a.trim()) !== nfc(b.trim());
+
 /** Draft persistence: an episode in progress survives navigation away and
- *  flaky connections (form-reset bug from the 2026-07-02 call). */
+ *  flaky connections (form-reset bug from the 2026-07-02 call). Older drafts
+ *  may carry a `confidence` field from before the widget's removal - it is
+ *  simply ignored on restore. */
 interface EpisodeDraft {
   step: Step;
   coldAnswer: string;
@@ -108,7 +122,6 @@ interface EpisodeDraft {
   instructionIg: string;
   coldLocked: boolean;
   winner: Winner | null;
-  confidence: number | null;
   explanation: string;
   failureTagsA: string[];
   failureTagsB: string[];
@@ -116,10 +129,16 @@ interface EpisodeDraft {
   axisNotes: Record<string, string>;
   editWinner: string;
   editSeededFor: "a" | "b" | null;
+  editReasons: ReasonMap;
   tieTarget: "a" | "b";
   tieEdit: string;
+  tieReasons: ReasonMap;
   salvage: string;
   salvageGloss: string;
+  markupTarget: "a" | "b";
+  markupEdit: string;
+  markupSeededFor: "a" | "b" | null;
+  markupReasons: ReasonMap;
 }
 
 function draftKeyFor(task: TaskData): string {
@@ -139,6 +158,10 @@ export function AnnotationInterface() {
   const [task, setTask] = useState<TaskData | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  // Corrections-lane size, replayed from the API on the all-caught-up screen
+  // so the cross-link only shows when there is genuinely something to do
+  // (live count - house rule: never hardcoded).
+  const [correctionsWaiting, setCorrectionsWaiting] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -165,9 +188,12 @@ export function AnnotationInterface() {
   const coldRef = useRef<HTMLTextAreaElement>(null);
   const instructionRef = useRef<HTMLTextAreaElement>(null);
 
-  // Pairwise
+  // Pairwise. (The 1-4 confidence widget is gone: 1,166 of 1,170 all-time
+  // comparisons sat at 4, including after it was made required - zero
+  // information, one tap of tax per episode. Span-level uncertainty now lives
+  // in the edit reason tag "unsure" instead. The API still ACCEPTS confidence
+  // so stale clients never 400.)
   const [winner, setWinner] = useState<Winner | null>(null);
-  const [confidence, setConfidence] = useState<number | null>(null);
   const [explanation, setExplanation] = useState("");
   // Per-output failure tags. Kept per side (not per "loser") so switching the
   // pick doesn't lose work; which sides actually get SENT is decided at submit
@@ -183,16 +209,29 @@ export function AnnotationInterface() {
   // Which winner (a|b) editWinner was seeded from, so switching the pick re-seeds
   // instead of leaving the LOSING output's text staged as a "correction".
   const [editSeededFor, setEditSeededFor] = useState<"a" | "b" | null>(null);
+  // Per-change reasons for the winner-edit suggestions (the editing ground).
+  const [editReasons, setEditReasons] = useState<ReasonMap>({});
   // When a locked cold answer already exists, the winner-edit box is hidden by
   // default (the cold answer IS the correction) and revealed only for a targeted
   // "small fixable error" fix. Reset per episode; a made edit re-reveals itself.
   const [winnerFixOpen, setWinnerFixOpen] = useState(false);
-  const editRef = useRef<HTMLTextAreaElement>(null);
 
   // Tie: optionally correct one side
   const [tieTarget, setTieTarget] = useState<"a" | "b">("a");
   const [tieEdit, setTieEdit] = useState("");
-  const tieRef = useRef<HTMLTextAreaElement>(null);
+  const [tieReasons, setTieReasons] = useState<ReasonMap>({});
+
+  // Both-inadequate markup: OPTIONALLY mark up one of the rejected AI answers
+  // as suggestions. Secondary to the salvage rewrite (source-free-ish
+  // authorship stays the anti-translationese core) - collapsed by default; a
+  // made markup re-reveals itself, same pattern as winnerFixOpen.
+  const [markupOpen, setMarkupOpen] = useState(false);
+  const [markupTarget, setMarkupTarget] = useState<"a" | "b">("a");
+  const [markupEdit, setMarkupEdit] = useState("");
+  const [markupSeededFor, setMarkupSeededFor] = useState<"a" | "b" | null>(
+    null,
+  );
+  const [markupReasons, setMarkupReasons] = useState<ReasonMap>({});
 
   // Both-inadequate salvage rewrite. It has its own English gloss (not shared
   // with the cold answer's) because it is a DIFFERENT answer whenever it is
@@ -263,7 +302,6 @@ export function AnnotationInterface() {
     setColdLocked(false);
     setWinnerFixOpen(false);
     setWinner(null);
-    setConfidence(null);
     setExplanation("");
     setFailureTagsA([]);
     setFailureTagsB([]);
@@ -271,8 +309,15 @@ export function AnnotationInterface() {
     setAxisNotes({});
     setEditWinner("");
     setEditSeededFor(null);
+    setEditReasons({});
     setTieTarget("a");
     setTieEdit("");
+    setTieReasons({});
+    setMarkupOpen(false);
+    setMarkupTarget("a");
+    setMarkupEdit("");
+    setMarkupSeededFor(null);
+    setMarkupReasons({});
     setSalvage("");
     setSalvageGloss("");
     setConsentBenchmark(true);
@@ -289,7 +334,6 @@ export function AnnotationInterface() {
     setInstructionOpen(Boolean(d.instructionIg?.trim()));
     setColdLocked(d.coldLocked);
     setWinner(d.winner);
-    setConfidence(d.confidence);
     setExplanation(d.explanation);
     setFailureTagsA(d.failureTagsA ?? []);
     setFailureTagsB(d.failureTagsB ?? []);
@@ -297,8 +341,14 @@ export function AnnotationInterface() {
     setAxisNotes(d.axisNotes ?? {});
     setEditWinner(d.editWinner);
     setEditSeededFor(d.editSeededFor ?? null);
+    setEditReasons(d.editReasons ?? {});
     setTieTarget(d.tieTarget);
     setTieEdit(d.tieEdit);
+    setTieReasons(d.tieReasons ?? {});
+    setMarkupTarget(d.markupTarget ?? "a");
+    setMarkupEdit(d.markupEdit ?? "");
+    setMarkupSeededFor(d.markupSeededFor ?? null);
+    setMarkupReasons(d.markupReasons ?? {});
     setSalvage(d.salvage);
     setSalvageGloss(d.salvageGloss ?? "");
   }, []);
@@ -317,6 +367,7 @@ export function AnnotationInterface() {
         complete?: boolean;
         progress?: Progress;
         task?: TaskData;
+        correctionsWaiting?: number;
       };
       if (!res.ok)
         throw new Error(data.error || "Failed to load the next task.");
@@ -325,6 +376,7 @@ export function AnnotationInterface() {
         setIsComplete(true);
         setTask(null);
         if (data.progress) setProgress(data.progress);
+        setCorrectionsWaiting(data.correctionsWaiting ?? 0);
       } else {
         setTask(data.task);
         setProgress(data.progress ?? null);
@@ -359,7 +411,6 @@ export function AnnotationInterface() {
       instructionIg,
       coldLocked,
       winner,
-      confidence,
       explanation,
       failureTagsA,
       failureTagsB,
@@ -367,10 +418,16 @@ export function AnnotationInterface() {
       axisNotes,
       editWinner,
       editSeededFor,
+      editReasons,
       tieTarget,
       tieEdit,
+      tieReasons,
       salvage,
       salvageGloss,
+      markupTarget,
+      markupEdit,
+      markupSeededFor,
+      markupReasons,
     };
     try {
       sessionStorage.setItem(draftKeyFor(task), JSON.stringify(draft));
@@ -385,7 +442,6 @@ export function AnnotationInterface() {
     instructionIg,
     coldLocked,
     winner,
-    confidence,
     explanation,
     failureTagsA,
     failureTagsB,
@@ -393,10 +449,16 @@ export function AnnotationInterface() {
     axisNotes,
     editWinner,
     editSeededFor,
+    editReasons,
     tieTarget,
     tieEdit,
+    tieReasons,
     salvage,
     salvageGloss,
+    markupTarget,
+    markupEdit,
+    markupSeededFor,
+    markupReasons,
   ]);
 
   const clearDraft = useCallback(() => {
@@ -467,7 +529,7 @@ export function AnnotationInterface() {
   const tagSides = failureTagSides(winner);
 
   function proceedToScore() {
-    if (!winner || confidence === null || !explanationOk) return;
+    if (!winner || !explanationOk) return;
     // Seed the edit box with the CURRENT winner's text whenever the pick changed
     // (or on first entry). If the annotator already edited this same winner, keep
     // their text. This prevents the losing output's text from being saved as a
@@ -509,12 +571,18 @@ export function AnnotationInterface() {
     if (!task || !winner || submitting || !canSubmit()) return;
     setSubmitting(true);
 
+    // Segments-with-reasons for whichever markup this episode sends: derived
+    // fresh from (original, trimmed corrected) at submit so they always match
+    // the correctedText the server verifies against. A reason whose segment
+    // vanished on the trim is dropped (documented, acceptable).
+    const segmentsFor = (original: string, corrected: string, r: ReasonMap) =>
+      attachReasons(diffToSegments(original, corrected), r);
+
     const payload: Record<string, unknown> = {
       promptId: task.prompt.promptId,
       modelOutputAId: task.outputA.id,
       modelOutputBId: task.outputB.id,
       winner,
-      confidence,
       explanation: explanation.trim(),
       // Only the sides the current pick actually offers chips for. Toggling
       // between picks keeps the chips on screen, but a side that became the
@@ -533,25 +601,48 @@ export function AnnotationInterface() {
         score: axisVals[a.key] === "na" ? null : axisVals[a.key],
         note: axisNotes[a.key]?.trim() ? axisNotes[a.key].trim() : undefined,
       }));
-      if (winnerOutput && editWinner.trim() !== winnerOutput.text.trim()) {
+      if (winnerOutput && textDiffers(editWinner, winnerOutput.text)) {
         payload.edit = {
           correctedText: editWinner.trim(),
+          segments: segmentsFor(
+            winnerOutput.text,
+            editWinner.trim(),
+            editReasons,
+          ),
           consentBenchmark,
           consentTraining,
         };
       }
     } else if (winner === "tie") {
       const target = tieTarget === "a" ? task.outputA : task.outputB;
-      if (tieEdit.trim() && tieEdit.trim() !== target.text.trim()) {
+      if (tieEdit.trim() && textDiffers(tieEdit, target.text)) {
         // Keep the honest "tie" winner; attach the correction to the chosen side.
         payload.edit = {
           modelOutputId: target.id,
           correctedText: tieEdit.trim(),
+          segments: segmentsFor(target.text, tieEdit.trim(), tieReasons),
           consentBenchmark,
           consentTraining,
         };
       }
     } else if (winner === "both_inadequate") {
+      // Optional markup of one rejected AI answer (the editing ground's
+      // secondary path here - the salvage rewrite below stays primary). Both
+      // may be sent together: they are different artifacts.
+      const markupSource = markupTarget === "a" ? task.outputA : task.outputB;
+      if (markupEdit.trim() && textDiffers(markupEdit, markupSource.text)) {
+        payload.edit = {
+          modelOutputId: markupSource.id,
+          correctedText: markupEdit.trim(),
+          segments: segmentsFor(
+            markupSource.text,
+            markupEdit.trim(),
+            markupReasons,
+          ),
+          consentBenchmark,
+          consentTraining,
+        };
+      }
       // If the salvage rewrite is identical to the already-locked cold answer,
       // it's not a second data point - skip it and let coldAuthor (below) carry
       // it alone, since that row has the stronger provenance (speaker-authored,
@@ -707,6 +798,16 @@ export function AnnotationInterface() {
               ? `You have completed all ${progress.total} comparisons.`
               : "There are no annotation tasks available right now."}
           </p>
+          {correctionsWaiting > 0 && (
+            <a
+              href="/annotator/corrections"
+              className="mt-4 inline-block rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+            >
+              {correctionsWaiting} of your judged answers{" "}
+              {correctionsWaiting === 1 ? "is" : "are"} ready for corrections
+              &rarr;
+            </a>
+          )}
         </div>
       </div>
     );
@@ -732,9 +833,23 @@ export function AnnotationInterface() {
   const winnerEdited = !!(
     winnerOutput &&
     editWinner.trim() &&
-    editWinner.trim() !== winnerOutput.text.trim()
+    textDiffers(editWinner, winnerOutput.text)
   );
   const showWinnerEdit = !hasColdGold || winnerFixOpen || winnerEdited;
+
+  // Both-inadequate markup: a made markup re-reveals its disclosure, same
+  // rule as showWinnerEdit.
+  const markupSource = task
+    ? markupTarget === "a"
+      ? task.outputA
+      : task.outputB
+    : null;
+  const markupMade = !!(
+    markupSource &&
+    markupEdit.trim() &&
+    textDiffers(markupEdit, markupSource.text)
+  );
+  const showMarkup = markupOpen || markupMade;
 
   // Shown under the lock/skip buttons when an Igala answer is written but its
   // English meaning is missing - the one thing that now blocks locking.
@@ -1327,39 +1442,6 @@ export function AnnotationInterface() {
             </InfoTip>
           </div>
 
-          {/* Confidence. Starts unselected on purpose - live data showed a
-              habitual 4, which kills the signal. Picking one gates Continue
-              (same pattern as explanationOk). */}
-          <div className="mt-6">
-            <div className="text-sm font-medium text-text-secondary">
-              How confident are you?
-            </div>
-            <div className="mt-2 flex gap-2">
-              {[1, 2, 3, 4].map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setConfidence(c)}
-                  className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-sm font-medium transition-colors ${
-                    confidence === c
-                      ? "bg-accent text-accent-contrast"
-                      : "border border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-              <span className="self-center text-xs text-text-muted">
-                1 = guess · 4 = certain
-              </span>
-            </div>
-            {winner !== null && confidence === null && (
-              <p className="mt-1 text-xs text-text-tertiary">
-                Pick how sure you are - an honest 1 or 2 is just as useful as a
-                4.
-              </p>
-            )}
-          </div>
-
           {/* The "why" step - explicit and in English. Required when both AI
               answers are inadequate (that is where the teaching signal lives),
               encouraged otherwise. */}
@@ -1413,7 +1495,7 @@ export function AnnotationInterface() {
             </button>
             <button
               onClick={proceedToScore}
-              disabled={!winner || confidence === null || !explanationOk}
+              disabled={!winner || !explanationOk}
               className="cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               Continue
@@ -1558,52 +1640,17 @@ export function AnnotationInterface() {
                       <InfoTip width="w-80">
                         Rewriting the winner the way a fluent speaker would
                         creates a gold SFT target. You edit only the winner -
-                        least work, cleanest target.
+                        least work, cleanest target. Your changes show up as
+                        suggestions, and each one can carry a short reason.
                       </InfoTip>
                     </label>
-                    <textarea
-                      ref={editRef}
-                      value={editWinner}
-                      onChange={(e) => setEditWinner(e.target.value)}
-                      rows={3}
-                      className={`mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary focus-visible:border-accent ${textFont}`}
-                    />
-                    <ToneKeyboard
-                      targetRef={editRef}
+                    <SuggestingEditor
+                      original={winnerOutput.text}
                       value={editWinner}
                       onValueChange={setEditWinner}
+                      reasons={editReasons}
+                      onReasonsChange={setEditReasons}
                     />
-                    {winnerEdited && (
-                      <div className="mt-3">
-                        <div className="mb-1 text-xs font-medium text-text-tertiary">
-                          Your changes:
-                        </div>
-                        <p
-                          className={`rounded bg-surface-sunken p-3 text-sm leading-relaxed ${textFont}`}
-                        >
-                          {wordDiff(winnerOutput.text, editWinner).map(
-                            (seg, i) =>
-                              seg.type === "same" ? (
-                                <span key={i}>{seg.value}</span>
-                              ) : seg.type === "added" ? (
-                                <span
-                                  key={i}
-                                  className="rounded bg-success-subtle text-success"
-                                >
-                                  {seg.value}
-                                </span>
-                              ) : (
-                                <span
-                                  key={i}
-                                  className="rounded bg-danger-subtle text-danger line-through"
-                                >
-                                  {seg.value}
-                                </span>
-                              ),
-                          )}
-                        </p>
-                      </div>
-                    )}
                   </>
                 )}
               </div>
@@ -1626,6 +1673,7 @@ export function AnnotationInterface() {
                       setTieEdit(
                         (t === "a" ? task.outputA : task.outputB).text,
                       );
+                      setTieReasons({});
                     }}
                     className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm transition-colors ${
                       tieTarget === t
@@ -1637,18 +1685,15 @@ export function AnnotationInterface() {
                   </button>
                 ))}
               </div>
-              <textarea
-                ref={tieRef}
-                value={tieEdit}
-                onChange={(e) => setTieEdit(e.target.value)}
-                rows={3}
-                placeholder="Optional correction…"
-                className={`mt-3 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text-primary focus-visible:border-accent ${textFont}`}
-              />
-              <ToneKeyboard
-                targetRef={tieRef}
+              <SuggestingEditor
+                original={
+                  (tieTarget === "a" ? task.outputA : task.outputB).text
+                }
                 value={tieEdit}
                 onValueChange={setTieEdit}
+                reasons={tieReasons}
+                onReasonsChange={setTieReasons}
+                placeholder="Optional correction…"
               />
             </div>
           )}
@@ -1711,17 +1756,88 @@ export function AnnotationInterface() {
                   with the meaning you already gave.
                 </p>
               )}
+
+              {/* Secondary, collapsed: mark up one rejected AI answer as
+                  suggestions. The fresh rewrite above STAYS primary -
+                  source-free-ish authorship is the anti-translationese core
+                  and must not be demoted. Doing both is allowed: they are
+                  different artifacts. */}
+              <div className="mt-5 border-t border-border pt-4">
+                {!showMarkup ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMarkupOpen(true);
+                      if (markupSeededFor !== markupTarget) {
+                        setMarkupEdit(
+                          (markupTarget === "a" ? task.outputA : task.outputB)
+                            .text,
+                        );
+                        setMarkupSeededFor(markupTarget);
+                      }
+                    }}
+                    className="cursor-pointer text-xs font-medium text-accent-text underline-offset-2 hover:underline"
+                  >
+                    Or mark up one of the AI answers instead
+                  </button>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-text-secondary">
+                      Mark up one of the AI answers{" "}
+                      <span className="font-normal text-text-muted">
+                        (optional)
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs text-text-muted">
+                      Fix it directly - your changes appear as suggestions, each
+                      with a reason.
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      {(["a", "b"] as const).map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => {
+                            setMarkupTarget(t);
+                            // Re-seed on every side switch so the other
+                            // side's text is never staged as this side's
+                            // "correction" (the editSeededFor rule).
+                            setMarkupEdit(
+                              (t === "a" ? task.outputA : task.outputB).text,
+                            );
+                            setMarkupSeededFor(t);
+                            setMarkupReasons({});
+                          }}
+                          className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                            markupTarget === t
+                              ? "border-accent bg-accent text-accent-contrast"
+                              : "border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
+                          }`}
+                        >
+                          Mark up Output {t.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                    <SuggestingEditor
+                      original={
+                        (markupTarget === "a" ? task.outputA : task.outputB)
+                          .text
+                      }
+                      value={markupEdit}
+                      onValueChange={setMarkupEdit}
+                      reasons={markupReasons}
+                      onReasonsChange={setMarkupReasons}
+                    />
+                  </>
+                )}
+              </div>
             </div>
           )}
 
           {/* Consent - only shown when something was authored */}
           {(coldAnswer.trim() ||
-            (winner === "both_inadequate" && salvage.trim()) ||
+            (winner === "both_inadequate" && (salvage.trim() || markupMade)) ||
             (winner === "tie" && tieEdit.trim()) ||
-            ((winner === "a" || winner === "b") &&
-              winnerOutput &&
-              editWinner.trim() &&
-              editWinner.trim() !== winnerOutput.text.trim())) && (
+            ((winner === "a" || winner === "b") && winnerEdited)) && (
             <div className="mt-6 rounded-lg border border-border bg-surface-sunken p-4">
               <div className="text-sm font-medium text-text-secondary">
                 How may we use what you wrote?

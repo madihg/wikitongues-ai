@@ -1,0 +1,12 @@
+-- The editing ground (2026-08-26, tasks/editing-ground-spec.md): span-level
+-- suggestions on OutputEdit. Versioned envelope
+--   { v: 1, segments: [{ start, end, original, replacement, reason, reasonTags }] }
+-- Offsets are UTF-16 code units into NFC(originalText). correctedText remains
+-- the single training-facing text; segments are ENRICHMENT (the server verifies
+-- reconstruction and drops them - never the edit - on mismatch). Additive and
+-- nullable so prod may lag the client safely.
+--
+-- Applied to Supabase schema `wikitongues` via the MCP apply_migration and
+-- recorded here for the migration ledger, following the pattern of
+-- 20260820120000_candidate_in_pairing_pool.
+ALTER TABLE wikitongues."OutputEdit" ADD COLUMN IF NOT EXISTS segments jsonb;

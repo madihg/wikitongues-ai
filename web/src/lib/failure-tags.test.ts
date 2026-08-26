@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
+  EDIT_REASON_TAGS,
+  EDIT_REASON_TAG_KEYS,
   FAILURE_TAGS,
   FAILURE_TAG_KEYS,
+  editReasonTagLabel,
   failureTagLabel,
   failureTagSides,
   isFailureTag,
+  sanitizeEditReasonTags,
   sanitizeFailureTags,
 } from "./failure-tags";
 
@@ -145,5 +149,55 @@ describe("failureTagSides", () => {
   it("never offers tags on the winning side", () => {
     expect(failureTagSides("a").a).toBe(false);
     expect(failureTagSides("b").b).toBe(false);
+  });
+});
+
+describe("EDIT_REASON_TAGS config (the editing ground)", () => {
+  it("is the pairwise taxonomy plus the two edit-only entries, one vocabulary", () => {
+    expect(EDIT_REASON_TAG_KEYS.slice(0, FAILURE_TAG_KEYS.length)).toEqual(
+      FAILURE_TAG_KEYS,
+    );
+    expect(EDIT_REASON_TAG_KEYS).toContain("unsure");
+    expect(EDIT_REASON_TAG_KEYS).toContain("other");
+    expect(EDIT_REASON_TAGS.length).toBe(FAILURE_TAGS.length + 2);
+  });
+
+  it("has unique keys and a label + hint on every entry", () => {
+    expect(new Set(EDIT_REASON_TAG_KEYS).size).toBe(EDIT_REASON_TAGS.length);
+    for (const tag of EDIT_REASON_TAGS) {
+      expect(tag.label.length).toBeGreaterThan(0);
+      expect(tag.hint.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("editReasonTagLabel resolves edit-only keys and falls back to the raw key", () => {
+    expect(editReasonTagLabel("unsure")).toBe("Not sure - please check");
+    expect(editReasonTagLabel("tone_marks")).toBe(
+      failureTagLabel("tone_marks"),
+    );
+    expect(editReasonTagLabel("retired_key")).toBe("retired_key");
+  });
+});
+
+describe("sanitizeEditReasonTags", () => {
+  it("accepts the edit-only keys the pairwise sanitizer would drop", () => {
+    expect(sanitizeEditReasonTags(["unsure", "other"])).toEqual([
+      "unsure",
+      "other",
+    ]);
+    expect(sanitizeFailureTags(["unsure"])).toEqual([]); // vocabularies stay distinct
+  });
+
+  it("drops unknown keys and non-strings, de-duplicates, preserves config order", () => {
+    expect(
+      sanitizeEditReasonTags(["other", "tone_marks", "zzz", 7, "tone_marks"]),
+    ).toEqual(["tone_marks", "other"]);
+  });
+
+  it("never throws on garbage - degrades to no tags", () => {
+    for (const garbage of [null, undefined, "x", 42, {}, [{}], [null]]) {
+      expect(() => sanitizeEditReasonTags(garbage)).not.toThrow();
+    }
+    expect(sanitizeEditReasonTags("not an array")).toEqual([]);
   });
 });

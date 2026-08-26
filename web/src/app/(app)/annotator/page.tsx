@@ -16,6 +16,7 @@ interface RecentItem {
 
 interface Summary {
   pending: number;
+  correctionsWaiting: number;
   completed: number;
   coldAnswers: number;
   promptsInCatalogue: number;
@@ -129,6 +130,12 @@ export default function AnnotatorDashboard() {
           value={num(summary?.pending)}
           description="Pairwise comparisons still waiting for your input"
           href="/annotator/annotate"
+        />
+        <StatCard
+          title="Corrections Waiting"
+          value={num(summary?.correctionsWaiting)}
+          description="AI answers you already judged, ready for your fixes"
+          href="/annotator/corrections"
         />
         <StatCard
           title="Comparisons Completed"

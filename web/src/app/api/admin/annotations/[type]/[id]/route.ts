@@ -5,7 +5,8 @@ import { bucketLabel, rubricV2Label } from "@/lib/buckets";
 import { failureTagLabel } from "@/lib/failure-tags";
 import { dialectLabel } from "@/lib/dialects";
 import { isAnnotationType } from "@/lib/annotations-query";
-import { VerificationStatus } from "@prisma/client";
+import { diffToSegments, nfc, segmentsEnvelope } from "@/lib/edit-segments";
+import { VerificationStatus, type Prisma } from "@prisma/client";
 
 /**
  * GET  /api/admin/annotations/[type]/[id] — full detail for one annotation event.
@@ -384,6 +385,8 @@ export async function PATCH(
   // type === "edit"
   const data: {
     correctedText?: string;
+    originalText?: string;
+    segments?: Prisma.InputJsonValue;
     verificationStatus?: VerificationStatus;
   } = {};
   if ("correctedText" in o) {
@@ -396,7 +399,28 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    data.correctedText = o.correctedText.trim();
+    // THE EDITING GROUND invariant: applySegments(originalText, segments) ===
+    // correctedText must hold on the stored row. A researcher rewrite of
+    // correctedText that left the old segments in place would break exactly
+    // that reconstruction, so the spans are RE-DERIVED here against the
+    // stored original (reasons on vanished spans are dropped - the rewrite
+    // superseded them). Both texts land NFC, matching the write paths.
+    const existing = await prisma.outputEdit.findUnique({
+      where: { id },
+      select: { originalText: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const originalNfc = nfc(existing.originalText);
+    const corrected = nfc(o.correctedText.trim());
+    data.correctedText = corrected;
+    // Legacy rows may predate the NFC contract; re-store the NFC form so the
+    // offsets in the fresh envelope address the text actually on the row.
+    if (existing.originalText !== originalNfc) data.originalText = originalNfc;
+    data.segments = segmentsEnvelope(
+      diffToSegments(originalNfc, corrected),
+    ) as unknown as Prisma.InputJsonValue;
   }
   if (verificationStatus) data.verificationStatus = verificationStatus;
   if (Object.keys(data).length === 0) {

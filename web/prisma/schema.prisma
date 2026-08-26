@@ -294,9 +294,17 @@ model OutputEdit {
   modelOutputId      String
   promptId           String
   bucket             EvalBucket?
-  originalText       String // model output as shown
+  originalText       String // model output as shown: NFC(ModelOutput.outputText) since 2026-08-26 (the editing ground)
   correctedText      String // annotator's corrected Igala
   rationale          String?
+  // Span-level suggestions (the editing ground). Versioned envelope:
+  //   { v: 1, segments: [{ start, end, original, replacement, reason, reasonTags }] }
+  // Offsets are UTF-16 code units into NFC(originalText). correctedText remains
+  // the single source of truth for training; segments are ENRICHMENT - the
+  // server validates that applying them to originalText reproduces correctedText
+  // exactly and DROPS them (never the edit) if they do not. Reason tag keys are
+  // CONFIG (EDIT_REASON_TAGS in src/lib/failure-tags.ts), not schema.
+  segments           Json?
   provenance         String? // model_correction | salvage_both_inadequate
   consentBenchmark   Boolean            @default(true) // may enter the public benchmark
   consentTraining    Boolean            @default(true) // may enter training sets

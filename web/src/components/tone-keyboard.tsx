@@ -75,7 +75,8 @@ export function ToneKeyboard({
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setCaps((c) => !c)}
         className={
-          "h-7 min-w-7 rounded border px-1.5 font-mono text-sm transition-colors disabled:opacity-40 " +
+          // h-10 / min-w-10 = 40px: tone keys are primary phone touch targets.
+          "h-10 min-w-10 rounded border px-1.5 font-mono text-sm transition-colors disabled:opacity-40 " +
           (caps
             ? "border-accent bg-accent text-accent-contrast"
             : "border-border-strong bg-surface text-text-secondary hover:bg-accent-subtle hover:text-accent-text")
@@ -93,7 +94,7 @@ export function ToneKeyboard({
             // Keep focus (and the selection) in the textarea so we splice at the caret.
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => insert(display)}
-            className="h-7 min-w-7 rounded border border-border-strong bg-surface px-1.5 font-mono text-sm text-text-secondary transition-colors hover:bg-accent-subtle hover:text-accent-text disabled:opacity-40"
+            className="h-10 min-w-10 rounded border border-border-strong bg-surface px-1.5 font-mono text-sm text-text-secondary transition-colors hover:bg-accent-subtle hover:text-accent-text disabled:opacity-40"
           >
             {display}
           </button>

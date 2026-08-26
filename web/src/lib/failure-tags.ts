@@ -102,6 +102,53 @@ export function sanitizeFailureTags(raw: unknown): string[] {
   return FAILURE_TAG_KEYS.filter((k) => seen.has(k));
 }
 
+/** Quick-pick reasons for edit segments (the editing ground): the failure
+ *  taxonomy the team already knows from pairwise chips, plus edit-only
+ *  entries. `unsure` is where per-verdict confidence went when the dead 1-4
+ *  widget was removed - uncertainty attached to a SPAN ("please check this
+ *  change") is actionable review signal; a global 1-4 never was. CONFIG, not
+ *  schema. */
+export const EDIT_REASON_TAGS: FailureTagDef[] = [
+  ...FAILURE_TAGS, // same 8 keys/labels - one vocabulary across the platform
+  {
+    key: "unsure",
+    label: "Not sure - please check",
+    hint: "Flag this change for a linguist or the team to confirm.",
+  },
+  {
+    key: "other",
+    label: "Other reason",
+    hint: "Use the text box to say what it is.",
+  },
+];
+
+export const EDIT_REASON_TAG_KEYS: string[] = EDIT_REASON_TAGS.map(
+  (t) => t.key,
+);
+
+const EDIT_TAG_BY_KEY: Record<string, FailureTagDef> = Object.fromEntries(
+  EDIT_REASON_TAGS.map((t) => [t.key, t]),
+);
+
+export function editReasonTagLabel(key: string): string {
+  return EDIT_TAG_BY_KEY[key]?.label ?? key;
+}
+
+/**
+ * Mirrors sanitizeFailureTags for the edit-reason vocabulary: drops
+ * non-strings and unknown keys, de-duplicates, preserves config order, never
+ * throws - malformed reasonTags degrade to "no tags", they can never cost an
+ * annotator their correction.
+ */
+export function sanitizeEditReasonTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  for (const v of raw) {
+    if (typeof v === "string" && EDIT_REASON_TAG_KEYS.includes(v)) seen.add(v);
+  }
+  return EDIT_REASON_TAG_KEYS.filter((k) => seen.has(k));
+}
+
 /**
  * Which output sides should be offered failure tags, given the pairwise pick.
  *
