@@ -115,6 +115,610 @@ export default async function HowItWorksPage() {
         </p>
       </div>
 
+      {/* ── a2. The whole system on one canvas ──────────────────────────── */}
+      {/* Placed immediately after "what this is" so a reader holds the full
+          mental model before the history (journey) and the zoom-in (assembly).
+          Counts inside the diagram are the same live values as the stat strip
+          above - never literals, per the house rule. */}
+      <section className="mb-10">
+        <h2 className="text-xl text-text-primary">The whole system</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
+          One picture, four layers. Read it top to bottom: the community
+          produces the knowledge, the knowledge is assembled around each
+          question, a model answers, and every answer flows back to the
+          community for judgment - which becomes new knowledge. The dashed loop
+          on the left is the whole idea.
+        </p>
+        <div className="mt-4 overflow-x-auto rounded-md border border-border bg-surface p-4">
+          <svg
+            viewBox="0 0 960 640"
+            className="h-auto w-full min-w-[760px]"
+            role="img"
+            aria-label="System diagram: the Igala community produces cold answers, blind comparisons and corrections; these fill the knowledge stores and the deduced grammar; per question, retrieval passes a leak guard into an assembled context that a model answers; answers return to the community for judgment and to the frozen benchmark for scoring"
+          >
+            {/* ── layer 1: the community ── */}
+            <rect
+              x="20"
+              y="16"
+              width="920"
+              height="88"
+              rx="8"
+              fill="var(--surface-sunken)"
+              stroke="var(--border-strong)"
+            />
+            <text
+              x="36"
+              y="40"
+              fontSize="13"
+              fontFamily="var(--font-display)"
+              fill="var(--text-primary)"
+            >
+              The Igala community — {corpus.annotators} annotators, led from
+              Abuja
+            </text>
+            {[
+              {
+                x: 36,
+                w: 280,
+                t1: "Cold answers",
+                t2: "written before seeing any model",
+              },
+              {
+                x: 336,
+                w: 280,
+                t1: "Blind comparisons",
+                t2: "which of two answers is better",
+              },
+              {
+                x: 636,
+                w: 288,
+                t1: "Corrections + reasons",
+                t2: "what was wrong, fixed by a speaker",
+              },
+            ].map((b) => (
+              <g key={b.t1}>
+                <rect
+                  x={b.x}
+                  y="52"
+                  width={b.w}
+                  height="40"
+                  rx="6"
+                  fill="var(--surface)"
+                  stroke="var(--border-strong)"
+                />
+                <text
+                  x={b.x + 12}
+                  y="69"
+                  fontSize="12"
+                  fill="var(--text-primary)"
+                >
+                  {b.t1}
+                </text>
+                <text
+                  x={b.x + 12}
+                  y="84"
+                  fontSize="10"
+                  fill="var(--text-tertiary)"
+                >
+                  {b.t2}
+                </text>
+              </g>
+            ))}
+
+            {/* arrows community -> knowledge */}
+            {[176, 476, 780].map((x) => (
+              <line
+                key={x}
+                x1={x}
+                y1="104"
+                x2={x}
+                y2="136"
+                stroke="var(--text-tertiary)"
+                strokeWidth="1.5"
+                markerEnd="url(#arr)"
+              />
+            ))}
+
+            {/* ── layer 2: knowledge stores + deduced grammar ── */}
+            <text
+              x="20"
+              y="130"
+              fontSize="10"
+              fill="var(--text-tertiary)"
+              letterSpacing="1"
+            >
+              KNOWLEDGE — the standing corpus, growing with every session
+            </text>
+            {[
+              {
+                x: 20,
+                w: 220,
+                t1: "Community gold",
+                t2: `${corpus.goldAnswers} question–answer pairs`,
+                t3: "the register anchor",
+              },
+              {
+                x: 252,
+                w: 220,
+                t1: "Dictionary",
+                t2: `${corpus.lexEntries} word ↔ meaning entries`,
+                t3: "curated + induced from the Bible",
+              },
+              {
+                x: 484,
+                w: 220,
+                t1: "Parallel sentences",
+                t2: `${corpus.parallelPairs} Igala ↔ English pairs`,
+                t3: "how sentences are built",
+              },
+            ].map((b) => (
+              <g key={b.t1}>
+                <rect
+                  x={b.x}
+                  y="140"
+                  width={b.w}
+                  height="66"
+                  rx="6"
+                  fill="var(--surface-sunken)"
+                  stroke="var(--border-strong)"
+                />
+                <text
+                  x={b.x + 12}
+                  y="160"
+                  fontSize="12"
+                  fontFamily="var(--font-display)"
+                  fill="var(--text-primary)"
+                >
+                  {b.t1}
+                </text>
+                <text
+                  x={b.x + 12}
+                  y="177"
+                  fontSize="11"
+                  fill="var(--text-secondary)"
+                >
+                  {b.t2}
+                </text>
+                <text
+                  x={b.x + 12}
+                  y="192"
+                  fontSize="10"
+                  fill="var(--text-tertiary)"
+                >
+                  {b.t3}
+                </text>
+              </g>
+            ))}
+            {/* deduced grammar -> system prompt, the rules column */}
+            <rect
+              x="716"
+              y="140"
+              width="224"
+              height="66"
+              rx="6"
+              fill="var(--accent-subtle)"
+              stroke="var(--accent)"
+            />
+            <text
+              x="728"
+              y="160"
+              fontSize="12"
+              fontFamily="var(--font-display)"
+              fill="var(--text-primary)"
+            >
+              Deduced grammar → system prompt
+            </text>
+            <text x="728" y="177" fontSize="10" fill="var(--text-secondary)">
+              rules read out of all the evidence,
+            </text>
+            <text x="728" y="191" fontSize="10" fill="var(--text-secondary)">
+              only two-source-verified rules ship
+            </text>
+
+            {/* arrows knowledge -> serving */}
+            {[130, 362, 594].map((x) => (
+              <line
+                key={x}
+                x1={x}
+                y1="206"
+                x2={x}
+                y2="252"
+                stroke="var(--text-tertiary)"
+                strokeWidth="1.5"
+                markerEnd="url(#arr)"
+              />
+            ))}
+            <line
+              x1="828"
+              y1="206"
+              x2="828"
+              y2="300"
+              stroke="var(--accent)"
+              strokeWidth="1.5"
+              markerEnd="url(#arrAccent)"
+            />
+            <text x="836" y="240" fontSize="10" fill="var(--text-tertiary)">
+              rules travel as
+            </text>
+            <text x="836" y="253" fontSize="10" fill="var(--text-tertiary)">
+              instructions, not
+            </text>
+            <text x="836" y="266" fontSize="10" fill="var(--text-tertiary)">
+              retrieved prose
+            </text>
+
+            {/* ── layer 3: per-question serving ── */}
+            <text
+              x="20"
+              y="246"
+              fontSize="10"
+              fill="var(--text-tertiary)"
+              letterSpacing="1"
+            >
+              PER QUESTION — assembled fresh every time
+            </text>
+            <rect
+              x="20"
+              y="256"
+              width="120"
+              height="56"
+              rx="6"
+              fill="var(--surface)"
+              stroke="var(--border-strong)"
+            />
+            <text x="32" y="280" fontSize="12" fill="var(--text-primary)">
+              Question
+            </text>
+            <text x="32" y="296" fontSize="10" fill="var(--text-tertiary)">
+              from a person
+            </text>
+            <line
+              x1="140"
+              y1="284"
+              x2="168"
+              y2="284"
+              stroke="var(--text-tertiary)"
+              strokeWidth="1.5"
+              markerEnd="url(#arr)"
+            />
+
+            <rect
+              x="170"
+              y="256"
+              width="130"
+              height="56"
+              rx="6"
+              fill="var(--surface)"
+              stroke="var(--border-strong)"
+            />
+            <text x="182" y="280" fontSize="12" fill="var(--text-primary)">
+              Retrieval
+            </text>
+            <text x="182" y="296" fontSize="10" fill="var(--text-tertiary)">
+              best-matching pieces
+            </text>
+
+            {/* the leak guard, drawn as the filter it is */}
+            <g>
+              <line
+                x1="300"
+                y1="284"
+                x2="336"
+                y2="284"
+                stroke="var(--text-tertiary)"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M336 270 L354 284 L336 298 Z"
+                fill="var(--danger)"
+                opacity="0.85"
+              />
+              <line
+                x1="354"
+                y1="284"
+                x2="382"
+                y2="284"
+                stroke="var(--text-tertiary)"
+                strokeWidth="1.5"
+                markerEnd="url(#arr)"
+              />
+              <text x="300" y="322" fontSize="10" fill="var(--danger)">
+                leak guard: no exam question is ever
+              </text>
+              <text x="300" y="335" fontSize="10" fill="var(--danger)">
+                handed its own answer
+              </text>
+            </g>
+
+            <rect
+              x="384"
+              y="248"
+              width="300"
+              height="120"
+              rx="6"
+              fill="var(--surface-sunken)"
+              stroke="var(--border-strong)"
+            />
+            <text
+              x="396"
+              y="268"
+              fontSize="12"
+              fontFamily="var(--font-display)"
+              fill="var(--text-primary)"
+            >
+              Assembled context
+            </text>
+            {[
+              "1  THE METHOD (system prompt: the rules)",
+              "2  gold Q&A exemplars (register)",
+              "3  parallel sentences (structure prompts only)",
+              "4  dictionary lines for this question's words",
+              "5  the question + one-line output contract",
+            ].map((t, i) => (
+              <text
+                key={t}
+                x="396"
+                y={286 + i * 15}
+                fontSize="10"
+                fill="var(--text-secondary)"
+              >
+                {t}
+              </text>
+            ))}
+            <line
+              x1="684"
+              y1="300"
+              x2="716"
+              y2="300"
+              stroke="var(--text-tertiary)"
+              strokeWidth="1.5"
+              markerEnd="url(#arr)"
+            />
+
+            <rect
+              x="718"
+              y="272"
+              width="100"
+              height="56"
+              rx="6"
+              fill="var(--surface)"
+              stroke="var(--border-strong)"
+            />
+            <text x="732" y="296" fontSize="12" fill="var(--text-primary)">
+              Model
+            </text>
+            <text x="732" y="312" fontSize="10" fill="var(--text-tertiary)">
+              any of them
+            </text>
+            <line
+              x1="818"
+              y1="300"
+              x2="848"
+              y2="300"
+              stroke="var(--text-tertiary)"
+              strokeWidth="1.5"
+              markerEnd="url(#arr)"
+            />
+
+            <rect
+              x="850"
+              y="272"
+              width="90"
+              height="56"
+              rx="6"
+              fill="var(--accent-subtle)"
+              stroke="var(--accent)"
+            />
+            <text x="864" y="296" fontSize="12" fill="var(--text-primary)">
+              Answer
+            </text>
+            <text x="864" y="312" fontSize="10" fill="var(--text-tertiary)">
+              in Igala
+            </text>
+
+            {/* answer -> two destinations */}
+            <line
+              x1="895"
+              y1="328"
+              x2="895"
+              y2="420"
+              stroke="var(--text-tertiary)"
+              strokeWidth="1.5"
+            />
+            <line
+              x1="895"
+              y1="420"
+              x2="686"
+              y2="420"
+              stroke="var(--text-tertiary)"
+              strokeWidth="1.5"
+              markerEnd="url(#arr)"
+            />
+            <line
+              x1="895"
+              y1="420"
+              x2="895"
+              y2="470"
+              stroke="var(--text-tertiary)"
+              strokeWidth="1.5"
+              markerEnd="url(#arr)"
+            />
+
+            {/* ── layer 4: judgment and measurement ── */}
+            <text
+              x="20"
+              y="414"
+              fontSize="10"
+              fill="var(--text-tertiary)"
+              letterSpacing="1"
+            >
+              JUDGMENT — the only measure that finally counts
+            </text>
+            <rect
+              x="20"
+              y="424"
+              width="440"
+              height="92"
+              rx="6"
+              fill="var(--surface-sunken)"
+              stroke="var(--border-strong)"
+            />
+            <text
+              x="32"
+              y="446"
+              fontSize="12"
+              fontFamily="var(--font-display)"
+              fill="var(--text-primary)"
+            >
+              Native judgment
+            </text>
+            <text x="32" y="464" fontSize="11" fill="var(--text-secondary)">
+              blind pairs + corrections on the strongest models
+            </text>
+            <text x="32" y="480" fontSize="10" fill="var(--text-tertiary)">
+              {corpus.poolComparisons > 0
+                ? `${corpus.poolComparisons} strong-pair judgments so far`
+                : "collecting now"}
+            </text>
+            <text x="32" y="496" fontSize="10" fill="var(--text-tertiary)">
+              what speakers fix becomes tomorrow&apos;s rules
+            </text>
+
+            <rect
+              x="480"
+              y="424"
+              width="206"
+              height="92"
+              rx="6"
+              fill="var(--surface-sunken)"
+              stroke="var(--border-strong)"
+            />
+            <text
+              x="492"
+              y="446"
+              fontSize="12"
+              fontFamily="var(--font-display)"
+              fill="var(--text-primary)"
+            >
+              Frozen exam
+            </text>
+            <text x="492" y="464" fontSize="11" fill="var(--text-secondary)">
+              43 questions no model
+            </text>
+            <text x="492" y="479" fontSize="11" fill="var(--text-secondary)">
+              ever trains or retrieves on
+            </text>
+            <text x="492" y="496" fontSize="10" fill="var(--text-tertiary)">
+              scored leak-free only
+            </text>
+
+            <rect
+              x="706"
+              y="424"
+              width="234"
+              height="92"
+              rx="6"
+              fill="var(--accent-subtle)"
+              stroke="var(--accent)"
+            />
+            <text
+              x="718"
+              y="446"
+              fontSize="12"
+              fontFamily="var(--font-display)"
+              fill="var(--text-primary)"
+            >
+              Agreement Score
+            </text>
+            <text x="718" y="464" fontSize="11" fill="var(--text-secondary)">
+              100 = two native speakers&apos;
+            </text>
+            <text x="718" y="479" fontSize="11" fill="var(--text-secondary)">
+              agreement with each other
+            </text>
+            <text x="718" y="496" fontSize="10" fill="var(--text-tertiary)">
+              the bars below
+            </text>
+            <line
+              x1="686"
+              y1="470"
+              x2="706"
+              y2="470"
+              stroke="var(--text-tertiary)"
+              strokeWidth="1.5"
+              markerEnd="url(#arr)"
+            />
+
+            {/* ── the flywheel: judgment loops back to the top ── */}
+            <path
+              d="M 20 470 C -6 470 -6 60 20 60"
+              fill="none"
+              stroke="var(--accent)"
+              strokeWidth="1.5"
+              strokeDasharray="5 4"
+              markerEnd="url(#arrAccent)"
+            />
+            <text
+              x="26"
+              y="556"
+              fontSize="11"
+              fill="var(--accent-text)"
+              fontFamily="var(--font-display)"
+            >
+              The flywheel: every judgment and correction re-enters the
+              knowledge,
+            </text>
+            <text
+              x="26"
+              y="572"
+              fontSize="11"
+              fill="var(--accent-text)"
+              fontFamily="var(--font-display)"
+            >
+              the grammar, and the next round of models. The community is not
+            </text>
+            <text
+              x="26"
+              y="588"
+              fontSize="11"
+              fill="var(--accent-text)"
+              fontFamily="var(--font-display)"
+            >
+              labeling for the system — the community is the system.
+            </text>
+
+            <defs>
+              <marker
+                id="arr"
+                markerWidth="8"
+                markerHeight="8"
+                refX="6"
+                refY="3"
+                orient="auto"
+              >
+                <path d="M0,0 L6,3 L0,6 Z" fill="var(--text-tertiary)" />
+              </marker>
+              <marker
+                id="arrAccent"
+                markerWidth="8"
+                markerHeight="8"
+                refX="6"
+                refY="3"
+                orient="auto"
+              >
+                <path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)" />
+              </marker>
+            </defs>
+          </svg>
+        </div>
+        <p className="mt-2 max-w-2xl text-xs text-text-muted">
+          Counts in the diagram are live, from the same computation as the
+          numbers above. The red filter is the leak guard: every retrieved piece
+          is checked so no benchmark question is ever served its own answer -
+          the reason the scores below can be believed.
+        </p>
+      </section>
+
       {/* ── b. The journey ──────────────────────────────────────────────── */}
       <section className="mb-10">
         <h2 className="text-xl text-text-primary">
