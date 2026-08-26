@@ -568,3 +568,38 @@ rate on pool-arm comparisons; >= 10% confirms the pivot, both_inadequate
 Gates after fixes: tsc 0, eslint 0, vitest 604/604 (2 tests added). Not
 committed (verifier holds the no-commit rule); no DB writes, real accounts
 untouched.
+
+## 2026-08-26 - Editing ground: adversarial verification (subagent)
+
+Verified the editing ground per tasks/editing-ground-spec.md, all five attack
+lanes. Findings and fixes (all in worktree, NOT committed):
+
+1. Integrity: proved segment-envelope tampering is DETECTED - new tamper tests
+   in edit-segments.test.ts fail when sanitizeSegments' reconstruction check is
+   removed (demonstrated fail-then-pass, guard restored). REAL BUG FOUND+FIXED:
+   admin PATCH /api/admin/annotations/edit/[id] could rewrite correctedText
+   while leaving stale segments - now re-derives the envelope (and NFCs legacy
+   originalText) so applySegments(originalText,segments)===correctedText holds
+   on every stored row. Benchmark-gold sweep: src/lib/eval reads no OutputEdit,
+   no path copies edits into ColdAuthorAnswer; exports carry provenance+consent.
+2. Graphemes: full hazard battery added (ẹ́/ọ̀ NFC-vs-NFD, ñ, d'ẹnyọ straight+
+   curly apostrophe, clause-final ǹ precomposed AND decomposed n+U+0300, mixed
+   normalization inside one string) - no boundary ever splits a grapheme.
+3. Queue: scripts/verify-corrections-queue.ts (read-only, live DB) ran all 6
+   real annotators - 120 servable targets independently re-derived, corrections
+   disjoint from remaining, no holdout/skip leaks, no re-serve after simulated
+   edit, lane order stable. HARDENING: /api/edits/skip now 403s on a prompt the
+   annotator never judged (a stray flag would have eaten their pairwise queue).
+   e2e walkthrough (scripts/e2e-editing-ground.ts) all green incl. new 403 leg;
+   its cleanup baseline now asserts test-owned rows, not global counts (Charity
+   was annotating live mid-run - global deltas are legit).
+4. Phone UX: chips/tone keys/inputs/links raised to >=40px (min-h-10 chips,
+   h-10 tone keys, 44px skip/consent/retry); structural 375px test added
+   (suggesting-editor.test.tsx) - wrap classes proven against a hostile long
+   token, no nowrap/fixed-px widths, read-only mode clean.
+5. Confidence: widget gone from UI, API still accepts it (e2e leg 13); span-
+   level `unsure` variance simulated in tests - non-degenerate distribution
+   stored end to end (e2e proves unsure tag lands in the envelope).
+
+Gates: tsc 0, eslint 0, vitest 670/670 (was 652; +18 tests). Live corrections
+backlog at verification time: 72 outputs across 6 annotators.

@@ -116,4 +116,52 @@ describe("editsToSftRows", () => {
     expect(rows).toHaveLength(1); // the loader carries them
     expect(buildSftExamples(rows)).toHaveLength(0); // the builder gates them
   });
+
+  // ─── the editing ground: segments and new provenance never change the SFT
+  //     contract (guard inventory 2 and 4, tasks/editing-ground-spec.md) ────
+
+  it("a segment-bearing salvage_both_inadequate edit still emits provenance 'edit' with ONLY correctedText as the target", () => {
+    // The DB row now carries `segments` (spans + reasons) and the finer
+    // provenance value; the mapper's input type deliberately has neither
+    // field, so they CANNOT leak into a completion - the same structural
+    // guarantee that keeps rationale/gloss out. The cast mimics a caller
+    // passing the raw enriched row.
+    const enriched = {
+      ...base,
+      correctedText: "Agba ọjọ",
+      provenance: "salvage_both_inadequate",
+      segments: {
+        v: 1,
+        segments: [
+          {
+            start: 0,
+            end: 10,
+            original: "Àgbá Ọ́jọ́",
+            replacement: "Agba ọjọ",
+            reason: "the team writes it without the marks",
+            reasonTags: ["tone_marks", "unsure"],
+          },
+        ],
+      },
+    } as EditInput;
+    const out = editsToSftRows([enriched]);
+    expect(out).toHaveLength(1);
+    expect(out[0].provenance).toBe("edit"); // never the finer DB value
+    expect(out[0].correctedText).toBe("Agba ọjọ");
+    // Nothing segment- or reason-shaped survives into the source row.
+    expect(JSON.stringify(out[0])).not.toMatch(
+      /reasonTags|replacement|without the marks/,
+    );
+  });
+
+  it("buildSftExamples default (includeEdits unset) emits zero 'edit' rows even from segment-bearing edits", () => {
+    const enriched = {
+      ...base,
+      provenance: "salvage_both_inadequate",
+      segments: { v: 1, segments: [] },
+    } as EditInput;
+    const rows = editsToSftRows([enriched, base]);
+    expect(rows).toHaveLength(2);
+    expect(buildSftExamples(rows)).toHaveLength(0); // FALSE default locked
+  });
 });

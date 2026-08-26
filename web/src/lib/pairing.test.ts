@@ -6,6 +6,9 @@ import {
   laneFor,
   orderQueueByLane,
   pairingEligibleOutputs,
+  qualifyCorrectionTargets,
+  type CorrectionComparisonInput,
+  type CorrectionInputs,
   type QueuePrompt,
 } from "./pairing";
 
@@ -373,5 +376,323 @@ describe("computeQueueState - pivot behaviour", () => {
     );
     expect(state.total).toBe(0);
     expect(state.remaining).toEqual([]);
+  });
+});
+
+// ─── the editing ground: corrections lane state + target qualification ───────
+
+describe("computeQueueState - corrections lane", () => {
+  // A mixed catalogue: done prompts with editable targets, an in-queue prompt,
+  // a held-out prompt with an (impossible in prod, but defended) editable
+  // count, and an edit-skipped prompt.
+  const catalogue: QueuePrompt[] = [
+    { promptId: "done_editable_1", outputCount: 2, goldCount: 2 },
+    { promptId: "in_queue", outputCount: 3, goldCount: 2 },
+    { promptId: "done_editable_2", outputCount: 2, goldCount: 0 },
+    { promptId: "frozen", outputCount: 2, goldCount: 4, isHoldout: true },
+    { promptId: "done_skipped", outputCount: 2, goldCount: 1 },
+    { promptId: "done_exhausted", outputCount: 2, goldCount: 1 },
+  ];
+  const done = new Set([
+    "done_editable_1",
+    "done_editable_2",
+    "done_skipped",
+    "done_exhausted",
+    "frozen",
+  ]);
+
+  const inputs = (
+    editable: [string, number][],
+    skipped: string[] = [],
+  ): CorrectionInputs => ({
+    editableByPromptId: new Map(editable),
+    editSkippedPromptIds: new Set(skipped),
+  });
+
+  it("without CorrectionInputs, corrections is empty and every existing field is untouched", () => {
+    const withOut = computeQueueState(catalogue, done, new Set());
+    expect(withOut.corrections).toEqual([]);
+    const withIn = computeQueueState(
+      catalogue,
+      done,
+      new Set(),
+      inputs([["done_editable_1", 1]]),
+    );
+    expect(withIn.total).toBe(withOut.total);
+    expect(withIn.completed).toBe(withOut.completed);
+    expect(withIn.remaining).toEqual(withOut.remaining);
+  });
+
+  it("only prompts with an editable count > 0 appear, in input (verdict-age) order", () => {
+    const state = computeQueueState(
+      catalogue,
+      done,
+      new Set(),
+      inputs([
+        // Verdict-age order deliberately differs from catalogue order: the
+        // MAP order must win (oldest judgment corrected first).
+        ["done_editable_2", 2],
+        ["done_editable_1", 1],
+        ["done_exhausted", 0],
+      ]),
+    );
+    expect(state.corrections.map((p) => p.promptId)).toEqual([
+      "done_editable_2",
+      "done_editable_1",
+    ]);
+  });
+
+  it("held-out prompts never appear even with an editable count > 0", () => {
+    const state = computeQueueState(
+      catalogue,
+      done,
+      new Set(),
+      inputs([
+        ["frozen", 3],
+        ["done_editable_1", 1],
+      ]),
+    );
+    expect(state.corrections.map((p) => p.promptId)).toEqual([
+      "done_editable_1",
+    ]);
+  });
+
+  it("edit-skipped prompts never appear", () => {
+    const state = computeQueueState(
+      catalogue,
+      done,
+      new Set(),
+      inputs(
+        [
+          ["done_editable_1", 1],
+          ["done_skipped", 2],
+        ],
+        ["done_skipped"],
+      ),
+    );
+    expect(state.corrections.map((p) => p.promptId)).toEqual([
+      "done_editable_1",
+    ]);
+  });
+
+  it("corrections and remaining are disjoint on a mixed catalogue", () => {
+    const state = computeQueueState(
+      catalogue,
+      done,
+      new Set(),
+      inputs([
+        ["done_editable_1", 1],
+        ["done_editable_2", 1],
+      ]),
+    );
+    const remainingIds = new Set(state.remaining.map((p) => p.promptId));
+    expect(state.remaining.map((p) => p.promptId)).toEqual(["in_queue"]);
+    for (const p of state.corrections) {
+      expect(remainingIds.has(p.promptId)).toBe(false);
+    }
+    expect(state.corrections.length).toBeGreaterThan(0);
+  });
+
+  it("never re-serves: an editable count dropping to 0 (edit landed) removes the prompt, and so does an edit-skip - pure re-computations", () => {
+    const before = computeQueueState(
+      catalogue,
+      done,
+      new Set(),
+      inputs([["done_editable_1", 1]]),
+    );
+    expect(before.corrections.map((p) => p.promptId)).toEqual([
+      "done_editable_1",
+    ]);
+
+    const afterEdit = computeQueueState(
+      catalogue,
+      done,
+      new Set(),
+      inputs([["done_editable_1", 0]]),
+    );
+    expect(afterEdit.corrections).toEqual([]);
+
+    const afterSkip = computeQueueState(
+      catalogue,
+      done,
+      new Set(),
+      inputs([["done_editable_1", 1]], ["done_editable_1"]),
+    );
+    expect(afterSkip.corrections).toEqual([]);
+  });
+
+  it("a single-pool-output prompt (never pairwise-eligible) can still carry corrections", () => {
+    const state = computeQueueState(
+      [{ promptId: "single_output", outputCount: 1, goldCount: 1 }],
+      new Set(["single_output"]),
+      new Set(),
+      inputs([["single_output", 1]]),
+    );
+    expect(state.total).toBe(0); // not pairwise-eligible
+    expect(state.corrections.map((p) => p.promptId)).toEqual(["single_output"]);
+  });
+});
+
+describe("qualifyCorrectionTargets", () => {
+  const side = (id: string, inPool = true, failureTags: string[] = []) => ({
+    modelOutputId: id,
+    outputText: `text of ${id}`,
+    inPool,
+    failureTags,
+  });
+
+  // One annotator, four comparisons covering all four winner values.
+  const comparisons: CorrectionComparisonInput[] = [
+    {
+      comparisonId: "cmp_win_a",
+      promptId: "p1",
+      winner: "a",
+      explanation: "A is closer to real Igala",
+      a: side("out_a1"),
+      b: side("out_b1", true, ["grammar"]),
+    },
+    {
+      comparisonId: "cmp_win_b",
+      promptId: "p2",
+      winner: "b",
+      explanation: "B got the greeting right",
+      a: side("out_a2", true, ["wrong_word"]),
+      b: side("out_b2"),
+    },
+    {
+      comparisonId: "cmp_tie",
+      promptId: "p3",
+      winner: "tie",
+      explanation: "both fine",
+      a: side("out_a3"),
+      b: side("out_b3"),
+    },
+    {
+      comparisonId: "cmp_both",
+      promptId: "p4",
+      winner: "both_inadequate",
+      explanation: "neither is Igala",
+      a: side("out_a4", true, ["not_igala"]),
+      b: side("out_b4", true, ["wrong_language"]),
+    },
+  ];
+
+  it("serves exactly the winner / tie-both / both-inadequate-both set with the right roles - pure losers are never served", () => {
+    const targets = qualifyCorrectionTargets(comparisons, new Set());
+    expect(targets.map((t) => [t.modelOutputId, t.role])).toEqual([
+      ["out_a1", "winner"],
+      ["out_b2", "winner"],
+      ["out_a3", "tie"],
+      ["out_b3", "tie"],
+      ["out_a4", "both_inadequate"],
+      ["out_b4", "both_inadequate"],
+    ]);
+    // The losing sides of a/b verdicts are absent.
+    const ids = new Set(targets.map((t) => t.modelOutputId));
+    expect(ids.has("out_b1")).toBe(false);
+    expect(ids.has("out_a2")).toBe(false);
+  });
+
+  it("replays the annotator's own verdict context: explanation and THIS side's failure tags", () => {
+    const targets = qualifyCorrectionTargets(comparisons, new Set());
+    const a4 = targets.find((t) => t.modelOutputId === "out_a4")!;
+    expect(a4.explanation).toBe("neither is Igala");
+    expect(a4.failureTags).toEqual(["not_igala"]);
+    expect(a4.comparisonId).toBe("cmp_both");
+    const b4 = targets.find((t) => t.modelOutputId === "out_b4")!;
+    expect(b4.failureTags).toEqual(["wrong_language"]);
+  });
+
+  it("drops outputs that already have an edit (from anyone), keeping the rest", () => {
+    const targets = qualifyCorrectionTargets(
+      comparisons,
+      new Set(["out_a1", "out_b3"]),
+    );
+    expect(targets.map((t) => t.modelOutputId)).toEqual([
+      "out_b2",
+      "out_a3",
+      "out_a4",
+      "out_b4",
+    ]);
+  });
+
+  it("drops non-pool outputs (editing dead weak-arm text is wasted budget)", () => {
+    const withNonPool: CorrectionComparisonInput[] = [
+      {
+        comparisonId: "cmp_pool_mixed",
+        promptId: "p5",
+        winner: "both_inadequate",
+        explanation: "x",
+        a: side("out_a5", false),
+        b: side("out_b5", true),
+      },
+    ];
+    expect(
+      qualifyCorrectionTargets(withNonPool, new Set()).map(
+        (t) => t.modelOutputId,
+      ),
+    ).toEqual(["out_b5"]);
+  });
+
+  it("NFC-normalizes the served output text", () => {
+    const nfd = "Ọjọ ki".normalize("NFD");
+    const input: CorrectionComparisonInput[] = [
+      {
+        comparisonId: "cmp_nfd",
+        promptId: "p6",
+        winner: "a",
+        explanation: "x",
+        a: {
+          modelOutputId: "out_nfd",
+          outputText: nfd,
+          inPool: true,
+          failureTags: [],
+        },
+        b: side("out_other"),
+      },
+    ];
+    const [t] = qualifyCorrectionTargets(input, new Set());
+    expect(t.outputTextNfc).toBe(nfd.normalize("NFC"));
+    expect(t.outputTextNfc).not.toBe(nfd);
+  });
+
+  it("dedupes an output judged in two old-scheme comparisons - the oldest verdict wins", () => {
+    const dup: CorrectionComparisonInput[] = [
+      {
+        comparisonId: "cmp_old",
+        promptId: "p7",
+        winner: "a",
+        explanation: "first verdict",
+        a: side("out_shared"),
+        b: side("out_x"),
+      },
+      {
+        comparisonId: "cmp_new",
+        promptId: "p7",
+        winner: "tie",
+        explanation: "second verdict",
+        a: side("out_shared"),
+        b: side("out_y"),
+      },
+    ];
+    const targets = qualifyCorrectionTargets(dup, new Set());
+    const shared = targets.filter((t) => t.modelOutputId === "out_shared");
+    expect(shared).toHaveLength(1);
+    expect(shared[0].comparisonId).toBe("cmp_old");
+    expect(shared[0].role).toBe("winner");
+  });
+
+  it("an unknown winner value serves nothing (defensive)", () => {
+    const weird: CorrectionComparisonInput[] = [
+      {
+        comparisonId: "cmp_weird",
+        promptId: "p8",
+        winner: "banana",
+        explanation: "x",
+        a: side("out_a8"),
+        b: side("out_b8"),
+      },
+    ];
+    expect(qualifyCorrectionTargets(weird, new Set())).toEqual([]);
   });
 });

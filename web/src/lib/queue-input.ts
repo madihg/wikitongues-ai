@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { pairingEligibleOutputs, type QueuePrompt } from "@/lib/pairing";
+import {
+  EDIT_SKIP_REASON,
+  pairingEligibleOutputs,
+  qualifyCorrectionTargets,
+  type CorrectionInputs,
+  type QueuePrompt,
+  type ServableTarget,
+} from "@/lib/pairing";
 
 /**
  * THE ONE loader behind both queue consumers (/api/annotations/next and
@@ -121,4 +128,130 @@ export async function loadQueueInputs(): Promise<QueueInputs> {
   }
 
   return { poolActive, byPromptId, queuePrompts };
+}
+
+// ─── The editing ground: corrections-lane inputs ─────────────────────────────
+
+export interface CorrectionInputsResult {
+  /** What computeQueueState consumes to derive the `corrections` list. */
+  correctionInputs: CorrectionInputs;
+  /** Full servable-target detail per prompt, in serving order (verdict age;
+   *  within one comparison winner side first, else A before B) - what
+   *  /api/edits/next walks. */
+  servableByPromptId: Map<string, ServableTarget[]>;
+}
+
+/**
+ * THE ONE loader behind every corrections-lane consumer (/api/edits/next,
+ * /api/annotator/summary, the all-caught-up link) - the same single-loader
+ * contract loadQueueInputs holds for the pairwise queue, for the same reason:
+ * two routes counting "corrections waiting" from different queries would
+ * drift.
+ *
+ * Servability is own-verdicts-only (v1): U's non-demo comparisons, joined to
+ * each side's candidateModel pool flags, minus outputs anyone (non-demo) has
+ * already edited, minus prompts U edit-skipped. Role qualification itself
+ * (winner/tie/both_inadequate servable, pure losers not) is the pure
+ * `qualifyCorrectionTargets` in src/lib/pairing.ts, tested there. Holdout
+ * exclusion is applied by computeQueueState from the prompt catalogue's
+ * isHoldout flag.
+ */
+export async function loadCorrectionInputs(
+  annotatorId: string,
+): Promise<CorrectionInputsResult> {
+  const sideSelect = {
+    select: {
+      id: true,
+      outputText: true,
+      candidateModel: { select: { inPairingPool: true, archived: true } },
+    },
+  } as const;
+
+  // Verdict-age order (id as a tiebreak on equal timestamps): oldest
+  // judgments get corrected first, and refreshing never shuffles.
+  const comparisons = await prisma.pairwiseComparison.findMany({
+    where: { annotatorId, isDemo: false },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      promptId: true,
+      winner: true,
+      explanation: true,
+      failureTagsA: true,
+      failureTagsB: true,
+      modelOutputA: sideSelect,
+      modelOutputB: sideSelect,
+    },
+  });
+
+  const outputIds = [
+    ...new Set(
+      comparisons.flatMap((c) => [c.modelOutputA.id, c.modelOutputB.id]),
+    ),
+  ];
+
+  const [editRows, skipFlags] = await Promise.all([
+    // ANY non-demo edit (from anyone) retires an output from the lane: v1
+    // optimizes breadth over depth across the backlog.
+    outputIds.length > 0
+      ? prisma.outputEdit.findMany({
+          where: { isDemo: false, modelOutputId: { in: outputIds } },
+          select: { modelOutputId: true },
+        })
+      : Promise.resolve([]),
+    prisma.promptFlag.findMany({
+      where: { annotatorId, reason: EDIT_SKIP_REASON },
+      select: { prompt: { select: { promptId: true } } },
+    }),
+  ]);
+
+  const inPool = (side: {
+    candidateModel: { inPairingPool: boolean; archived: boolean } | null;
+  }) =>
+    side.candidateModel?.inPairingPool === true &&
+    side.candidateModel.archived === false;
+
+  const targets = qualifyCorrectionTargets(
+    comparisons.map((c) => ({
+      comparisonId: c.id,
+      promptId: c.promptId,
+      winner: c.winner,
+      explanation: c.explanation,
+      a: {
+        modelOutputId: c.modelOutputA.id,
+        outputText: c.modelOutputA.outputText,
+        inPool: inPool(c.modelOutputA),
+        failureTags: c.failureTagsA,
+      },
+      b: {
+        modelOutputId: c.modelOutputB.id,
+        outputText: c.modelOutputB.outputText,
+        inPool: inPool(c.modelOutputB),
+        failureTags: c.failureTagsB,
+      },
+    })),
+    new Set(editRows.map((e) => e.modelOutputId)),
+  );
+
+  // Group per prompt, preserving serving order; map insertion order carries
+  // the verdict-age ordering into computeQueueState.
+  const servableByPromptId = new Map<string, ServableTarget[]>();
+  const editableByPromptId = new Map<string, number>();
+  for (const target of targets) {
+    const list = servableByPromptId.get(target.promptId);
+    if (list) list.push(target);
+    else servableByPromptId.set(target.promptId, [target]);
+    editableByPromptId.set(
+      target.promptId,
+      (editableByPromptId.get(target.promptId) ?? 0) + 1,
+    );
+  }
+
+  return {
+    correctionInputs: {
+      editableByPromptId,
+      editSkippedPromptIds: new Set(skipFlags.map((f) => f.prompt.promptId)),
+    },
+    servableByPromptId,
+  };
 }

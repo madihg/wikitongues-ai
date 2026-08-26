@@ -5,6 +5,12 @@ import { prisma } from "@/lib/prisma";
 import { isRubricV2Axis, RUBRIC_VERSION } from "@/lib/buckets";
 import { sanitizeFailureTags, failureTagSides } from "@/lib/failure-tags";
 import { sanitizeDialect } from "@/lib/dialects";
+import {
+  diffToSegments,
+  nfc,
+  sanitizeSegments,
+  segmentsEnvelope,
+} from "@/lib/edit-segments";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -289,8 +295,18 @@ export async function POST(req: Request) {
   }
 
   // Inline edit -> gold SFT target. Targets the explicit modelOutputId if given
-  // (the tie path corrects a chosen side without faking a winner), otherwise the
-  // winner. Not used for both_inadequate (salvage authoring is used instead).
+  // (the tie path and the both-inadequate markup correct a chosen side without
+  // faking a winner), otherwise the winner.
+  //
+  // THE EDITING GROUND (tasks/editing-ground-spec.md): both texts are
+  // NFC-normalized - originalText stores NFC(outputText) from now on, so
+  // applySegments(originalText, segments) === correctedText holds on the
+  // stored row itself, and an NFD model output no longer "differs" from
+  // identical NFC typing (the latent false-positive). Client segments are
+  // sanitized against the pair; when absent or invalid they are DERIVED
+  // server-side (spans recorded, reasons absent) - a stale client still
+  // produces a structured edit, and enrichment failure never costs the
+  // episode.
   let editsSaved = 0;
   if (edit && typeof edit === "object") {
     const e = edit as Record<string, unknown>;
@@ -303,25 +319,40 @@ export async function POST(req: Request) {
           ? outputB
           : winnerOutput;
     const corrected =
-      typeof e.correctedText === "string" ? e.correctedText.trim() : "";
-    if (target && corrected && corrected !== target.outputText.trim()) {
+      typeof e.correctedText === "string" ? nfc(e.correctedText.trim()) : "";
+    const originalNfc = target ? nfc(target.outputText) : "";
+    if (target && corrected && corrected !== originalNfc.trim()) {
+      const segs =
+        sanitizeSegments(e.segments, originalNfc, corrected) ??
+        diffToSegments(originalNfc, corrected);
       editsSaved = 1;
       ops.push(
+        // select only id - prod may lag the client on newly added nullable
+        // columns (segments), and RETURNING all scalars would 500.
         prisma.outputEdit.create({
           data: {
             modelOutputId: target.id,
             promptId: target.promptId,
             bucket,
-            originalText: target.outputText,
+            originalText: originalNfc,
             correctedText: corrected,
             rationale: typeof e.rationale === "string" ? e.rationale : null,
-            provenance: "model_correction",
+            segments: segmentsEnvelope(
+              segs,
+            ) as unknown as Prisma.InputJsonValue,
+            // The schema comment reserved "salvage_both_inadequate" for
+            // corrections of a rejected output; winner/tie paths unchanged.
+            provenance:
+              win === "both_inadequate"
+                ? "salvage_both_inadequate"
+                : "model_correction",
             consentBenchmark: e.consentBenchmark !== false,
             consentTraining: e.consentTraining !== false,
             annotatorId,
             isDemo,
             demoSessionId: isDemo ? demoSessionId : null,
           },
+          select: { id: true },
         }),
       );
     }

@@ -212,6 +212,122 @@ export function orderQueueByLane(prompts: QueuePrompt[]): QueuePrompt[] {
   return [...both, ...interleaved];
 }
 
+// ─── The editing ground (2026-08-26, tasks/editing-ground-spec.md) ──────────
+//
+// The Corrections lane serves one already-judged OUTPUT at a time for span-
+// level correction. It is a separate surface (never interleaved into the
+// pairwise queue - switching between "compare two answers" and "fix one
+// answer" mid-flow is exactly the cognitive whiplash the lane ordering was
+// built to avoid), but its STATE derives inside computeQueueState so
+// /api/edits/next, /api/annotator/summary, and the all-caught-up screen can
+// never drift - the same discipline that binds /next and /summary.
+
+/** Sentinel PromptFlag.reason for "skip this prompt in the corrections lane".
+ *  Own-verdicts-only servability means every lane prompt is already in the
+ *  annotator's donePromptIds, so this flag can never eat a prompt out of the
+ *  pairwise queue (the flag-based-skip tradeoff documented in the spec). */
+export const EDIT_SKIP_REASON = "edit_skip";
+
+export interface CorrectionInputs {
+  /** promptId -> count of still-servable correction targets for THIS
+   *  annotator (servability rules resolved by the loader), in verdict-age
+   *  order - map insertion order IS the serving order. */
+  editableByPromptId: ReadonlyMap<string, number>;
+  /** Prompts this annotator edit-skipped (PromptFlag reason "edit_skip"). */
+  editSkippedPromptIds: ReadonlySet<string>;
+}
+
+/** One side of a comparison, as the correction qualifier sees it. */
+export interface CorrectionSideInput {
+  modelOutputId: string;
+  outputText: string;
+  /** candidateModel.inPairingPool && !archived - resolved by the loader. */
+  inPool: boolean;
+  /** The failure tags this annotator gave THIS side. */
+  failureTags: string[];
+}
+
+/** One of the annotator's own non-demo comparisons, decoupled from Prisma. */
+export interface CorrectionComparisonInput {
+  comparisonId: string;
+  /** Public promptId string (e.g. ig_orth_001) - what PairwiseComparison stores. */
+  promptId: string;
+  winner: string;
+  explanation: string;
+  a: CorrectionSideInput;
+  b: CorrectionSideInput;
+}
+
+export type CorrectionRole = "winner" | "tie" | "both_inadequate";
+
+/** A servable correction target: an output plus the annotator's own verdict
+ *  context, replayed so they apply a judgment they already made. */
+export interface ServableTarget {
+  promptId: string;
+  modelOutputId: string;
+  /** NFC - what the lane shows and what offsets address. */
+  outputTextNfc: string;
+  comparisonId: string;
+  role: CorrectionRole;
+  explanation: string;
+  failureTags: string[];
+}
+
+/**
+ * Which outputs qualify for the corrections lane, from the annotator's OWN
+ * comparisons (in verdict-age order - order is preserved):
+ *
+ *   - winner a/b  -> the WINNING side only, role "winner". Pure losers are
+ *     never served: the winner from the same comparison is the better target,
+ *     and the loser's diagnosis already lives in its failure tags.
+ *   - tie              -> both sides (A before B), role "tie".
+ *   - both_inadequate  -> both sides (A before B), role "both_inadequate".
+ *
+ * An output is dropped when it is not a pool-arm output (editing dead weak-arm
+ * text is wasted budget - the pivot's own reasoning) or when ANY non-demo edit
+ * already exists for it (v1 optimizes breadth over depth). Deduplicated by
+ * output across comparisons (old-scheme history could judge one output twice);
+ * the oldest verdict wins, matching the serving order.
+ */
+export function qualifyCorrectionTargets(
+  comparisons: CorrectionComparisonInput[],
+  editedOutputIds: ReadonlySet<string>,
+): ServableTarget[] {
+  const out: ServableTarget[] = [];
+  const seen = new Set<string>();
+  for (const c of comparisons) {
+    const candidates: { side: CorrectionSideInput; role: CorrectionRole }[] =
+      [];
+    if (c.winner === "a") candidates.push({ side: c.a, role: "winner" });
+    else if (c.winner === "b") candidates.push({ side: c.b, role: "winner" });
+    else if (c.winner === "tie") {
+      candidates.push({ side: c.a, role: "tie" }, { side: c.b, role: "tie" });
+    } else if (c.winner === "both_inadequate") {
+      candidates.push(
+        { side: c.a, role: "both_inadequate" },
+        { side: c.b, role: "both_inadequate" },
+      );
+    }
+    // any other winner value: nothing servable from this comparison
+    for (const { side, role } of candidates) {
+      if (!side.inPool) continue;
+      if (editedOutputIds.has(side.modelOutputId)) continue;
+      if (seen.has(side.modelOutputId)) continue;
+      seen.add(side.modelOutputId);
+      out.push({
+        promptId: c.promptId,
+        modelOutputId: side.modelOutputId,
+        outputTextNfc: side.outputText.normalize("NFC"),
+        comparisonId: c.comparisonId,
+        role,
+        explanation: c.explanation,
+        failureTags: side.failureTags,
+      });
+    }
+  }
+  return out;
+}
+
 export interface QueueState {
   /** Prompts with >= 2 pairing-eligible outputs - assignable at all. */
   total: number;
@@ -226,6 +342,16 @@ export interface QueueState {
    * function is what keeps the two routes from drifting apart.
    */
   remaining: QueuePrompt[];
+  /**
+   * Prompts with servable correction targets for this annotator, in the
+   * CorrectionInputs order (verdict-age - oldest judgments first, refreshing
+   * never shuffles). Empty when CorrectionInputs is not supplied, so existing
+   * callers are untouched. Held-out prompts never appear (an edit there could
+   * never be used anywhere), nor do edit-skipped prompts. Disjoint from
+   * `remaining` by construction: own-verdict servability implies the prompt is
+   * already in donePromptIds.
+   */
+  corrections: QueuePrompt[];
 }
 
 /**
@@ -244,6 +370,7 @@ export function computeQueueState(
   prompts: QueuePrompt[],
   donePromptIds: ReadonlySet<string>,
   skippedPromptIds: ReadonlySet<string>,
+  correctionInputs?: CorrectionInputs,
 ): QueueState {
   const eligible = prompts.filter((p) => p.outputCount >= 2 && !p.isHoldout);
   let completed = 0;
@@ -257,9 +384,28 @@ export function computeQueueState(
     remaining.push(prompt);
   }
   const hasLaneMetadata = remaining.some((p) => p.goldCount !== undefined);
+
+  // Corrections lane: walked in CorrectionInputs (verdict-age) order, NOT
+  // catalogue order. Eligibility here is per-output (the loader already
+  // resolved servability), so the pairwise >= 2-outputs rule does not apply -
+  // a prompt with a single pool output is correctable even though it can
+  // never be pairwise-served again.
+  const corrections: QueuePrompt[] = [];
+  if (correctionInputs) {
+    const byId = new Map(prompts.map((p) => [p.promptId, p]));
+    for (const [promptId, count] of correctionInputs.editableByPromptId) {
+      if (count <= 0) continue;
+      if (correctionInputs.editSkippedPromptIds.has(promptId)) continue;
+      const prompt = byId.get(promptId);
+      if (!prompt || prompt.isHoldout) continue;
+      corrections.push(prompt);
+    }
+  }
+
   return {
     total: eligible.length,
     completed,
     remaining: hasLaneMetadata ? orderQueueByLane(remaining) : remaining,
+    corrections,
   };
 }

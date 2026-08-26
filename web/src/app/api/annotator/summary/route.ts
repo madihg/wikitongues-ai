@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isResearcher } from "@/lib/personas";
 import { computeQueueState } from "@/lib/pairing";
-import { loadQueueInputs } from "@/lib/queue-input";
+import { loadCorrectionInputs, loadQueueInputs } from "@/lib/queue-input";
 
 /**
  * Real numbers for the annotator dashboard. Everything here is scoped to the
@@ -26,28 +26,35 @@ export async function GET() {
   // (any pair, including old-scheme history) or skipped. Identical input
   // path, so "Queue Remaining" here can never drift from what the queue
   // actually serves.
-  const [{ queuePrompts }, doneRows, skipRows] = await Promise.all([
-    loadQueueInputs(),
-    prisma.pairwiseComparison.findMany({
-      where: { annotatorId, isDemo: false },
-      select: { promptId: true },
-    }),
-    // ANY flag by this annotator (skip or malformed-prompt) excludes the
-    // prompt for them - mirrors /api/annotations/next exactly.
-    prisma.promptFlag.findMany({
-      where: { annotatorId },
-      select: { prompt: { select: { promptId: true } } },
-    }),
-  ]);
+  const [{ queuePrompts }, { correctionInputs }, doneRows, skipRows] =
+    await Promise.all([
+      loadQueueInputs(),
+      // The corrections lane count comes through the SAME loader + pure
+      // function as /api/edits/next, so "Corrections waiting" can never
+      // drift from what the lane actually serves.
+      loadCorrectionInputs(annotatorId),
+      prisma.pairwiseComparison.findMany({
+        where: { annotatorId, isDemo: false },
+        select: { promptId: true },
+      }),
+      // ANY flag by this annotator (skip or malformed-prompt) excludes the
+      // prompt for them - mirrors /api/annotations/next exactly.
+      prisma.promptFlag.findMany({
+        where: { annotatorId },
+        select: { prompt: { select: { promptId: true } } },
+      }),
+    ]);
   const donePromptIds = new Set(doneRows.map((r) => r.promptId));
   const skippedPromptIds = new Set(skipRows.map((r) => r.prompt.promptId));
 
-  const { remaining } = computeQueueState(
+  const { remaining, corrections } = computeQueueState(
     queuePrompts,
     donePromptIds,
     skippedPromptIds,
+    correctionInputs,
   );
   const pending = remaining.length;
+  const correctionsWaiting = corrections.length;
 
   const [completed, rubricScores, coldAnswers] = await Promise.all([
     prisma.pairwiseComparison.count({ where: { annotatorId, isDemo: false } }),
@@ -119,6 +126,7 @@ export async function GET() {
 
   return NextResponse.json({
     pending,
+    correctionsWaiting,
     completed,
     rubricScores,
     coldAnswers,

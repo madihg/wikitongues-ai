@@ -16,7 +16,7 @@ import {
   goldFirstFor,
   laneFor,
 } from "@/lib/pairing";
-import { loadQueueInputs } from "@/lib/queue-input";
+import { loadCorrectionInputs, loadQueueInputs } from "@/lib/queue-input";
 
 /**
  * Serve the next annotation task. The response carries everything the
@@ -64,10 +64,25 @@ export async function GET(req: Request) {
 
   const { byPromptId, queuePrompts } = await loadQueueInputs();
 
+  // Live corrections-lane size for the all-caught-up screen's cross-link
+  // (never computed in demo mode - the lane is hidden there in v1). Computed
+  // lazily: only the complete paths pay for it.
+  const correctionsWaiting = async (): Promise<number> => {
+    if (isDemo) return 0;
+    const { correctionInputs } = await loadCorrectionInputs(annotatorId);
+    return computeQueueState(
+      queuePrompts,
+      new Set(),
+      new Set(),
+      correctionInputs,
+    ).corrections.length;
+  };
+
   if (queuePrompts.length === 0) {
     return NextResponse.json({
       complete: true,
       message: "No prompts with model outputs available yet.",
+      correctionsWaiting: await correctionsWaiting(),
     });
   }
 
@@ -170,5 +185,6 @@ export async function GET(req: Request) {
   return NextResponse.json({
     complete: true,
     progress: { completed, total },
+    correctionsWaiting: await correctionsWaiting(),
   });
 }
