@@ -603,3 +603,19 @@ lanes. Findings and fixes (all in worktree, NOT committed):
 
 Gates: tsc 0, eslint 0, vitest 670/670 (was 652; +18 tests). Live corrections
 backlog at verification time: 72 outputs across 6 annotators.
+
+## Two outreach outcomes resolved (2026-08-27)
+
+GRN: written permission GRANTED to use the Igala "Words of Life"
+recording (45:38, the only usable Igala speech asset anywhere) in this
+project - modified copyright/partnership agreement signed by Graydon
+Colville (GRN) and counter-signed by Halim 2026-08-27; final PDF pending
+from GRN. PROJECT-SCOPED grant, not a public licence change - the signed
+agreement on the email thread (Lydia + Daniel cc'd) is the authority.
+
+Crubadan: CLOSED FOR CAUSE. Scannell no longer holds the data, and the
+crawl metadata shows all 17 Igala documents were watchtower.org content
+- squarely under the standing JW rule (JW300 precedent). A crawler's CC
+BY label cannot relicense Watch Tower's text; Wayback reachability is
+not a licence. Nothing was ever ingested; nothing will be. The honest
+corpus ceiling loses the (never-verified) 13.9k words.
