@@ -47,6 +47,11 @@ export interface CorpusCounts {
   poolComparisons: number;
   /** "Both inadequate" verdicts within poolComparisons. */
   poolBothInadequate: number;
+  /** Comparisons within poolComparisons where a winner was actually picked
+   * (winner "a" or "b" - ties and both-inadequate excluded). Kept as its own
+   * count rather than derived by subtraction because "tie" is a real verdict:
+   * poolComparisons - poolBothInadequate would silently count ties as wins. */
+  poolDecided: number;
   parallelPairs: number;
   lexEntries: number;
   /** Distinct real contributors - seed @test.com accounts excluded, same rule
@@ -78,6 +83,7 @@ export type Approach =
   | "retrieval v1"
   | "retrieval v2"
   | "retrieval v3"
+  | "retrieval v4"
   | "fine-tuned"
   | "other";
 
@@ -138,10 +144,10 @@ export interface MethodMetrics {
 
 /**
  * Human-readable method label from candidate metadata. versionLabel="rag-v2"
- * / "rag-v3" is how the serving routes themselves distinguish those paths
- * (see scripts/register-rag-v2.ts and scripts/register-rag-v3.ts), so the
- * scoreboard branches on the same field rather than on a name convention
- * that could drift.
+ * / "rag-v3" / "rag-v4" is how the serving routes themselves distinguish
+ * those paths (see scripts/register-rag-v2.ts, register-rag-v3.ts and
+ * register-rag-v4.ts), so the scoreboard branches on the same field rather
+ * than on a name convention that could drift.
  */
 export function approachLabel(
   kind: string,
@@ -149,6 +155,7 @@ export function approachLabel(
 ): Approach {
   if (kind === "baseline") return "untouched";
   if (kind === "rag") {
+    if (versionLabel === "rag-v4") return "retrieval v4";
     if (versionLabel === "rag-v3") return "retrieval v3";
     return versionLabel === "rag-v2" ? "retrieval v2" : "retrieval v1";
   }
@@ -289,6 +296,7 @@ export async function computeMethodMetrics(
     pairwiseBothInadequate,
     poolComparisons,
     poolBothInadequate,
+    poolDecided,
     parallelPairs,
     lexEntries,
     pairwiseAnnotators,
@@ -349,6 +357,14 @@ export async function computeMethodMetrics(
       where: {
         isDemo: false,
         winner: "both_inadequate",
+        modelOutputA: { candidateModel: { inPairingPool: true } },
+        modelOutputB: { candidateModel: { inPairingPool: true } },
+      },
+    }),
+    prisma.pairwiseComparison.count({
+      where: {
+        isDemo: false,
+        winner: { in: ["a", "b"] },
         modelOutputA: { candidateModel: { inPairingPool: true } },
         modelOutputB: { candidateModel: { inPairingPool: true } },
       },
@@ -572,6 +588,7 @@ export async function computeMethodMetrics(
       pairwiseBothInadequate,
       poolComparisons,
       poolBothInadequate,
+      poolDecided,
       parallelPairs,
       lexEntries,
       annotators,

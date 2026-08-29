@@ -131,12 +131,18 @@ export default function AnnotatorDashboard() {
           description="Pairwise comparisons still waiting for your input"
           href="/annotator/annotate"
         />
-        <StatCard
-          title="Corrections Waiting"
-          value={num(summary?.correctionsWaiting)}
-          description="AI answers you already judged, ready for your fixes"
-          href="/annotator/corrections"
-        />
+        {/* Researcher-only since the 2026-08-28 rework: annotators correct
+            inside each episode now, and their /annotator/corrections link
+            would just redirect them back to Annotate. Researchers keep the
+            standalone backlog lane this card counts. */}
+        {researcher && (
+          <StatCard
+            title="Corrections Waiting"
+            value={num(summary?.correctionsWaiting)}
+            description="AI answers you already judged, ready for your fixes"
+            href="/annotator/corrections"
+          />
+        )}
         <StatCard
           title="Comparisons Completed"
           value={num(summary?.completed)}

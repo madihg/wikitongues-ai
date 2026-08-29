@@ -41,9 +41,14 @@ import { InfoTip } from "@/components/info-tip";
 import { BenchmarkBars } from "@/components/arena/benchmark-bars";
 
 /**
- * "How it works" - the whole project explained for non-ML readers:
- * Wikitongues staff, funders, community members. Researcher-gated by the
- * admin layout's RoleGuard, like every sibling page under /admin.
+ * "How it works" - the slim in-app version: hero, live stat strip, the
+ * four-layer system diagram, a banner to the full public story, the
+ * scoreboard bars researchers need at hand, and the changelog.
+ *
+ * The long-form sections (journey, assembly, verbatim prompts, score
+ * deep-dive, what is being tested) are moving to the marketing site's
+ * /how-it-works page. They remain below in a parity-hold appendix until
+ * that page carries them - see the PARITY HOLD comment.
  *
  * Every number on this page is computed from the database when the page
  * loads (force-dynamic + computeMethodMetrics). Nothing numeric is written
@@ -58,6 +63,34 @@ function fmt(n: number | null): string {
 function pct(part: number, whole: number): string {
   return whole > 0 ? ((100 * part) / whole).toFixed(1) : "n/a";
 }
+
+/** Fixed history - dates and what each day added or corrected. */
+const CHANGELOG = [
+  {
+    date: "Aug 9, 2026",
+    text: "The automatic eval harness, the honest human ceiling, and the leak guard. The audit that day found the benchmark had served 15+ of its 43 frozen questions their own community answers - those scores measured copying, so every number since is reported on the leak-free subset.",
+  },
+  {
+    date: "Aug 12, 2026",
+    text: "The Bible parallel corpus - 30,907 Igala-English sentence pairs ingested under BSN permission - plus a 2,104-entry lexicon, powering retrieval v2 and THE METHOD.",
+  },
+  {
+    date: "Aug 13, 2026",
+    text: "The frontier arms joined the board. Gemini 3.1 Pro topped it untouched; Claude Opus 5 gained +22 from community retrieval - a clean read on knowledge versus skill. This page was made public and the cost ledger rebuilt.",
+  },
+  {
+    date: "Aug 14, 2026",
+    text: "A working grammar deduced from all the evidence (tasks/igala-grammar-deduced.md) and METHOD v3, which enshrines only its A- and B-grade rules in the system prompt.",
+  },
+  {
+    date: "Aug 17, 2026",
+    text: "The benchmark visual and the Community Agreement Score: leak-free stripped chrF rescaled so the deduplicated native-speaker ceiling reads 100, drawn LLM-benchmark style with confidence whiskers. The raw chrF table moved under the chart; nothing was removed and no score is capped.",
+  },
+  {
+    date: "Aug 29, 2026",
+    text: "Global Recordings Network signed a copyright agreement (Aug 27) covering their “Words of Life” Igala recording, and the audio (45:38, the only usable Igala speech asset) was acquired, along with six Bible-for-Children booklets as raw assets; the booklets' fonts silently strip the ẹ/ọ subdots on extraction, so nothing from them may enter the corpus until that is solved. Outreach to other rights holders (the JWAL papers, Egbunu's proverbs study, PanLex) is in progress, with a call with the JWAL author scheduled; none of their text enters the corpus before written permission is on file, so the corpus counters above are unchanged.",
+  },
+];
 
 export default async function HowItWorksPage() {
   const m = await computeMethodMetrics(prisma);
@@ -603,7 +636,7 @@ export default async function HowItWorksPage() {
               Frozen exam
             </text>
             <text x="492" y="464" fontSize="11" fill="var(--text-secondary)">
-              43 questions no model
+              {benchmark.frozenPrompts} questions no model
             </text>
             <text x="492" y="479" fontSize="11" fill="var(--text-secondary)">
               ever trains or retrieves on
@@ -718,6 +751,105 @@ export default async function HowItWorksPage() {
           the reason the scores below can be believed.
         </p>
       </section>
+
+      {/* ── The full story lives on the public site ─────────────────────── */}
+      <a
+        href="https://wikitongues-ai-site.vercel.app/how-it-works/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group mb-10 flex items-center justify-between gap-4 rounded-lg border border-accent bg-accent-subtle p-5 shadow-sm transition-shadow hover:shadow-md"
+      >
+        <div>
+          <p className="text-base font-semibold text-text-primary">
+            The full story - method, scores, and the exact instructions the
+            models receive
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            On the public Wikitongues AI site - readable without a login,
+            shareable with funders and community.
+          </p>
+        </div>
+        <svg
+          className="h-6 w-6 shrink-0 text-accent-text transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M7 17L17 7" />
+          <path d="M8 7h9v9" />
+        </svg>
+      </a>
+
+      {/* ── The scoreboard ──────────────────────────────────────────────── */}
+      <section className="mb-10">
+        <h2 className="flex items-center gap-2 text-xl text-text-primary">
+          The benchmark: Community Agreement Score
+          <InfoTip label="About this score" width="w-80">
+            Character overlap (chrF) with the community&apos;s answers, rescaled
+            so that 100 marks how closely one native speaker agrees with another
+            on the same questions. Computed live from the database on every page
+            load, on the leak-free subset only, and never capped at 100.
+          </InfoTip>
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
+          Every model faces the same {benchmark.frozenPrompts}-question frozen
+          exam - questions the models never saw during any adaptation step - and
+          each answer is compared with what Igala speakers wrote for that
+          question. Longer bar, closer to how the community actually writes; the
+          yardstick is agreement with this one community&apos;s writing, on
+          Igala questions only.
+        </p>
+        <div className="mt-4">
+          <BenchmarkBars
+            candidates={candidates}
+            ceilingChrf={m.agreementCeilingChrf}
+            leakFreePrompts={benchmark.leakFreePrompts}
+          />
+        </div>
+      </section>
+
+      {/* ── What changed, when ──────────────────────────────────────────── */}
+      <section className="mb-10">
+        <h2 className="text-xl text-text-primary">What changed, when</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
+          The dates are fixed history - what each day added and what it
+          corrected. Every live number they produced is recomputed above, not
+          repeated here.
+        </p>
+        <ul className="mt-3 max-w-2xl space-y-3">
+          {CHANGELOG.map((e) => (
+            <li
+              key={e.date}
+              className="rounded-md border border-border bg-surface p-4 text-sm leading-relaxed text-text-secondary"
+            >
+              <span className="font-mono text-xs text-accent-text">
+                {e.date}
+              </span>
+              <p className="mt-1">{e.text}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* ── PARITY HOLD (2026-08-28) ─────────────────────────────────────
+          Everything below is slated to move to the marketing site's
+          /how-it-works page (linked in the banner above) and then be deleted
+          from this app page. At the time of this edit that public page
+          returned 404, so per the coordination rule these sections stay here
+          until the public page verifiably carries their content. Once parity
+          is confirmed, delete from this divider to the end of the "What is
+          being tested now" section. */}
+      <div className="mb-10 border-t border-border pt-6">
+        <p className="max-w-2xl text-xs text-text-muted">
+          The sections below are moving to the public story page linked above.
+          They stay here until that page carries them, so nothing is lost in the
+          move.
+        </p>
+      </div>
 
       {/* ── b. The journey ──────────────────────────────────────────────── */}
       <section className="mb-10">
@@ -1015,34 +1147,16 @@ export default async function HowItWorksPage() {
         </div>
       </section>
 
-      {/* ── e. The benchmark ────────────────────────────────────────────── */}
+      {/* ── e. Reading the score (the bars themselves are above) ────────── */}
       <section className="mb-10">
-        <h2 className="flex items-center gap-2 text-xl text-text-primary">
-          The benchmark: Community Agreement Score
-          <InfoTip label="About this score" width="w-80">
-            Character overlap (chrF) with the community&apos;s answers, rescaled
-            so that 100 marks how closely one native speaker agrees with another
-            on the same questions. Computed live from the database on every page
-            load, on the leak-free subset only, and never capped at 100.
-          </InfoTip>
+        <h2 className="text-xl text-text-primary">
+          Reading the Community Agreement Score
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
-          Every model faces the same {benchmark.frozenPrompts}-question frozen
-          exam - questions the models never saw during any adaptation step - and
-          each answer is compared with what Igala speakers wrote for that
-          question. The chart borrows the familiar benchmark layout - longer
-          bar, closer to how the community actually writes - but the yardstick
-          is agreement with this one community&apos;s writing, on Igala
-          questions only. It is not comparable to general-knowledge benchmarks
-          like MMLU, and a high bar here claims nothing beyond Igala.
+          The scoreboard above is not comparable to general-knowledge benchmarks
+          like MMLU, and a high bar there claims nothing beyond Igala. Here is
+          what the number actually measures.
         </p>
-        <div className="mt-4">
-          <BenchmarkBars
-            candidates={candidates}
-            ceilingChrf={m.agreementCeilingChrf}
-            leakFreePrompts={benchmark.leakFreePrompts}
-          />
-        </div>
 
         <div className="mt-4 max-w-2xl space-y-3 rounded-md border border-border bg-surface p-4 text-sm leading-relaxed text-text-secondary">
           <p>
@@ -1113,8 +1227,9 @@ export default async function HowItWorksPage() {
                 {corpus.poolComparisons} comparisons
               </>
             )}
-            . So these bars chart progress from &quot;does not speak Igala&quot;
-            toward &quot;speaks it badly&quot;, and the speakers judge the rest.
+            . So the bars above chart progress from &quot;does not speak
+            Igala&quot; toward &quot;speaks it badly&quot;, and the speakers
+            judge the rest.
           </p>
         </div>
 
@@ -1217,50 +1332,6 @@ export default async function HowItWorksPage() {
             the binding constraint. And Lydia&apos;s syntax write-up, to turn
             her review into data.
           </li>
-        </ul>
-      </section>
-
-      {/* ── g. What changed, when ───────────────────────────────────────── */}
-      <section className="mb-10">
-        <h2 className="text-xl text-text-primary">What changed, when</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
-          The dates are fixed history - what each day added and what it
-          corrected. Every live number they produced is recomputed above, not
-          repeated here.
-        </p>
-        <ul className="mt-3 max-w-2xl space-y-3">
-          {[
-            {
-              date: "Aug 9, 2026",
-              text: "The automatic eval harness, the honest human ceiling, and the leak guard. The audit that day found the benchmark had served 15+ of its 43 frozen questions their own community answers - those scores measured copying, so every number since is reported on the leak-free subset.",
-            },
-            {
-              date: "Aug 12, 2026",
-              text: "The Bible parallel corpus - 30,907 Igala-English sentence pairs ingested under BSN permission - plus a 2,104-entry lexicon, powering retrieval v2 and THE METHOD.",
-            },
-            {
-              date: "Aug 13, 2026",
-              text: "The frontier arms joined the board. Gemini 3.1 Pro topped it untouched; Claude Opus 5 gained +22 from community retrieval - a clean read on knowledge versus skill. This page was made public and the cost ledger rebuilt.",
-            },
-            {
-              date: "Aug 14, 2026",
-              text: "A working grammar deduced from all the evidence (tasks/igala-grammar-deduced.md) and METHOD v3, which enshrines only its A- and B-grade rules in the system prompt.",
-            },
-            {
-              date: "Aug 17, 2026",
-              text: "The benchmark visual and the Community Agreement Score: leak-free stripped chrF rescaled so the deduplicated native-speaker ceiling reads 100, drawn LLM-benchmark style with confidence whiskers. The raw chrF table moved under the chart; nothing was removed and no score is capped.",
-            },
-          ].map((e) => (
-            <li
-              key={e.date}
-              className="rounded-md border border-border bg-surface p-4 text-sm leading-relaxed text-text-secondary"
-            >
-              <span className="font-mono text-xs text-accent-text">
-                {e.date}
-              </span>
-              <p className="mt-1">{e.text}</p>
-            </li>
-          ))}
         </ul>
       </section>
     </div>

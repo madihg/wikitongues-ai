@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isRubricV2Axis, RUBRIC_VERSION } from "@/lib/buckets";
-import { sanitizeFailureTags, failureTagSides } from "@/lib/failure-tags";
+import {
+  sanitizeFailureTags,
+  failureTagSides,
+  missingFailureTagSides,
+} from "@/lib/failure-tags";
 import { sanitizeDialect } from "@/lib/dialects";
 import {
   diffToSegments,
@@ -32,9 +36,19 @@ import type { Prisma } from "@prisma/client";
  * HOW models fail. Unknown tag keys are DROPPED rather than rejected - a stale
  * client must never 500 an annotator's episode.
  *
- * The explanation is encouraged but has NO minimum length (2026-07-02 call).
- * Demo-session submissions are flagged isDemo=true and excluded everywhere
- * training data is built.
+ * 2026-08-28 rework (Halim's call - the no-tab flow): two things became
+ * REQUIRED, validated here so no client can drift around them:
+ *   - at least one failure tag on every side the verdict rejects (the loser
+ *     on a/b, both sides on both_inadequate; tie requires none) - the same
+ *     pure rule the episode's Continue gate uses (missingFailureTagSides);
+ *   - an English rationale on every OutputEdit this episode saves ("explain
+ *     why you made these corrections") - eleven corrections shipped with a
+ *     null rationale under the optional regime, which is zero teaching
+ *     signal. Enrichment (segments, reason tags) stays never-rejecting.
+ *
+ * The verdict-level explanation is encouraged but has NO minimum length
+ * (2026-07-02 call). Demo-session submissions are flagged isDemo=true and
+ * excluded everywhere training data is built.
  */
 
 const WINNERS = ["a", "b", "tie", "both_inadequate"] as const;
@@ -170,6 +184,28 @@ export async function POST(req: Request) {
     conf = confidence;
   }
 
+  // Failure tags. Unknown keys are dropped (never a 500), and tags are kept
+  // only for the sides the pick actually offers them on - so a client that
+  // leaves stale chips selected after switching the winner can't record "the
+  // winning output is not Igala". On the sides the verdict REJECTS, at least
+  // one surviving tag is required (2026-08-28 rework): the WHY is the signal,
+  // and the sanitized set is what's checked, so all-unknown-keys fails too.
+  const sides = failureTagSides(win);
+  const tagsA = sides.a ? sanitizeFailureTags(failureTagsA) : [];
+  const tagsB = sides.b ? sanitizeFailureTags(failureTagsB) : [];
+  const missingTags = missingFailureTagSides(win, tagsA, tagsB);
+  if (missingTags.a || missingTags.b) {
+    return NextResponse.json(
+      {
+        error:
+          win === "both_inadequate"
+            ? "Pick at least one failure tag on each output - what is wrong with it?"
+            : "Pick at least one failure tag on the losing output - why did it lose?",
+      },
+      { status: 400 },
+    );
+  }
+
   // Rubric is required when there is a single winner; ignored otherwise.
   // Every axis must be answered: a 0-5 score or an explicit N/A (null),
   // and at least one axis must carry a real score.
@@ -240,14 +276,6 @@ export async function POST(req: Request) {
   }
 
   const winnerOutput = win === "a" ? outputA : win === "b" ? outputB : null;
-
-  // Failure tags. Unknown keys are dropped (never a 400/500), and tags are kept
-  // only for the sides the pick actually offers them on - so a client that
-  // leaves stale chips selected after switching the winner can't record "the
-  // winning output is not Igala".
-  const sides = failureTagSides(win);
-  const tagsA = sides.a ? sanitizeFailureTags(failureTagsA) : [];
-  const tagsB = sides.b ? sanitizeFailureTags(failureTagsB) : [];
 
   const ops: Prisma.PrismaPromise<unknown>[] = [
     // select only id - RETURNING all scalars 500s whenever the deployed client
@@ -322,6 +350,22 @@ export async function POST(req: Request) {
       typeof e.correctedText === "string" ? nfc(e.correctedText.trim()) : "";
     const originalNfc = target ? nfc(target.outputText) : "";
     if (target && corrected && corrected !== originalNfc.trim()) {
+      // 2026-08-28 rework: a correction without its English "why" is half a
+      // correction - required here, not just in the UI. Presence only (the
+      // client nudges a sentence); enrichment below stays never-rejecting.
+      const rationale =
+        typeof e.rationale === "string" && e.rationale.trim()
+          ? e.rationale.trim()
+          : null;
+      if (!rationale) {
+        return NextResponse.json(
+          {
+            error:
+              "Explain in English why you made these corrections - a sentence is enough.",
+          },
+          { status: 400 },
+        );
+      }
       const segs =
         sanitizeSegments(e.segments, originalNfc, corrected) ??
         diffToSegments(originalNfc, corrected);
@@ -336,7 +380,7 @@ export async function POST(req: Request) {
             bucket,
             originalText: originalNfc,
             correctedText: corrected,
-            rationale: typeof e.rationale === "string" ? e.rationale : null,
+            rationale,
             segments: segmentsEnvelope(
               segs,
             ) as unknown as Prisma.InputJsonValue,

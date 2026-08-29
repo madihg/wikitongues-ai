@@ -170,7 +170,12 @@ function fakePrisma(
         // the corpus-wide counts so a query that dropped the pool filter
         // would be caught by the numbers, not just the recorded WHERE.
         if (where.modelOutputA) {
-          return where.winner === "both_inadequate" ? 1 : 3;
+          if (where.winner === "both_inadequate") return 1;
+          // Decided wins: winner in ["a","b"]. 1 + 1 < 3, so one pool
+          // comparison is a tie - deriving decided by subtraction instead of
+          // querying it would be caught here.
+          if (where.winner) return 1;
+          return 3;
         }
         return where.winner === "both_inadequate" ? 6 : 7;
       },
@@ -257,6 +262,7 @@ describe("computeMethodMetrics - corpus and benchmark shape", () => {
       pairwiseBothInadequate: 6,
       poolComparisons: 3,
       poolBothInadequate: 1,
+      poolDecided: 1,
       parallelPairs: 10,
       lexEntries: 5,
       // annA appears in two signal types; the union counts people, not rows.
@@ -269,7 +275,7 @@ describe("computeMethodMetrics - corpus and benchmark shape", () => {
     const poolCounts = calls.filter(
       (c) => c.model === "pairwise.count" && c.args.where?.modelOutputA,
     );
-    expect(poolCounts).toHaveLength(2);
+    expect(poolCounts).toHaveLength(3);
     for (const call of poolCounts) {
       expect(call.args.where?.isDemo).toBe(false);
       expect(call.args.where?.modelOutputA).toEqual({
@@ -281,6 +287,15 @@ describe("computeMethodMetrics - corpus and benchmark shape", () => {
     }
     expect(
       poolCounts.filter((c) => c.args.where?.winner === "both_inadequate"),
+    ).toHaveLength(1);
+    // Decided wins must be an explicit winner-in-["a","b"] query, so ties can
+    // never be counted as decided.
+    expect(
+      poolCounts.filter(
+        (c) =>
+          JSON.stringify(c.args.where?.winner) ===
+          JSON.stringify({ in: ["a", "b"] }),
+      ),
     ).toHaveLength(1);
   });
 
@@ -418,6 +433,7 @@ describe("pure helpers", () => {
     expect(approachLabel("rag", null)).toBe("retrieval v1");
     expect(approachLabel("rag", "rag-v2")).toBe("retrieval v2");
     expect(approachLabel("rag", "rag-v3")).toBe("retrieval v3");
+    expect(approachLabel("rag", "rag-v4")).toBe("retrieval v4");
     expect(approachLabel("sft", null)).toBe("fine-tuned");
     expect(approachLabel("dpo", null)).toBe("fine-tuned");
     expect(approachLabel("continued_pretrain", null)).toBe("other");

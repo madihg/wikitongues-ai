@@ -8,9 +8,14 @@ import { canAccess } from "@/lib/personas";
 export function RoleGuard({
   allowedRoles,
   children,
+  fallback = "/",
 }: {
   allowedRoles: string[];
   children: React.ReactNode;
+  /** Where a signed-in-but-not-allowed user lands. Defaults to the home
+   *  redirect; pages that have a better "this is where your work moved"
+   *  destination (e.g. /annotator/corrections -> the annotate flow) pass it. */
+  fallback?: string;
 }) {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -27,9 +32,9 @@ export function RoleGuard({
     }
 
     if (!allowed) {
-      router.push("/");
+      router.push(fallback);
     }
-  }, [session, status, allowed, router]);
+  }, [session, status, allowed, router, fallback]);
 
   if (status === "loading") {
     return (

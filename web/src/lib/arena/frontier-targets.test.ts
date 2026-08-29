@@ -101,9 +101,9 @@ describe("FRONTIER_TARGETS", () => {
 });
 
 describe("servingModeFor", () => {
-  it("mirrors the chat route's branch: rag-v2/rag-v3 label wins over ragEnabled", () => {
-    // Same precedence as src/app/api/arena/chat/route.ts, where the v2/v3
-    // path is selected on versionLabel alone.
+  it("mirrors the chat route's branch: rag-v2/rag-v3/rag-v4 label wins over ragEnabled", () => {
+    // Same precedence as src/app/api/arena/chat/route.ts, where the
+    // versioned paths are selected on versionLabel alone.
     expect(servingModeFor({ ragEnabled: true, versionLabel: "rag-v2" })).toBe(
       "rag-v2",
     );
@@ -115,6 +115,12 @@ describe("servingModeFor", () => {
     );
     expect(servingModeFor({ ragEnabled: false, versionLabel: "rag-v3" })).toBe(
       "rag-v3",
+    );
+    expect(servingModeFor({ ragEnabled: true, versionLabel: "rag-v4" })).toBe(
+      "rag-v4",
+    );
+    expect(servingModeFor({ ragEnabled: false, versionLabel: "rag-v4" })).toBe(
+      "rag-v4",
     );
     expect(servingModeFor({ ragEnabled: true, versionLabel: "rag" })).toBe(
       "rag-v1",
