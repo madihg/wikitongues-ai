@@ -827,3 +827,31 @@ Annotate page help, corrections page reframed as researcher backlog.
 run on all touched files clean (full `eslint .` takes >10min here). NO
 commits. NOT done: no schema/migration needed (rationale column existed,
 never used - that was the point); WhatsApp rollout note not redrafted.
+
+## Session State (2026-08-29, evening) - PR #46 open, awaiting Halim's merge click
+
+Everything shipped-ready is committed on halim-bot/fervent-jemison-b6bb05
+(commit 12dd086) and pushed; PR #46 is open against main. The merge
+itself was permission-blocked for the agent, so HALIM MERGES IT:
+https://github.com/madihg/wikitongues-ai/pull/46. On merge, Vercel
+deploys the app and /api/public/method-metrics goes live, which lights
+up the live numbers on the marketing page.
+
+Already live (separate repo, pushed this session): the public
+How-it-works page at https://wikitongues-ai-site.vercel.app/how-it-works/
+(commits 136f46b + cd0b663 in wikitongues-web-ai). Its changelog is
+byte-pinned to the app's CHANGELOG constant (sha256 test); until the
+app deploys, the page shows its "live numbers unavailable" state by
+design. The app page carries the external arrow CTA to it.
+
+Provenance stands corrected everywhere (see the 2026-08-29 correction
+note above): GRN is the only documented grant; JWAL unblocks at the
+Aug 31 Salem call (get a one-line email confirmation after); Egbunu
+and Arokoyo need first contact; PanLex waits on Long Now. Ingestion
+scripts run the same hour a written grant lands.
+
+Owed and delivered this session: the WhatsApp message about the
+in-episode correction flow (in chat, send AFTER merging PR #46).
+Still open: v4 benchmark generation on the frozen 43 (needs a valid
+Anthropic key in web/.env.local for the Claude arm plus a funded run);
+the Bible-for-Children font-run decode; train-queue-fill remainder.
