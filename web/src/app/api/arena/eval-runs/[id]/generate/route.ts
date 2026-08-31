@@ -5,8 +5,10 @@ import { generateForCandidate, type RagChunk } from "@/lib/arena/providers";
 import { searchRag } from "@/lib/rag";
 import { estimateGenerationCostUsd, roundUsd } from "@/lib/arena/pricing";
 import { buildRetrievalV2 } from "@/lib/arena/retrieval-v2";
+import { buildRetrievalV4 } from "@/lib/arena/retrieval-v4";
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
+import { IGALA_SYSTEM_V4, buildUserTurnV4 } from "@/lib/generation-prompt-v4";
 
 /**
  * Generate the candidate's answers on the frozen held-out bank. Uses the
@@ -60,7 +62,25 @@ export async function POST(
     try {
       let result;
       let ragContextIds: string[];
-      if (
+      if (candidate.versionLabel === "rag-v4") {
+        // The v4 serving path: v2's composition plus the corrections block
+        // and the register-guarded, source-diversified parallel retrieval,
+        // under IGALA_SYSTEM_V4. Its own buildRetrievalV4 call - never shared
+        // with v2/v3, whose composition is frozen for comparability. The
+        // audit trail gains edit:<id> entries for served corrections.
+        const v4 = await buildRetrievalV4(prisma, {
+          promptId: prompt.promptId,
+          text: prompt.text,
+          bucket: prompt.bucket,
+          isHoldout: prompt.isHoldout,
+        });
+        result = await generateForCandidate(candidate, {
+          userMessage: buildUserTurnV4(prompt.text, v4, prompt.bucket),
+          goldExamples: v4.exampleTurns,
+          systemPromptOverride: IGALA_SYSTEM_V4,
+        });
+        ragContextIds = v4.contextIds;
+      } else if (
         candidate.versionLabel === "rag-v2" ||
         candidate.versionLabel === "rag-v3"
       ) {

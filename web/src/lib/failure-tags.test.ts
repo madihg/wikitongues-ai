@@ -7,7 +7,9 @@ import {
   editReasonTagLabel,
   failureTagLabel,
   failureTagSides,
+  failureTagsSatisfy,
   isFailureTag,
+  missingFailureTagSides,
   sanitizeEditReasonTags,
   sanitizeFailureTags,
 } from "./failure-tags";
@@ -149,6 +151,63 @@ describe("failureTagSides", () => {
   it("never offers tags on the winning side", () => {
     expect(failureTagSides("a").a).toBe(false);
     expect(failureTagSides("b").b).toBe(false);
+  });
+});
+
+describe("missingFailureTagSides / failureTagsSatisfy (the required WHY, 2026-08-28 rework)", () => {
+  it("winner a: the losing side B must carry at least one tag", () => {
+    expect(missingFailureTagSides("a", [], [])).toEqual({ a: false, b: true });
+    expect(missingFailureTagSides("a", [], ["wrong_language"])).toEqual({
+      a: false,
+      b: false,
+    });
+    expect(failureTagsSatisfy("a", [], [])).toBe(false);
+    expect(failureTagsSatisfy("a", [], ["wrong_language"])).toBe(true);
+  });
+
+  it("winner b: the losing side A must carry at least one tag", () => {
+    expect(missingFailureTagSides("b", [], [])).toEqual({ a: true, b: false });
+    expect(failureTagsSatisfy("b", ["grammar"], [])).toBe(true);
+    expect(failureTagsSatisfy("b", [], ["grammar"])).toBe(false); // wrong side
+  });
+
+  it("both_inadequate: BOTH sides must carry at least one tag each", () => {
+    expect(missingFailureTagSides("both_inadequate", [], [])).toEqual({
+      a: true,
+      b: true,
+    });
+    expect(
+      missingFailureTagSides("both_inadequate", ["not_igala"], []),
+    ).toEqual({ a: false, b: true });
+    expect(
+      failureTagsSatisfy("both_inadequate", ["not_igala"], ["grammar"]),
+    ).toBe(true);
+    expect(failureTagsSatisfy("both_inadequate", ["not_igala"], [])).toBe(
+      false,
+    );
+  });
+
+  it("tie and no-pick require nothing - there is no rejected output to diagnose", () => {
+    expect(missingFailureTagSides("tie", [], [])).toEqual({
+      a: false,
+      b: false,
+    });
+    expect(failureTagsSatisfy("tie", [], [])).toBe(true);
+    expect(failureTagsSatisfy(null, [], [])).toBe(true);
+    expect(failureTagsSatisfy(undefined, [], [])).toBe(true);
+  });
+
+  it("tags on a non-required side never satisfy a missing required side", () => {
+    // The winner's own (stale) chips can't stand in for the loser's diagnosis.
+    expect(failureTagsSatisfy("a", ["grammar", "not_igala"], [])).toBe(false);
+  });
+
+  it("agrees with failureTagSides: required sides are exactly the offered sides", () => {
+    for (const winner of ["a", "b", "tie", "both_inadequate", null]) {
+      const offered = failureTagSides(winner);
+      const missing = missingFailureTagSides(winner, [], []);
+      expect(missing).toEqual(offered); // no tags at all -> missing == offered
+    }
   });
 });
 

@@ -1,6 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
-import { retrieveGoldExamples, type GoldPoolEntry } from "./gold-retrieval";
+import {
+  retrieveGoldExamples,
+  type GoldPoolEntry,
+  type RetrievedGold,
+} from "./gold-retrieval";
 import {
   buildProtectedSet,
   filterAssembled,
@@ -40,13 +44,16 @@ import { toOrthography } from "@/lib/lexicon-parse";
  */
 
 // ─── the knobs ──────────────────────────────────────────────────────────────
+// Exported (2026-08-28) because the v4 serving path (retrieval-v4.ts) must
+// share these caps exactly - a v2/v4 delta that silently moved a knob would
+// stop being attributable to the v4 design changes.
 
 /** Dictionary lines served per prompt. DiPMT caps around here too. */
-const MAX_HEADWORDS = 20;
+export const MAX_HEADWORDS = 20;
 /** Senses per headword. DiPMT's cap: more senses is noise, not coverage. */
-const MAX_SENSES = 3;
+export const MAX_SENSES = 3;
 /** Parallel pairs per prompt, when the prompt wants structure at all. */
-const PARALLEL_K = 4;
+export const PARALLEL_K = 4;
 /**
  * Community gold exemplars per prompt. 8, matching v1's proven setting - the
  * first sniff run served 4 to make room for the new blocks and lost 6.8
@@ -54,7 +61,7 @@ const PARALLEL_K = 4;
  * prompts the gold exemplars are the strongest signal there is; making room
  * at their expense was the wrong trade.
  */
-const GOLD_K = 8;
+export const GOLD_K = 8;
 
 /**
  * Should this prompt get parallel sentence examples at all?
@@ -299,7 +306,7 @@ export interface RetrievalV2Result {
   leakReport: LeakReport;
 }
 
-interface LexRow {
+export interface LexRow {
   id: string;
   headword: string;
   gloss: string;
@@ -307,7 +314,7 @@ interface LexRow {
   confidence: number;
 }
 
-interface ParallelRow {
+export interface ParallelRow {
   id: string;
   igala: string;
   english: string;
@@ -320,7 +327,7 @@ function senseOrder(a: LexRow, b: LexRow): number {
 }
 
 /** Keep one row per headword - the same form from two sources is one sense. */
-function dedupeByHeadword(rows: LexRow[]): LexRow[] {
+export function dedupeByHeadword(rows: LexRow[]): LexRow[] {
   const seen = new Set<string>();
   const out: LexRow[] = [];
   for (const r of [...rows].sort(senseOrder)) {
@@ -331,38 +338,22 @@ function dedupeByHeadword(rows: LexRow[]): LexRow[] {
   return out;
 }
 
+/** One dictionary candidate: the queried English word plus a retrieved sense. */
+export interface DictCandidate {
+  word: string;
+  sense: LexRow;
+}
+
 /**
- * Build the full v2 retrieval context for one prompt.
- *
- * Prisma is injected so the module is unit-testable with a recorder/fake, the
- * same pattern as collectEvalBundle (see collect.test.ts).
+ * The dictionary leg, extracted verbatim from buildRetrievalV2 (2026-08-28) so
+ * the v4 path (retrieval-v4.ts) serves the IDENTICAL lookup - same queries,
+ * same fallback rule, same caps. Behavior is pinned by retrieval-v2.test.ts;
+ * any change here changes BOTH serving paths, on purpose.
  */
-export async function buildRetrievalV2(
+export async function retrieveDictCandidates(
   prisma: PrismaClient,
-  prompt: RetrievalV2Prompt,
-): Promise<RetrievalV2Result> {
-  const words = contentWords(prompt.text);
-
-  // The Prompt row resolves the slug to the cuid the gold pool is keyed on,
-  // and carries the prompt's own benchmark gold for the leak guard's
-  // protected set. consentBenchmark gold is what the eval harness scores
-  // against (collect.ts), so it is exactly the set whose leakage would turn a
-  // measurement into an answer-key copy. A synthetic promptId ("__chat__")
-  // resolves to nothing: empty protected set, and the self-exclusion rule in
-  // gold retrieval simply has nothing to match, which is correct - chat is
-  // guarded by isHoldout=true instead.
-  const promptRow = await prisma.prompt.findUnique({
-    where: { promptId: prompt.promptId },
-    select: {
-      id: true,
-      coldAuthorAnswers: {
-        where: { consentBenchmark: true, isDemo: false },
-        select: { answerText: true },
-      },
-    },
-  });
-
-  // ── 1. DICTIONARY: exact glossFolded match, then prefix as fallback ──────
+  words: string[],
+): Promise<DictCandidate[]> {
   // Lookup is LEXICAL on the English side because that is where the query has
   // signal: the prompts are English, and rag-design.md measured every
   // production embedder at exactly chance on the Igala side.
@@ -413,7 +404,7 @@ export async function buildRetrievalV2(
   // rather than being backfilled by the next candidate - backfilling would
   // let the protected content steer which entries get served, and the guard
   // must never shape the context it polices.
-  const dictCandidates: { word: string; sense: LexRow }[] = [];
+  const dictCandidates: DictCandidate[] = [];
   for (const word of words) {
     if (dictCandidates.length >= MAX_HEADWORDS * MAX_SENSES) break;
     const senses = dedupeByHeadword(sensesByWord.get(word) ?? []).slice(
@@ -422,6 +413,120 @@ export async function buildRetrievalV2(
     );
     for (const sense of senses) dictCandidates.push({ word, sense });
   }
+  return dictCandidates;
+}
+
+/** Header line of the v2 parallel block. Static text: Scope A applies. */
+export const PARALLEL_INTRO_V2 =
+  "These Igala-English pairs show how Igala sentences are BUILT. Imitate their structure - word order, sentence length - when composing your answer:";
+
+/** Header line of the dictionary block. Static text: Scope A applies. */
+export const DICTIONARY_INTRO =
+  "Igala dictionary entries for the words in this question. Use these exact forms, spelled exactly as written:";
+
+/**
+ * Render the dictionary block from the leak-guard-surviving candidates.
+ * Extracted verbatim from buildRetrievalV2 (2026-08-28), shared with v4.
+ */
+export function renderDictionaryBlock(
+  words: string[],
+  keptDict: DictCandidate[],
+): { dictionaryBlock: string; dictIds: string[] } {
+  const dictLines: string[] = [];
+  const dictIds: string[] = [];
+  for (const word of words) {
+    if (dictLines.length >= MAX_HEADWORDS) break;
+    const senses = keptDict.filter((c) => c.word === word).map((c) => c.sense);
+    if (senses.length === 0) continue;
+    dictLines.push(renderDictionaryLine(word, senses));
+    dictIds.push(...senses.map((s) => `lex:${s.id}`));
+  }
+  const dictionaryBlock =
+    dictLines.length === 0 ? "" : [DICTIONARY_INTRO, ...dictLines].join("\n");
+  return { dictionaryBlock, dictIds };
+}
+
+/**
+ * The gold-exemplar leg, extracted verbatim from buildRetrievalV2
+ * (2026-08-28), shared with v4. The caller resolves the query's promptId (the
+ * cuid when the prompt exists, else the slug - which matches no pool entry,
+ * leaving the id-level guard inert and the isHoldout flag as the active
+ * defence). retrieveGoldExamples owns the contamination rules.
+ */
+export async function retrieveGuardedGold(
+  prisma: PrismaClient,
+  query: {
+    promptId: string;
+    text: string;
+    bucket: string | null;
+    isHoldout: boolean;
+  },
+): Promise<RetrievedGold[]> {
+  const goldRows = await prisma.coldAuthorAnswer.findMany({
+    where: { isDemo: false, consentTraining: true },
+    select: {
+      id: true,
+      promptId: true,
+      answerText: true,
+      bucket: true,
+      consentTraining: true,
+      isDemo: true,
+      verificationStatus: true,
+      prompt: {
+        select: { promptId: true, text: true, isHoldout: true, bucket: true },
+      },
+    },
+  });
+  const goldPool: GoldPoolEntry[] = goldRows.map((r) => ({
+    id: r.id,
+    promptId: r.promptId,
+    promptRef: r.prompt.promptId,
+    promptText: r.prompt.text,
+    answerText: r.answerText,
+    bucket: r.bucket ?? r.prompt.bucket,
+    isHoldout: r.prompt.isHoldout,
+    isDemo: r.isDemo,
+    consentTraining: r.consentTraining,
+    verificationStatus: r.verificationStatus,
+  }));
+  return retrieveGoldExamples(query, goldPool, { k: GOLD_K }).examples;
+}
+
+/**
+ * Build the full v2 retrieval context for one prompt.
+ *
+ * Prisma is injected so the module is unit-testable with a recorder/fake, the
+ * same pattern as collectEvalBundle (see collect.test.ts).
+ */
+export async function buildRetrievalV2(
+  prisma: PrismaClient,
+  prompt: RetrievalV2Prompt,
+): Promise<RetrievalV2Result> {
+  const words = contentWords(prompt.text);
+
+  // The Prompt row resolves the slug to the cuid the gold pool is keyed on,
+  // and carries the prompt's own benchmark gold for the leak guard's
+  // protected set. consentBenchmark gold is what the eval harness scores
+  // against (collect.ts), so it is exactly the set whose leakage would turn a
+  // measurement into an answer-key copy. A synthetic promptId ("__chat__")
+  // resolves to nothing: empty protected set, and the self-exclusion rule in
+  // gold retrieval simply has nothing to match, which is correct - chat is
+  // guarded by isHoldout=true instead.
+  const promptRow = await prisma.prompt.findUnique({
+    where: { promptId: prompt.promptId },
+    select: {
+      id: true,
+      coldAuthorAnswers: {
+        where: { consentBenchmark: true, isDemo: false },
+        select: { answerText: true },
+      },
+    },
+  });
+
+  // ── 1. DICTIONARY: exact glossFolded match, then prefix as fallback ──────
+  // Extracted to retrieveDictCandidates (shared with the v4 path); the
+  // queries, fallback rule and caps are the ones documented on that function.
+  const dictCandidates = await retrieveDictCandidates(prisma, words);
 
   // ── 2. PARALLEL EXAMPLES: full-text overlap on the English side ──────────
   // plainto_tsquery over the generated englishTsv column (DB-only, GIN
@@ -452,46 +557,16 @@ export async function buildRetrievalV2(
     : [];
 
   // ── 3. GOLD EXEMPLARS: the existing guarded retrieval, k=GOLD_K ───────────────
-  const goldRows = await prisma.coldAuthorAnswer.findMany({
-    where: { isDemo: false, consentTraining: true },
-    select: {
-      id: true,
-      promptId: true,
-      answerText: true,
-      bucket: true,
-      consentTraining: true,
-      isDemo: true,
-      verificationStatus: true,
-      prompt: {
-        select: { promptId: true, text: true, isHoldout: true, bucket: true },
-      },
-    },
+  // Extracted to retrieveGuardedGold (shared with the v4 path).
+  const gold = await retrieveGuardedGold(prisma, {
+    // The cuid when the prompt exists, else the slug itself - which matches
+    // no pool entry, leaving the id-level guard inert and the isHoldout
+    // flag as the active defence.
+    promptId: promptRow?.id ?? prompt.promptId,
+    text: prompt.text,
+    bucket: prompt.bucket,
+    isHoldout: prompt.isHoldout,
   });
-  const goldPool: GoldPoolEntry[] = goldRows.map((r) => ({
-    id: r.id,
-    promptId: r.promptId,
-    promptRef: r.prompt.promptId,
-    promptText: r.prompt.text,
-    answerText: r.answerText,
-    bucket: r.bucket ?? r.prompt.bucket,
-    isHoldout: r.prompt.isHoldout,
-    isDemo: r.isDemo,
-    consentTraining: r.consentTraining,
-    verificationStatus: r.verificationStatus,
-  }));
-  const gold = retrieveGoldExamples(
-    {
-      // The cuid when the prompt exists, else the slug itself - which matches
-      // no pool entry, leaving the id-level guard inert and the isHoldout
-      // flag as the active defence.
-      promptId: promptRow?.id ?? prompt.promptId,
-      text: prompt.text,
-      bucket: prompt.bucket,
-      isHoldout: prompt.isHoldout,
-    },
-    goldPool,
-    { k: GOLD_K },
-  ).examples;
 
   // ── 4. LEAK GUARD over every piece, holdout prompts only ─────────────────
   // The guard checks each piece's SERVED text (headword + gloss for lexicon,
@@ -530,29 +605,14 @@ export async function buildRetrievalV2(
 
   // ── 5. RENDER ────────────────────────────────────────────────────────────
   const keptDict = dictCandidates.filter((c) => kept(`lex:${c.sense.id}`));
-  const dictLines: string[] = [];
-  const dictIds: string[] = [];
-  for (const word of words) {
-    if (dictLines.length >= MAX_HEADWORDS) break;
-    const senses = keptDict.filter((c) => c.word === word).map((c) => c.sense);
-    if (senses.length === 0) continue;
-    dictLines.push(renderDictionaryLine(word, senses));
-    dictIds.push(...senses.map((s) => `lex:${s.id}`));
-  }
-  const dictionaryBlock =
-    dictLines.length === 0
-      ? ""
-      : [
-          "Igala dictionary entries for the words in this question. Use these exact forms, spelled exactly as written:",
-          ...dictLines,
-        ].join("\n");
+  const { dictionaryBlock, dictIds } = renderDictionaryBlock(words, keptDict);
 
   const keptPairs = pairRows.filter((p) => kept(`pp:${p.id}`));
   const parallelBlock =
     keptPairs.length === 0
       ? ""
       : [
-          "These Igala-English pairs show how Igala sentences are BUILT. Imitate their structure - word order, sentence length - when composing your answer:",
+          PARALLEL_INTRO_V2,
           ...keptPairs.map((p) => `English: ${p.english}\nIgala: ${p.igala}`),
         ].join("\n\n");
 

@@ -16,7 +16,7 @@ import {
   goldFirstFor,
   laneFor,
 } from "@/lib/pairing";
-import { loadCorrectionInputs, loadQueueInputs } from "@/lib/queue-input";
+import { loadQueueInputs } from "@/lib/queue-input";
 
 /**
  * Serve the next annotation task. The response carries everything the
@@ -64,25 +64,15 @@ export async function GET(req: Request) {
 
   const { byPromptId, queuePrompts } = await loadQueueInputs();
 
-  // Live corrections-lane size for the all-caught-up screen's cross-link
-  // (never computed in demo mode - the lane is hidden there in v1). Computed
-  // lazily: only the complete paths pay for it.
-  const correctionsWaiting = async (): Promise<number> => {
-    if (isDemo) return 0;
-    const { correctionInputs } = await loadCorrectionInputs(annotatorId);
-    return computeQueueState(
-      queuePrompts,
-      new Set(),
-      new Set(),
-      correctionInputs,
-    ).corrections.length;
-  };
-
+  // (2026-08-28 rework: the all-caught-up screen's corrections cross-link is
+  // gone - corrections now happen inside the episode - so this route no
+  // longer computes the lane size. Stale clients read a missing field as 0
+  // and simply render no link. The lane itself still serves researchers via
+  // /api/edits/next and /api/annotator/summary.)
   if (queuePrompts.length === 0) {
     return NextResponse.json({
       complete: true,
       message: "No prompts with model outputs available yet.",
-      correctionsWaiting: await correctionsWaiting(),
     });
   }
 
@@ -185,6 +175,5 @@ export async function GET(req: Request) {
   return NextResponse.json({
     complete: true,
     progress: { completed, total },
-    correctionsWaiting: await correctionsWaiting(),
   });
 }

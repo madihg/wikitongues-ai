@@ -615,7 +615,243 @@ agreement on the email thread (Lydia + Daniel cc'd) is the authority.
 
 Crubadan: CLOSED FOR CAUSE. Scannell no longer holds the data, and the
 crawl metadata shows all 17 Igala documents were watchtower.org content
+
 - squarely under the standing JW rule (JW300 precedent). A crawler's CC
-BY label cannot relicense Watch Tower's text; Wayback reachability is
-not a licence. Nothing was ever ingested; nothing will be. The honest
-corpus ceiling loses the (never-verified) 13.9k words.
+  BY label cannot relicense Watch Tower's text; Wayback reachability is
+  not a licence. Nothing was ever ingested; nothing will be. The honest
+  corpus ceiling loses the (never-verified) 13.9k words.
+
+## Integrate pass after the permission-harvest acquire wave (2026-08-29)
+
+The acquire wave landed RAW ASSETS ONLY, zero database rows. Verified
+directly against Supabase: LexEntry 2,104 (newest row 2026-08-12),
+ParallelPair 30,907 (newest 2026-08-12), RagEntry 84 (newest 2026-08-09)
+
+- identical to the pre-wave totals in the 2026-08-12 session notes.
+  Assets on disk: GRN "Words of Life" MP3 zip (data/audio/grn-igala/,
+  future ASR seed, not processed) and 6 Bible-for-Children PDFs
+  (data/pdfs/bible-for-children/, extraction DEFEATED by the
+  underline-subset font trick - see the corpus ledger's font-forensics
+  note; nothing from them may enter any store).
+
+Re-measured: frozen-prompt content-word coverage 40/86 = 0.465
+(build-lexicon-curated.ts --dry-run) - unchanged from 2026-08-12. Leak
+guard: checkStatic sweep over every LexEntry/ParallelPair/RagEntry row
+created after 2026-08-13 against the real protected set (238
+consentBenchmark gold answers over the 43 frozen prompts) = scan set 0
+rows, 0 hits, nothing quarantined.
+
+Ledger (tasks/igala-corpus-sources.md) CORRECTED 2026-08-29: an earlier
+edit had stamped PanLex, JWAL, Egbunu and Arokoyo with "permission
+granted on a call"; a records check (Gmail + Drive + anarlog meeting
+notes) found no corroboration and in three cases direct contradiction.
+Documented reality per source: GRN = signed agreement 2026-08-27 in
+Drive (the only real grant); Ejeba/JWAL = warm reply 2026-08-14, call
+scheduled 2026-08-31, no grant yet; PanLex = the ask NEVER REACHED
+them (info@panlex.org bounced permanently 2026-08-16; Long Now
+escalation services@longnow.org 2026-08-27 unanswered); Egbunu and
+Arokoyo = no contact exists at all. The ledger rows, both PROVENANCE.md
+files, and the /how-it-works Aug 29 changelog entry now say exactly
+this. Nothing was ever ingested under the uncorroborated claims.
+
+NEXT before any ingestion of these sources: a written grant on file
+per source (an email reply or signed doc in Drive), named to the
+source. The Aug 31 Salem call is the natural moment for the JWAL ask;
+Egbunu and Arokoyo need first-contact outreach; PanLex waits on Long
+Now. Then: ingestion scripts in web/prisma/ (idempotent, create-only,
+seed-rag-igala-concord.ts conventions) with a provenance string citing
+the actual written grant, a 100-row language-ID sample where text
+claims to be Igala, toOrthography or a notation key for phonemic
+notation, and a checkStatic pass before anything reaches retrieval.
+PanLex API is still NXDOMAIN; BFC still needs content-stream font-run
+parsing or underline-aware OCR.
+
+## Session State (2026-08-28) - SERVING v4 shipped (rag-v4: meaning-first METHOD, corrections retrieval, register-guarded diversified pairs)
+
+**Store totals measured at build time (the harvest has NOT landed yet):**
+LexEntry 2,104 (Bible alignment-induced 1,262 / chikhapo 482 / Koelle 224 /
+Wiktionary 136); ParallelPair 30,907 - Bible IGL70 is still the ONLY source
+family (no JWAL sentences, no proverbs, no PanLex/Arokoyo/Omachonu rows);
+RagEntry 84 (70 igala + 13 quarantined_seed + 1 partly-english); OutputEdit 14
+rows, 13 on train prompts, 0 with segments and 0 with rationale (all predate
+or bypass suggesting mode; a concurrent 2026-08-28 session is making the
+rationale REQUIRED going forward). v4 was built to exploit the enriched
+stores the moment they land while degrading exactly to today's state.
+
+**What shipped (versionLabel 'rag-v4'; v2/v3 paths byte-identical, pinned by
+their untouched tests):**
+
+- `web/src/lib/generation-prompt-v4.ts` - IGALA_SYSTEM_V4 (~860 tokens,
+  budget test <= 900): METHOD rewritten meaning-first (Agnes: word-by-word
+  "will not get what it is"; dictionary serves the ANSWER's words; "leave out
+  what the examples leave out" licenses pro-drop by deferring to the data
+  layer + describe-or-borrow-never-coin for lexical gaps); v3's ten A/B
+  grammar lines verbatim PLUS the dates line (ordinal day/month per R5.3-B,
+  years in digits as the non-fabricating representation - measured: 0 digits
+  in 30,907 verses, 0 spelled years in 884 train answers) and the closing
+  "Every small word must have a job" gate (R7.1-B generalized); NEVER WRITE
+  gains "These are Igbo, not Igala: the market-day names Orie and Nkwọ"
+  (section 11 #10 - only the two forms unique to Igbo; Eke/Afọ are
+  diacritic-near the attested Igala week and stay unbanned). buildUserTurnV4
+  orders corrections -> pairs -> dictionary -> question (DiPMT seat kept).
+- `web/src/lib/arena/retrieval-v4.ts` - buildRetrievalV4: dictionary + gold
+  legs IMPORTED from retrieval-v2 (extracted there as retrieveDictCandidates
+  / renderDictionaryBlock / retrieveGuardedGold - additive refactor, v2
+  tests still pin behavior); parallel leg adds the non-Bible reservation
+  (NON_BIBLE_RESERVE=2 of PARALLEL_K=4, WHY register: 30,907 Bible verses
+  must not drown the harvest's higher-register rows; second bounded SQL query
+  `source !~* '(igl70|bible)'` + pure diversifyParallel, degrades to exactly
+  the v2 ranking on today's Bible-only store) and the register guard
+  PARALLEL_INTRO_V4 ("copy only the sentence SHAPE... spell as the DICTIONARY
+  spells"); corrections leg retrieves OutputEdit rows (train-split prompts
+  only, consentTraining, self-excluded, no-op/oversize skipped) ranked by
+  English-side content-word overlap, k<=3, rendered "A model wrote / A
+  speaker corrected it to / Reason" (Reason composed from segment reasons +
+  tag labels + rationale when present - today's rows have none, line omitted);
+  every piece incl. corrections passes filterAssembled (leak guard).
+- Wiring (v3 pattern): chat route + eval-runs generate route + frontier-fill
+  (own v4Cache - retrieval differs from v2/v3 so the cache is NOT shared) +
+  servingModeFor 'rag-v4' + approachLabel "retrieval v4".
+- `scripts/register-rag-v4.ts` RUN: gpt-4-1-rag-v4, claude-opus-5-rag-v4
+  (temperature null - the sanctioned Anthropic opt-out), gemini-3-1-pro-rag-v4
+  all CREATED, parented to their v3 siblings (lineage v1->v2->v3->v4),
+  decoding copied verbatim and asserted.
+- `scripts/static-leak-check-v4.ts` - real Scope-A over IGALA_SYSTEM_V4 (whole
+  - per line) AND the static retrieval headers (corrections/parallel/dict
+    intros), v2/v3 as controls. First run FAILED (2 hits): the dates line's
+    day-noun example was a whole frozen gold answer (ig_bank_orth_010). Fixed
+    mechanically by citing the month pattern only; final: **SCOPE A: PASS**
+    against all 139 protected strings. Re-run this script after ANY edit to
+    the v4 prompt or headers.
+- Live smoke (script deleted after run): train blessing prompt served 3 real
+  blessing corrections + 4 pairs + 5 lex + 8 gold (turn ~2.7k chars); frozen
+  ig_reg_001 leak pass, 22 pieces.
+
+**Gates at handoff:** vitest 711/711 green (retrieval-v4.test.ts +
+generation-prompt-v4.test.ts new; frontier-targets + method-metrics tests
+extended); eslint 0; tsc was 0 on my tree - final tsc re-run raced a
+CONCURRENT session live-editing method-metrics.ts / the submit route (their
+editAnnotators work), so re-verify tsc once that session lands. NO commits.
+
+**Deliberately NOT done:** no benchmark generation for the v4 arms (costs
+money; run `npx tsx --env-file=.env.local scripts/frontier-fill.ts generate
+gpt-4-1-rag-v4 gemini-3-1-pro-rag-v4 claude-opus-5-rag-v4` when wanted -
+Anthropic key still invalid); /how-it-works narrative still explains only
+v0-v3 (scoreboard will label v4 rows correctly via approachLabel, but the
+story section needs a v4 stage once results exist).
+
+## Session: how-it-works slim redesign (2026-08-28, app-page workstream)
+
+Reworked `web/src/app/how-it-works/page.tsx` into the slim in-app version.
+New order: hero paragraph + live stat strip -> four-layer system diagram ->
+banner CTA ("The full story - method, scores, and the exact instructions the
+models receive", arrow-up-right inline SVG, target=_blank noopener noreferrer,
+-> https://wikitongues-ai-site.vercel.app/how-it-works) -> scoreboard bars
+(BenchmarkBars, kept for researchers) -> changelog (hoisted to module-level
+CHANGELOG const, Aug 29 GRN/PanLex entry from the concurrent session
+preserved).
+
+PARITY HOLD: the marketing /how-it-works page returned 404 at edit time and
+tasks/marketing-site-discovery.md is discovery only (no parity confirmation),
+so the long-form sections (journey v0-v3, answer assembly, verbatim v2/v3
+prompts + terminal contract, "Reading the Community Agreement Score" deep
+dive + raw chrF table, "What is being tested now") were NOT deleted - they
+sit below the changelog behind a marked divider (see the PARITY HOLD comment
+in the page). Once the public page verifiably carries them, delete from that
+divider to the end of "What is being tested now".
+
+/admin/how-it-works redirect untouched and still valid (redirects to
+/how-it-works, same route). personas.ts untouched by this workstream. No
+commits (orchestrator lands them).
+
+## Session: pairwise flow rework - corrections in-episode, no tab (2026-08-28)
+
+Halim's directive, implemented exactly: "don't do a different tab -
+corrections happen right after people choose output A or B; picking WHY is
+REQUIRED (the rubric tags beside the losing output, e.g. this is Yoruba);
+then correct the chosen output if anything needs correcting; and explain in
+English why they made these corrections."
+
+**The no-tab flow.** Annotator nav lost the Corrections entry (personas.ts);
+/annotator/corrections is now RoleGuard-gated to RESEARCHER with
+`fallback="/annotator/annotate"` (new RoleGuard prop) - annotators following
+old links land in the annotate flow. Researchers keep the standalone backlog
+lane, its nav entry, and the dashboard "Corrections Waiting" card (now inside
+the `researcher &&` block). /api/edits/* routes, loadCorrectionInputs, the
+computeQueueState corrections field, CorrectionsInterface, and all stored
+edits: untouched. /api/annotations/next no longer computes/returns
+correctionsWaiting (its only consumer, the all-caught-up cross-link, is gone;
+stale clients read the missing field as 0).
+
+**The episode sequence after a verdict** (annotation-interface.tsx, all on
+the pairwise page - one scrolling page, no modals):
+
+1. REQUIRED failure tags beside every rejected output: loser on a/b, BOTH
+   sides on both_inadequate, none on tie. Pure rule shared client/server:
+   `missingFailureTagSides` / `failureTagsSatisfy` in failure-tags.ts.
+2. SuggestingEditor seeds with the chosen output the moment A or B is picked
+   (useEffect on winner/editSeededFor; switching picks re-seeds and clears
+   correction state). Skippable ONLY via the explicit "Nothing to correct"
+   toggle (aria-pressed; typing in the editor clears it). Continue and Submit
+   both gate on `correctionResolved`.
+3. When a correction exists, an English rationale is REQUIRED (min 10 chars
+   client-side, non-empty server-side) -> OutputEdit.rationale. Same rule on
+   tie and both-inadequate-markup edits once they are made. Per-segment
+   quick-pick reason chips unchanged. hasColdGold no longer collapses the
+   editor (the explicit act replaced winnerFixOpen); it shows a context line
+   instead. Score step keeps rubric only + a three-state replay box (staged /
+   confirmed-nothing / still-open for pre-rework drafts).
+
+**API validation** (/api/annotations/submit): 400 when the sanitized tag set
+misses a required side (sanitize-then-require, so all-unknown-keys fails);
+400 when an edit would save without a non-empty rationale (rationale trimmed
+into the row). Provenance rules untouched (model_correction /
+salvage_both_inadequate - locked by test). Enrichment stays never-rejecting
+(garbage segments -> server-derived), confidence stays accepted-optional.
+EpisodeDraft gained editRationale/nothingToCorrect/tieRationale/
+markupRationale; old drafts restore with defaults and get "go back" hints
+instead of silent disabled buttons.
+
+**Tests** (new/extended): failure-tags.test.ts (required-sides rule),
+personas.test.ts (no-tab nav, researcher keeps lane),
+api/annotations/submit/route.test.ts (13 tests, mocked prisma/auth: tag 400s
+per winner, rationale 400s, trimmed rationale + provenance assertions,
+NFD-identical edit needs no rationale, garbage segments still save),
+annotation-interface.test.tsx (sequence lives in the pairwise step, no
+modals, >= 40px targets on every tappable in the sequence, no
+/annotator/corrections link), pairing.test.ts (+1: lane state survives the
+tab removal). Copy updated: episode framing card, step bar ("Why & fix"),
+Annotate page help, corrections page reframed as researcher backlog.
+
+**Gates:** tsc 0; vitest 52 files / 749 tests green (exit 0); eslint scoped
+run on all touched files clean (full `eslint .` takes >10min here). NO
+commits. NOT done: no schema/migration needed (rationale column existed,
+never used - that was the point); WhatsApp rollout note not redrafted.
+
+## Session State (2026-08-29, evening) - PR #46 open, awaiting Halim's merge click
+
+Everything shipped-ready is committed on halim-bot/fervent-jemison-b6bb05
+(commit 12dd086) and pushed; PR #46 is open against main. The merge
+itself was permission-blocked for the agent, so HALIM MERGES IT:
+https://github.com/madihg/wikitongues-ai/pull/46. On merge, Vercel
+deploys the app and /api/public/method-metrics goes live, which lights
+up the live numbers on the marketing page.
+
+Already live (separate repo, pushed this session): the public
+How-it-works page at https://wikitongues-ai-site.vercel.app/how-it-works/
+(commits 136f46b + cd0b663 in wikitongues-web-ai). Its changelog is
+byte-pinned to the app's CHANGELOG constant (sha256 test); until the
+app deploys, the page shows its "live numbers unavailable" state by
+design. The app page carries the external arrow CTA to it.
+
+Provenance stands corrected everywhere (see the 2026-08-29 correction
+note above): GRN is the only documented grant; JWAL unblocks at the
+Aug 31 Salem call (get a one-line email confirmation after); Egbunu
+and Arokoyo need first contact; PanLex waits on Long Now. Ingestion
+scripts run the same hour a written grant lands.
+
+Owed and delivered this session: the WhatsApp message about the
+in-episode correction flow (in chat, send AFTER merging PR #46).
+Still open: v4 benchmark generation on the frozen 43 (needs a valid
+Anthropic key in web/.env.local for the Claude arm plus a funded run);
+the Bible-for-Children font-run decode; train-queue-fill remainder.

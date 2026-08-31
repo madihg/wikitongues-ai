@@ -423,6 +423,26 @@ describe("computeQueueState - corrections lane", () => {
     expect(withIn.remaining).toEqual(withOut.remaining);
   });
 
+  it("the lane state survives the no-tab flow: still derivable for the researcher lane and summary card (2026-08-28 rework removed the annotator TAB, not the state)", () => {
+    // /api/edits/next and /api/annotator/summary keep calling this exact
+    // derivation after the rework - the annotator's route now redirects, but
+    // researchers still work the backlog through it, so the corrections
+    // field must keep behaving identically.
+    const state = computeQueueState(
+      catalogue,
+      done,
+      new Set(),
+      inputs([
+        ["done_editable_1", 1],
+        ["done_editable_2", 2],
+      ]),
+    );
+    expect(state.corrections.map((p) => p.promptId)).toEqual([
+      "done_editable_1",
+      "done_editable_2",
+    ]);
+  });
+
   it("only prompts with an editable count > 0 appear, in input (verdict-age) order", () => {
     const state = computeQueueState(
       catalogue,

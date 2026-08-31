@@ -28,3 +28,12 @@ data/results/*.json
 Thumbs.db
 .vercel
 .env*.local
+
+# Session/agent local state
+.claude/
+node_modules/
+
+# Raw third-party media assets: provenance files are tracked, binaries are not
+data/audio/**/*.zip
+data/audio/**/*.mp3
+data/pdfs/**/*.pdf

@@ -51,8 +51,13 @@ import {
   buildRetrievalV2,
   type RetrievalV2Result,
 } from "@/lib/arena/retrieval-v2";
+import {
+  buildRetrievalV4,
+  type RetrievalV4Result,
+} from "@/lib/arena/retrieval-v4";
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
+import { IGALA_SYSTEM_V4, buildUserTurnV4 } from "@/lib/generation-prompt-v4";
 import { estimateGenerationCostUsd, roundUsd } from "@/lib/arena/pricing";
 import {
   FRONTIER_SLUGS,
@@ -281,6 +286,11 @@ async function generate(slugs: string[]) {
   let goldPool: GoldPoolEntry[] | null = null;
   const v1Cache = new Map<string, V1Retrieval>();
   const v2Cache = new Map<string, RetrievalV2Result>();
+  // v4 caches separately from v2/v3: its retrieval composition differs
+  // (corrections block, source-diversified pairs), so sharing the v2 cache
+  // would serve v4 arms a context nobody registered - the exact drift the
+  // mode function exists to prevent.
+  const v4Cache = new Map<string, RetrievalV4Result>();
 
   const reports: CandidateReport[] = [];
 
@@ -376,7 +386,30 @@ async function generate(slugs: string[]) {
         let gen;
         let ragContextIds: string[];
 
-        if (mode === "rag-v2" || mode === "rag-v3") {
+        if (mode === "rag-v4") {
+          // The v4 leg mirrors the eval-runs generate route: buildRetrievalV4
+          // on the human slug (its leak guard keys on prompt slugs, same as
+          // v2), buildUserTurnV4, IGALA_SYSTEM_V4, gold exemplars as prior
+          // turns. The audit trail gains edit:<id> entries for corrections.
+          if (!v4Cache.has(prompt.promptId)) {
+            v4Cache.set(
+              prompt.promptId,
+              await buildRetrievalV4(prisma, {
+                promptId: prompt.promptId,
+                text: prompt.text,
+                bucket: prompt.bucket,
+                isHoldout: true,
+              }),
+            );
+          }
+          const v4 = v4Cache.get(prompt.promptId)!;
+          gen = await generateForCandidate(candidate as CandidateLike, {
+            userMessage: buildUserTurnV4(prompt.text, v4, prompt.bucket),
+            goldExamples: v4.exampleTurns,
+            systemPromptOverride: IGALA_SYSTEM_V4,
+          });
+          ragContextIds = v4.contextIds;
+        } else if (mode === "rag-v2" || mode === "rag-v3") {
           if (!v2Cache.has(prompt.promptId)) {
             v2Cache.set(
               prompt.promptId,

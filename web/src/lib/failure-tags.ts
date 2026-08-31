@@ -170,3 +170,35 @@ export function failureTagSides(winner: string | null | undefined): {
   if (winner === "b") return { a: true, b: false };
   return { a: false, b: false };
 }
+
+/**
+ * Which offered sides are still MISSING a required tag (2026-08-28 rework):
+ * after a verdict, saying WHY the rejected output lost is required, not
+ * encouraged - a verdict with no diagnosis was the single biggest signal gap
+ * (1,109 both_inadequate rows whose only structure is the winner enum).
+ * Required sides are exactly the offered sides (failureTagSides): the loser on
+ * a/b, both on both_inadequate, none on tie. One pure function shared by the
+ * episode's Continue/Submit gates and the submit route's 400 - client and
+ * server can never drift on what "required" means.
+ */
+export function missingFailureTagSides(
+  winner: string | null | undefined,
+  tagsA: readonly string[],
+  tagsB: readonly string[],
+): { a: boolean; b: boolean } {
+  const sides = failureTagSides(winner);
+  return {
+    a: sides.a && tagsA.length === 0,
+    b: sides.b && tagsB.length === 0,
+  };
+}
+
+/** True when every side the verdict requires tags on has at least one. */
+export function failureTagsSatisfy(
+  winner: string | null | undefined,
+  tagsA: readonly string[],
+  tagsB: readonly string[],
+): boolean {
+  const missing = missingFailureTagSides(winner, tagsA, tagsB);
+  return !missing.a && !missing.b;
+}

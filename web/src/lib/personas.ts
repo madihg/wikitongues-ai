@@ -50,6 +50,8 @@ export function navForRole(
       { href: "/annotator", label: "Dashboard" },
       { href: "/annotator/prompts", label: "Prompts" },
       { href: "/annotator/annotate", label: "Annotate" },
+      // Researchers keep the standalone Corrections lane (the backlog view of
+      // already-judged outputs). Annotators do NOT get it - see below.
       { href: "/annotator/corrections", label: "Corrections" },
       { href: "/annotator/history", label: "My Work" },
       { href: "/annotator/rubric", label: "Rubric" },
@@ -62,11 +64,14 @@ export function navForRole(
       { href: "/admin/how-it-works", label: "How it works" },
     ];
   }
-  // Pure annotator.
+  // Pure annotator. NO Corrections tab (2026-08-28 rework, Halim's call):
+  // corrections happen inside the episode, right after the A/B verdict - a
+  // separate lane made "fix it" a different errand from "judge it", and the
+  // errand never got run. /annotator/corrections redirects annotators into
+  // the annotate flow; the API routes and researcher lane stay.
   return [
     { href: "/annotator", label: "Dashboard" },
     { href: "/annotator/annotate", label: "Annotate" },
-    { href: "/annotator/corrections", label: "Corrections" },
     { href: "/annotator/history", label: "My Work" },
     { href: "/annotator/rubric", label: "Rubric" },
   ];

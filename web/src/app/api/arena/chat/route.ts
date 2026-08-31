@@ -12,8 +12,13 @@ import {
   buildRetrievalV2,
   type RetrievalV2Result,
 } from "@/lib/arena/retrieval-v2";
+import {
+  buildRetrievalV4,
+  type RetrievalV4Result,
+} from "@/lib/arena/retrieval-v4";
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
+import { IGALA_SYSTEM_V4, buildUserTurnV4 } from "@/lib/generation-prompt-v4";
 
 /**
  * POST /api/arena/chat - talk to several registered candidates at once.
@@ -134,14 +139,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No such candidates" }, { status: 404 });
   }
 
-  // rag-v2/rag-v3 candidates use the v2 retrieval path exclusively, so the v1
-  // retrieval below only runs when a v1 RAG candidate is actually selected -
-  // v1 composition for v1 candidates stays byte-identical either way.
+  // rag-v2/rag-v3/rag-v4 candidates use their versioned retrieval paths
+  // exclusively, so the v1 retrieval below only runs when a v1 RAG candidate
+  // is actually selected - v1 composition for v1 candidates stays
+  // byte-identical either way.
   const needsRetrieval = candidates.some(
     (c) =>
       c.ragEnabled &&
       c.versionLabel !== "rag-v2" &&
-      c.versionLabel !== "rag-v3",
+      c.versionLabel !== "rag-v3" &&
+      c.versionLabel !== "rag-v4",
   );
   const goldPool = needsRetrieval ? await loadGoldPool() : [];
 
@@ -159,6 +166,21 @@ export async function POST(req: Request) {
     )
   ) {
     v2 = await buildRetrievalV2(prisma, {
+      promptId: "__chat__",
+      text: userMessage,
+      bucket: null,
+      isHoldout: true,
+    });
+  }
+
+  // rag-v4 gets its OWN build (never shared with v2/v3): its retrieval
+  // composition differs - source-diversified parallel pairs plus the
+  // corrections block - so sharing would either change the v2/v3 serving
+  // (forbidden: those paths are frozen for comparability) or serve v4
+  // candidates a context nobody registered. Same synthetic-holdout guard.
+  let v4: RetrievalV4Result | null = null;
+  if (candidates.some((c) => c.versionLabel === "rag-v4")) {
+    v4 = await buildRetrievalV4(prisma, {
       promptId: "__chat__",
       text: userMessage,
       bucket: null,
@@ -214,30 +236,40 @@ export async function POST(req: Request) {
         (candidate.versionLabel === "rag-v2" ||
           candidate.versionLabel === "rag-v3") &&
         v2 !== null;
+      const isV4 = candidate.versionLabel === "rag-v4" && v4 !== null;
       try {
         // The v2/v3 path swaps all three levers at once: dictionary +
         // parallel examples appended to the user turn (dictionary last,
         // immediately above the question - the DiPMT position), gold
         // exemplars as prior turns, and the version's system prompt - the
-        // ONLY thing that differs between rag-v2 and rag-v3. Everything else
-        // flows through the same generateForCandidate call so latency/token
-        // accounting and error handling stay identical across versions.
-        const result = isV2
+        // ONLY thing that differs between rag-v2 and rag-v3. The v4 path is
+        // the same shape with its own retrieval build (corrections block +
+        // register-guarded, source-diversified pairs) and IGALA_SYSTEM_V4.
+        // Everything flows through the same generateForCandidate call so
+        // latency/token accounting and error handling stay identical.
+        const result = isV4
           ? await generateForCandidate(candidate, {
-              userMessage: buildUserTurnV2(userMessage, v2!, null),
+              userMessage: buildUserTurnV4(userMessage, v4!, null),
               conversationHistory: history,
-              goldExamples: v2!.exampleTurns,
-              systemPromptOverride:
-                candidate.versionLabel === "rag-v3"
-                  ? IGALA_SYSTEM_V3
-                  : IGALA_SYSTEM_V2,
+              goldExamples: v4!.exampleTurns,
+              systemPromptOverride: IGALA_SYSTEM_V4,
             })
-          : await generateForCandidate(candidate, {
-              userMessage,
-              conversationHistory: history,
-              ragContext,
-              goldExamples,
-            });
+          : isV2
+            ? await generateForCandidate(candidate, {
+                userMessage: buildUserTurnV2(userMessage, v2!, null),
+                conversationHistory: history,
+                goldExamples: v2!.exampleTurns,
+                systemPromptOverride:
+                  candidate.versionLabel === "rag-v3"
+                    ? IGALA_SYSTEM_V3
+                    : IGALA_SYSTEM_V2,
+              })
+            : await generateForCandidate(candidate, {
+                userMessage,
+                conversationHistory: history,
+                ragContext,
+                goldExamples,
+              });
         return {
           slug: candidate.slug,
           name: candidate.name,
@@ -245,18 +277,23 @@ export async function POST(req: Request) {
           latencyMs: result.latencyMs,
           tokensIn: result.tokensIn ?? null,
           tokensOut: result.tokensOut ?? null,
-          // For v2, "chunks" is the served lexicon + parallel material - the
-          // audit-trail ids minus the gold exemplars.
-          retrievedChunks: isV2
-            ? v2!.contextIds.filter((id) => !id.startsWith("gold:")).length
-            : candidate.ragEnabled
-              ? ragContext.length
-              : 0,
-          retrievedExemplars: isV2
-            ? v2!.exampleTurns.length
-            : candidate.ragEnabled
-              ? goldExamples.length
-              : 0,
+          // For v2/v4, "chunks" is the served lexicon + parallel (+ v4
+          // corrections) material - the audit-trail ids minus the gold
+          // exemplars.
+          retrievedChunks: isV4
+            ? v4!.contextIds.filter((id) => !id.startsWith("gold:")).length
+            : isV2
+              ? v2!.contextIds.filter((id) => !id.startsWith("gold:")).length
+              : candidate.ragEnabled
+                ? ragContext.length
+                : 0,
+          retrievedExemplars: isV4
+            ? v4!.exampleTurns.length
+            : isV2
+              ? v2!.exampleTurns.length
+              : candidate.ragEnabled
+                ? goldExamples.length
+                : 0,
           error: null as string | null,
         };
       } catch (e) {
