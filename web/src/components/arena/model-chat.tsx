@@ -24,6 +24,13 @@ import {
   type ChatStreamEvent,
   type StreamingReply,
 } from "@/lib/arena/chat-stream";
+import {
+  applyStatusEvents,
+  initColumnPhases,
+  setPendingPhases,
+  type ColumnPhases,
+} from "@/lib/arena/column-status";
+import { ColumnStatusLine } from "./column-status-line";
 
 /** What the page hands the picker; the approach label is derived server-side
  * by approachLabel so it cannot drift from the scoreboard's. */
@@ -37,9 +44,23 @@ type ScoresFetch =
 
 interface Exchange {
   question: string;
-  /** Null until the first byte of the response; then live streaming columns. */
-  replies: StreamingReply[] | null;
+  /**
+   * The columns, created the moment the question is asked - never null, never
+   * a global "asking N models" placeholder. A column that exists and says what
+   * it is waiting for is the whole point: an empty grid tells the reviewer
+   * nothing about which arm is slow.
+   */
+  replies: StreamingReply[];
+  /** Per-column progress, folded from the same stream events (column-status). */
+  phases: ColumnPhases;
+  /** Wall clock at send, the origin for every column's elapsed counter. */
+  startedAt: number;
 }
+
+/** How often the elapsed counters re-read the clock while a request is live.
+ * Twice a second keeps the displayed whole seconds from lagging visibly
+ * without re-rendering the grid on every animation frame. */
+const CLOCK_TICK_MS = 500;
 
 /**
  * Talk to several candidates at once and read their answers side by side.
@@ -127,7 +148,21 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Set once the question has been asked but the default selection is still
+  // resolving; the effect below fires it the moment a model is known.
+  const [queued, setQueued] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  // The clock behind every column's elapsed counter. It only runs while a
+  // request is in flight, so an idle page does no work; the counters
+  // themselves appear per column and only past ELAPSED_VISIBLE_AFTER_MS.
+  const [nowMs, setNowMs] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), CLOCK_TICK_MS);
+    return () => clearInterval(id);
+  }, [busy]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -145,36 +180,60 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
 
   const send = useCallback(async () => {
     const question = draft.trim();
-    if (!question || busy || selected.length === 0) return;
+    if (!question || busy) return;
+    if (selected.length === 0) {
+      // The default selection is still being derived from the live scores.
+      // Hold the question rather than dropping it silently on the floor - the
+      // reviewer pressed Enter and is entitled to know it registered.
+      if (usedDefault && scoresState === "loading") setQueued(true);
+      return;
+    }
+
+    const columns = selected.map((slug) => ({
+      slug,
+      name: candidates.find((c) => c.slug === slug)?.name ?? slug,
+    }));
+    const initial = initStreamingReplies(columns);
 
     // The history each model sees is its OWN prior turns. Interleaving another
     // model's answers would make every model's context depend on its
     // neighbours, and the comparison would stop being independent.
     const index = exchanges.length;
-    setExchanges((prev) => [...prev, { question, replies: null }]);
+    const startedAt = Date.now();
+    setExchanges((prev) => [
+      ...prev,
+      {
+        question,
+        replies: initial,
+        phases: initColumnPhases(selected),
+        startedAt,
+      },
+    ]);
     setDraft("");
     setBusy(true);
+    setNowMs(startedAt);
 
-    // Patch this exchange's columns in place; every stream event funnels
-    // through here so React re-renders as tokens arrive.
-    const patch = (
-      fn: (replies: StreamingReply[] | null) => StreamingReply[],
-    ) =>
-      setExchanges((prev) =>
-        prev.map((ex, i) =>
-          i === index ? { ...ex, replies: fn(ex.replies) } : ex,
-        ),
-      );
+    // Patch this exchange in place; every stream event funnels through here so
+    // React re-renders as tokens - and as status transitions - arrive.
+    const patch = (fn: (ex: Exchange) => Exchange) =>
+      setExchanges((prev) => prev.map((ex, i) => (i === index ? fn(ex) : ex)));
+
+    const fail = (message: string) =>
+      patch((ex) => ({
+        ...ex,
+        replies: failPendingReplies(ex.replies, message),
+        phases: setPendingPhases(ex.phases, "failed"),
+      }));
 
     try {
-      const res = await fetch("/api/arena/chat", {
+      const responded = fetch("/api/arena/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slugs: selected,
           messages: [
             ...exchanges.flatMap((ex) => {
-              const mine = ex.replies?.[0];
+              const mine = ex.replies[0];
               return mine
                 ? [
                     { role: "user" as const, content: ex.question },
@@ -186,6 +245,16 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
           ],
         }),
       });
+      // The request is out. Everything the server does before the response
+      // head - auth, the per-version retrieval builds - happens in exactly
+      // this window, which is why "retrieving context" is what the columns say
+      // until the first byte for them arrives. (Those same stages are timed
+      // into the response's Server-Timing header; see server-timing.ts.)
+      patch((ex) => ({
+        ...ex,
+        phases: setPendingPhases(ex.phases, "retrieving"),
+      }));
+      const res = await responded;
       if (!res.ok) {
         // Errors keep the old JSON contract (auth, validation).
         const data = await res.json().catch(() => null);
@@ -196,19 +265,18 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
       if (res.body && contentType.includes("ndjson")) {
         // The streaming path: one NDJSON event per line, deltas filling each
         // model's column as its provider produces tokens (see chat-stream.ts).
-        const initial = initStreamingReplies(
-          selected.map((slug) => ({
-            slug,
-            name: candidates.find((c) => c.slug === slug)?.name ?? slug,
-          })),
-        );
-        patch(() => initial);
+        // The SAME event batch drives the text and the status line, so a
+        // column can never be writing text while its label says otherwise.
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         const parser = new ChatStreamParser();
         const apply = (events: ChatStreamEvent[]) => {
-          if (events.length > 0)
-            patch((replies) => applyChatEvents(replies ?? initial, events));
+          if (events.length === 0) return;
+          patch((ex) => ({
+            ...ex,
+            replies: applyChatEvents(ex.replies, events),
+            phases: applyStatusEvents(ex.phases, events),
+          }));
         };
         for (;;) {
           const { done, value } = await reader.read();
@@ -218,38 +286,40 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
         apply(parser.flush());
         // A stream that ended without closing every column (proxy cut the
         // connection) must not leave columns spinning forever.
-        patch((replies) =>
-          failPendingReplies(replies ?? initial, "Response ended early"),
-        );
+        fail("Response ended early");
       } else {
         // Buffered JSON fallback, the pre-streaming contract.
         const data = await res.json();
-        patch(() =>
-          (data.replies as Omit<StreamingReply, "done">[]).map((r) => ({
-            ...r,
-            done: true,
-          })),
-        );
+        patch((ex) => {
+          const replies = (
+            data.replies as Omit<StreamingReply, "done" | "revisedFor">[]
+          ).map((r) => ({ ...r, done: true, revisedFor: null }));
+          return {
+            ...ex,
+            replies,
+            phases: initColumnPhases(
+              replies.map((r) => r.slug),
+              "done",
+            ),
+          };
+        });
       }
     } catch (e) {
       // Keep whatever already streamed in; only the unfinished columns carry
       // the failure.
-      patch((replies) =>
-        failPendingReplies(
-          replies ??
-            initStreamingReplies(
-              selected.map((slug) => ({
-                slug,
-                name: candidates.find((c) => c.slug === slug)?.name ?? slug,
-              })),
-            ),
-          (e as Error).message,
-        ),
-      );
+      fail((e as Error).message);
     } finally {
       setBusy(false);
     }
-  }, [draft, busy, selected, exchanges, candidates]);
+  }, [draft, busy, selected, exchanges, candidates, usedDefault, scoresState]);
+
+  // A question asked before the live scores landed starts the moment the
+  // default selection resolves. Guarded on `queued` so it fires exactly once.
+  useEffect(() => {
+    if (!queued || selected.length === 0 || busy) return;
+    setQueued(false);
+    void send();
+  }, [queued, selected, busy, send]);
 
   const copyLink = useCallback(async () => {
     const url = buildShareUrl(window.location.origin, pathname, selected);
@@ -261,6 +331,21 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
       // Clipboard can be blocked; the URL is in the address bar regardless.
     }
   }, [pathname, selected]);
+
+  const selectedNames = useMemo(
+    () =>
+      selected.map(
+        (slug) => candidates.find((c) => c.slug === slug)?.name ?? slug,
+      ),
+    [selected, candidates],
+  );
+
+  // The URL named nothing and the live scores that decide the default are
+  // still in flight. The composer stays USABLE through this window: it is
+  // sub-second, the reviewer can type, and a question asked early is queued
+  // rather than refused. Disabling it made a ready page look like a broken one.
+  const resolvingDefault = usedDefault && scoresState === "loading";
+  const composerBlocked = selected.length === 0 && !resolvingDefault;
 
   const gridCols =
     selected.length >= 4
@@ -299,6 +384,18 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
               word you expect models to confuse with Yoruba, a proverb, or a
               question that needs the respectful register.
             </p>
+            {/* An empty page with a model already chosen is READY, not
+                loading. Naming who will answer says so in one line, and it is
+                the fact a reviewer actually needs before typing. */}
+            {selectedNames.length > 0 && (
+              <p className="mt-3 text-xs text-text-secondary">
+                Ready. {selectedNames.join(", ")}{" "}
+                {selectedNames.length === 1
+                  ? "will answer"
+                  : "will each answer"}
+                .
+              </p>
+            )}
           </div>
         )}
 
@@ -310,55 +407,64 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
               </p>
             </div>
 
-            {ex.replies === null ? (
-              <p className="text-xs text-text-tertiary">
-                Asking {selected.length} model
-                {selected.length === 1 ? "" : "s"}…
-              </p>
-            ) : (
-              <div className={`grid grid-cols-1 gap-3 ${gridCols}`}>
-                {ex.replies.map((r) => (
-                  <div
-                    key={r.slug}
-                    className={[
-                      "flex flex-col rounded border p-3",
-                      r.error
-                        ? "border-danger bg-danger-subtle"
-                        : "border-border bg-surface",
-                    ].join(" ")}
-                  >
-                    <p className="mb-2 text-xs font-medium text-text-secondary">
-                      {r.name}
+            <div className={`grid grid-cols-1 gap-3 ${gridCols}`}>
+              {ex.replies.map((r) => (
+                <div
+                  key={r.slug}
+                  className={[
+                    "flex flex-col rounded border p-3",
+                    r.error
+                      ? "border-danger bg-danger-subtle"
+                      : "border-border bg-surface",
+                  ].join(" ")}
+                >
+                  <p className="mb-2 text-xs font-medium text-text-secondary">
+                    {r.name}
+                  </p>
+                  {/* The repair round rewrote this column: say so, and say
+                        why, rather than letting the text silently change under
+                        a reviewer who was already reading it. */}
+                  {r.revisedFor && !r.error && (
+                    <p className="mb-2 text-[11px] text-text-tertiary">
+                      {r.done ? "Rewrote" : "Rewriting"} its answer
+                      {r.revisedFor.length > 0
+                        ? `: the first attempt used ${r.revisedFor.join(", ")}.`
+                        : "."}
                     </p>
-                    {r.error ? (
-                      <p className="text-xs text-danger">{r.error}</p>
-                    ) : (
-                      <p className="flex-1 whitespace-pre-wrap text-base leading-relaxed text-text-primary">
-                        {r.text ||
-                          (r.done ? (
-                            <span className="text-text-tertiary">
-                              (empty response)
-                            </span>
-                          ) : (
-                            <span className="text-text-tertiary">…</span>
-                          ))}
-                      </p>
-                    )}
-                    <p className="mt-3 text-[11px] text-text-tertiary">
-                      {r.done ? (
-                        <>
-                          {(r.latencyMs / 1000).toFixed(1)}s
-                          {r.retrievedExemplars > 0 &&
-                            ` · ${r.retrievedExemplars} gold examples, ${r.retrievedChunks} reference chunks`}
-                        </>
-                      ) : (
-                        "streaming…"
-                      )}
+                  )}
+                  {r.error ? (
+                    <p className="text-xs text-danger">{r.error}</p>
+                  ) : (
+                    <p className="flex-1 whitespace-pre-wrap text-base leading-relaxed text-text-primary">
+                      {r.text ||
+                        (r.done ? (
+                          <span className="text-text-tertiary">
+                            (empty response)
+                          </span>
+                        ) : (
+                          <span className="text-text-tertiary">…</span>
+                        ))}
                     </p>
-                  </div>
-                ))}
-              </div>
-            )}
+                  )}
+                  {/* One status line per column, always present: what this
+                      model is doing, and how long it has been doing it once
+                      the wait is long enough to be worth counting. */}
+                  <ColumnStatusLine
+                    phase={ex.phases[r.slug] ?? (r.done ? "done" : "waiting")}
+                    elapsedMs={nowMs - ex.startedAt}
+                    detail={
+                      r.done && !r.error
+                        ? `${(r.latencyMs / 1000).toFixed(1)}s${
+                            r.retrievedExemplars > 0
+                              ? ` · ${r.retrievedExemplars} gold examples, ${r.retrievedChunks} reference chunks`
+                              : ""
+                          }`
+                        : undefined
+                    }
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         ))}
         <div ref={endRef} />
@@ -378,25 +484,28 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
             }}
             rows={2}
             placeholder={
-              selected.length === 0
-                ? scoresState === "loading" && usedDefault
-                  ? "Finding the leading model…"
-                  : "Select at least one model above"
+              composerBlocked
+                ? "Select at least one model above"
                 : "Ask all selected models the same question…  (Enter to send, Shift+Enter for a new line)"
             }
-            disabled={selected.length === 0}
+            disabled={composerBlocked}
             aria-label="Message to send to every selected model"
             className="flex-1 resize-y rounded border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none disabled:opacity-50"
           />
           <button
             type="button"
             onClick={() => void send()}
-            disabled={busy || !draft.trim() || selected.length === 0}
+            disabled={busy || !draft.trim() || composerBlocked}
             className="rounded bg-accent px-4 py-2 text-sm text-accent-contrast hover:bg-accent-hover disabled:opacity-40"
           >
             {busy ? "Asking…" : "Ask"}
           </button>
         </div>
+        {queued && (
+          <p className="mt-2 text-xs text-text-tertiary" aria-live="polite">
+            Queued. It goes out as soon as the model list finishes loading.
+          </p>
+        )}
         {exchanges.length > 0 && (
           <button
             type="button"

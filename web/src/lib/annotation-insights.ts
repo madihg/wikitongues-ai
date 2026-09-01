@@ -84,6 +84,31 @@ export interface WeeklyInadequacy {
   bothInadequate: number;
 }
 
+/**
+ * The two comparison counts a reader meets on the arena Overview, reconciled.
+ *
+ * "pool" is every matchup between two arms that are in the pairing pool right
+ * now; "legacy" is the remainder, where at least one side is an arm the
+ * project has since retired. all = pool + legacy, always.
+ *
+ * The split is defined by the live inPairingPool flag rather than by a
+ * cutover date, so it keeps telling the truth as the pool changes. It exists
+ * because the all-time number and the pool number look contradictory side by
+ * side, and the difference between their decided rates is the whole story:
+ * the retired era is most of the input and almost none of the signal.
+ */
+export interface CorpusSplit {
+  allComparisons: number;
+  allDecided: number;
+  allBothInadequate: number;
+  poolComparisons: number;
+  poolDecided: number;
+  poolBothInadequate: number;
+  legacyComparisons: number;
+  legacyDecided: number;
+  legacyBothInadequate: number;
+}
+
 /** One recent decided comparison, ready to render. No annotator identity is
  * ever carried here - the UI attributes every verdict to "a speaker". */
 export interface RecentDecision {
@@ -101,6 +126,8 @@ export interface RecentDecision {
 export interface AnnotationInsights {
   computedAt: string;
   headline: VerdictHeadline;
+  /** All-time versus current-pool comparison counts, reconciled. */
+  corpus: CorpusSplit;
   pairings: PairingSummary[];
   /** Failure tags of the LOSING side across decided comparisons. */
   losingTags: TagCount[];
@@ -156,6 +183,43 @@ export function poolHeadline(rows: ComparisonRow[]): VerdictHeadline {
     runnerUpName: runnerUp ? runnerUp[0] : null,
     runnerUpWins: runnerUp ? runnerUp[1] : 0,
   };
+}
+
+/**
+ * Split every comparison into the current-pool matchups and the legacy
+ * remainder, counting decided winners and both-inadequate verdicts in each.
+ * Pure counting, no thresholds: the caller decides what is worth saying.
+ */
+export function corpusSplit(rows: ComparisonRow[]): CorpusSplit {
+  const split: CorpusSplit = {
+    allComparisons: 0,
+    allDecided: 0,
+    allBothInadequate: 0,
+    poolComparisons: 0,
+    poolDecided: 0,
+    poolBothInadequate: 0,
+    legacyComparisons: 0,
+    legacyDecided: 0,
+    legacyBothInadequate: 0,
+  };
+  for (const r of rows) {
+    const inPool = r.aInPool && r.bInPool;
+    const decided = DECIDED.has(r.winner);
+    const both = r.winner === "both_inadequate";
+    split.allComparisons++;
+    if (decided) split.allDecided++;
+    if (both) split.allBothInadequate++;
+    if (inPool) {
+      split.poolComparisons++;
+      if (decided) split.poolDecided++;
+      if (both) split.poolBothInadequate++;
+    } else {
+      split.legacyComparisons++;
+      if (decided) split.legacyDecided++;
+      if (both) split.legacyBothInadequate++;
+    }
+  }
+  return split;
 }
 
 /** Minimum decided comparisons before a pairing is worth a bar. Exported so
@@ -435,6 +499,7 @@ export async function computeAnnotationInsights(
   return {
     computedAt: new Date().toISOString(),
     headline: poolHeadline(rows),
+    corpus: corpusSplit(rows),
     pairings: pairingSummaries(rows),
     losingTags: losingTagCounts(rows),
     bothInadequateTags: bothInadequateTagCounts(rows),

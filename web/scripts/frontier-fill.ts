@@ -85,6 +85,11 @@ function keyForProvider(provider: string): string | undefined {
       return (
         process.env.OPENAI_COMPATIBLE_API_KEY ?? process.env.TOGETHER_API_KEY
       );
+    case "openrouter":
+      // OpenRouter only. Same rule as resolveModel: no borrowing another
+      // vendor's key, or this pre-flight would wave through a run that the
+      // provider path then rejects.
+      return process.env.OPENROUTER_API_KEY;
     default:
       return undefined;
   }

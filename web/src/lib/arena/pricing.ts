@@ -24,6 +24,14 @@ const INFERENCE_PRICE: { match: string; price: TokenPrice }[] = [
   { match: "gpt-4o-mini", price: { input: 0.15, output: 0.6 } },
   { match: "gpt-4o", price: { input: 2.5, output: 10 } },
   { match: "gpt-4.1", price: { input: 2, output: 8 } },
+  // Gemini 3.1 Pro, published rate $2/$12 per 1M (google/gemini-3.1-pro-preview).
+  // Both spellings are pinned: our candidate slugs use the hyphenated
+  // "gemini-3-1-pro" form while ModelOutput.modelId carries the dotted
+  // "gemini-3.1-pro-preview". Either one falling through to the default
+  // ($1/$3) under-reports this model's spend by roughly 4x, so these rows must
+  // stay above every looser gemini match.
+  { match: "gemini-3.1-pro", price: { input: 2, output: 12 } },
+  { match: "gemini-3-1-pro", price: { input: 2, output: 12 } },
   { match: "gemini-2.0-flash", price: { input: 0.1, output: 0.4 } },
   { match: "gemini-1.5-flash", price: { input: 0.075, output: 0.3 } },
   { match: "gemini-1.5-pro", price: { input: 1.25, output: 5 } },

@@ -21,7 +21,13 @@ interface Candidate {
   _count?: { evalRuns: number; modelOutputs: number };
 }
 
-const PROVIDERS = ["anthropic", "openai", "google", "openai-compatible"];
+const PROVIDERS = [
+  "anthropic",
+  "openai",
+  "google",
+  "openai-compatible",
+  "openrouter",
+];
 const KINDS = [
   "baseline",
   "rag",

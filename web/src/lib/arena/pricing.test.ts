@@ -21,6 +21,28 @@ describe("priceForModel", () => {
     expect(priceForModel("claude-opus-4-1")).toEqual({ input: 15, output: 75 });
   });
 
+  it("prices both spellings of Gemini 3.1 Pro at its published rate", () => {
+    // Candidate slugs use the hyphenated form, ModelOutput.modelId the dotted
+    // one. Both must hit the real $2/$12 row.
+    const expected = { input: 2, output: 12 };
+    expect(priceForModel("gemini-3-1-pro")).toEqual(expected);
+    expect(priceForModel("gemini-3.1-pro")).toEqual(expected);
+    expect(priceForModel("gemini-3.1-pro-preview")).toEqual(expected);
+    expect(priceForModel("gemini-3-1-pro-rag-v3")).toEqual(expected);
+    expect(priceForModel("google/gemini-3.1-pro-preview")).toEqual(expected);
+  });
+
+  it("does not let Gemini 3.1 Pro fall through to the default price", () => {
+    const fallback = priceForModel("some-unknown-model");
+    for (const id of [
+      "gemini-3-1-pro",
+      "gemini-3.1-pro",
+      "gemini-3.1-pro-preview",
+    ]) {
+      expect(priceForModel(id)).not.toEqual(fallback);
+    }
+  });
+
   it("falls back to a default for unknown models", () => {
     const p = priceForModel("some-unknown-model");
     expect(p.input).toBeGreaterThan(0);

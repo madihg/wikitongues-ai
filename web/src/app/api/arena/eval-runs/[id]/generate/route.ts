@@ -8,9 +8,8 @@ import { buildRetrievalV2 } from "@/lib/arena/retrieval-v2";
 import { buildRetrievalV4 } from "@/lib/arena/retrieval-v4";
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
-import { IGALA_SYSTEM_V4, buildUserTurnV4 } from "@/lib/generation-prompt-v4";
-import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { generateWithRepairRound } from "@/lib/arena/repair-round";
+import { buildV4FamilyTurn } from "@/lib/arena/frozen-exam";
 
 /**
  * Generate the candidate's answers on the frozen held-out bank. Uses the
@@ -87,18 +86,22 @@ export async function POST(
           bucket: prompt.bucket,
           isHoldout: prompt.isHoldout,
         });
-        const isV41 = candidate.versionLabel === "rag-v4-1";
+        //
+        // The request assembly (user turn, exemplars, system prompt, and the
+        // R8.3 allowTone gate on the raw question) lives in
+        // src/lib/arena/frozen-exam.ts, shared with the frozen-exam runner,
+        // so an output stored by an offline exam and one stored here cannot
+        // drift apart.
+        const { args, opts } = buildV4FamilyTurn(
+          candidate.versionLabel,
+          prompt,
+          v4,
+        );
         result = await generateWithRepairRound(
           candidate,
-          {
-            userMessage: buildUserTurnV4(prompt.text, v4, prompt.bucket),
-            goldExamples: v4.exampleTurns,
-            systemPromptOverride: isV41 ? IGALA_SYSTEM_V4_1 : IGALA_SYSTEM_V4,
-          },
+          args,
           (a) => generateForCandidate(candidate, a),
-          // R8.3: tone saturation is the requested behavior when the prompt
-          // itself asks for tone marks.
-          { allowTone: /\btone/i.test(prompt.text) },
+          opts,
         );
         ragContextIds = v4.contextIds;
       } else if (
