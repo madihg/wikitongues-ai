@@ -486,3 +486,105 @@ describe("the stage event and unknown event types", () => {
     expect(after[0].error).toBeNull();
   });
 });
+
+/**
+ * THE REVISION THAT COULD NOT BE APPLIED.
+ *
+ * When the turn's budget runs out before a rewrite could plausibly finish, the
+ * route reports the violations anyway and marks the revision `applied: false`.
+ * The two cases are opposites for the fold - one discards the column, the other
+ * must not - so the distinction is pinned here rather than left to the reader
+ * of a boolean.
+ */
+describe("applyChatEvents - a revision the server had no time to apply", () => {
+  const models = [
+    { slug: "v41", name: "Gemini + v4.1" },
+    { slug: "n", name: "Neighbour" },
+  ];
+
+  it("KEEPS the streamed text and records why it was flagged", () => {
+    let replies = initStreamingReplies(models);
+    replies = applyChatEvents(replies, [
+      { type: "delta", slug: "v41", text: "sooro " },
+      { type: "delta", slug: "v41", text: "ada" },
+      {
+        type: "revision",
+        slug: "v41",
+        reasons: ["letters that are not in the Igala alphabet"],
+        applied: false,
+      },
+    ]);
+    // Clearing here would blank a column whose content is the best answer the
+    // reviewer is going to get - the failure this whole change exists to stop.
+    expect(replies[0].text).toBe("sooro ada");
+    expect(replies[0].revisedFor).toEqual([
+      "letters that are not in the Igala alphabet",
+    ]);
+    expect(replies[0].revisionApplied).toBe(false);
+    expect(replies[1].text).toBe("");
+    expect(replies[1].revisedFor).toBeNull();
+  });
+
+  it("carries the not-applied flag through the closing reply event", () => {
+    let replies = initStreamingReplies(models);
+    replies = applyChatEvents(replies, [
+      { type: "delta", slug: "v41", text: "sooro ada" },
+      {
+        type: "revision",
+        slug: "v41",
+        reasons: ["letters that are not in the Igala alphabet"],
+        applied: false,
+      },
+      { type: "reply", reply: reply("v41", { text: "sooro ada" }) },
+    ]);
+    expect(replies[0].text).toBe("sooro ada");
+    expect(replies[0].done).toBe(true);
+    // The finished column can still say the answer was flagged and why it was
+    // not rewritten. The reply event itself knows nothing about repairs.
+    expect(replies[0].revisedFor).toHaveLength(1);
+    expect(replies[0].revisionApplied).toBe(false);
+  });
+
+  it("an ordinary revision still replaces, and still reads as applied", () => {
+    let replies = initStreamingReplies(models);
+    replies = applyChatEvents(replies, [
+      { type: "delta", slug: "v41", text: "sooro ada" },
+      { type: "revision", slug: "v41", reasons: ["a rule family"] },
+    ]);
+    expect(replies[0].text).toBe("");
+    expect(replies[0].revisionApplied).toBe(true);
+  });
+
+  it("defaults to applied for a fresh column, so the flag needs no null check", () => {
+    expect(initStreamingReplies(models)[0].revisionApplied).toBe(true);
+  });
+});
+
+describe("the applied flag on the wire", () => {
+  it("round-trips an explicit false", () => {
+    const event: ChatStreamEvent = {
+      type: "revision",
+      slug: "a",
+      reasons: ["letters that are not in the Igala alphabet"],
+      applied: false,
+    };
+    const parser = new ChatStreamParser();
+    expect(parser.push(encodeChatEvent(event))).toEqual([event]);
+  });
+
+  it("normalizes anything that is not an explicit false to the old meaning", () => {
+    // Absence is the historical wire: a server that predates the turn budget
+    // must parse to exactly the object it always parsed to, with no flag to
+    // reason about.
+    const parser = new ChatStreamParser();
+    for (const line of [
+      '{"type":"revision","slug":"a","reasons":["x"]}\n',
+      '{"type":"revision","slug":"a","reasons":["x"],"applied":true}\n',
+      '{"type":"revision","slug":"a","reasons":["x"],"applied":"maybe"}\n',
+    ]) {
+      expect(parser.push(line)).toEqual([
+        { type: "revision", slug: "a", reasons: ["x"] },
+      ]);
+    }
+  });
+});

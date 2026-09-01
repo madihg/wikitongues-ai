@@ -62,6 +62,32 @@ vi.mock("@/lib/arena/retrieval-v4", () => ({
 }));
 vi.mock("@/lib/rag", () => ({ searchRag: mockSearchRag }));
 
+/**
+ * The turn budget, made testable. A real turn has ~92s of budget, which is not
+ * a thing a unit test can wait for, so `turnBudgetMs` shortens the route's
+ * deadline and nothing else: TURN_CUTOFF_NOTICE, MIN_REASK_BUDGET_MS and the
+ * real hasBudgetForReask gate all come through untouched, so the tests below
+ * exercise the shipped decisions rather than a mock of them.
+ *
+ * `forceReask` is the one exception, used by a single test that needs a
+ * REWRITE to be mid-flight when the deadline lands - impossible otherwise,
+ * since permitting a re-ask requires more budget than a test can wait out.
+ */
+const { turnBudgetMs, forceReask } = vi.hoisted(() => ({
+  turnBudgetMs: { value: 92_000 },
+  forceReask: { value: false },
+}));
+vi.mock("@/lib/arena/turn-budget", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/arena/turn-budget")>();
+  return {
+    ...actual,
+    turnDeadlineFrom: (startedAtMs: number) => startedAtMs + turnBudgetMs.value,
+    hasBudgetForReask: (deadlineMs?: number, now?: number) =>
+      forceReask.value || actual.hasBudgetForReask(deadlineMs, now),
+  };
+});
+
 import { POST } from "./route";
 import type { ChatStreamEvent } from "@/lib/arena/chat-stream";
 import {
@@ -70,6 +96,7 @@ import {
   type StreamingReply,
 } from "@/lib/arena/chat-stream";
 import { SERVER_TIMING_STAGE_NAMES } from "@/lib/arena/server-timing";
+import { TURN_CUTOFF_NOTICE } from "@/lib/arena/turn-budget";
 import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { buildUserTurnV2, IGALA_SYSTEM_V2 } from "@/lib/generation-prompt-v2";
@@ -204,6 +231,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   timeline = [];
   genCount = 0;
+  turnBudgetMs.value = 92_000;
+  forceReask.value = false;
   mockRequireResearcher.mockResolvedValue({
     error: null,
     userId: "u1",
@@ -611,6 +640,7 @@ describe("a client that has never heard of the new events", () => {
             ...ev.reply,
             done: true,
             revisedFor: null,
+            revisionApplied: true,
           });
       }
     }
@@ -711,5 +741,422 @@ describe("Server-Timing", () => {
     expect(bareHeader.split(", ").map((e) => e.split(";")[0])).toEqual(
       header.split(", ").map((e) => e.split(";")[0]),
     );
+  });
+});
+
+// ─── (g) the deadline: degrade, never vanish ────────────────────────────────
+
+/**
+ * THE INCIDENT, AT THE WIRE LEVEL.
+ *
+ * A long turn used to end as a bare "HTTP 504" card: 0.0s, no text, no reason.
+ * The platform killed the function, and a killed function cannot say anything -
+ * the client gets a gateway error with no body. The only defence is to stop
+ * FIRST and spend the remaining margin explaining, which is what these tests
+ * read off the wire: every unfinished column closes through the ordinary
+ * `reply` event, carrying the text it had already streamed plus a
+ * plain-language note, and the stream closes without waiting for the provider
+ * that is about to be killed.
+ */
+describe("a turn that runs past its deadline", () => {
+  const v4 = candidate({ slug: "v4", name: "v4", versionLabel: "rag-v4" });
+
+  /** One column that streams a prefix immediately, then stalls past any test. */
+  function stallAfterPrefix(prefix: string) {
+    mockStreamForCandidate.mockImplementation(
+      async (
+        _candidate: unknown,
+        _args: unknown,
+        onDelta: (d: string) => void,
+      ) => {
+        onDelta(prefix);
+        await sleep(4000);
+        onDelta(" never arrives");
+        return {
+          text: `${prefix} never arrives`,
+          modelId: "gpt-x",
+          latencyMs: 4000,
+          tokensIn: 100,
+          tokensOut: 10,
+          ragContextIds: [],
+        };
+      },
+    );
+  }
+
+  it("keeps the partial text and explains the cutoff, instead of an empty card", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v4]);
+    stallAfterPrefix("Wọla ọdudu, this much arrived");
+    turnBudgetMs.value = 30;
+
+    const startedAt = Date.now();
+    const { events } = await drain(await POST(request(["v4"])));
+    const elapsed = Date.now() - startedAt;
+
+    // The response closed on OUR deadline, not on the provider's 4s stall and
+    // not on the platform's axe.
+    expect(elapsed).toBeLessThan(2000);
+
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.text).toBe(
+      "Wọla ọdudu, this much arrived",
+    );
+    expect(reply.type === "reply" && reply.reply.error).toBe(
+      TURN_CUTOFF_NOTICE,
+    );
+    // Every column is closed: nothing is left spinning for a client to guess
+    // about.
+    expect(events.filter((e) => e.type === "reply")).toHaveLength(1);
+  });
+
+  it("folds to partial text PLUS the explanation, never a blank column", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v4]);
+    stallAfterPrefix("half an answer");
+    turnBudgetMs.value = 30;
+
+    const { events } = await drain(await POST(request(["v4"])));
+    const folded = applyChatEvents(
+      initStreamingReplies([{ slug: "v4", name: "v4" }]),
+      events,
+    );
+    // Both halves of what the reviewer must see. The old failure had neither.
+    expect(folded[0].text).toBe("half an answer");
+    expect(folded[0].error).toBe(TURN_CUTOFF_NOTICE);
+    expect(folded[0].done).toBe(true);
+    expect(folded[0].error).toMatch(/time limit/i);
+  });
+
+  it("cuts every unfinished column and leaves the finished one alone", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([
+      v4,
+      candidate({ id: "c2", slug: "fast", name: "fast", ragEnabled: false }),
+      candidate({ id: "c3", slug: "slow", name: "slow", ragEnabled: false }),
+    ]);
+    mockStreamForCandidate.mockImplementation(
+      async (
+        c: { slug: string },
+        _args: unknown,
+        onDelta: (d: string) => void,
+      ) => {
+        if (c.slug === "fast") {
+          onDelta("finished in time");
+          return {
+            text: "finished in time",
+            modelId: "gpt-x",
+            latencyMs: 2,
+            tokensIn: 1,
+            tokensOut: 1,
+            ragContextIds: [],
+          };
+        }
+        onDelta(`${c.slug} got this far`);
+        await sleep(4000);
+        return {
+          text: "unreachable",
+          modelId: "gpt-x",
+          latencyMs: 4000,
+          tokensIn: 1,
+          tokensOut: 1,
+          ragContextIds: [],
+        };
+      },
+    );
+    turnBudgetMs.value = 40;
+
+    const { events } = await drain(await POST(request(["v4", "fast", "slow"])));
+    const replies = Object.fromEntries(
+      events
+        .filter((e) => e.type === "reply")
+        .map((e) => [
+          e.type === "reply" ? e.reply.slug : "",
+          e.type === "reply" ? e.reply : null,
+        ]),
+    );
+    expect(Object.keys(replies).sort()).toEqual(["fast", "slow", "v4"]);
+    // The column that finished keeps its real reply, untouched by the cutoff.
+    expect(replies["fast"]!.text).toBe("finished in time");
+    expect(replies["fast"]!.error).toBeNull();
+    expect(replies["fast"]!.latencyMs).toBe(2);
+    // The two that did not each keep their own partial text.
+    expect(replies["v4"]!.text).toBe("v4 got this far");
+    expect(replies["slow"]!.text).toBe("slow got this far");
+    for (const slug of ["v4", "slow"]) {
+      expect(replies[slug]!.error).toBe(TURN_CUTOFF_NOTICE);
+      // No invented accounting for a generation that never finished.
+      expect(replies[slug]!.tokensIn).toBeNull();
+      expect(replies[slug]!.tokensOut).toBeNull();
+    }
+  });
+
+  it("closes a column that had produced NOTHING with the same explanation", async () => {
+    // The worst case, and the literal shape of the incident: not one token
+    // arrived. It still closes with a reason rather than a bodiless 504.
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v4]);
+    mockStreamForCandidate.mockImplementation(async () => {
+      await sleep(4000);
+      return {
+        text: "never",
+        modelId: "gpt-x",
+        latencyMs: 4000,
+        tokensIn: 1,
+        tokensOut: 1,
+        ragContextIds: [],
+      };
+    });
+    turnBudgetMs.value = 30;
+
+    const { events } = await drain(await POST(request(["v4"])));
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.text).toBe("");
+    expect(reply.type === "reply" && reply.reply.error).toBe(
+      TURN_CUTOFF_NOTICE,
+    );
+  });
+
+  it("shows the REWRITE's prefix when the deadline lands mid-repair", async () => {
+    // A v4.1 column that was rewriting when the cutoff arrived must not fall
+    // back to the discarded first attempt: the revision event already told the
+    // client to throw that away.
+    mockPrisma.candidateModel.findMany.mockResolvedValue([
+      candidate({ slug: "v41", name: "v4.1", versionLabel: "rag-v4-1" }),
+    ]);
+    forceReask.value = true;
+    mockStreamForCandidate.mockImplementation(
+      async (_c: unknown, _args: unknown, onDelta: (d: string) => void) => {
+        const n = ++genCount;
+        if (n === 1) {
+          onDelta("sooro");
+          return {
+            text: "sooro",
+            modelId: "gpt-x",
+            latencyMs: 5,
+            tokensIn: 1,
+            tokensOut: 1,
+            ragContextIds: [],
+          };
+        }
+        onDelta("ojo ");
+        await sleep(4000);
+        return {
+          text: "ojo daa",
+          modelId: "gpt-x",
+          latencyMs: 4000,
+          tokensIn: 1,
+          tokensOut: 1,
+          ragContextIds: [],
+        };
+      },
+    );
+    turnBudgetMs.value = 60;
+
+    const { events } = await drain(await POST(request(["v41"])));
+    expect(genCount).toBe(2);
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.text).toBe("ojo ");
+    expect(reply.type === "reply" && reply.reply.error).toBe(
+      TURN_CUTOFF_NOTICE,
+    );
+
+    const folded = applyChatEvents(
+      initStreamingReplies([{ slug: "v41", name: "v4.1" }]),
+      events,
+    );
+    expect(folded[0].text).toBe("ojo ");
+  });
+
+  it("does nothing at all to a turn that finishes inside its budget", async () => {
+    // The ordinary case, stated: with a real budget no cutoff reply exists and
+    // no wire event mentions the time limit.
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v4]);
+    const { events, lines } = await drain(await POST(request(["v4"])));
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.text).toBe("hello world");
+    expect(reply.type === "reply" && reply.reply.error).toBeNull();
+    expect(lines.join("\n")).not.toContain("time limit");
+  });
+});
+
+// ─── (h) the re-ask the budget could not afford ─────────────────────────────
+
+describe("a v4.1 column whose turn has no time left to rewrite", () => {
+  const v41 = candidate({
+    slug: "v41",
+    name: "v4.1",
+    versionLabel: "rag-v4-1",
+  });
+
+  it("keeps the first answer and says the check found something", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v41]);
+    // A dirty first answer that WOULD be rewritten with budget to spare.
+    scriptGenerations([
+      ["so", "oro"],
+      ["ojo ", "daa"],
+    ]);
+    // Enough budget for the first attempt to land, nowhere near enough for a
+    // second generation - the real gate decides, on the real threshold.
+    turnBudgetMs.value = 2_000;
+
+    const { events } = await drain(await POST(request(["v41"])));
+
+    // ONE generation. The second would have been killed by the platform, and
+    // the finished first answer would have died with it.
+    expect(genCount).toBe(1);
+    const revision = events.find((e) => e.type === "revision")!;
+    expect(revision).toMatchObject({
+      type: "revision",
+      slug: "v41",
+      reasons: ["letters that are not in the Igala alphabet"],
+      applied: false,
+    });
+
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.text).toBe("sooro");
+    expect(reply.type === "reply" && reply.reply.error).toBeNull();
+
+    // The client keeps the text AND learns it was flagged - never a silent
+    // pass, never a blank column.
+    const folded = applyChatEvents(
+      initStreamingReplies([{ slug: "v41", name: "v4.1" }]),
+      events,
+    );
+    expect(folded[0].text).toBe("sooro");
+    expect(folded[0].revisedFor).toEqual([
+      "letters that are not in the Igala alphabet",
+    ]);
+    expect(folded[0].revisionApplied).toBe(false);
+    expect(folded[0].error).toBeNull();
+  });
+
+  it("still rewrites when the budget allows it", async () => {
+    // Same column, same dirty answer, a real turn budget: unchanged behaviour.
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v41]);
+    scriptGenerations([
+      ["so", "oro"],
+      ["ojo ", "daa"],
+    ]);
+    const { events } = await drain(await POST(request(["v41"])));
+
+    expect(genCount).toBe(2);
+    const revision = events.find((e) => e.type === "revision")!;
+    expect(revision.type === "revision" && revision.applied).toBeUndefined();
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.text).toBe("ojo daa");
+  });
+});
+
+// ─── (i) the two remaining ways a column could still go blank ───────────────
+
+/**
+ * THE SAME INVARIANT, ON THE TWO PATHS THE DEADLINE DOES NOT OWN.
+ *
+ * The rule the incident bought is not "the cutoff explains itself" but "a
+ * column never closes as a bare code with nothing in it". Two paths could
+ * still break that:
+ *
+ *   1. A PROVIDER that dies mid-stream. Its tokens were already on the
+ *      reviewer's screen; the closing reply used to replace them with the
+ *      error string alone, which is the empty card again with a different
+ *      cause.
+ *   2. RETRIEVAL that outlives the budget. It runs BEFORE the response head is
+ *      flushed, so there is no open stream to explain down - exactly the
+ *      bodiless gateway error, one stage earlier.
+ */
+describe("a column never closes as a bare error with nothing in it", () => {
+  it("keeps what a provider streamed before it died", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([
+      candidate({ slug: "v4", name: "v4", versionLabel: "rag-v4" }),
+    ]);
+    mockStreamForCandidate.mockImplementation(
+      async (
+        _c: unknown,
+        _args: unknown,
+        onDelta: (d: string) => void,
+      ): Promise<never> => {
+        onDelta("Wọla ọdudu, this much arrived");
+        await sleep();
+        // The shape the incident wore: a terse upstream code, no body.
+        throw new Error("HTTP 504");
+      },
+    );
+
+    const { events } = await drain(await POST(request(["v4"])));
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.text).toBe(
+      "Wọla ọdudu, this much arrived",
+    );
+    expect(reply.type === "reply" && reply.reply.error).toBe("HTTP 504");
+
+    // What the reviewer ends up looking at: the partial answer AND the
+    // failure, never the failure alone.
+    const folded = applyChatEvents(
+      initStreamingReplies([{ slug: "v4", name: "v4" }]),
+      events,
+    );
+    expect(folded[0].text).toBe("Wọla ọdudu, this much arrived");
+    expect(folded[0].error).toBe("HTTP 504");
+  });
+
+  it("explains itself when the deadline lands during RETRIEVAL, before any model is called", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([
+      candidate({ slug: "v4", name: "v4", versionLabel: "rag-v4" }),
+      candidate({
+        id: "c2",
+        slug: "v41",
+        name: "v4.1",
+        versionLabel: "rag-v4-1",
+      }),
+    ]);
+    // Retrieval that never returns inside the budget.
+    mockBuildRetrievalV4.mockImplementation(async () => {
+      await sleep(4000);
+      return V4;
+    });
+    turnBudgetMs.value = 30;
+
+    const startedAt = Date.now();
+    const res = await POST(request(["v4", "v41"]));
+    const { events } = await drain(res);
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+
+    // Still the ordinary NDJSON contract, so no client needs new code.
+    expect(res.headers.get("Content-Type")).toContain("application/x-ndjson");
+    expect(res.headers.get("Server-Timing")).toContain("total;dur=");
+    expect(res.status).toBe(200);
+
+    // No provider was ever called, and every selected column is closed with a
+    // sentence instead of a bodiless gateway error.
+    expect(genCount).toBe(0);
+    const replies = events.filter((e) => e.type === "reply");
+    expect(replies).toHaveLength(2);
+    for (const ev of replies) {
+      const reply = ev.type === "reply" ? ev.reply : null;
+      expect(reply!.error).toBe(TURN_CUTOFF_NOTICE);
+      expect(reply!.error).not.toMatch(/504|HTTP/);
+      expect(reply!.tokensIn).toBeNull();
+      expect(reply!.tokensOut).toBeNull();
+    }
+
+    const folded = applyChatEvents(
+      initStreamingReplies([
+        { slug: "v4", name: "v4" },
+        { slug: "v41", name: "v4.1" },
+      ]),
+      events,
+    );
+    for (const column of folded) {
+      expect(column.done).toBe(true);
+      expect(column.error).toBe(TURN_CUTOFF_NOTICE);
+    }
+  });
+
+  it("leaves an ordinary turn's retrieval completely alone", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([
+      candidate({ slug: "v4", name: "v4", versionLabel: "rag-v4" }),
+    ]);
+    const { events } = await drain(await POST(request(["v4"])));
+    expect(mockBuildRetrievalV4).toHaveBeenCalledTimes(1);
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.text).toBe("hello world");
+    expect(reply.type === "reply" && reply.reply.error).toBeNull();
   });
 });

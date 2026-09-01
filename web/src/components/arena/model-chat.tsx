@@ -31,6 +31,8 @@ import {
   type ColumnPhases,
 } from "@/lib/arena/column-status";
 import { ColumnStatusLine } from "./column-status-line";
+import { LongInputNotice } from "./long-input-notice";
+import { ChatColumnBody } from "./chat-column-body";
 
 /** What the page hands the picker; the approach label is derived server-side
  * by approachLabel so it cannot drift from the scoreboard's. */
@@ -292,8 +294,16 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
         const data = await res.json();
         patch((ex) => {
           const replies = (
-            data.replies as Omit<StreamingReply, "done" | "revisedFor">[]
-          ).map((r) => ({ ...r, done: true, revisedFor: null }));
+            data.replies as Omit<
+              StreamingReply,
+              "done" | "revisedFor" | "revisionApplied"
+            >[]
+          ).map((r) => ({
+            ...r,
+            done: true,
+            revisedFor: null,
+            revisionApplied: true,
+          }));
           return {
             ...ex,
             replies,
@@ -421,31 +431,10 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
                   <p className="mb-2 text-xs font-medium text-text-secondary">
                     {r.name}
                   </p>
-                  {/* The repair round rewrote this column: say so, and say
-                        why, rather than letting the text silently change under
-                        a reviewer who was already reading it. */}
-                  {r.revisedFor && !r.error && (
-                    <p className="mb-2 text-[11px] text-text-tertiary">
-                      {r.done ? "Rewrote" : "Rewriting"} its answer
-                      {r.revisedFor.length > 0
-                        ? `: the first attempt used ${r.revisedFor.join(", ")}.`
-                        : "."}
-                    </p>
-                  )}
-                  {r.error ? (
-                    <p className="text-xs text-danger">{r.error}</p>
-                  ) : (
-                    <p className="flex-1 whitespace-pre-wrap text-base leading-relaxed text-text-primary">
-                      {r.text ||
-                        (r.done ? (
-                          <span className="text-text-tertiary">
-                            (empty response)
-                          </span>
-                        ) : (
-                          <span className="text-text-tertiary">…</span>
-                        ))}
-                    </p>
-                  )}
+                  {/* The repair note, the answer and the failure, all three
+                      independent of each other - see chat-column-body.tsx for
+                      why that independence is the whole point. */}
+                  <ChatColumnBody reply={r} />
                   {/* One status line per column, always present: what this
                       model is doing, and how long it has been doing it once
                       the wait is long enough to be worth counting. */}
@@ -501,6 +490,9 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
             {busy ? "Asking…" : "Ask"}
           </button>
         </div>
+        {/* Pre-flight only: it never disables the button above, and the draft
+            is never shortened. See long-input-notice.tsx. */}
+        <LongInputNotice text={draft} />
         {queued && (
           <p className="mt-2 text-xs text-text-tertiary" aria-live="polite">
             Queued. It goes out as soon as the model list finishes loading.

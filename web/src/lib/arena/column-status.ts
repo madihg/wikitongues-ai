@@ -136,7 +136,12 @@ export function applyStatusEvents(
     } else if (ev.type === "stage") {
       if (typeof ev.slug === "string") move(ev.slug, ev.stage);
     } else if (ev.type === "revision") {
-      if (typeof ev.slug === "string") move(ev.slug, "revising");
+      // A revision the server had no budget to act on (`applied: false`) is a
+      // notice, not a phase: nothing is being rewritten, the column is about
+      // to close on the answer it already has. Moving it to "revising" would
+      // promise a rewrite that is never coming.
+      if (typeof ev.slug === "string" && ev.applied !== false)
+        move(ev.slug, "revising");
     } else if (ev.type === "reply") {
       const reply = ev.reply;
       if (reply && typeof reply.slug === "string")
