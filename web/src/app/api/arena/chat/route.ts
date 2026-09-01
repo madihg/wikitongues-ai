@@ -35,7 +35,6 @@ import {
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
 import {
-  CHAT_MAX_DURATION_S,
   deadlineAlarm,
   turnDeadlineFrom,
   TURN_CUTOFF_NOTICE,
@@ -70,14 +69,15 @@ import {
  */
 
 /**
- * Next reads this at build time, so it must be a literal `export const` here -
- * but the NUMBER comes from turn-budget.ts, which also owns the ceiling the
- * platform actually enforces and the deadline every column is held to. The
- * incident that motivated all of this was exactly a declared number the
- * platform never honoured; one module now knows both figures and their
- * difference.
+ * MUST BE A LITERAL. Next validates route segment config statically, before
+ * any module graph is resolved, so `= CHAT_MAX_DURATION_S` fails the build
+ * with "Invalid segment configuration export detected" - which is exactly how
+ * this line broke production once already. A literal cannot import, so the
+ * agreement with turn-budget.ts is enforced by test instead: route.test.ts
+ * asserts this export equals CHAT_MAX_DURATION_S, and fails if either moves.
+ * Change both together, or the test tells you that you did not.
  */
-export const maxDuration = CHAT_MAX_DURATION_S;
+export const maxDuration = 120;
 
 interface ChatTurn {
   role: "user" | "assistant";

@@ -201,11 +201,20 @@ describe("the chat route declares the duration this module owns", () => {
     "utf8",
   );
 
-  it("re-exports the constant instead of writing its own number", () => {
-    expect(routeSource).toContain(
-      "export const maxDuration = CHAT_MAX_DURATION_S",
-    );
-    expect(routeSource).not.toMatch(/export const maxDuration = \d/);
+  it("declares a literal that equals this module's ceiling", () => {
+    // This assertion USED to require the opposite - that the route write
+    // `= CHAT_MAX_DURATION_S` - and that requirement broke production: Next
+    // validates route segment config statically, before imports resolve, and
+    // rejected the build with "Invalid segment configuration export detected".
+    // Local `next build` missed it because Vercel builds with turbopack, which
+    // enforces the rule; vitest missed it because a grep for the wrong shape
+    // passes happily. So the invariant is not "share the identifier" but
+    // "share the value": a literal, checked against the constant here.
+    const m = routeSource.match(/export const maxDuration = ([^;]+);/);
+    expect(m).not.toBeNull();
+    const rhs = (m?.[1] ?? "").trim();
+    expect(rhs).toMatch(/^\d+$/);
+    expect(Number(rhs)).toBe(CHAT_MAX_DURATION_S);
   });
 
   it("takes its deadline and its cutoff copy from here too", () => {
