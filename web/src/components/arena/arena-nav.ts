@@ -18,6 +18,11 @@ export const ARENA_TABS: ArenaTab[] = [
     hint: "The candidate-by-category table, plus a plain-English reading of what those numbers currently do and do not show.",
   },
   {
+    href: "/admin/arena/verdict",
+    label: "Speakers' verdict",
+    hint: "What native speakers decide in blind matchups: who wins, why losing answers lose, and how often both answers are still inadequate. The human-judgment counterpart to the benchmark scores, in plain language.",
+  },
+  {
     href: "/admin/arena/candidates",
     label: "Candidates",
     hint: "The registry of model variants. A candidate is a reproducible recipe: a base model plus optional retrieval, system prompt, or fine-tune artifact.",

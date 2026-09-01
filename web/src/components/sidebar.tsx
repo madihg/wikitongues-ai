@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { navForRole, isOwner, isResearcher, PERSONAS } from "@/lib/personas";
+import {
+  navForRole,
+  activeNavHref,
+  isOwner,
+  isResearcher,
+  PERSONAS,
+} from "@/lib/personas";
 
 export function Sidebar() {
   const { data: session } = useSession();
@@ -20,6 +26,10 @@ export function Sidebar() {
     ? "Owner"
     : role.charAt(0) + role.slice(1).toLowerCase();
 
+  // Longest-prefix match so nested links (e.g. Speakers' Verdict under
+  // /admin/arena) highlight exactly one entry, never their parent too.
+  const activeHref = activeNavHref(links, pathname);
+
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-border bg-surface">
       <div className="border-b border-border px-6 py-5">
@@ -29,11 +39,7 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-1 px-3 py-4">
         {links.map((link) => {
-          const isActive =
-            pathname === link.href ||
-            (link.href !== "/annotator" &&
-              link.href !== "/admin" &&
-              pathname.startsWith(link.href));
+          const isActive = activeHref === link.href;
           return (
             <Link
               key={link.href}

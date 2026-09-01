@@ -2,9 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseChatSelection,
   serializeChatSelection,
-  toggleChatModel,
   buildShareUrl,
-  DEFAULT_CHAT_SLUGS,
   MAX_CHAT_MODELS,
   MODELS_PARAM,
 } from "./chat-selection";
@@ -31,12 +29,31 @@ describe("parseChatSelection", () => {
     expect(r.usedDefault).toBe(false);
   });
 
-  it("falls back to the curated set when the URL names nothing", () => {
-    expect(parseChatSelection("", AVAILABLE).slugs).toEqual([
-      ...DEFAULT_CHAT_SLUGS,
+  it("signals the default case with no slugs when the URL names nothing", () => {
+    // The default is the live leading model, which only the picker can know
+    // once scores load - so this module hands back an empty selection plus
+    // the usedDefault flag instead of a hardcoded slug list.
+    for (const qs of ["", "models="]) {
+      const r = parseChatSelection(qs, AVAILABLE);
+      expect(r.slugs).toEqual([]);
+      expect(r.usedDefault).toBe(true);
+    }
+  });
+
+  it("resolves a legacy 4-model share link in full (old URLs must not break)", () => {
+    // The first feedback session's curated links carried four models; the
+    // picker's newer compare cap of 3 must not truncate them.
+    const legacy =
+      "models=gpt-4-1-rag,gemma-4-31b-rag,gpt-4-1-mini-sft-igala-cold-gold-cmsjnjcp,llama-3-3-70b-rag";
+    const r = parseChatSelection(legacy, AVAILABLE);
+    expect(r.slugs).toEqual([
+      "gpt-4-1-rag",
+      "gemma-4-31b-rag",
+      "gpt-4-1-mini-sft-igala-cold-gold-cmsjnjcp",
+      "llama-3-3-70b-rag",
     ]);
-    expect(parseChatSelection("", AVAILABLE).usedDefault).toBe(true);
-    expect(parseChatSelection("models=", AVAILABLE).usedDefault).toBe(true);
+    expect(r.usedDefault).toBe(false);
+    expect(r.droppedUnknown).toEqual([]);
   });
 
   it("drops slugs that no longer exist instead of erroring", () => {
@@ -58,14 +75,9 @@ describe("parseChatSelection", () => {
     expect(r.slugs).toEqual(["gpt-4-1-rag", "llama-3-3-70b-rag"]);
   });
 
-  it("enforces the cap, because each model is a separate billed call", () => {
+  it("enforces the legacy cap, because each model is a separate billed call", () => {
     const r = parseChatSelection(`models=${AVAILABLE.join(",")}`, AVAILABLE);
     expect(r.slugs).toHaveLength(MAX_CHAT_MODELS);
-  });
-
-  it("filters the default set to what actually exists", () => {
-    const r = parseChatSelection("", ["gpt-4-1-rag"]);
-    expect(r.slugs).toEqual(["gpt-4-1-rag"]);
   });
 
   it("accepts URLSearchParams as well as a raw string", () => {
@@ -80,6 +92,14 @@ describe("serializeChatSelection", () => {
     const picked = ["gemma-4-31b-rag", "gpt-4-1-rag"];
     const qs = serializeChatSelection(picked);
     expect(parseChatSelection(qs, AVAILABLE).slugs).toEqual(picked);
+  });
+
+  it("emits the same param format legacy links use", () => {
+    // The wire format is pinned: `models=` plus comma-joined slugs. Changing
+    // it would orphan every saved link.
+    expect(serializeChatSelection(["a", "b", "c"])).toBe(
+      `${MODELS_PARAM}=a,b,c`,
+    );
   });
 
   it("returns empty for an empty selection so the default takes over", () => {
@@ -97,30 +117,18 @@ describe("serializeChatSelection", () => {
   });
 });
 
-describe("toggleChatModel", () => {
-  it("adds at the end and removes in place", () => {
-    expect(toggleChatModel(["a"], "b")).toEqual(["a", "b"]);
-    expect(toggleChatModel(["a", "b", "c"], "b")).toEqual(["a", "c"]);
-  });
-
-  it("refuses to exceed the cap but still allows removal", () => {
-    const full = Array.from({ length: MAX_CHAT_MODELS }, (_, i) => `m${i}`);
-    expect(toggleChatModel(full, "extra")).toEqual(full);
-    expect(toggleChatModel(full, "m0")).toHaveLength(MAX_CHAT_MODELS - 1);
-  });
-});
-
 describe("buildShareUrl", () => {
-  it("always pins the models explicitly, even when they match the default", () => {
-    // If a shared link relied on the default, changing the default later would
+  it("always pins the models explicitly", () => {
+    // If a shared link relied on the default, the leader changing later would
     // silently change what the recipient opens.
+    const picked = ["gpt-4-1-rag", "gemma-4-31b-rag"];
     const url = buildShareUrl(
       "https://example.com",
       "/admin/arena/chat",
-      DEFAULT_CHAT_SLUGS,
+      picked,
     );
     expect(url).toContain(`?${MODELS_PARAM}=`);
-    for (const slug of DEFAULT_CHAT_SLUGS) expect(url).toContain(slug);
+    for (const slug of picked) expect(url).toContain(slug);
   });
 
   it("does not double the slash on an origin with a trailing slash", () => {

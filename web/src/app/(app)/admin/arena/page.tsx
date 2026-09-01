@@ -1,8 +1,17 @@
 import { BucketMatrix } from "@/components/arena/bucket-matrix";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
+import { prisma } from "@/lib/prisma";
+import { computeAnnotationInsights } from "@/lib/annotation-insights";
+import { VerdictTeaser } from "@/components/arena/speakers-verdict";
 
-export default function ArenaPage() {
+/** The verdict teaser's numbers are computed from the database per request -
+ * the house rule: no hardcoded counts or scores anywhere in the UI. */
+export const dynamic = "force-dynamic";
+
+export default async function ArenaPage() {
+  const insights = await computeAnnotationInsights(prisma);
+
   return (
     <div>
       <div className="mb-8">
@@ -28,6 +37,10 @@ export default function ArenaPage() {
           SFT to teach the missing language, then DPO as the finisher. The
           rung-by-rung deltas are the experiment.
         </p>
+      </div>
+
+      <div className="mb-6">
+        <VerdictTeaser headline={insights.headline} />
       </div>
 
       <BucketMatrix />
