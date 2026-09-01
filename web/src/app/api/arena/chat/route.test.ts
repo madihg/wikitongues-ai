@@ -96,7 +96,11 @@ import {
   type StreamingReply,
 } from "@/lib/arena/chat-stream";
 import { SERVER_TIMING_STAGE_NAMES } from "@/lib/arena/server-timing";
-import { TURN_CUTOFF_NOTICE } from "@/lib/arena/turn-budget";
+import {
+  CHAT_MAX_DURATION_S,
+  TURN_CUTOFF_NOTICE,
+} from "@/lib/arena/turn-budget";
+import { readFileSync } from "node:fs";
 import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { buildUserTurnV2, IGALA_SYSTEM_V2 } from "@/lib/generation-prompt-v2";
@@ -1158,5 +1162,53 @@ describe("a column never closes as a bare error with nothing in it", () => {
     const reply = events.find((e) => e.type === "reply")!;
     expect(reply.type === "reply" && reply.reply.text).toBe("hello world");
     expect(reply.type === "reply" && reply.reply.error).toBeNull();
+  });
+});
+
+describe("route segment config must survive a real Next build", () => {
+  // This suite exists because production broke on exactly this: the route had
+  // `export const maxDuration = CHAT_MAX_DURATION_S`, and Next validates
+  // segment config STATICALLY, before resolving imports. The build died with
+  // "Invalid segment configuration export detected" while tsc and vitest were
+  // both green, so nothing local caught it.
+  const routeSource = readFileSync(
+    new URL("./route.ts", import.meta.url),
+    "utf8",
+  );
+
+  it("declares maxDuration as a bare numeric literal", () => {
+    const m = routeSource.match(/export const maxDuration = ([^;]+);/);
+    expect(m).not.toBeNull();
+    const rhs = (m?.[1] ?? "").trim();
+    expect(rhs).toMatch(/^\d+$/);
+  });
+
+  it("keeps that literal equal to the turn budget's declared ceiling", () => {
+    // The literal cannot import, so this is the join that stops the two
+    // drifting apart. Change one and this fails, naming both numbers.
+    const m = routeSource.match(/export const maxDuration = (\d+);/);
+    expect(Number(m?.[1])).toBe(CHAT_MAX_DURATION_S);
+  });
+
+  it("has no non-literal segment config export of any kind", () => {
+    const SEGMENT_KEYS = [
+      "dynamic",
+      "revalidate",
+      "runtime",
+      "maxDuration",
+      "fetchCache",
+      "preferredRegion",
+      "dynamicParams",
+    ];
+    for (const key of SEGMENT_KEYS) {
+      const m = routeSource.match(new RegExp(`export const ${key} = ([^;]+);`));
+      if (!m) continue;
+      const rhs = m[1].trim();
+      // literal number, literal string, or literal boolean - nothing else
+      expect(
+        /^(\d+|"[^"]*"|'[^']*'|true|false)$/.test(rhs),
+        `segment config "${key}" must be a literal, got: ${rhs}`,
+      ).toBe(true);
+    }
   });
 });
