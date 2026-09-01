@@ -1,4 +1,5 @@
 import type { CandidateGeneration, GenerateArgs } from "@/lib/arena/providers";
+import { hasBudgetForReask } from "@/lib/arena/turn-budget";
 
 /**
  * REPAIR ROUND for the rag-v4-1 serving path: a deterministic, dependency-free
@@ -36,6 +37,11 @@ import type { CandidateGeneration, GenerateArgs } from "@/lib/arena/providers";
  *     turn, so the model sees exactly what it wrote), and the second answer
  *     is kept REGARDLESS - never a loop, never a third call. Latency and
  *     token accounting SUM both calls: serve what you measure.
+ *   - rag-v4-1, violations, but a BUDGET was supplied and it is nearly spent:
+ *     the re-ask is NOT started. The first answer is kept and the caller is
+ *     told through onRevision(violations, false). Only the chat route supplies
+ *     a budget; the exam and the eval route pass none, so this branch cannot
+ *     fire on the measured paths and their behaviour is unchanged.
  *
  * BUFFERED FOR THE EXAM, STREAMED FOR THE CHAT
  * --------------------------------------------
@@ -304,6 +310,28 @@ export interface RepairedGeneration extends CandidateGeneration {
    * null = the checker never ran (any other versionLabel).
    */
   repairViolations: RepairViolation[] | null;
+  /**
+   * True when the checker DID find violations but the turn had too little
+   * budget left to run a second generation, so the first answer was kept. Only
+   * ever true when a budget was supplied - the exam and eval paths supply
+   * none, so it is false there by construction.
+   */
+  repairSkippedForTime: boolean;
+}
+
+/**
+ * The turn's deadline, as the repair round sees it.
+ *
+ * An ABSOLUTE timestamp rather than a duration: the round starts whenever the
+ * first attempt happens to finish, and "how much of the turn is left" is only
+ * answerable against a fixed end point. `now` is injected so the decision is
+ * testable without sleeping through a real budget.
+ */
+export interface RepairRoundBudget {
+  /** Epoch ms by which the whole turn must be finished. */
+  deadlineMs: number;
+  /** Clock, injectable for tests. Defaults to Date.now. */
+  now?: () => number;
 }
 
 /**
@@ -324,22 +352,57 @@ async function runRepairRound(
   candidate: { versionLabel?: string | null },
   args: GenerateArgs,
   run: (a: GenerateArgs) => Promise<CandidateGeneration>,
-  onRevision: (violations: RepairViolation[]) => void,
+  onRevision: (violations: RepairViolation[], applied: boolean) => void,
   opts: RepairCheckOptions,
+  budget?: RepairRoundBudget,
 ): Promise<RepairedGeneration> {
   if (candidate.versionLabel !== REPAIR_ROUND_VERSION_LABEL) {
     // The no-op guarantee: one call, untouched args, unchanged result.
     const result = await run(args);
-    return { ...result, repaired: false, repairViolations: null };
+    return {
+      ...result,
+      repaired: false,
+      repairViolations: null,
+      repairSkippedForTime: false,
+    };
   }
 
   const first = await run(args);
   const violations = checkIgalaOutput(first.text, opts);
   if (violations.length === 0) {
-    return { ...first, repaired: false, repairViolations: [] };
+    return {
+      ...first,
+      repaired: false,
+      repairViolations: [],
+      repairSkippedForTime: false,
+    };
   }
 
-  onRevision(violations);
+  // THE BUDGET GATE - the only deadline-aware decision in this file.
+  //
+  // The first attempt is finished and, on the chat path, already on the
+  // reviewer's screen. A re-ask is a SECOND full generation; started with too
+  // little budget left it does not finish, the platform kills the function
+  // mid-rewrite, and BOTH answers are lost - the bodiless 504 this work exists
+  // to prevent. The asymmetry decides it: an answer with a lint violation is
+  // worth far more than a rewrite that never lands. So the first answer is
+  // kept, and the reviewer is told through the SAME channel a real rewrite
+  // announces itself on that the check found something and there was no time
+  // to act on it. Never a silent pass.
+  //
+  // No budget means no deadline (exam, eval): the gate cannot fire there.
+  const now = budget?.now ?? Date.now;
+  if (budget !== undefined && !hasBudgetForReask(budget.deadlineMs, now())) {
+    onRevision(violations, false);
+    return {
+      ...first,
+      repaired: false,
+      repairViolations: violations,
+      repairSkippedForTime: true,
+    };
+  }
+
+  onRevision(violations, true);
 
   // Re-ask ONCE, violations named, first answer in context as the model's
   // own prior turn. The second answer is kept regardless of what the checker
@@ -365,6 +428,7 @@ async function runRepairRound(
     tokensOut: sumTokens(first.tokensOut, second.tokensOut),
     repaired: true,
     repairViolations: violations,
+    repairSkippedForTime: false,
   };
 }
 
@@ -383,19 +447,33 @@ export async function generateWithRepairRound(
   args: GenerateArgs,
   generate: (a: GenerateArgs) => Promise<CandidateGeneration>,
   opts: RepairCheckOptions = {},
+  budget?: RepairRoundBudget,
 ): Promise<RepairedGeneration> {
-  return runRepairRound(candidate, args, generate, NO_REVISION_NOTICE, opts);
+  return runRepairRound(
+    candidate,
+    args,
+    generate,
+    NO_REVISION_NOTICE,
+    opts,
+    budget,
+  );
 }
 
 export interface RepairStreamHandlers {
   /** Every token of BOTH attempts, in arrival order. */
   onDelta: (delta: string) => void;
   /**
-   * The first attempt was dirty and the repaired attempt is about to stream:
-   * everything delivered through onDelta so far is superseded. Fires at most
-   * once, and never for a clean answer or a non-rag-v4-1 label.
+   * The first attempt was dirty. Fires at most once, and never for a clean
+   * answer or a non-rag-v4-1 label.
+   *
+   * `applied` says what happens next, and the two cases are opposites for the
+   * client: true - a repaired attempt is about to stream, so everything
+   * delivered through onDelta so far is SUPERSEDED. false - the turn had too
+   * little budget left to rewrite, so the first attempt STANDS and is the
+   * answer; the reasons are still worth showing, because a reviewer must not
+   * be served a flagged answer without being told it was flagged.
    */
-  onRevision: (violations: RepairViolation[]) => void;
+  onRevision: (violations: RepairViolation[], applied: boolean) => void;
 }
 
 /**
@@ -419,6 +497,7 @@ export async function streamWithRepairRound(
   ) => Promise<CandidateGeneration>,
   handlers: RepairStreamHandlers,
   opts: RepairCheckOptions = {},
+  budget?: RepairRoundBudget,
 ): Promise<RepairedGeneration> {
   return runRepairRound(
     candidate,
@@ -426,5 +505,6 @@ export async function streamWithRepairRound(
     (a) => stream(a, handlers.onDelta),
     handlers.onRevision,
     opts,
+    budget,
   );
 }

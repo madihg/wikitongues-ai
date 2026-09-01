@@ -64,6 +64,26 @@ export const PARALLEL_K = 4;
 export const GOLD_K = 8;
 
 /**
+ * How many content words of ONE question the retrieval legs will look at.
+ *
+ * The bound that was missing (added 2026-09-01, after the chat 504). Everything
+ * this module SERVES has always been capped - MAX_HEADWORDS lines, MAX_SENSES
+ * each, PARALLEL_K pairs, GOLD_K exemplars - but the WORK was not: the
+ * dictionary leg issues one prefix query per content word that misses the
+ * lexicon, so a pasted paragraph with 200 content words opened 200 database
+ * round trips before a single token was generated. That is latency spent on a
+ * block that can never exceed MAX_HEADWORDS lines anyway.
+ *
+ * Twice MAX_HEADWORDS: enough headroom that the twenty rendered lines are
+ * chosen from a comfortably larger pool of matches, while the fan-out stays
+ * bounded no matter how long the input is. Every prompt in the frozen bank is
+ * far below this (the longest is well under twenty content words), so the
+ * measured paths are unaffected - see retrieval-breadth.test.ts, which pins
+ * that separately from the byte-identical assembly tests.
+ */
+export const MAX_RETRIEVAL_CONTENT_WORDS = MAX_HEADWORDS * 2;
+
+/**
  * Should this prompt get parallel sentence examples at all?
  *
  * The sniff run measured why this gate exists: serving six Bible verses as
@@ -227,6 +247,11 @@ export const ENGLISH_STOPWORDS: ReadonlySet<string> = new Set([
  * preserved. Order matters: CoD measured that shuffling dictionary entries out
  * of source order degrades results, so the block is rendered in the order the
  * words appear in the question.
+ *
+ * Capped at MAX_RETRIEVAL_CONTENT_WORDS. The cap takes the FIRST words rather
+ * than sampling, for the same reason the order is preserved: the question's
+ * own order is the only ranking signal available here, and truncating the tail
+ * is the one form of dropping that keeps it.
  */
 export function contentWords(text: string): string[] {
   const seen = new Set<string>();
@@ -238,6 +263,7 @@ export function contentWords(text: string): string[] {
     if (seen.has(w)) continue;
     seen.add(w);
     out.push(w);
+    if (out.length >= MAX_RETRIEVAL_CONTENT_WORDS) break;
   }
   return out;
 }

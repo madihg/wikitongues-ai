@@ -71,11 +71,20 @@ export type ChatStreamEvent =
   /** A token (or token batch) from one model, append to its column. */
   | { type: "delta"; slug: string; text: string }
   /**
-   * This column's finished first attempt broke the serving lint, so a repaired
-   * second attempt is about to stream: DISCARD what has accumulated, show the
-   * reasons, and treat the deltas that follow as the column's text.
+   * This column's finished first attempt broke the serving lint.
+   *
+   * `applied` absent (the ordinary case, and what every server before the turn
+   * budget existed sent): a repaired second attempt is about to stream, so
+   * DISCARD what has accumulated, show the reasons, and treat the deltas that
+   * follow as the column's text.
+   *
+   * `applied: false`: the turn ran out of budget for a second generation, so
+   * the first attempt STANDS. KEEP the accumulated text and show the reasons
+   * beside it. Absence meaning "applied" is what makes the field additive: a
+   * client that ignores it behaves exactly as it did before, and is corrected
+   * by the closing `reply` event, which carries the kept first answer.
    */
-  | { type: "revision"; slug: string; reasons: string[] }
+  | { type: "revision"; slug: string; reasons: string[]; applied?: boolean }
   /**
    * Advisory progress marker for one column. Carries a fixed enum and a slug,
    * never text - a client may ignore it entirely and lose nothing but the
@@ -136,6 +145,14 @@ export interface StreamingReply extends ChatReply {
    * contract and carries no repair fields.
    */
   revisedFor: string[] | null;
+  /**
+   * Whether the revision named in `revisedFor` was actually carried out. False
+   * only when the turn ran out of budget for the rewrite, in which case the
+   * text here IS the flagged first attempt and the reader must be told so.
+   * Meaningless while `revisedFor` is null; true then, so the ordinary case
+   * needs no special reading.
+   */
+  revisionApplied: boolean;
 }
 
 /** Fresh columns for one exchange, in the order the models were selected. */
@@ -154,6 +171,7 @@ export function initStreamingReplies(
     error: null,
     done: false,
     revisedFor: null,
+    revisionApplied: true,
   }));
 }
 
@@ -168,7 +186,9 @@ export function initStreamingReplies(
  * is discarded in favour of the second, so the accumulated text is cleared and
  * the reasons recorded. The reasons then RIDE THROUGH the closing reply event
  * (which knows nothing about repairs) so a finished column can still show why
- * it was rewritten.
+ * it was rewritten. A revision carrying `applied: false` is the exception -
+ * the turn ran out of budget for the rewrite, so the text stays and the
+ * reasons become an annotation on it rather than an epitaph for it.
  */
 export function applyChatEvents(
   replies: StreamingReply[],
@@ -183,8 +203,14 @@ export function applyChatEvents(
     } else if (ev.type === "revision") {
       const r = bySlug.get(ev.slug);
       if (r && !r.done) {
-        r.text = "";
+        // The text is discarded ONLY when the rewrite is actually happening.
+        // A revision the server could not act on for lack of time leaves the
+        // column exactly as it is: that text is the answer now, and clearing
+        // it would blank a column whose content is the best we will get.
+        const applied = ev.applied !== false;
+        if (applied) r.text = "";
         r.revisedFor = ev.reasons;
+        r.revisionApplied = applied;
       }
     } else if (ev.type === "reply") {
       const r = bySlug.get(ev.reply.slug);
@@ -193,6 +219,7 @@ export function applyChatEvents(
           ...ev.reply,
           done: true,
           revisedFor: r.revisedFor,
+          revisionApplied: r.revisionApplied,
         });
     }
     // Anything else - a `stage` marker, or an event type a newer server sends
@@ -234,16 +261,21 @@ function parseLine(line: string): ChatStreamEvent[] {
     if (parsed.type === "delta" || parsed.type === "reply") return [parsed];
     // A revision with a malformed reasons list is still a revision: the
     // replacement semantics matter, the wording is decoration.
-    if (parsed.type === "revision")
-      return [
-        {
-          type: "revision",
-          slug: parsed.slug,
-          reasons: Array.isArray(parsed.reasons)
-            ? parsed.reasons.filter((r): r is string => typeof r === "string")
-            : [],
-        },
-      ];
+    if (parsed.type === "revision") {
+      const revision: ChatStreamEvent = {
+        type: "revision",
+        slug: parsed.slug,
+        reasons: Array.isArray(parsed.reasons)
+          ? parsed.reasons.filter((r): r is string => typeof r === "string")
+          : [],
+      };
+      // Only an EXPLICIT false is carried. Anything else - absent, junk, a
+      // literal true - normalizes to the historical meaning (the text is
+      // superseded), so an old server's lines parse to exactly the objects
+      // they parsed to before the field existed.
+      if (parsed.applied === false) revision.applied = false;
+      return [revision];
+    }
     if (
       parsed.type === "stage" &&
       typeof parsed.slug === "string" &&
