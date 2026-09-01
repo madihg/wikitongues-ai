@@ -885,3 +885,35 @@ Halim adding credits unlocks Claude v4/v4.1 exam arms via the
 openai-compatible path. Vercel DATABASE_URL still needs
 connection_limit=10 (Halim). Salem written-permission email = JWAL
 ingestion unlock.
+
+## Session State (2026-09-01, late) - Claude on OpenRouter: v4.1 fixes what v3 broke
+
+Claude Opus 5 arms ran the frozen 43 via OpenRouter (direct Anthropic key
+still dead; OPENROUTER_API_KEY funded with Halim's $20, logged as a
+credits CostEntry under provider "openrouter"). Both arms registered with
+provider "openrouter" so consumption attributes correctly in the burndown.
+86 generations, $1.94 actual, budget stop at $8 never approached.
+
+CLAUDE LADDER (Community Agreement Score, leak-free n=27):
+  bare 27.2 | v1 83.3 | v2 62.1 | v3 54.6 | v4 71.5 | v4.1 93.2 [70.5-120.4]
+THE FINDING: v3's grammar rules cost Claude 28.7 points against v1
+(83.3 -> 54.6). v4.1 recovers all of it and passes v1: +38.6 over v3,
++9.9 over v1, and Claude's best score ever. v4.1 is the FIRST method
+version that helps both families - the per-family recipe split (Gemini
+wants rules, Claude wants exemplars) may no longer be needed. CIs overlap
+heavily, so v4.1 > v1 for Claude is suggestive, not established; the v3
+-> v4.1 recovery is large enough to be the real signal.
+Repair round fired 9/43 on Claude v4.1 (7/43 on Gemini): tone saturation
+plus banned characters, i.e. it is doing real work on a second family.
+
+Board top: Gemini v4.1 120.1 | Gemini v4 102.1 | Gemini v3 99.2 |
+bare Gemini 94.2 | CLAUDE v4.1 93.2 | Gemini v2 84.6 | Claude v1 83.3.
+
+NOT logged as a CostEntry on purpose: generation cost is computed live
+from ModelOutput token counts by /api/arena/costs. Adding a row would
+double count - that was the $1.12 bug fixed earlier today.
+
+NEXT: pool decision still open (add Gemini v4.1 and/or Claude v4.1 to
+inPairingPool for blind judgment). The 9 grammar RagEntry rows remain
+unreachable on the v4 retrieval path - a v4.2 retrieval block is the
+open build. GRN is still the only documented corpus permission.
