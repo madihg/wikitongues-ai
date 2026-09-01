@@ -382,23 +382,34 @@ export async function retrieveDictCandidates(
   // Never alongside exact hits: when the exact form is attested, a looser
   // match can only add near-forms, and near-forms are the confusion channel
   // (Onokotu vs Nokotu) this whole path is built to close.
-  for (const word of words) {
-    if (sensesByWord.has(word)) continue;
-    const rows = (await prisma.lexEntry.findMany({
-      where: { glossFolded: { startsWith: word } },
-      select: {
-        id: true,
-        headword: true,
-        gloss: true,
-        glossFolded: true,
-        confidence: true,
-      },
-      // Enough to survive dedupe down to MAX_SENSES; bounded so a one-letter
-      // fragment can never drag in half the lexicon.
-      take: MAX_SENSES * 4,
-    })) as LexRow[];
-    if (rows.length > 0) sensesByWord.set(word, rows);
-  }
+  //
+  // The per-word queries are independent (each word's fallback set depends
+  // only on the exact-match results above), so they run CONCURRENTLY: the
+  // sequential version cost one DB round trip per missed word, measured at
+  // ~400ms each against the pooled production DB - 2.5s of the chat path's
+  // latency on a seven-word prompt was this loop alone.
+  const missedWords = words.filter((w) => !sensesByWord.has(w));
+  const fallbackRows = await Promise.all(
+    missedWords.map(
+      (word) =>
+        prisma.lexEntry.findMany({
+          where: { glossFolded: { startsWith: word } },
+          select: {
+            id: true,
+            headword: true,
+            gloss: true,
+            glossFolded: true,
+            confidence: true,
+          },
+          // Enough to survive dedupe down to MAX_SENSES; bounded so a
+          // one-letter fragment can never drag in half the lexicon.
+          take: MAX_SENSES * 4,
+        }) as Promise<LexRow[]>,
+    ),
+  );
+  missedWords.forEach((word, i) => {
+    if (fallbackRows[i].length > 0) sensesByWord.set(word, fallbackRows[i]);
+  });
 
   // Cap BEFORE the leak guard, so a dropped sense leaves a visible gap
   // rather than being backfilled by the next candidate - backfilling would
@@ -447,21 +458,23 @@ export function renderDictionaryBlock(
 }
 
 /**
- * The gold-exemplar leg, extracted verbatim from buildRetrievalV2
- * (2026-08-28), shared with v4. The caller resolves the query's promptId (the
- * cuid when the prompt exists, else the slug - which matches no pool entry,
- * leaving the id-level guard inert and the isHoldout flag as the active
- * defence). retrieveGoldExamples owns the contamination rules.
+ * Gold-pool cache, keyed per Prisma client. Loading the pool is the single
+ * heaviest query on the serving path (the full consenting ColdAuthorAnswer
+ * join, ~1500 rows with their prompt texts - measured ~0.9-2.1s per chat
+ * request against the pooled production DB), and the pool is effectively a
+ * per-process invariant: community gold accrues on the scale of review
+ * sessions, not requests. A short TTL bounds staleness to one minute; the
+ * WeakMap keying keeps injected test fakes isolated from each other and lets
+ * an entry die with its client. The promise (not the resolved rows) is
+ * cached so concurrent requests share one in-flight load.
  */
-export async function retrieveGuardedGold(
-  prisma: PrismaClient,
-  query: {
-    promptId: string;
-    text: string;
-    bucket: string | null;
-    isHoldout: boolean;
-  },
-): Promise<RetrievedGold[]> {
+const GOLD_POOL_TTL_MS = 60_000;
+const goldPoolCache = new WeakMap<
+  PrismaClient,
+  { at: number; rows: Promise<GoldPoolEntry[]> }
+>();
+
+async function loadGoldPool(prisma: PrismaClient): Promise<GoldPoolEntry[]> {
   const goldRows = await prisma.coldAuthorAnswer.findMany({
     where: { isDemo: false, consentTraining: true },
     select: {
@@ -477,7 +490,7 @@ export async function retrieveGuardedGold(
       },
     },
   });
-  const goldPool: GoldPoolEntry[] = goldRows.map((r) => ({
+  return goldRows.map((r) => ({
     id: r.id,
     promptId: r.promptId,
     promptRef: r.prompt.promptId,
@@ -489,6 +502,40 @@ export async function retrieveGuardedGold(
     consentTraining: r.consentTraining,
     verificationStatus: r.verificationStatus,
   }));
+}
+
+function goldPoolFor(prisma: PrismaClient): Promise<GoldPoolEntry[]> {
+  const hit = goldPoolCache.get(prisma);
+  if (hit && Date.now() - hit.at < GOLD_POOL_TTL_MS) return hit.rows;
+  const rows = loadGoldPool(prisma);
+  const entry = { at: Date.now(), rows };
+  goldPoolCache.set(prisma, entry);
+  // Never cache a failure: a transient DB error must not blank the exemplar
+  // leg for a whole TTL. Only evict if this entry is still the current one.
+  rows.catch(() => {
+    if (goldPoolCache.get(prisma) === entry) goldPoolCache.delete(prisma);
+  });
+  return rows;
+}
+
+/**
+ * The gold-exemplar leg, extracted verbatim from buildRetrievalV2
+ * (2026-08-28), shared with v4. The caller resolves the query's promptId (the
+ * cuid when the prompt exists, else the slug - which matches no pool entry,
+ * leaving the id-level guard inert and the isHoldout flag as the active
+ * defence). retrieveGoldExamples owns the contamination rules. The pool load
+ * is cached (see goldPoolFor); the guard itself runs fresh on every call.
+ */
+export async function retrieveGuardedGold(
+  prisma: PrismaClient,
+  query: {
+    promptId: string;
+    text: string;
+    bucket: string | null;
+    isHoldout: boolean;
+  },
+): Promise<RetrievedGold[]> {
+  const goldPool = await goldPoolFor(prisma);
   return retrieveGoldExamples(query, goldPool, { k: GOLD_K }).examples;
 }
 
@@ -512,7 +559,7 @@ export async function buildRetrievalV2(
   // resolves to nothing: empty protected set, and the self-exclusion rule in
   // gold retrieval simply has nothing to match, which is correct - chat is
   // guarded by isHoldout=true instead.
-  const promptRow = await prisma.prompt.findUnique({
+  const promptRowPromise = prisma.prompt.findUnique({
     where: { promptId: prompt.promptId },
     select: {
       id: true,
@@ -523,10 +570,17 @@ export async function buildRetrievalV2(
     },
   });
 
+  // The four legs below are independent of each other (gold needs only the
+  // prompt row's cuid, so it chains on that one promise), so they run
+  // CONCURRENTLY. Sequential awaits cost one full DB round trip per leg -
+  // measured ~400ms each against the pooled production DB, which stacked to
+  // seconds per chat turn. Results are identical either way: each leg's
+  // inputs are fixed before any of them starts.
+
   // ── 1. DICTIONARY: exact glossFolded match, then prefix as fallback ──────
   // Extracted to retrieveDictCandidates (shared with the v4 path); the
   // queries, fallback rule and caps are the ones documented on that function.
-  const dictCandidates = await retrieveDictCandidates(prisma, words);
+  const dictCandidatesPromise = retrieveDictCandidates(prisma, words);
 
   // ── 2. PARALLEL EXAMPLES: full-text overlap on the English side ──────────
   // plainto_tsquery over the generated englishTsv column (DB-only, GIN
@@ -546,27 +600,36 @@ export async function buildRetrievalV2(
   //
   // Table is schema-qualified because Supabase pools connections and the
   // search_path is not guaranteed per-statement.
-  const pairRows = wantsStructureExamples(prompt.bucket, prompt.text)
-    ? await prisma.$queryRaw<ParallelRow[]>(Prisma.sql`
+  const pairRowsPromise = wantsStructureExamples(prompt.bucket, prompt.text)
+    ? prisma.$queryRaw<ParallelRow[]>(Prisma.sql`
     SELECT id, igala, english
     FROM wikitongues."ParallelPair"
     WHERE "englishTsv" @@ replace(plainto_tsquery('english', ${prompt.text})::text, ' & ', ' | ')::tsquery
     ORDER BY ts_rank("englishTsv", replace(plainto_tsquery('english', ${prompt.text})::text, ' & ', ' | ')::tsquery) DESC, id ASC
     LIMIT ${PARALLEL_K}
   `)
-    : [];
+    : Promise.resolve([] as ParallelRow[]);
 
   // ── 3. GOLD EXEMPLARS: the existing guarded retrieval, k=GOLD_K ───────────────
   // Extracted to retrieveGuardedGold (shared with the v4 path).
-  const gold = await retrieveGuardedGold(prisma, {
-    // The cuid when the prompt exists, else the slug itself - which matches
-    // no pool entry, leaving the id-level guard inert and the isHoldout
-    // flag as the active defence.
-    promptId: promptRow?.id ?? prompt.promptId,
-    text: prompt.text,
-    bucket: prompt.bucket,
-    isHoldout: prompt.isHoldout,
-  });
+  const goldPromise = promptRowPromise.then((row) =>
+    retrieveGuardedGold(prisma, {
+      // The cuid when the prompt exists, else the slug itself - which matches
+      // no pool entry, leaving the id-level guard inert and the isHoldout
+      // flag as the active defence.
+      promptId: row?.id ?? prompt.promptId,
+      text: prompt.text,
+      bucket: prompt.bucket,
+      isHoldout: prompt.isHoldout,
+    }),
+  );
+
+  const [promptRow, dictCandidates, pairRows, gold] = await Promise.all([
+    promptRowPromise,
+    dictCandidatesPromise,
+    pairRowsPromise,
+    goldPromise,
+  ]);
 
   // ── 4. LEAK GUARD over every piece, holdout prompts only ─────────────────
   // The guard checks each piece's SERVED text (headword + gloss for lexicon,

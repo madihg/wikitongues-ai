@@ -19,6 +19,10 @@ describe("ARENA_TABS", () => {
     }
   });
 
+  it("puts the Speakers' verdict right after Overview - the first stop after the front page", () => {
+    expect(ARENA_TABS[1].href).toBe("/admin/arena/verdict");
+  });
+
   it("has no duplicate hrefs or labels", () => {
     expect(new Set(ARENA_TABS.map((t) => t.href)).size).toBe(ARENA_TABS.length);
     expect(new Set(ARENA_TABS.map((t) => t.label)).size).toBe(

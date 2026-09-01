@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
+import { approachLabel } from "@/lib/method-metrics";
 import { ModelChat, type ChatCandidate } from "@/components/arena/model-chat";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
@@ -22,18 +23,27 @@ export const dynamic = "force-dynamic";
 async function ChatSurface() {
   const candidates = await prisma.candidateModel.findMany({
     where: { archived: false, language: "igala" },
-    select: { slug: true, name: true, kind: true, ragEnabled: true },
+    select: {
+      slug: true,
+      name: true,
+      kind: true,
+      ragEnabled: true,
+      versionLabel: true,
+    },
     orderBy: [{ kind: "asc" }, { name: "asc" }],
   });
 
-  // Order the picker the way a curator thinks: the adapted candidates first,
-  // untouched baselines last, since baselines are mostly there as a control.
-  const rank = (k: string) => (k === "rag" ? 0 : k === "sft" ? 1 : 2);
-  const list: ChatCandidate[] = candidates
-    .map((c) => ({ ...c, score: null }))
-    .sort(
-      (a, b) => rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name),
-    );
+  // Ordering happens client-side by live agreement score (chat-picker.ts);
+  // the server only supplies the facts. The approach label is derived here
+  // with the scoreboard's own approachLabel so the two surfaces cannot drift.
+  const list: ChatCandidate[] = candidates.map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    kind: c.kind,
+    ragEnabled: c.ragEnabled,
+    versionLabel: c.versionLabel,
+    approach: approachLabel(c.kind, c.versionLabel),
+  }));
 
   return <ModelChat candidates={list} />;
 }
@@ -71,7 +81,7 @@ export default function ArenaChatPage() {
 
       <HelpButton
         title="Chat with the models"
-        description="A side-by-side conversation with several registered candidates at once. Every model receives the identical question and, for retrieval-backed candidates, the identical retrieved context - the same eight community gold exemplars and four reference chunks the benchmark serves them, so a verdict here transfers to the numbers on the Automatic eval tab. Each model keeps its own conversation history, so the models never see each other's answers and the comparison stays independent. Gold answers from the frozen benchmark are excluded from retrieval here, so this page cannot display a held-out answer to the people whose independent judgement that benchmark depends on. Nothing typed here is recorded as annotation data: it does not enter training, the leaderboard, or any fine-tune source. Each message costs a real API call per selected model, which is why at most six can be selected at once."
+        description="A side-by-side conversation with several registered candidates at once. Every model receives the identical question and, for retrieval-backed candidates, the identical retrieved context - the same eight community gold exemplars and four reference chunks the benchmark serves them, so a verdict here transfers to the numbers on the Automatic eval tab. Each model keeps its own conversation history, so the models never see each other's answers and the comparison stays independent. Gold answers from the frozen benchmark are excluded from retrieval here, so this page cannot display a held-out answer to the people whose independent judgement that benchmark depends on. Nothing typed here is recorded as annotation data: it does not enter training, the leaderboard, or any fine-tune source. Each message costs a real API call per selected model, which is why the picker assembles at most three at once - the leading model by live agreement score is preselected, and comparison is an explicit choice. Links shared before that cap may still open on their full larger set."
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { generateText, type LanguageModel } from "ai";
+import { generateText, streamText, type LanguageModel } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { openai, createOpenAI } from "@ai-sdk/openai";
 import { google } from "@ai-sdk/google";
@@ -220,12 +220,22 @@ export function buildSystemPrompt(
   return base;
 }
 
-/** Generate one response for a candidate, fully described by its config. */
-export async function generateForCandidate(
+/**
+ * Everything a provider call needs, assembled once. Extracted from
+ * generateForCandidate (2026-08-31) so the streaming path sends the
+ * BYTE-IDENTICAL system prompt and message list as the buffered path - the
+ * two must never drift, or a chat reviewer would be judging a different
+ * composition than the eval harness measures.
+ */
+export function assembleGenerationRequest(
   candidate: CandidateLike,
   args: GenerateArgs,
-): Promise<CandidateGeneration> {
-  const start = Date.now();
+): {
+  system: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  decoding: Decoding;
+  ragContextIds: string[];
+} {
   const decoding = parseDecoding(candidate.decodingParams);
   const ragContext = candidate.ragEnabled ? (args.ragContext ?? []) : [];
   // Retrieved community gold is gated on ragEnabled for the same reason
@@ -263,6 +273,29 @@ export async function generateForCandidate(
   }
   messages.push({ role: "user", content: args.userMessage });
 
+  return {
+    system,
+    messages,
+    decoding,
+    // Full retrieval provenance: RagEntry chunk ids plus the ColdAuthorAnswer
+    // ids used as exemplars, prefixed so the two corpora stay distinguishable
+    // when the row is read back months later.
+    ragContextIds: [
+      ...ragContext.map((c) => c.id),
+      ...goldExamples.filter((g) => g.id).map((g) => `gold:${g.id}`),
+    ],
+  };
+}
+
+/** Generate one response for a candidate, fully described by its config. */
+export async function generateForCandidate(
+  candidate: CandidateLike,
+  args: GenerateArgs,
+): Promise<CandidateGeneration> {
+  const start = Date.now();
+  const { system, messages, decoding, ragContextIds } =
+    assembleGenerationRequest(candidate, args);
+
   const result = await generateText({
     model: resolveModel(candidate),
     system,
@@ -280,12 +313,72 @@ export async function generateForCandidate(
     latencyMs: Date.now() - start,
     tokensIn: usage?.inputTokens,
     tokensOut: usage?.outputTokens,
-    // Full retrieval provenance: RagEntry chunk ids plus the ColdAuthorAnswer
-    // ids used as exemplars, prefixed so the two corpora stay distinguishable
-    // when the row is read back months later.
-    ragContextIds: [
-      ...ragContext.map((c) => c.id),
-      ...goldExamples.filter((g) => g.id).map((g) => `gold:${g.id}`),
-    ],
+    ragContextIds,
+  };
+}
+
+/**
+ * Streaming twin of generateForCandidate: identical request assembly (the
+ * shared assembleGenerationRequest above), but tokens are surfaced through
+ * onDelta as they arrive instead of buffering the full completion. The chat
+ * route uses this so a reviewer starts reading after the first token, not
+ * after the last - the perceived-latency complaint against rag-v3 was mostly
+ * time-to-first-visible-character, and no retrieval change can fix that while
+ * the route waits for the whole answer.
+ *
+ * The returned CandidateGeneration is the same shape as the buffered path, so
+ * accounting (latency, tokens, provenance) stays identical downstream.
+ * `modelForTest` lets unit tests inject a mock LanguageModel; production
+ * callers omit it and get resolveModel(candidate).
+ */
+export async function streamForCandidate(
+  candidate: CandidateLike,
+  args: GenerateArgs,
+  onDelta: (delta: string) => void,
+  modelForTest?: LanguageModel,
+): Promise<CandidateGeneration> {
+  const start = Date.now();
+  const { system, messages, decoding, ragContextIds } =
+    assembleGenerationRequest(candidate, args);
+
+  const result = streamText({
+    model: modelForTest ?? resolveModel(candidate),
+    system,
+    messages,
+    temperature: decoding.temperature,
+    topP: decoding.topP,
+    maxOutputTokens: decoding.maxTokens,
+  });
+
+  // fullStream, not textStream: the SDK routes provider failures through
+  // `error` PARTS rather than throwing from the text iterator, so reading
+  // textStream alone would turn a dead API key into a silent empty answer.
+  // Surfacing the error part as a rejection keeps this path's error contract
+  // identical to generateText's, which is what the chat route's per-model
+  // catch depends on.
+  let text = "";
+  let streamError: unknown = null;
+  for await (const part of result.fullStream) {
+    if (part.type === "text-delta") {
+      text += part.text;
+      onDelta(part.text);
+    } else if (part.type === "error") {
+      streamError = part.error;
+    }
+  }
+  if (streamError !== null) {
+    throw streamError instanceof Error
+      ? streamError
+      : new Error(String(streamError));
+  }
+  const usage = await result.usage;
+
+  return {
+    text,
+    modelId: candidate.baseModelId,
+    latencyMs: Date.now() - start,
+    tokensIn: usage?.inputTokens,
+    tokensOut: usage?.outputTokens,
+    ragContextIds,
   };
 }

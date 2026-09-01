@@ -13,26 +13,18 @@
  * is shareable, bookmarkable, survives a reload, and makes the shared state
  * visible rather than hidden. `?models=a,b,c` IS the state.
  *
- * localStorage is still used, but only as a convenience for the curator's own
- * return visits, and the URL always wins when both are present.
+ * When the URL names no models, this module does NOT supply a default: the
+ * default is the current leading model by live agreement score, which only the
+ * picker (chat-picker.ts) can know once scores load. A hardcoded default slug
+ * list lived here once and went stale the week a new arm took the lead.
  */
 
 /**
- * The curated default, used only when the URL names no models.
- *
- * These are the four the researcher selected for the first feedback session:
- * the three retrieval variants plus the community fine-tune. Baselines are
- * deliberately absent - a speaker's time is better spent on the candidates that
- * might actually be deployed than on models we already know answer in Yoruba.
+ * Hard cap on models one legacy link may resolve: each is a separate billed
+ * API call. New selections are assembled by the picker under the tighter
+ * MAX_COMPARE_MODELS (chat-picker.ts); this looser bound survives so links
+ * shared before that cap existed still open on their full set.
  */
-export const DEFAULT_CHAT_SLUGS: readonly string[] = [
-  "gpt-4-1-rag",
-  "gemma-4-31b-rag",
-  "gpt-4-1-mini-sft-igala-cold-gold-cmsjnjcp",
-  "llama-3-3-70b-rag",
-];
-
-/** Hard cap on models per message: each one is a separate billed API call. */
 export const MAX_CHAT_MODELS = 6;
 
 export const MODELS_PARAM = "models";
@@ -55,16 +47,9 @@ export function parseChatSelection(
   const availableSet = new Set(available);
 
   if (raw === null || raw.trim() === "") {
-    // No selection in the URL: fall back to the curated set, still filtered to
-    // what exists.
-    return {
-      slugs: DEFAULT_CHAT_SLUGS.filter((s) => availableSet.has(s)).slice(
-        0,
-        MAX_CHAT_MODELS,
-      ),
-      droppedUnknown: [],
-      usedDefault: true,
-    };
+    // No selection in the URL: signal it and let the caller pick the default
+    // (the live leading model, which requires scores this module cannot see).
+    return { slugs: [], droppedUnknown: [], usedDefault: true };
   }
 
   const requested = raw
@@ -107,16 +92,6 @@ export function serializeChatSelection(slugs: readonly string[]): string {
   }
   if (unique.length === 0) return "";
   return `${MODELS_PARAM}=${unique.map(encodeURIComponent).join(",")}`;
-}
-
-/** Add or remove one model, preserving order and honouring the cap. */
-export function toggleChatModel(
-  slugs: readonly string[],
-  slug: string,
-): string[] {
-  if (slugs.includes(slug)) return slugs.filter((s) => s !== slug);
-  if (slugs.length >= MAX_CHAT_MODELS) return [...slugs];
-  return [...slugs, slug];
 }
 
 /**

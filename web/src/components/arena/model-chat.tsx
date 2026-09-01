@@ -3,36 +3,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  MAX_CHAT_MODELS,
   buildShareUrl,
   parseChatSelection,
   serializeChatSelection,
-  toggleChatModel,
 } from "@/lib/arena/chat-selection";
+import {
+  addCompare,
+  defaultChatSelection,
+  rankChatCandidates,
+  removeModel,
+  selectOnly,
+  type PickerCandidate,
+} from "@/lib/arena/chat-picker";
+import { ModelPicker, type ScoresState } from "./model-picker";
+import {
+  ChatStreamParser,
+  applyChatEvents,
+  failPendingReplies,
+  initStreamingReplies,
+  type ChatStreamEvent,
+  type StreamingReply,
+} from "@/lib/arena/chat-stream";
 
-export interface ChatCandidate {
-  slug: string;
-  name: string;
-  kind: string;
-  ragEnabled: boolean;
-  /** Leak-free chrF, when the candidate has been scored. Null otherwise. */
-  score: number | null;
-}
+/** What the page hands the picker; the approach label is derived server-side
+ * by approachLabel so it cannot drift from the scoreboard's. */
+export type ChatCandidate = PickerCandidate;
 
-interface Reply {
-  slug: string;
-  name: string;
-  text: string;
-  latencyMs: number;
-  retrievedChunks: number;
-  retrievedExemplars: number;
-  error: string | null;
-}
+/** Live agreement scores keyed by candidate name, or the fetch's fate. */
+type ScoresFetch =
+  | { status: "loading" }
+  | { status: "ready"; byName: Map<string, number | null> }
+  | { status: "error" };
 
 interface Exchange {
   question: string;
-  /** Null while in flight. */
-  replies: Reply[] | null;
+  /** Null until the first byte of the response; then live streaming columns. */
+  replies: StreamingReply[] | null;
 }
 
 /**
@@ -58,10 +64,64 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
     [candidates],
   );
 
-  const { slugs: selected, droppedUnknown } = useMemo(
+  // Live agreement scores, from the same computation as the scoreboard
+  // (computeMethodMetrics behind /api/public/method-metrics, cached
+  // server-side). The picker's order and its default both fall out of this
+  // data - nothing here names a model.
+  const [scores, setScores] = useState<ScoresFetch>({ status: "loading" });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/public/method-metrics");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data: {
+          candidates?: { name: string; agreementScore: number | null }[];
+        } = await res.json();
+        if (cancelled) return;
+        setScores({
+          status: "ready",
+          byName: new Map(
+            (data.candidates ?? []).map((c) => [c.name, c.agreementScore]),
+          ),
+        });
+      } catch {
+        if (!cancelled) setScores({ status: "error" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const scoresState: ScoresState = scores.status;
+  const ranked = useMemo(
+    () =>
+      rankChatCandidates(
+        candidates,
+        scores.status === "ready" ? scores.byName : null,
+      ),
+    [candidates, scores],
+  );
+
+  const {
+    slugs: parsedSlugs,
+    droppedUnknown,
+    usedDefault,
+  } = useMemo(
     () => parseChatSelection(searchParams.toString(), availableSlugs),
     [searchParams, availableSlugs],
   );
+
+  // The default (URL names nothing) is the live leader, alone. While scores
+  // are still loading the default is deliberately empty rather than a guess:
+  // preselecting the fallback leader and then swapping it once scores land
+  // would silently change which model the first question goes to.
+  const selected = useMemo(() => {
+    if (!usedDefault) return parsedSlugs;
+    if (scores.status === "loading") return [];
+    return defaultChatSelection(ranked);
+  }, [usedDefault, parsedSlugs, scores.status, ranked]);
 
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [draft, setDraft] = useState("");
@@ -95,6 +155,17 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
     setDraft("");
     setBusy(true);
 
+    // Patch this exchange's columns in place; every stream event funnels
+    // through here so React re-renders as tokens arrive.
+    const patch = (
+      fn: (replies: StreamingReply[] | null) => StreamingReply[],
+    ) =>
+      setExchanges((prev) =>
+        prev.map((ex, i) =>
+          i === index ? { ...ex, replies: fn(ex.replies) } : ex,
+        ),
+      );
+
     try {
       const res = await fetch("/api/arena/chat", {
         method: "POST",
@@ -115,30 +186,64 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
           ],
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      setExchanges((prev) =>
-        prev.map((ex, i) =>
-          i === index ? { ...ex, replies: data.replies as Reply[] } : ex,
-        ),
-      );
+      if (!res.ok) {
+        // Errors keep the old JSON contract (auth, validation).
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? `HTTP ${res.status}`);
+      }
+
+      const contentType = res.headers.get("content-type") ?? "";
+      if (res.body && contentType.includes("ndjson")) {
+        // The streaming path: one NDJSON event per line, deltas filling each
+        // model's column as its provider produces tokens (see chat-stream.ts).
+        const initial = initStreamingReplies(
+          selected.map((slug) => ({
+            slug,
+            name: candidates.find((c) => c.slug === slug)?.name ?? slug,
+          })),
+        );
+        patch(() => initial);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        const parser = new ChatStreamParser();
+        const apply = (events: ChatStreamEvent[]) => {
+          if (events.length > 0)
+            patch((replies) => applyChatEvents(replies ?? initial, events));
+        };
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          apply(parser.push(decoder.decode(value, { stream: true })));
+        }
+        apply(parser.flush());
+        // A stream that ended without closing every column (proxy cut the
+        // connection) must not leave columns spinning forever.
+        patch((replies) =>
+          failPendingReplies(replies ?? initial, "Response ended early"),
+        );
+      } else {
+        // Buffered JSON fallback, the pre-streaming contract.
+        const data = await res.json();
+        patch(() =>
+          (data.replies as Omit<StreamingReply, "done">[]).map((r) => ({
+            ...r,
+            done: true,
+          })),
+        );
+      }
     } catch (e) {
-      setExchanges((prev) =>
-        prev.map((ex, i) =>
-          i === index
-            ? {
-                ...ex,
-                replies: selected.map((slug) => ({
-                  slug,
-                  name: candidates.find((c) => c.slug === slug)?.name ?? slug,
-                  text: "",
-                  latencyMs: 0,
-                  retrievedChunks: 0,
-                  retrievedExemplars: 0,
-                  error: (e as Error).message,
-                })),
-              }
-            : ex,
+      // Keep whatever already streamed in; only the unfinished columns carry
+      // the failure.
+      patch((replies) =>
+        failPendingReplies(
+          replies ??
+            initStreamingReplies(
+              selected.map((slug) => ({
+                slug,
+                name: candidates.find((c) => c.slug === slug)?.name ?? slug,
+              })),
+            ),
+          (e as Error).message,
         ),
       );
     } finally {
@@ -169,89 +274,17 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
   return (
     <div className="flex flex-col gap-4">
       {/* ── model picker ─────────────────────────────────────────────── */}
-      <div className="rounded border border-border bg-surface p-4">
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-sm font-medium text-text-primary">
-            Models in this conversation
-          </h2>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-text-tertiary">
-              {selected.length} of {MAX_CHAT_MODELS} max
-            </span>
-            <button
-              type="button"
-              onClick={copyLink}
-              className="rounded border border-border px-2 py-1 text-xs text-text-secondary hover:border-border-strong hover:text-text-primary"
-            >
-              {copied ? "Link copied" : "Copy link to share"}
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {candidates.map((c) => {
-            const on = selected.includes(c.slug);
-            const atCap = !on && selected.length >= MAX_CHAT_MODELS;
-            return (
-              <button
-                key={c.slug}
-                type="button"
-                aria-pressed={on}
-                disabled={atCap}
-                onClick={() => setSelection(toggleChatModel(selected, c.slug))}
-                title={
-                  atCap
-                    ? `Deselect one first - at most ${MAX_CHAT_MODELS} models per message`
-                    : c.ragEnabled
-                      ? "Retrieval: community gold exemplars plus reference chunks"
-                      : c.kind === "sft"
-                        ? "Fine-tuned on community gold, no retrieval"
-                        : "Untuned baseline, no retrieval"
-                }
-                className={[
-                  "rounded-full border px-3 py-1 text-xs transition-colors",
-                  on
-                    ? "border-accent bg-accent text-accent-contrast"
-                    : "border-border text-text-secondary hover:border-border-strong hover:text-text-primary",
-                  atCap ? "cursor-not-allowed opacity-40" : "",
-                ].join(" ")}
-              >
-                {c.name}
-                <span
-                  className={on ? "ml-2 opacity-70" : "ml-2 text-text-tertiary"}
-                >
-                  {c.ragEnabled
-                    ? "retrieval"
-                    : c.kind === "sft"
-                      ? "fine-tuned"
-                      : "baseline"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {droppedUnknown.length > 0 && (
-          <p className="mt-3 text-xs text-warning">
-            {droppedUnknown.length} model
-            {droppedUnknown.length === 1 ? "" : "s"} in this link no longer
-            exist and {droppedUnknown.length === 1 ? "was" : "were"} skipped.
-          </p>
-        )}
-        <p className="mt-3 text-xs text-text-tertiary">
-          The label beside each name is how that model gets its Igala:{" "}
-          <span className="text-text-secondary">retrieval</span> looks up
-          community answers and reference material at question time,{" "}
-          <span className="text-text-secondary">fine-tuned</span> was trained on
-          community answers,{" "}
-          <span className="text-text-secondary">baseline</span> is the model
-          untouched. Automatic scores live on the Automatic eval tab and are not
-          shown here on purpose - a number beside a chat window invites reading
-          it as a quality verdict, which it is not. The selection is held in
-          this page&apos;s address, so the link above opens on exactly these
-          models.
-        </p>
-      </div>
+      <ModelPicker
+        ranked={ranked}
+        selected={selected}
+        scoresState={scoresState}
+        onSelectOnly={(slug) => setSelection(selectOnly(slug))}
+        onAddCompare={(slug) => setSelection(addCompare(selected, slug))}
+        onRemove={(slug) => setSelection(removeModel(selected, slug))}
+        onCopyLink={() => void copyLink()}
+        copied={copied}
+        droppedUnknown={droppedUnknown}
+      />
 
       {/* ── transcript ───────────────────────────────────────────────── */}
       <div className="flex flex-col gap-6">
@@ -301,17 +334,26 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
                       <p className="text-xs text-danger">{r.error}</p>
                     ) : (
                       <p className="flex-1 whitespace-pre-wrap text-base leading-relaxed text-text-primary">
-                        {r.text || (
-                          <span className="text-text-tertiary">
-                            (empty response)
-                          </span>
-                        )}
+                        {r.text ||
+                          (r.done ? (
+                            <span className="text-text-tertiary">
+                              (empty response)
+                            </span>
+                          ) : (
+                            <span className="text-text-tertiary">…</span>
+                          ))}
                       </p>
                     )}
                     <p className="mt-3 text-[11px] text-text-tertiary">
-                      {(r.latencyMs / 1000).toFixed(1)}s
-                      {r.retrievedExemplars > 0 &&
-                        ` · ${r.retrievedExemplars} gold examples, ${r.retrievedChunks} reference chunks`}
+                      {r.done ? (
+                        <>
+                          {(r.latencyMs / 1000).toFixed(1)}s
+                          {r.retrievedExemplars > 0 &&
+                            ` · ${r.retrievedExemplars} gold examples, ${r.retrievedChunks} reference chunks`}
+                        </>
+                      ) : (
+                        "streaming…"
+                      )}
                     </p>
                   </div>
                 ))}
@@ -337,7 +379,9 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
             rows={2}
             placeholder={
               selected.length === 0
-                ? "Select at least one model above"
+                ? scoresState === "loading" && usedDefault
+                  ? "Finding the leading model…"
+                  : "Select at least one model above"
                 : "Ask all selected models the same question…  (Enter to send, Shift+Enter for a new line)"
             }
             disabled={selected.length === 0}

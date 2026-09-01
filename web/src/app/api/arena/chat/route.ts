@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
-import { generateForCandidate, type RagChunk } from "@/lib/arena/providers";
+import { streamForCandidate, type RagChunk } from "@/lib/arena/providers";
+import {
+  encodeChatEvent,
+  type ChatReply,
+  type ChatStreamEvent,
+} from "@/lib/arena/chat-stream";
 import { searchRag } from "@/lib/rag";
 import {
   retrieveGoldExamples,
@@ -90,6 +95,51 @@ async function loadGoldPool(): Promise<GoldPoolEntry[]> {
   }));
 }
 
+/**
+ * The v1 retrieval context: encyclopedic chunks and gold exemplars for
+ * candidates still on the original composition. The two legs are independent,
+ * so they run concurrently.
+ */
+async function loadV1Context(userMessage: string): Promise<{
+  ragContext: RagChunk[];
+  goldExamples: { id: string; question: string; answer: string }[];
+}> {
+  const [ragContext, goldPool] = await Promise.all([
+    searchRag(userMessage, "igala", RAG_K)
+      .then((entries) =>
+        entries.map((e) => ({
+          id: e.id,
+          content: e.content,
+          topic: e.topic,
+          chunkType: e.chunkType,
+        })),
+      )
+      // Degrade loudly in the response rather than silently serving nothing.
+      .catch(() => [] as RagChunk[]),
+    loadGoldPool(),
+  ]);
+  const retrieved = retrieveGoldExamples(
+    // A free-text question belongs to no prompt. Marking it holdout keeps the
+    // guard at its strictest, so no frozen-bank answer can be displayed here.
+    {
+      promptId: "__chat__",
+      text: userMessage,
+      bucket: null,
+      isHoldout: true,
+    },
+    goldPool,
+    { k: GOLD_K },
+  );
+  return {
+    ragContext,
+    goldExamples: retrieved.examples.map((e) => ({
+      id: e.id,
+      question: e.question,
+      answer: e.answer,
+    })),
+  };
+}
+
 export async function POST(req: Request) {
   const guard = await requireResearcher();
   if (guard.error) return guard.error;
@@ -150,8 +200,13 @@ export async function POST(req: Request) {
       c.versionLabel !== "rag-v3" &&
       c.versionLabel !== "rag-v4",
   );
-  const goldPool = needsRetrieval ? await loadGoldPool() : [];
 
+  // The three per-version context builds are independent of each other, so
+  // they run CONCURRENTLY - a mixed selection (a v1 candidate beside a v3 and
+  // a v4) used to pay for all three sequentially before any model was even
+  // called. Each build keeps its exact former inputs, so every version's
+  // composition stays byte-identical.
+  //
   // One v2 context per request, shared by every rag-v2 AND rag-v3 candidate -
   // v3 changes only the system prompt (the enshrined grammar), never the
   // retrieval composition, so the two labels share one build. A free-text
@@ -159,68 +214,39 @@ export async function POST(req: Request) {
   // isHoldout is forced true: the strictest guard, so no frozen-bank answer
   // can ever be displayed to the very reviewers whose independent judgement
   // the benchmark depends on.
-  let v2: RetrievalV2Result | null = null;
-  if (
-    candidates.some(
-      (c) => c.versionLabel === "rag-v2" || c.versionLabel === "rag-v3",
-    )
-  ) {
-    v2 = await buildRetrievalV2(prisma, {
-      promptId: "__chat__",
-      text: userMessage,
-      bucket: null,
-      isHoldout: true,
-    });
-  }
-
+  //
   // rag-v4 gets its OWN build (never shared with v2/v3): its retrieval
   // composition differs - source-diversified parallel pairs plus the
   // corrections block - so sharing would either change the v2/v3 serving
   // (forbidden: those paths are frozen for comparability) or serve v4
   // candidates a context nobody registered. Same synthetic-holdout guard.
-  let v4: RetrievalV4Result | null = null;
-  if (candidates.some((c) => c.versionLabel === "rag-v4")) {
-    v4 = await buildRetrievalV4(prisma, {
-      promptId: "__chat__",
-      text: userMessage,
-      bucket: null,
-      isHoldout: true,
-    });
-  }
-
-  let ragContext: RagChunk[] = [];
-  let goldExamples: { id: string; question: string; answer: string }[] = [];
-  if (needsRetrieval) {
-    try {
-      const entries = await searchRag(userMessage, "igala", RAG_K);
-      ragContext = entries.map((e) => ({
-        id: e.id,
-        content: e.content,
-        topic: e.topic,
-        chunkType: e.chunkType,
-      }));
-    } catch {
-      // Degrade loudly in the response rather than silently serving nothing.
-      ragContext = [];
-    }
-    const retrieved = retrieveGoldExamples(
-      // A free-text question belongs to no prompt. Marking it holdout keeps the
-      // guard at its strictest, so no frozen-bank answer can be displayed here.
-      {
-        promptId: "__chat__",
-        text: userMessage,
-        bucket: null,
-        isHoldout: true,
-      },
-      goldPool,
-      { k: GOLD_K },
-    );
-    goldExamples = retrieved.examples.map((e) => ({
-      id: e.id,
-      question: e.question,
-      answer: e.answer,
-    }));
-  }
+  const chatQuery = {
+    promptId: "__chat__",
+    text: userMessage,
+    bucket: null,
+    isHoldout: true,
+  };
+  const [v2, v4, v1] = await Promise.all([
+    candidates.some(
+      (c) => c.versionLabel === "rag-v2" || c.versionLabel === "rag-v3",
+    )
+      ? buildRetrievalV2(prisma, chatQuery)
+      : Promise.resolve<RetrievalV2Result | null>(null),
+    candidates.some((c) => c.versionLabel === "rag-v4")
+      ? buildRetrievalV4(prisma, chatQuery)
+      : Promise.resolve<RetrievalV4Result | null>(null),
+    needsRetrieval
+      ? loadV1Context(userMessage)
+      : Promise.resolve({
+          ragContext: [] as RagChunk[],
+          goldExamples: [] as {
+            id: string;
+            question: string;
+            answer: string;
+          }[],
+        }),
+  ]);
+  const { ragContext, goldExamples } = v1;
 
   // Order the answers the way the caller listed the models, so the columns a
   // reviewer reads left-to-right match the order that was chosen for her.
@@ -229,90 +255,141 @@ export async function POST(req: Request) {
     .map((s) => bySlug.get(s))
     .filter((c): c is NonNullable<typeof c> => Boolean(c));
 
-  const replies = await Promise.all(
-    ordered.map(async (candidate) => {
-      const started = Date.now();
-      const isV2 =
-        (candidate.versionLabel === "rag-v2" ||
-          candidate.versionLabel === "rag-v3") &&
-        v2 !== null;
-      const isV4 = candidate.versionLabel === "rag-v4" && v4 !== null;
-      try {
-        // The v2/v3 path swaps all three levers at once: dictionary +
-        // parallel examples appended to the user turn (dictionary last,
-        // immediately above the question - the DiPMT position), gold
-        // exemplars as prior turns, and the version's system prompt - the
-        // ONLY thing that differs between rag-v2 and rag-v3. The v4 path is
-        // the same shape with its own retrieval build (corrections block +
-        // register-guarded, source-diversified pairs) and IGALA_SYSTEM_V4.
-        // Everything flows through the same generateForCandidate call so
-        // latency/token accounting and error handling stay identical.
-        const result = isV4
-          ? await generateForCandidate(candidate, {
-              userMessage: buildUserTurnV4(userMessage, v4!, null),
-              conversationHistory: history,
-              goldExamples: v4!.exampleTurns,
-              systemPromptOverride: IGALA_SYSTEM_V4,
-            })
-          : isV2
-            ? await generateForCandidate(candidate, {
-                userMessage: buildUserTurnV2(userMessage, v2!, null),
-                conversationHistory: history,
-                goldExamples: v2!.exampleTurns,
-                systemPromptOverride:
-                  candidate.versionLabel === "rag-v3"
-                    ? IGALA_SYSTEM_V3
-                    : IGALA_SYSTEM_V2,
-              })
-            : await generateForCandidate(candidate, {
-                userMessage,
-                conversationHistory: history,
-                ragContext,
-                goldExamples,
-              });
-        return {
-          slug: candidate.slug,
-          name: candidate.name,
-          text: result.text,
-          latencyMs: result.latencyMs,
-          tokensIn: result.tokensIn ?? null,
-          tokensOut: result.tokensOut ?? null,
-          // For v2/v4, "chunks" is the served lexicon + parallel (+ v4
-          // corrections) material - the audit-trail ids minus the gold
-          // exemplars.
-          retrievedChunks: isV4
-            ? v4!.contextIds.filter((id) => !id.startsWith("gold:")).length
-            : isV2
-              ? v2!.contextIds.filter((id) => !id.startsWith("gold:")).length
-              : candidate.ragEnabled
-                ? ragContext.length
-                : 0,
-          retrievedExemplars: isV4
-            ? v4!.exampleTurns.length
-            : isV2
-              ? v2!.exampleTurns.length
-              : candidate.ragEnabled
-                ? goldExamples.length
-                : 0,
-          error: null as string | null,
-        };
-      } catch (e) {
-        // One dead provider key must not blank the whole comparison - the other
-        // models still have something worth reading.
-        return {
-          slug: candidate.slug,
-          name: candidate.name,
-          text: "",
-          latencyMs: Date.now() - started,
-          tokensIn: null,
-          tokensOut: null,
-          retrievedChunks: 0,
-          retrievedExemplars: 0,
-          error: (e as Error).message.slice(0, 300),
-        };
-      }
-    }),
-  );
+  // STREAMING, NOT BUFFERING. The buffered version held the response until
+  // the SLOWEST provider finished its LAST token - the reviewer stared at a
+  // spinner for the entire completion time, which is what "the v3 arm is
+  // slow" mostly was. Now every model's tokens are forwarded as they arrive,
+  // multiplexed over one NDJSON response (see chat-stream.ts). Each model's
+  // closing `reply` event carries the exact object the buffered contract
+  // returned, so accounting and error semantics are unchanged - one dead
+  // provider key still must not blank the whole comparison.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (event: ChatStreamEvent) => {
+        try {
+          controller.enqueue(encoder.encode(encodeChatEvent(event)));
+        } catch {
+          // The client went away mid-stream; the providers' own iteration
+          // still runs to completion, there is just nobody left to tell.
+        }
+      };
 
-  return NextResponse.json({ replies });
+      void Promise.all(
+        ordered.map(async (candidate) => {
+          const started = Date.now();
+          const isV2 =
+            (candidate.versionLabel === "rag-v2" ||
+              candidate.versionLabel === "rag-v3") &&
+            v2 !== null;
+          const isV4 = candidate.versionLabel === "rag-v4" && v4 !== null;
+          const onDelta = (delta: string) =>
+            send({ type: "delta", slug: candidate.slug, text: delta });
+          let reply: ChatReply;
+          try {
+            // The v2/v3 path swaps all three levers at once: dictionary +
+            // parallel examples appended to the user turn (dictionary last,
+            // immediately above the question - the DiPMT position), gold
+            // exemplars as prior turns, and the version's system prompt - the
+            // ONLY thing that differs between rag-v2 and rag-v3. The v4 path
+            // is the same shape with its own retrieval build (corrections
+            // block + register-guarded, source-diversified pairs) and
+            // IGALA_SYSTEM_V4. Everything flows through the same
+            // streamForCandidate call so latency/token accounting and error
+            // handling stay identical.
+            const result = isV4
+              ? await streamForCandidate(
+                  candidate,
+                  {
+                    userMessage: buildUserTurnV4(userMessage, v4!, null),
+                    conversationHistory: history,
+                    goldExamples: v4!.exampleTurns,
+                    systemPromptOverride: IGALA_SYSTEM_V4,
+                  },
+                  onDelta,
+                )
+              : isV2
+                ? await streamForCandidate(
+                    candidate,
+                    {
+                      userMessage: buildUserTurnV2(userMessage, v2!, null),
+                      conversationHistory: history,
+                      goldExamples: v2!.exampleTurns,
+                      systemPromptOverride:
+                        candidate.versionLabel === "rag-v3"
+                          ? IGALA_SYSTEM_V3
+                          : IGALA_SYSTEM_V2,
+                    },
+                    onDelta,
+                  )
+                : await streamForCandidate(
+                    candidate,
+                    {
+                      userMessage,
+                      conversationHistory: history,
+                      ragContext,
+                      goldExamples,
+                    },
+                    onDelta,
+                  );
+            reply = {
+              slug: candidate.slug,
+              name: candidate.name,
+              text: result.text,
+              latencyMs: result.latencyMs,
+              tokensIn: result.tokensIn ?? null,
+              tokensOut: result.tokensOut ?? null,
+              // For v2/v4, "chunks" is the served lexicon + parallel (+ v4
+              // corrections) material - the audit-trail ids minus the gold
+              // exemplars.
+              retrievedChunks: isV4
+                ? v4!.contextIds.filter((id) => !id.startsWith("gold:")).length
+                : isV2
+                  ? v2!.contextIds.filter((id) => !id.startsWith("gold:"))
+                      .length
+                  : candidate.ragEnabled
+                    ? ragContext.length
+                    : 0,
+              retrievedExemplars: isV4
+                ? v4!.exampleTurns.length
+                : isV2
+                  ? v2!.exampleTurns.length
+                  : candidate.ragEnabled
+                    ? goldExamples.length
+                    : 0,
+              error: null,
+            };
+          } catch (e) {
+            // One dead provider key must not blank the whole comparison - the
+            // other models still have something worth reading.
+            reply = {
+              slug: candidate.slug,
+              name: candidate.name,
+              text: "",
+              latencyMs: Date.now() - started,
+              tokensIn: null,
+              tokensOut: null,
+              retrievedChunks: 0,
+              retrievedExemplars: 0,
+              error: (e as Error).message.slice(0, 300),
+            };
+          }
+          send({ type: "reply", reply });
+        }),
+      ).finally(() => {
+        try {
+          controller.close();
+        } catch {
+          // Already closed by cancellation.
+        }
+      });
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+    },
+  });
 }

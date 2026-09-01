@@ -2,7 +2,7 @@
  * Information architecture per persona.
  *
  * - Learner: the chat tutor only.
- * - Annotator (Agnes's team): annotate — pairwise, rubric, edits. They do NOT
+ * - Annotator (Agnes's team): annotate - pairwise, rubric, edits. They do NOT
  *   manage the prompt catalogue, the handoff review queue, or the researcher tools.
  * - Researcher (linguists, advisory council): everything.
  *
@@ -58,6 +58,9 @@ export function navForRole(
       { href: "/annotator/review", label: "Review queue" },
       { href: "/admin/annotations", label: "Annotations" },
       { href: "/admin", label: "Researcher Dashboard" },
+      // First stop for the human-judgment evidence: what speakers decide in
+      // blind matchups, in plain language. Deliberately ahead of Model Arena.
+      { href: "/admin/arena/verdict", label: "Speakers' Verdict" },
       { href: "/admin/arena", label: "Model Arena" },
       // Plain-language project explainer for staff, funders and community
       // members - researcher-gated like its /admin siblings.
@@ -75,6 +78,32 @@ export function navForRole(
     { href: "/annotator/history", label: "My Work" },
     { href: "/annotator/rubric", label: "Rubric" },
   ];
+}
+
+/**
+ * Which sidebar link owns a pathname: exact match wins, otherwise the LONGEST
+ * link href that prefixes the pathname (at a path-segment boundary). The two
+ * role dashboards ("/annotator", "/admin") only match exactly - every one of
+ * their sub-pages has, or belongs to, its own link. Longest-prefix keeps
+ * nested entries honest: /admin/arena/verdict highlights Speakers' Verdict,
+ * not Model Arena as well.
+ */
+export function activeNavHref(
+  links: NavLink[],
+  pathname: string,
+): string | null {
+  let best: string | null = null;
+  for (const { href } of links) {
+    if (pathname === href) return href;
+    if (href === "/annotator" || href === "/admin") continue;
+    if (
+      pathname.startsWith(`${href}/`) &&
+      (best === null || href.length > best.length)
+    ) {
+      best = href;
+    }
+  }
+  return best;
 }
 
 export interface Persona {
