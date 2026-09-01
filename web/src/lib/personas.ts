@@ -32,9 +32,22 @@ export function isResearcher(
   return canAccess(["RESEARCHER"], role, email);
 }
 
+/**
+ * The public "How it works" page lives on the marketing site, not in the app.
+ * It is the canonical plain-language explainer (same live numbers, fetched
+ * from /api/public/method-metrics), so the nav sends people there rather than
+ * maintaining a second telling. The in-app /admin/how-it-works route still
+ * exists for its parity-hold appendix; it is simply no longer the front door.
+ * One constant so nav, in-page CTAs and tests cannot drift apart.
+ */
+export const PUBLIC_HOW_IT_WORKS_URL =
+  "https://wikitongues-ai-site.vercel.app/how-it-works/";
+
 export interface NavLink {
   href: string;
   label: string;
+  /** Renders as an out-link: new tab, rel-guarded, arrow-marked, never active. */
+  external?: boolean;
 }
 
 /**
@@ -63,8 +76,13 @@ export function navForRole(
       { href: "/admin/arena/verdict", label: "Speakers' Verdict" },
       { href: "/admin/arena", label: "Model Arena" },
       // Plain-language project explainer for staff, funders and community
-      // members - researcher-gated like its /admin siblings.
-      { href: "/admin/how-it-works", label: "How it works" },
+      // members. Points OUT to the public marketing page (see the constant
+      // above): one telling of the story, publicly readable, live numbers.
+      {
+        href: PUBLIC_HOW_IT_WORKS_URL,
+        label: "How it works",
+        external: true,
+      },
     ];
   }
   // Pure annotator. NO Corrections tab (2026-08-28 rework, Halim's call):
@@ -93,7 +111,9 @@ export function activeNavHref(
   pathname: string,
 ): string | null {
   let best: string | null = null;
-  for (const { href } of links) {
+  for (const { href, external } of links) {
+    // An out-link is never the active page: the reader left the app.
+    if (external) continue;
     if (pathname === href) return href;
     if (href === "/annotator" || href === "/admin") continue;
     if (
