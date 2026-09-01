@@ -84,6 +84,7 @@ export type Approach =
   | "retrieval v2"
   | "retrieval v3"
   | "retrieval v4"
+  | "retrieval v4.1"
   | "fine-tuned"
   | "other";
 
@@ -155,6 +156,7 @@ export function approachLabel(
 ): Approach {
   if (kind === "baseline") return "untouched";
   if (kind === "rag") {
+    if (versionLabel === "rag-v4-1") return "retrieval v4.1";
     if (versionLabel === "rag-v4") return "retrieval v4";
     if (versionLabel === "rag-v3") return "retrieval v3";
     return versionLabel === "rag-v2" ? "retrieval v2" : "retrieval v1";

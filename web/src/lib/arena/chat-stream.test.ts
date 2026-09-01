@@ -110,6 +110,28 @@ describe("applyChatEvents - the client-side fold", () => {
     expect(replies[0].retrievedExemplars).toBe(8);
   });
 
+  it("folds a buffered column - a reply with no prior deltas (the rag-v4-1 repair-round path)", () => {
+    // The rag-v4-1 chat column is deliberately BUFFERED: the repair round
+    // must see the whole answer first, so the server emits NO delta events
+    // for it and its single closing reply event carries the final (possibly
+    // repaired) text. The fold must land that column complete while a
+    // streaming neighbour is still mid-flight.
+    let replies = initStreamingReplies(models);
+    replies = applyChatEvents(replies, [
+      { type: "delta", slug: "b", text: "streaming neighbour" },
+      {
+        type: "reply",
+        reply: reply("a", { text: "Wọla ọdudu", latencyMs: 4200 }),
+      },
+    ]);
+    expect(replies[0].text).toBe("Wọla ọdudu");
+    expect(replies[0].done).toBe(true);
+    expect(replies[0].error).toBeNull();
+    expect(replies[0].latencyMs).toBe(4200);
+    expect(replies[1].text).toBe("streaming neighbour");
+    expect(replies[1].done).toBe(false);
+  });
+
   it("keeps column order stable whatever order models finish in", () => {
     let replies = initStreamingReplies(models);
     replies = applyChatEvents(replies, [

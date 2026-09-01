@@ -294,9 +294,8 @@ export function SpeakersVerdict({
         </h2>
         <p className="mb-4 mt-1 text-sm text-text-tertiary">
           Every pairing with at least {MIN_DECIDED_PER_PAIRING} decided
-          matchups. The bar splits each
-          pairing&apos;s matchups by outcome; the current pairing pool is
-          featured first.
+          matchups. The bar splits each pairing&apos;s matchups by outcome; the
+          current pairing pool is featured first.
         </p>
         {insights.pairings.length === 0 ? (
           <p className="text-sm text-text-tertiary">
