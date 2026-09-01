@@ -9,6 +9,8 @@ import { buildRetrievalV4 } from "@/lib/arena/retrieval-v4";
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
 import { IGALA_SYSTEM_V4, buildUserTurnV4 } from "@/lib/generation-prompt-v4";
+import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
+import { generateWithRepairRound } from "@/lib/arena/repair-round";
 
 /**
  * Generate the candidate's answers on the frozen held-out bank. Uses the
@@ -62,23 +64,42 @@ export async function POST(
     try {
       let result;
       let ragContextIds: string[];
-      if (candidate.versionLabel === "rag-v4") {
+      if (
+        candidate.versionLabel === "rag-v4" ||
+        candidate.versionLabel === "rag-v4-1"
+      ) {
         // The v4 serving path: v2's composition plus the corrections block
         // and the register-guarded, source-diversified parallel retrieval,
         // under IGALA_SYSTEM_V4. Its own buildRetrievalV4 call - never shared
         // with v2/v3, whose composition is frozen for comparability. The
         // audit trail gains edit:<id> entries for served corrections.
+        //
+        // rag-v4-1 = the SAME retrieval (buildRetrievalV4, unchanged) with
+        // the v4.1 system prompt and the deterministic repair round: a dirty
+        // first answer (allowlist / hyphen-prefix / tone-saturation) is
+        // re-asked ONCE with the violations named, and the second answer is
+        // kept regardless. generateWithRepairRound is a no-op passthrough
+        // for rag-v4 (unit-tested), so the v4 arm's serving and accounting
+        // stay byte-identical.
         const v4 = await buildRetrievalV4(prisma, {
           promptId: prompt.promptId,
           text: prompt.text,
           bucket: prompt.bucket,
           isHoldout: prompt.isHoldout,
         });
-        result = await generateForCandidate(candidate, {
-          userMessage: buildUserTurnV4(prompt.text, v4, prompt.bucket),
-          goldExamples: v4.exampleTurns,
-          systemPromptOverride: IGALA_SYSTEM_V4,
-        });
+        const isV41 = candidate.versionLabel === "rag-v4-1";
+        result = await generateWithRepairRound(
+          candidate,
+          {
+            userMessage: buildUserTurnV4(prompt.text, v4, prompt.bucket),
+            goldExamples: v4.exampleTurns,
+            systemPromptOverride: isV41 ? IGALA_SYSTEM_V4_1 : IGALA_SYSTEM_V4,
+          },
+          (a) => generateForCandidate(candidate, a),
+          // R8.3: tone saturation is the requested behavior when the prompt
+          // itself asks for tone marks.
+          { allowTone: /\btone/i.test(prompt.text) },
+        );
         ragContextIds = v4.contextIds;
       } else if (
         candidate.versionLabel === "rag-v2" ||

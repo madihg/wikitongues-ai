@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
-import { streamForCandidate, type RagChunk } from "@/lib/arena/providers";
+import {
+  generateForCandidate,
+  streamForCandidate,
+  type RagChunk,
+} from "@/lib/arena/providers";
+import { generateWithRepairRound } from "@/lib/arena/repair-round";
 import {
   encodeChatEvent,
   type ChatReply,
@@ -24,6 +29,7 @@ import {
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
 import { IGALA_SYSTEM_V4, buildUserTurnV4 } from "@/lib/generation-prompt-v4";
+import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 
 /**
  * POST /api/arena/chat - talk to several registered candidates at once.
@@ -189,16 +195,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No such candidates" }, { status: 404 });
   }
 
-  // rag-v2/rag-v3/rag-v4 candidates use their versioned retrieval paths
-  // exclusively, so the v1 retrieval below only runs when a v1 RAG candidate
-  // is actually selected - v1 composition for v1 candidates stays
+  // rag-v2/rag-v3/rag-v4/rag-v4-1 candidates use their versioned retrieval
+  // paths exclusively, so the v1 retrieval below only runs when a v1 RAG
+  // candidate is actually selected - v1 composition for v1 candidates stays
   // byte-identical either way.
   const needsRetrieval = candidates.some(
     (c) =>
       c.ragEnabled &&
       c.versionLabel !== "rag-v2" &&
       c.versionLabel !== "rag-v3" &&
-      c.versionLabel !== "rag-v4",
+      c.versionLabel !== "rag-v4" &&
+      c.versionLabel !== "rag-v4-1",
   );
 
   // The three per-version context builds are independent of each other, so
@@ -220,6 +227,10 @@ export async function POST(req: Request) {
   // corrections block - so sharing would either change the v2/v3 serving
   // (forbidden: those paths are frozen for comparability) or serve v4
   // candidates a context nobody registered. Same synthetic-holdout guard.
+  // rag-v4-1 SHARES the v4 build: v4.1 changes only the system prompt and
+  // adds the repair round, never the retrieval composition (the spec pins
+  // retrieval-v4.ts unchanged), so the two labels share one build the same
+  // way rag-v2 and rag-v3 share the v2 build.
   const chatQuery = {
     promptId: "__chat__",
     text: userMessage,
@@ -232,7 +243,9 @@ export async function POST(req: Request) {
     )
       ? buildRetrievalV2(prisma, chatQuery)
       : Promise.resolve<RetrievalV2Result | null>(null),
-    candidates.some((c) => c.versionLabel === "rag-v4")
+    candidates.some(
+      (c) => c.versionLabel === "rag-v4" || c.versionLabel === "rag-v4-1",
+    )
       ? buildRetrievalV4(prisma, chatQuery)
       : Promise.resolve<RetrievalV4Result | null>(null),
     needsRetrieval
@@ -283,6 +296,7 @@ export async function POST(req: Request) {
               candidate.versionLabel === "rag-v3") &&
             v2 !== null;
           const isV4 = candidate.versionLabel === "rag-v4" && v4 !== null;
+          const isV41 = candidate.versionLabel === "rag-v4-1" && v4 !== null;
           const onDelta = (delta: string) =>
             send({ type: "delta", slug: candidate.slug, text: delta });
           let reply: ChatReply;
@@ -297,41 +311,64 @@ export async function POST(req: Request) {
             // IGALA_SYSTEM_V4. Everything flows through the same
             // streamForCandidate call so latency/token accounting and error
             // handling stay identical.
-            const result = isV4
-              ? await streamForCandidate(
+            //
+            // rag-v4-1 is the ONE deliberately BUFFERED column: the repair
+            // round must see the complete answer before anything is shown -
+            // serve what you measure - so it uses generateForCandidate (the
+            // byte-identical buffered twin of streamForCandidate), emits no
+            // delta events, and its closing `reply` event carries the final
+            // (possibly repaired) text. The wire format already treats the
+            // reply event as authoritative, so a buffered column is just a
+            // degenerate stream.
+            const result = isV41
+              ? await generateWithRepairRound(
                   candidate,
                   {
                     userMessage: buildUserTurnV4(userMessage, v4!, null),
                     conversationHistory: history,
                     goldExamples: v4!.exampleTurns,
-                    systemPromptOverride: IGALA_SYSTEM_V4,
+                    systemPromptOverride: IGALA_SYSTEM_V4_1,
                   },
-                  onDelta,
+                  (a) => generateForCandidate(candidate, a),
+                  // R8.3: saturation is requested behavior when the question
+                  // itself asks about tone.
+                  { allowTone: /\btone/i.test(userMessage) },
                 )
-              : isV2
+              : isV4
                 ? await streamForCandidate(
                     candidate,
                     {
-                      userMessage: buildUserTurnV2(userMessage, v2!, null),
+                      userMessage: buildUserTurnV4(userMessage, v4!, null),
                       conversationHistory: history,
-                      goldExamples: v2!.exampleTurns,
-                      systemPromptOverride:
-                        candidate.versionLabel === "rag-v3"
-                          ? IGALA_SYSTEM_V3
-                          : IGALA_SYSTEM_V2,
+                      goldExamples: v4!.exampleTurns,
+                      systemPromptOverride: IGALA_SYSTEM_V4,
                     },
                     onDelta,
                   )
-                : await streamForCandidate(
-                    candidate,
-                    {
-                      userMessage,
-                      conversationHistory: history,
-                      ragContext,
-                      goldExamples,
-                    },
-                    onDelta,
-                  );
+                : isV2
+                  ? await streamForCandidate(
+                      candidate,
+                      {
+                        userMessage: buildUserTurnV2(userMessage, v2!, null),
+                        conversationHistory: history,
+                        goldExamples: v2!.exampleTurns,
+                        systemPromptOverride:
+                          candidate.versionLabel === "rag-v3"
+                            ? IGALA_SYSTEM_V3
+                            : IGALA_SYSTEM_V2,
+                      },
+                      onDelta,
+                    )
+                  : await streamForCandidate(
+                      candidate,
+                      {
+                        userMessage,
+                        conversationHistory: history,
+                        ragContext,
+                        goldExamples,
+                      },
+                      onDelta,
+                    );
             reply = {
               slug: candidate.slug,
               name: candidate.name,
@@ -342,21 +379,24 @@ export async function POST(req: Request) {
               // For v2/v4, "chunks" is the served lexicon + parallel (+ v4
               // corrections) material - the audit-trail ids minus the gold
               // exemplars.
-              retrievedChunks: isV4
-                ? v4!.contextIds.filter((id) => !id.startsWith("gold:")).length
-                : isV2
-                  ? v2!.contextIds.filter((id) => !id.startsWith("gold:"))
+              retrievedChunks:
+                isV4 || isV41
+                  ? v4!.contextIds.filter((id) => !id.startsWith("gold:"))
                       .length
-                  : candidate.ragEnabled
-                    ? ragContext.length
-                    : 0,
-              retrievedExemplars: isV4
-                ? v4!.exampleTurns.length
-                : isV2
-                  ? v2!.exampleTurns.length
-                  : candidate.ragEnabled
-                    ? goldExamples.length
-                    : 0,
+                  : isV2
+                    ? v2!.contextIds.filter((id) => !id.startsWith("gold:"))
+                        .length
+                    : candidate.ragEnabled
+                      ? ragContext.length
+                      : 0,
+              retrievedExemplars:
+                isV4 || isV41
+                  ? v4!.exampleTurns.length
+                  : isV2
+                    ? v2!.exampleTurns.length
+                    : candidate.ragEnabled
+                      ? goldExamples.length
+                      : 0,
               error: null,
             };
           } catch (e) {

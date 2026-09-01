@@ -434,6 +434,7 @@ describe("pure helpers", () => {
     expect(approachLabel("rag", "rag-v2")).toBe("retrieval v2");
     expect(approachLabel("rag", "rag-v3")).toBe("retrieval v3");
     expect(approachLabel("rag", "rag-v4")).toBe("retrieval v4");
+    expect(approachLabel("rag", "rag-v4-1")).toBe("retrieval v4.1");
     expect(approachLabel("sft", null)).toBe("fine-tuned");
     expect(approachLabel("dpo", null)).toBe("fine-tuned");
     expect(approachLabel("continued_pretrain", null)).toBe("other");

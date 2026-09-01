@@ -855,3 +855,33 @@ in-episode correction flow (in chat, send AFTER merging PR #46).
 Still open: v4 benchmark generation on the frozen 43 (needs a valid
 Anthropic key in web/.env.local for the Claude arm plus a funded run);
 the Bible-for-Children font-run decode; train-queue-fill remainder.
+
+## Session State (2026-09-01) - v4.1 shipped and examined: agreement 120.1
+
+METHOD v4.1 (generation-prompt-v4-1.ts): v4 base + perform-don't-describe
++ dialect honesty + 8 two-source rules + fabrication denylist, 1,148/1,150
+tokens (2 chars headroom - any edit must cut elsewhere). Repair round
+(repair-round.ts): deterministic checker + ONE re-ask, rag-v4-1 only,
+provably no-op elsewhere; chat serves rag-v4-1 buffered so serving ==
+measurement. Exam (exam-rag-v4-1.ts, frontier-fill has no rag-v4-1 mode):
+43/43, $0.29, repair fired 7/43 (all tone saturation). Leak-free strLF
+47.5 [36.8-58.8], agreement 120.1 [93.2-148.9] vs v4 102.1 / v3 99.2 /
+bare 94.2. CIs overlap - v4.1 > v4 is suggestive, not established.
+
+KNOWN ATTRIBUTION FACT (verify agent): the 9 seeded grammar_rule
+RagEntry rows (RE1-RE9, seed-rag-v4-1-grammar.ts, Scope-A clean,
+embedded) are UNREACHABLE on the rag-v4-1 path - buildRetrievalV4 never
+queries RagEntry. The 102->120 gain is prompt + repair round alone.
+Open decision: wire a grammar_rule block into a v4.2 retrieval and
+re-exam (~$0.30), or leave rows v1-path-only. Do NOT claim the entries
+contributed to 120.
+
+Pool decision pending (Halim): add gemini-3-1-pro-rag-v4-1 to the
+pairing pool (gives v4.1-vs-v3 and v4.1-vs-bare blind pairs) or keep
+the current v3-vs-bare series clean. inPairingPool=false until he says.
+
+OpenRouter: key valid, Claude Opus 5 available, balance EMPTY (402) -
+Halim adding credits unlocks Claude v4/v4.1 exam arms via the
+openai-compatible path. Vercel DATABASE_URL still needs
+connection_limit=10 (Halim). Salem written-permission email = JWAL
+ingestion unlock.
