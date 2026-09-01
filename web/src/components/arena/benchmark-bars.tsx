@@ -279,9 +279,14 @@ export function BenchmarkBars({
         95% bootstrap intervals over per-question scores.
         {anyUnderpowered &&
           " * too few leak-free answers for an interval - point estimate only."}{" "}
-        A bar past the 100 line means the model matched the community&apos;s
-        writing more closely than one speaker matches another - shown as
-        measured, never capped.
+        A bar past the 100 line does not mean the model beat the speakers. The
+        model is scored against every community answer for a question, while
+        each speaker is scored against the other speakers only, and that gives
+        models a built-in advantage that grows with the number of answers per
+        question. Scored like-for-like, the best system sits at speaker level.
+        This score is being replaced with one that cannot pass 100 by
+        construction; until then, read a bar past 100 as &quot;at speaker
+        level&quot;, not above it.
       </p>
     </div>
   );

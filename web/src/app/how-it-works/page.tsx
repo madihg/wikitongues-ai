@@ -72,7 +72,7 @@ const CHANGELOG = [
   },
   {
     date: "Aug 12, 2026",
-    text: "The Bible parallel corpus - 30,907 Igala-English sentence pairs ingested under BSN permission - plus a 2,104-entry lexicon, powering retrieval v2 and THE METHOD.",
+    text: "The Bible parallel corpus - 30,907 Igala-English sentence pairs from the Bible Society of Nigeria's Igala Bible - plus a 2,104-entry lexicon, powering retrieval v2 and THE METHOD. Corrected Sep 1: this entry said the pairs were ingested under BSN permission. Our records hold two written requests to the Society and no reply, so no permission is on file. What that means for the corpus is an open item recorded in the Sep 1 entry.",
   },
   {
     date: "Aug 13, 2026",
@@ -89,6 +89,14 @@ const CHANGELOG = [
   {
     date: "Aug 29, 2026",
     text: "Global Recordings Network signed a copyright agreement (Aug 27) covering their “Words of Life” Igala recording, and the audio (45:38, the only usable Igala speech asset) was acquired, along with six Bible-for-Children booklets as raw assets; the booklets' fonts silently strip the ẹ/ọ subdots on extraction, so nothing from them may enter the corpus until that is solved. Outreach to other rights holders (the JWAL papers, Egbunu's proverbs study, PanLex) is in progress, with a call with the JWAL author scheduled; none of their text enters the corpus before written permission is on file, so the corpus counters above are unchanged.",
+  },
+  {
+    date: "Aug 31, 2026",
+    text: "METHOD v4 and v4.1. v4 rewrote the instructions around one rule from the community's review: translate the meaning of the whole sentence, never word by word. v4.1 added eight grammar rules mined from 132 judged failures, a step that tells the model to perform a greeting rather than describe one, a rule against inventing dialect facts, and a repair round: when an answer uses letters Igala does not have or is saturated with tone marks, the model is asked once to rewrite it. On the frozen exam Gemini v4.1 scored 120 and v4 102; Claude v4.1 scored 93 against 55 for Claude v3, so the rules that had hurt Claude at v3 no longer do. Nine grammar entries were added to the knowledge store, but the v4 retrieval path does not read them, so they contribute nothing to these scores.",
+  },
+  {
+    date: "Sep 1, 2026",
+    text: 'An adversarial audit of every public number, run against the live database. What it corrected. A bar past the 100 line is mostly built in: a model is scored against every community answer for a question while a speaker is scored against the other speakers only. Scored like-for-like the best system sits at about 103, level with the speakers, and the score is being replaced by one that cannot pass 100 by construction. The v4 to v4.1 gain is mostly fewer tone marks, which the community rarely writes; with tone marks ignored the two versions are level. The sentence "the grammar lifts Gemini measurably" was not supported and has been removed. The blind preference belongs to one pairing only, Gemini with the v3 package against the same Gemini with nothing added: 54 to 14, with ties and double rejections counted separately, or 25 to 7 when each question is counted once. No speaker has yet judged v4 or v4.1. The fall in "both answers inadequate" from 99% to about half came with a change of models, not from the method. 131 of the 238 exam answers were written after a speaker saw and rejected a model\'s attempt, so "written before seeing any model" was wrong for more than half of them. And the Bible corpus had been described as used under a BSN permission that our records do not contain. What held: speakers prefer the v3 package to nothing, every one of the six annotators; v4.1 undid the regression v3 caused for Claude; and v4.1 beats v3 on the exam in a paired test, the only step between Gemini versions that does.',
   },
 ];
 
@@ -1188,10 +1196,15 @@ export default async function HowItWorksPage() {
             identical string - spelling varies, tone marks vary, phrasing
             varies. So the honest yardstick is not &quot;matched the answer
             key&quot; (there is no single answer key) but &quot;agreed with the
-            community as much as its own members agree with each other&quot;.
-            That is also why a bar can pass 100: matching the pooled community
-            answers more closely than one speaker matches another is possible,
-            and when it happens the chart shows it rather than clamping it.
+            community as much as its own members agree with each other&quot;. A
+            bar past the 100 line does not mean the model beat the speakers. The
+            model is scored against every community answer for a question, while
+            each speaker is scored against the other speakers only, and that
+            gives models a built-in advantage that grows with the number of
+            answers per question. Scored like-for-like, the best system sits at
+            speaker level. This score is being replaced with one that cannot
+            pass 100 by construction; until then, read a bar past 100 as
+            &quot;at speaker level&quot;, not above it.
           </p>
           <p>
             <strong className="text-text-primary">
