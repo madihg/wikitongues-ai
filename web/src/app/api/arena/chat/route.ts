@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
+import { streamForCandidate, type RagChunk } from "@/lib/arena/providers";
 import {
-  generateForCandidate,
-  streamForCandidate,
-  type RagChunk,
-} from "@/lib/arena/providers";
-import { generateWithRepairRound } from "@/lib/arena/repair-round";
+  describeViolations,
+  streamWithRepairRound,
+} from "@/lib/arena/repair-round";
+import { buildV4FamilyTurn } from "@/lib/arena/frozen-exam";
 import {
   encodeChatEvent,
   type ChatReply,
   type ChatStreamEvent,
+  type ColumnStage,
 } from "@/lib/arena/chat-stream";
+import {
+  formatServerTiming,
+  timeStage,
+  type TimedStage,
+} from "@/lib/arena/server-timing";
 import { searchRag } from "@/lib/rag";
 import {
   retrieveGoldExamples,
@@ -28,8 +34,6 @@ import {
 } from "@/lib/arena/retrieval-v4";
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
-import { IGALA_SYSTEM_V4, buildUserTurnV4 } from "@/lib/generation-prompt-v4";
-import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 
 /**
  * POST /api/arena/chat - talk to several registered candidates at once.
@@ -147,7 +151,24 @@ async function loadV1Context(userMessage: string): Promise<{
 }
 
 export async function POST(req: Request) {
-  const guard = await requireResearcher();
+  // Server-Timing instrumentation. Every stage measured here is one that
+  // completes BEFORE the response head is flushed, which on a streaming
+  // response is the only thing a header can honestly report - see
+  // server-timing.ts for what that excludes and where those numbers live
+  // instead. The point is that "why is the chat slow" becomes a question you
+  // answer from the network tab: retrieval build per version, separately
+  // timed, next to the total time before the first byte.
+  const requestStart = Date.now();
+  let authMs = 0;
+  let candidatesMs = 0;
+  let retrievalV1Ms = 0;
+  let retrievalV2Ms = 0;
+  let retrievalV4Ms = 0;
+
+  const guard = await timeStage(
+    () => requireResearcher(),
+    (ms) => (authMs = ms),
+  );
   if (guard.error) return guard.error;
 
   let body: { slugs?: unknown; messages?: unknown };
@@ -188,9 +209,13 @@ export async function POST(req: Request) {
   // Everything before the final user turn is prior conversation.
   const history = messages.slice(0, messages.lastIndexOf(last));
 
-  const candidates = await prisma.candidateModel.findMany({
-    where: { slug: { in: slugs }, archived: false },
-  });
+  const candidates = await timeStage(
+    () =>
+      prisma.candidateModel.findMany({
+        where: { slug: { in: slugs }, archived: false },
+      }),
+    (ms) => (candidatesMs = ms),
+  );
   if (candidates.length === 0) {
     return NextResponse.json({ error: "No such candidates" }, { status: 404 });
   }
@@ -237,19 +262,32 @@ export async function POST(req: Request) {
     bucket: null,
     isHoldout: true,
   };
+  //
+  // Each leg is timed SEPARATELY even though they run concurrently: they are
+  // the stages a "the v4 arm feels slow" report needs disambiguated, and a
+  // single combined number would only ever report the slowest one.
   const [v2, v4, v1] = await Promise.all([
     candidates.some(
       (c) => c.versionLabel === "rag-v2" || c.versionLabel === "rag-v3",
     )
-      ? buildRetrievalV2(prisma, chatQuery)
+      ? timeStage(
+          () => buildRetrievalV2(prisma, chatQuery),
+          (ms) => (retrievalV2Ms = ms),
+        )
       : Promise.resolve<RetrievalV2Result | null>(null),
     candidates.some(
       (c) => c.versionLabel === "rag-v4" || c.versionLabel === "rag-v4-1",
     )
-      ? buildRetrievalV4(prisma, chatQuery)
+      ? timeStage(
+          () => buildRetrievalV4(prisma, chatQuery),
+          (ms) => (retrievalV4Ms = ms),
+        )
       : Promise.resolve<RetrievalV4Result | null>(null),
     needsRetrieval
-      ? loadV1Context(userMessage)
+      ? timeStage(
+          () => loadV1Context(userMessage),
+          (ms) => (retrievalV1Ms = ms),
+        )
       : Promise.resolve({
           ragContext: [] as RagChunk[],
           goldExamples: [] as {
@@ -291,6 +329,14 @@ export async function POST(req: Request) {
       void Promise.all(
         ordered.map(async (candidate) => {
           const started = Date.now();
+          // Advisory progress for this column. A streaming column narrates
+          // itself through its deltas; these events cover the gaps where it
+          // cannot - the seconds before the first token, and the pause on the
+          // repaired arm while the serving lint reads a finished attempt.
+          // Fixed enum values only: no prompt text, no model id, nothing a
+          // client could render as content.
+          const sendStage = (stage: ColumnStage) =>
+            send({ type: "stage", slug: candidate.slug, stage });
           const isV2 =
             (candidate.versionLabel === "rag-v2" ||
               candidate.versionLabel === "rag-v3") &&
@@ -312,37 +358,76 @@ export async function POST(req: Request) {
             // streamForCandidate call so latency/token accounting and error
             // handling stay identical.
             //
-            // rag-v4-1 is the ONE deliberately BUFFERED column: the repair
-            // round must see the complete answer before anything is shown -
-            // serve what you measure - so it uses generateForCandidate (the
-            // byte-identical buffered twin of streamForCandidate), emits no
-            // delta events, and its closing `reply` event carries the final
-            // (possibly repaired) text. The wire format already treats the
-            // reply event as authoritative, so a buffered column is just a
-            // degenerate stream.
+            // rag-v4-1 STREAMS TOO, repair applied after. It used to be the
+            // one buffered column, because the repair round must see a
+            // complete answer before it can judge it. But v4.1 is the
+            // default-selected model, so buffering made the first thing every
+            // reviewer saw a blank panel for the length of TWO generations -
+            // 30-60s on an open-ended question, with no feedback. Now the
+            // first attempt streams like any other column; if the checker
+            // finds violations, a `revision` event tells the client to discard
+            // what it has and names the rule families in plain language, and
+            // the repaired attempt streams in its place. The closing `reply`
+            // still carries the final text, so the FINAL RENDERED TEXT is
+            // exactly what the buffered round would have produced - which is
+            // what the exam measures (streamWithRepairRound and
+            // generateWithRepairRound share one core, pinned by test).
+            //
+            // Both v4-family labels assemble their request through
+            // buildV4FamilyTurn, the same builder the eval-generation route
+            // and the frozen exam use, so chat cannot drift from the measured
+            // composition. The only addition is conversationHistory: chat is a
+            // conversation, the exam is one prompt.
+            const v4Turn =
+              isV4 || isV41
+                ? buildV4FamilyTurn(
+                    isV41 ? "rag-v4-1" : "rag-v4",
+                    { text: userMessage, bucket: null },
+                    v4!,
+                  )
+                : null;
+            // Every arm announces that its provider call has started, so a
+            // column that has not produced a token yet still says something
+            // truer than nothing. On the repaired arm the wrapper below also
+            // marks the gap between attempts: attempt one returns, the lint
+            // runs (`checking`), and if it re-asks, attempt two announces
+            // `writing` again as it goes out.
+            sendStage("writing");
+            let attempt = 0;
             const result = isV41
-              ? await generateWithRepairRound(
+              ? await streamWithRepairRound(
                   candidate,
-                  {
-                    userMessage: buildUserTurnV4(userMessage, v4!, null),
-                    conversationHistory: history,
-                    goldExamples: v4!.exampleTurns,
-                    systemPromptOverride: IGALA_SYSTEM_V4_1,
+                  { ...v4Turn!.args, conversationHistory: history },
+                  async (a, onAttemptDelta) => {
+                    attempt += 1;
+                    if (attempt > 1) sendStage("writing");
+                    const generated = await streamForCandidate(
+                      candidate,
+                      a,
+                      onAttemptDelta,
+                    );
+                    // Only the FIRST attempt is checked; after the second the
+                    // column is finished and the `reply` event says so.
+                    if (attempt === 1) sendStage("checking");
+                    return generated;
                   },
-                  (a) => generateForCandidate(candidate, a),
+                  {
+                    onDelta,
+                    onRevision: (violations) =>
+                      send({
+                        type: "revision",
+                        slug: candidate.slug,
+                        reasons: describeViolations(violations),
+                      }),
+                  },
                   // R8.3: saturation is requested behavior when the question
-                  // itself asks about tone.
-                  { allowTone: /\btone/i.test(userMessage) },
+                  // itself asks about tone. Same gate as the exam's.
+                  v4Turn!.opts,
                 )
               : isV4
                 ? await streamForCandidate(
                     candidate,
-                    {
-                      userMessage: buildUserTurnV4(userMessage, v4!, null),
-                      conversationHistory: history,
-                      goldExamples: v4!.exampleTurns,
-                      systemPromptOverride: IGALA_SYSTEM_V4,
-                    },
+                    { ...v4Turn!.args, conversationHistory: history },
                     onDelta,
                   )
                 : isV2
@@ -426,10 +511,28 @@ export async function POST(req: Request) {
     },
   });
 
+  // Names and durations only, never a `desc` - the only free text in reach of
+  // this route is the reviewer's question and the candidate registry, and
+  // neither belongs in a response header. The stage SET is fixed rather than
+  // conditional on the selection, so the header's shape describes the route,
+  // not the request. formatServerTiming enforces an allowlist of stage names,
+  // so a stage timed per candidate or per question could not reach the wire
+  // even if someone added one - a candidate slug looks exactly like a safe
+  // token, and only enumeration stops it.
+  const timingStages: TimedStage[] = [
+    { name: "auth", durMs: authMs },
+    { name: "candidates", durMs: candidatesMs },
+    { name: "retrieval-v1", durMs: retrievalV1Ms },
+    { name: "retrieval-v2", durMs: retrievalV2Ms },
+    { name: "retrieval-v4", durMs: retrievalV4Ms },
+    { name: "total", durMs: Date.now() - requestStart },
+  ];
+
   return new Response(stream, {
     headers: {
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
+      "Server-Timing": formatServerTiming(timingStages),
     },
   });
 }

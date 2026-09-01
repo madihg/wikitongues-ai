@@ -14,11 +14,21 @@ import {
  *
  * Open-weights / fine-tuned variants are served via an OpenAI-compatible
  * endpoint (Together / Fireworks / vLLM) — the `openai-compatible` provider —
- * which scaffolds the flywheel without changing this interface.
+ * which scaffolds the flywheel without changing this interface. Frontier
+ * models can also be reached through an aggregator with the `openrouter`
+ * provider, which is how the Claude arms are served: same wire format, its own
+ * key, vendor-qualified model ids.
  */
 
 export type CandidateProvider =
-  "anthropic" | "openai" | "google" | "openai-compatible";
+  "anthropic" | "openai" | "google" | "openai-compatible" | "openrouter";
+
+/**
+ * OpenRouter's OpenAI-compatible endpoint. Pinned here, exported so the cost
+ * and registration scripts can name the exact host in their errors instead of
+ * repeating a string literal that could drift.
+ */
+export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 export interface CandidateLike {
   id?: string;
@@ -80,6 +90,48 @@ interface Decoding {
   maxTokens: number;
 }
 
+/**
+ * OpenRouter request shim: turns EXTENDED THINKING OFF unless a candidate has
+ * deliberately asked for it.
+ *
+ * Measured 2026-09-01 against anthropic/claude-opus-5 (OpenRouter routed it to
+ * Amazon Bedrock): with the default settings a single 294-token-in request
+ * came back with `content: null`, `finish_reason: "length"` and
+ * `reasoning_tokens` equal to the ENTIRE completion budget - empty answers at
+ * maxTokens 64, 300 and 512, and at the candidates' registered 4096 it spent
+ * 4079 output tokens (~$0.10 and 61s for one answer) with the visible text
+ * only just fitting before the cap.
+ *
+ * The direct Anthropic path this replaces did not think: the same arm's stored
+ * outputs run a couple of hundred output tokens. Letting the transport swap
+ * silently switch the model into a reasoning mode would (a) make new outputs
+ * incomparable with the arm's own history, (b) multiply inference spend ~20x
+ * against a metered budget, and (c) truncate answers whenever the trace eats
+ * the budget first. A transport change must stay a transport change.
+ *
+ * `reasoning: { enabled: false }` is OpenRouter's unified switch; it is a
+ * no-op for models that do not reason. Injected here rather than passed as a
+ * decoding param because the AI SDK's OpenAI provider has no pass-through for
+ * vendor-specific body fields, and an existing `reasoning` key is never
+ * overwritten, so a future candidate can opt back in.
+ */
+export const openRouterFetch: typeof fetch = async (input, init) => {
+  if (init && typeof init.body === "string") {
+    try {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      if (body.reasoning === undefined) {
+        body.reasoning = { enabled: false };
+        init = { ...init, body: JSON.stringify(body) };
+      }
+    } catch {
+      // Not JSON (should not happen on this path) - send it untouched rather
+      // than failing the request over an optional flag.
+    }
+  }
+  // Global lookup, not a captured reference: tests stub globalThis.fetch.
+  return fetch(input, init);
+};
+
 export function resolveModel(candidate: CandidateLike): LanguageModel {
   const provider = candidate.provider as CandidateProvider;
   switch (provider) {
@@ -134,6 +186,49 @@ export function resolveModel(candidate: CandidateLike): LanguageModel {
       // "The requested model does not support the Responses api" and every
       // generation fails. Third-party OpenAI-compatible hosts implement
       // /v1/chat/completions, which is what .chat() targets.
+      return client.chat(candidate.baseModelId);
+    }
+    case "openrouter": {
+      // OpenRouter speaks the OpenAI wire format but is its own vendor with
+      // its own key and its own vendor-qualified model ids
+      // ("anthropic/claude-opus-5", not "claude-opus-5").
+      //
+      // NEVER fall back to ANTHROPIC_API_KEY, OPENAI_API_KEY or
+      // TOGETHER_API_KEY here, for the same reason the openai-compatible case
+      // above refuses OPENAI_API_KEY: a borrowed key produces a 401 that reads
+      // as "the OpenRouter key is wrong" when the truth is that no OpenRouter
+      // key was ever set. Routing Claude through OpenRouter exists precisely
+      // because the direct Anthropic key is dead - quietly reaching for it
+      // would resurrect the failure this path was built to escape.
+      const apiKey = process.env.OPENROUTER_API_KEY;
+      const host = candidate.apiEndpoint ?? OPENROUTER_BASE_URL;
+      if (!apiKey) {
+        throw new Error(
+          `No API key for OpenRouter host ${host}. ` +
+            `Set OPENROUTER_API_KEY in this environment. ` +
+            `An Anthropic, OpenAI or Together key will NOT work against OpenRouter.`,
+        );
+      }
+      const client = createOpenAI({
+        baseURL: host,
+        // Same stray-quote strip as the openai-compatible path: a quoted value
+        // copied out of a .env file 401s indistinguishably from a revoked key.
+        apiKey: apiKey.trim().replace(/^["']|["']$/g, ""),
+        fetch: openRouterFetch,
+      });
+      // .chat() for the same reason as above: the bare call targets OpenAI's
+      // Responses API, which OpenRouter does not implement. OpenRouter serves
+      // /v1/chat/completions.
+      //
+      // Decoding note: candidates served here carry decodingParams
+      // temperature null, the sanctioned opt-out for Claude Opus 5, which
+      // REJECTS the temperature parameter ("`temperature` is deprecated for
+      // this model") whether it is reached directly or through OpenRouter.
+      // parseDecoding turns that null into undefined and generateText/
+      // streamText then omit the field on the wire - nothing on this path may
+      // substitute a default, which providers-openrouter.test.ts pins by
+      // asserting the request body has no temperature key at all. (Thinking is
+      // switched off by openRouterFetch above; see its header for why.)
       return client.chat(candidate.baseModelId);
     }
     default:
@@ -253,7 +348,8 @@ export function assembleGenerationRequest(
   // priming turns ahead of any real conversation history.
   messages.push(...buildFewShotTurns(args.userMessage));
   // Retrieved community gold next, modeled as real prior chat turns. Every
-  // provider wired here (Anthropic, OpenAI, Google, OpenAI-compatible) takes
+  // provider wired here (Anthropic, OpenAI, Google, OpenAI-compatible,
+  // OpenRouter) takes
   // multi-turn messages through the AI SDK, so this one path is
   // provider-agnostic - no per-provider formatting fallback is needed.
   const current = args.userMessage.trim();

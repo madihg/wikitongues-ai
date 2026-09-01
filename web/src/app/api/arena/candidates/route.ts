@@ -11,7 +11,13 @@ const VALID_KINDS: CandidateKind[] = [
   "continued_pretrain",
   "composite",
 ];
-const VALID_PROVIDERS = ["anthropic", "openai", "google", "openai-compatible"];
+const VALID_PROVIDERS = [
+  "anthropic",
+  "openai",
+  "google",
+  "openai-compatible",
+  "openrouter",
+];
 
 function slugify(s: string): string {
   return s

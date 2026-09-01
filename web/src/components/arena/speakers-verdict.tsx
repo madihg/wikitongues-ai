@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   MIN_DECIDED_PER_PAIRING,
   type AnnotationInsights,
@@ -15,6 +14,10 @@ import { failureTagLabel } from "@/lib/failure-tags";
  * arena (rounded-lg border border-border bg-surface shadow-sm). Every number
  * arrives through computeAnnotationInsights - this file draws, it never
  * computes, and it never hardcodes a count.
+ *
+ * VerdictHeadlineCard, PairingSplitBar and InadequacyStrip are exported so the
+ * arena Overview can lead with the same three pieces rather than growing a
+ * second, drifting copy of them.
  */
 
 function pct(part: number, whole: number): string {
@@ -24,7 +27,11 @@ function pct(part: number, whole: number): string {
 
 // ─── 1. headline ────────────────────────────────────────────────────────────
 
-function Headline({ headline }: { headline: VerdictHeadline }) {
+export function VerdictHeadlineCard({
+  headline,
+}: {
+  headline: VerdictHeadline;
+}) {
   if (headline.poolDecided === 0 || headline.leaderName === null) {
     return (
       <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
@@ -61,7 +68,7 @@ function Headline({ headline }: { headline: VerdictHeadline }) {
 
 // ─── 2. head-to-head bars ───────────────────────────────────────────────────
 
-function PairingBar({ p }: { p: PairingSummary }) {
+export function PairingSplitBar({ p }: { p: PairingSummary }) {
   const segments = [
     { label: `${p.aName} wins`, value: p.aWins, cls: "bg-pick-a" },
     { label: "ties", value: p.ties, cls: "bg-border-strong" },
@@ -150,7 +157,7 @@ function TagBars({ tags }: { tags: TagCount[] }) {
 
 // ─── 4. honesty strip ───────────────────────────────────────────────────────
 
-function InadequacyStrip({ weekly }: { weekly: WeeklyInadequacy[] }) {
+export function InadequacyStrip({ weekly }: { weekly: WeeklyInadequacy[] }) {
   const observed = weekly.filter((w) => w.total > 0);
   if (observed.length === 0) {
     return (
@@ -286,7 +293,7 @@ export function SpeakersVerdict({
 }) {
   return (
     <div className="space-y-6">
-      <Headline headline={insights.headline} />
+      <VerdictHeadlineCard headline={insights.headline} />
 
       <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
         <h2 className="text-base font-semibold text-text-primary">
@@ -305,7 +312,7 @@ export function SpeakersVerdict({
         ) : (
           <div className="space-y-6">
             {insights.pairings.map((p) => (
-              <PairingBar key={`${p.aName}::${p.bName}`} p={p} />
+              <PairingSplitBar key={`${p.aName}::${p.bName}`} p={p} />
             ))}
           </div>
         )}
@@ -372,39 +379,5 @@ export function SpeakersVerdict({
         <RecentExamples recent={insights.recent} />
       </section>
     </div>
-  );
-}
-
-/**
- * Compact teaser for the arena Overview: the headline sentence plus a link.
- * Same live-data rule - the numbers arrive through computeAnnotationInsights
- * on the page that renders this.
- */
-export function VerdictTeaser({ headline }: { headline: VerdictHeadline }) {
-  return (
-    <Link
-      href="/admin/arena/verdict"
-      className="group block rounded-lg border border-border bg-surface p-5 shadow-sm transition-colors hover:bg-surface-sunken"
-    >
-      <h2 className="text-base font-semibold text-text-primary">
-        The Speakers&apos; Verdict
-      </h2>
-      {headline.poolDecided > 0 && headline.leaderName !== null ? (
-        <p className="mt-1 text-sm text-text-secondary">
-          In {headline.poolComparisons} blind matchups between the current
-          systems, when speakers preferred one answer, they chose{" "}
-          {headline.leaderName} {headline.leaderWins} times out of{" "}
-          {headline.poolDecided}.
-        </p>
-      ) : (
-        <p className="mt-1 text-sm text-text-secondary">
-          What Igala speakers decide in blind matchups, and why losing answers
-          lose.
-        </p>
-      )}
-      <span className="mt-3 inline-block text-sm font-medium text-accent-text">
-        See the verdict &rarr;
-      </span>
-    </Link>
   );
 }

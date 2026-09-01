@@ -37,11 +37,22 @@ import type { CandidateGeneration, GenerateArgs } from "@/lib/arena/providers";
  *     is kept REGARDLESS - never a loop, never a third call. Latency and
  *     token accounting SUM both calls: serve what you measure.
  *
- * This is why the chat route serves rag-v4-1 BUFFERED while other arms
- * stream: the repair round must see the complete answer before anything is
- * shown, or a reviewer would watch text being judged that later silently
- * changes. The wire format already carries a final `reply` event, so a
- * buffered column is just a degenerate stream that emits only that event.
+ * BUFFERED FOR THE EXAM, STREAMED FOR THE CHAT
+ * --------------------------------------------
+ * The checker needs a COMPLETE answer, which is why the offline exam and the
+ * eval-generation route keep calling generateWithRepairRound: buffered, one
+ * stored output per prompt, nobody watching. The chat route may not pay that
+ * price - rag-v4-1 is the default-selected column, so buffering it meant the
+ * first thing every reviewer saw was a blank panel for the length of TWO full
+ * generations.
+ *
+ * streamWithRepairRound resolves that without touching the invariant the exam
+ * measures. Both entry points call the SAME runRepairRound core with the same
+ * decisions (check, one named re-ask, second answer kept regardless, summed
+ * accounting); they differ only in the two callbacks they inject - deltas as
+ * they arrive, and a notification between the attempts. The streamed column
+ * therefore ENDS on exactly the text the buffered call would have returned,
+ * which is the only property the numbers depend on.
  */
 
 /** The one versionLabel whose serving path runs the repair round. */
@@ -245,6 +256,32 @@ export function checkIgalaOutput(
 }
 
 /**
+ * Short, plain-language names for the three rule families - what a reviewer is
+ * told while the column is being rewritten under her.
+ *
+ * Deliberately NOT the `detail` lines: those are written for the model and
+ * quote the offending words, and the offending words are about to disappear
+ * from the screen. The reviewer needs the category, not the evidence.
+ */
+export const REPAIR_VIOLATION_LABELS: Record<RepairViolationKind, string> = {
+  "banned-character": "letters that are not in the Igala alphabet",
+  "hyphenated-prefix": "a hyphenated prefix Igala does not use",
+  "tone-saturation": "tone marks the question did not ask for",
+};
+
+/** The labels for one violation set, one per kind, in check order. */
+export function describeViolations(violations: RepairViolation[]): string[] {
+  const seen = new Set<RepairViolationKind>();
+  const out: string[] = [];
+  for (const v of violations) {
+    if (seen.has(v.kind)) continue;
+    seen.add(v.kind);
+    out.push(REPAIR_VIOLATION_LABELS[v.kind]);
+  }
+  return out;
+}
+
+/**
  * The re-ask turn. English scaffolding plus the model's own output words
  * only - no attested Igala forms, so Scope A has nothing to bite on. Restates
  * the output contract because the retrieval-laden first turn scrolled away.
@@ -270,33 +307,44 @@ export interface RepairedGeneration extends CandidateGeneration {
 }
 
 /**
- * Wrap one buffered generation in the repair round. `generate` is injected
- * (the routes pass generateForCandidate bound to their candidate) so this
- * module stays pure of provider concerns and the unit tests need no SDK
- * mocks.
+ * THE ONE implementation of the repair round. Every decision the round makes
+ * lives here and nowhere else: which labels run it, what counts as dirty, how
+ * the re-ask turn is built, that the second answer is kept regardless, and how
+ * latency and tokens are summed.
+ *
+ * `run` is one generation, however the caller performs it - buffered for the
+ * exam and the eval route, streaming for chat. `onRevision` fires exactly once,
+ * AFTER the first answer is judged dirty and BEFORE the second call starts, so
+ * a streaming caller can tell its client that what it has been reading is
+ * about to be replaced. Neither injection can change the outcome: `run` is
+ * called with identical arguments in identical order either way, so buffered
+ * and streamed callers return the same RepairedGeneration for the same model.
  */
-export async function generateWithRepairRound(
+async function runRepairRound(
   candidate: { versionLabel?: string | null },
   args: GenerateArgs,
-  generate: (a: GenerateArgs) => Promise<CandidateGeneration>,
-  opts: RepairCheckOptions = {},
+  run: (a: GenerateArgs) => Promise<CandidateGeneration>,
+  onRevision: (violations: RepairViolation[]) => void,
+  opts: RepairCheckOptions,
 ): Promise<RepairedGeneration> {
   if (candidate.versionLabel !== REPAIR_ROUND_VERSION_LABEL) {
     // The no-op guarantee: one call, untouched args, unchanged result.
-    const result = await generate(args);
+    const result = await run(args);
     return { ...result, repaired: false, repairViolations: null };
   }
 
-  const first = await generate(args);
+  const first = await run(args);
   const violations = checkIgalaOutput(first.text, opts);
   if (violations.length === 0) {
     return { ...first, repaired: false, repairViolations: [] };
   }
 
+  onRevision(violations);
+
   // Re-ask ONCE, violations named, first answer in context as the model's
   // own prior turn. The second answer is kept regardless of what the checker
   // would say about it - one repair, never a loop.
-  const second = await generate({
+  const second = await run({
     ...args,
     conversationHistory: [
       ...(args.conversationHistory ?? []),
@@ -318,4 +366,65 @@ export async function generateWithRepairRound(
     repaired: true,
     repairViolations: violations,
   };
+}
+
+/** Nothing to announce when nobody is watching a buffered generation. */
+const NO_REVISION_NOTICE = () => {};
+
+/**
+ * Wrap one BUFFERED generation in the repair round - the exam and eval path.
+ * `generate` is injected (the routes pass generateForCandidate bound to their
+ * candidate) so this module stays pure of provider concerns and the unit tests
+ * need no SDK mocks. Nothing is shown until the round is over, which is what a
+ * stored, scored output wants.
+ */
+export async function generateWithRepairRound(
+  candidate: { versionLabel?: string | null },
+  args: GenerateArgs,
+  generate: (a: GenerateArgs) => Promise<CandidateGeneration>,
+  opts: RepairCheckOptions = {},
+): Promise<RepairedGeneration> {
+  return runRepairRound(candidate, args, generate, NO_REVISION_NOTICE, opts);
+}
+
+export interface RepairStreamHandlers {
+  /** Every token of BOTH attempts, in arrival order. */
+  onDelta: (delta: string) => void;
+  /**
+   * The first attempt was dirty and the repaired attempt is about to stream:
+   * everything delivered through onDelta so far is superseded. Fires at most
+   * once, and never for a clean answer or a non-rag-v4-1 label.
+   */
+  onRevision: (violations: RepairViolation[]) => void;
+}
+
+/**
+ * Wrap one STREAMED generation in the repair round - the chat path.
+ *
+ * Same round, same result, tokens delivered as they arrive. `stream` performs
+ * one generation and reports its deltas (the chat route passes
+ * streamForCandidate bound to its candidate); both attempts go through it, so
+ * a repaired column streams twice with an onRevision between - which is
+ * precisely the information the client needs to throw the first attempt away.
+ *
+ * The returned RepairedGeneration is identical to what generateWithRepairRound
+ * returns for the same model, because it IS the same core - pinned by test.
+ */
+export async function streamWithRepairRound(
+  candidate: { versionLabel?: string | null },
+  args: GenerateArgs,
+  stream: (
+    a: GenerateArgs,
+    onDelta: (delta: string) => void,
+  ) => Promise<CandidateGeneration>,
+  handlers: RepairStreamHandlers,
+  opts: RepairCheckOptions = {},
+): Promise<RepairedGeneration> {
+  return runRepairRound(
+    candidate,
+    args,
+    (a) => stream(a, handlers.onDelta),
+    handlers.onRevision,
+    opts,
+  );
 }

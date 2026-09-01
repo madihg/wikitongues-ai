@@ -2,16 +2,37 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
 import {
-  buildArenaMatrix,
-  type PairwiseRow,
-  type RubricRow,
-} from "@/lib/arena/aggregate";
+  buildEraSlice,
+  derivePivotAt,
+  eraSplit,
+  type ArenaComparisonRow,
+  type EraSlice,
+} from "@/lib/arena/era";
 import { BUCKETS } from "@/lib/buckets";
 
 /**
- * The arena leaderboard: a candidate x 8-bucket matrix ranked by human pairwise
- * (Bradley-Terry, per bucket), with rubric means and "not distinguishable" flags.
+ * The rubric arena leaderboard: a candidate x 8-category matrix ranked by human
+ * pairwise (Bradley-Terry, per category), served for TWO windows.
+ *
+ * The window matters more than the fit. Fitted over all history the table is
+ * dominated by the era before the annotation pivot, when speakers rejected both
+ * answers in nearly every comparison, so the decided winners spread thin and
+ * almost every cell reports an absence of evidence. Both eras are computed here
+ * and shipped together - the client switches without a refetch, and neither
+ * window is hidden from the reader. See src/lib/arena/era.ts for the derivation
+ * of the pivot and the sparsity gate.
+ *
+ * The population is the one every other arena surface counts: non-demo
+ * comparisons by real annotators. The page that renders this table quotes its
+ * own all-time and current-pool counts from computeAnnotationInsights, so if
+ * the two queries disagreed the reader would meet two different counts of the
+ * same thing in the same scroll.
  */
+
+/** Same seed-account exclusion, same reason, as src/lib/annotation-insights.ts,
+ * src/lib/method-metrics.ts and /api/public/stats: a bring-up test login is not
+ * a speaker, and its comparisons are not evidence about a model. */
+const SEED_ACCOUNT_EMAIL_SUFFIX = "@test.com";
 export async function GET() {
   const guard = await requireResearcher();
   if (guard.error) return guard.error;
@@ -29,43 +50,47 @@ export async function GET() {
       color: true,
       isChampion: true,
       ragEnabled: true,
+      inPairingPool: true,
     },
   });
 
   const candidateById = new Map(candidates.map((c) => [c.id, c]));
 
-  // Pairwise: map each comparison's two outputs to their candidates.
+  // Pairwise: map each comparison's two outputs to their candidates. createdAt
+  // rides along because the era window is a time window, and the pool flag
+  // rides along because the window's start is derived from it.
   const comparisons = await prisma.pairwiseComparison.findMany({
-    where: { isDemo: false },
+    where: {
+      isDemo: false,
+      annotator: { email: { not: { endsWith: SEED_ACCOUNT_EMAIL_SUFFIX } } },
+    },
     select: {
       winner: true,
       bucket: true,
+      createdAt: true,
       modelOutputA: { select: { candidateModelId: true, bucket: true } },
       modelOutputB: { select: { candidateModelId: true, bucket: true } },
     },
   });
 
-  // Outcome mix, counted before the Bradley-Terry fit folds "both_inadequate"
-  // and "tie" into the same bucket. The UI needs the distinction: a decided
-  // winner is evidence, a rejection of both answers is not.
-  let decided = 0;
-  let ties = 0;
-  let bothInadequate = 0;
-
-  const pairwise: PairwiseRow[] = [];
+  const rows: ArenaComparisonRow[] = [];
   for (const c of comparisons) {
     const a = c.modelOutputA?.candidateModelId;
     const b = c.modelOutputB?.candidateModelId;
     if (!a || !b || a === b) continue;
-    if (!candidateById.has(a) || !candidateById.has(b)) continue;
-    if (c.winner === "a" || c.winner === "b") decided += 1;
-    else if (c.winner === "both_inadequate") bothInadequate += 1;
-    else ties += 1;
-    pairwise.push({
+    const candA = candidateById.get(a);
+    const candB = candidateById.get(b);
+    if (!candA || !candB) continue;
+    rows.push({
       candidateA: a,
       candidateB: b,
-      winner: c.winner === "a" || c.winner === "b" ? c.winner : "tie",
+      // The raw verdict, not folded: "both_inadequate" is a rejection of both
+      // answers, and the sparsity gate must never count it as evidence.
+      outcome: c.winner,
       bucket: c.bucket ?? c.modelOutputA?.bucket ?? null,
+      createdAt: c.createdAt,
+      aInPool: candA.inPairingPool,
+      bInPool: candB.inPairingPool,
     });
   }
 
@@ -74,33 +99,37 @@ export async function GET() {
     where: { language: "igala", split: "test" },
   });
 
-  // Rubric v2: one row per scored axis. N/A (null) scores are stored but
-  // excluded from ranking math.
-  const axisScores = await prisma.rubricAxisScore.findMany({
+  // Rubric v2 volume, for the "n rubric scores" line. N/A (null) scores are
+  // stored but never counted as a score.
+  const rubricScores = await prisma.rubricAxisScore.count({
     where: { isDemo: false, score: { not: null } },
-    select: {
-      bucket: true,
-      axis: true,
-      score: true,
-      modelOutput: { select: { candidateModelId: true, bucket: true } },
-    },
   });
 
-  const rubric: RubricRow[] = [];
-  for (const r of axisScores) {
-    const cid = r.modelOutput?.candidateModelId;
-    if (!cid || !candidateById.has(cid) || r.score === null) continue;
-    rubric.push({
-      candidateId: cid,
-      bucket: r.bucket ?? r.modelOutput?.bucket ?? null,
-      axis: r.axis,
-      score: r.score,
-    });
-  }
+  const pivotAt = derivePivotAt(rows);
+  const candidateIds = candidates.map((c) => c.id);
+  const sincePivot = buildEraSlice(rows, {
+    era: "since_pivot",
+    pivotAt,
+    candidateIds,
+  });
+  const allTime = buildEraSlice(rows, {
+    era: "all_time",
+    pivotAt,
+    candidateIds,
+  });
 
-  const matrix = buildArenaMatrix(pairwise, rubric);
+  const shapeEra = (slice: EraSlice) => ({
+    ...slice,
+    rows: slice.rows.map((r) => ({
+      ...r,
+      candidate: candidateById.get(r.candidateId) ?? null,
+    })),
+    belowGate: slice.belowGate.map((s) => ({
+      ...s,
+      candidate: candidateById.get(s.candidateId) ?? null,
+    })),
+  });
 
-  // Shape the response as a candidate x bucket table the UI can render directly.
   const buckets = BUCKETS.map((b) => ({
     key: b.key,
     num: b.num,
@@ -108,59 +137,28 @@ export async function GET() {
     label: b.label,
   }));
 
-  const rows = candidates.map((cand) => {
-    const cells = BUCKETS.map((b) => {
-      const bt = matrix.byBucket[b.key];
-      const entry = bt?.candidates.find((c) => c.id === cand.id);
-      const rubricMean = matrix.rubric[cand.id]?.[b.key]?.overall ?? null;
-      return {
-        bucket: b.key,
-        strength: entry?.strength ?? null,
-        ciLow: entry?.ciLow ?? null,
-        ciHigh: entry?.ciHigh ?? null,
-        rank: entry?.rank ?? null,
-        games: entry?.games ?? 0,
-        distinguishable: bt?.distinguishable ?? false,
-        rubricMean,
-      };
-    });
-    const overallEntry = matrix.overall.candidates.find(
-      (c) => c.id === cand.id,
-    );
-    return {
-      candidate: cand,
-      overall: {
-        strength: overallEntry?.strength ?? null,
-        rank: overallEntry?.rank ?? null,
-        games: overallEntry?.games ?? 0,
-        distinguishable: matrix.overall.distinguishable,
-        rubricMean: matrix.rubric[cand.id]?.["__overall__"]?.overall ?? null,
-      },
-      cells,
-    };
-  });
-
-  // Order rows by overall rank (nulls last).
-  rows.sort((a, b) => {
-    const ra = a.overall.rank ?? Infinity;
-    const rb = b.overall.rank ?? Infinity;
-    return ra - rb;
-  });
-
   return NextResponse.json({
     buckets,
-    rows,
+    /** ISO start of the post-pivot window, derived from the data. */
+    pivotAt: pivotAt ? pivotAt.toISOString() : null,
+    eras: {
+      since_pivot: shapeEra(sincePivot),
+      all_time: shapeEra(allTime),
+    },
+    /** The two windows' comparison and decided counts, for the copy that
+     * explains why the post-pivot window is the default. */
+    split: eraSplit(allTime, sincePivot),
     totals: {
       candidates: candidates.length,
-      pairwise: pairwise.length,
-      rubric: rubric.length,
-      overallDistinguishable: matrix.overall.distinguishable,
-      // Live inputs for the leaderboard explainer.
+      pairwise: allTime.comparisons,
+      rubric: rubricScores,
+      overallDistinguishable: allTime.overallDistinguishable,
+      // Live inputs for the leaderboard explainer, all-time.
       signal: {
-        comparisons: pairwise.length,
-        decided,
-        ties,
-        bothInadequate,
+        comparisons: allTime.comparisons,
+        decided: allTime.decided,
+        ties: allTime.ties,
+        bothInadequate: allTime.bothInadequate,
         heldOutPrompts,
       },
     },

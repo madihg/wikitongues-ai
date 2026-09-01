@@ -27,9 +27,9 @@
  *     never passed), so the benchmark is not used to build the system under
  *     test.
  *
- * THE $15 HARD CAP is enforced by RULE, not estimate ("gemini-3.1-pro-preview"
- * is absent from pricing.ts and bills at the $1/$3 default, documented as a
- * floor):
+ * THE $15 HARD CAP is enforced by RULE, not estimate (pricing.ts now carries
+ * gemini-3.1-pro's real $2/$12 rate, so the worst case priced below is the
+ * real one, not the old $1/$3 default floor):
  *   - maxTokens per provider - 1024 for Claude (bounds its worst case),
  *     4096 for Gemini (whose reasoning trace bills against the completion
  *     budget; see trainMaxTokensFor) - and the worst-case pricing below uses
@@ -144,6 +144,9 @@ function keyForProvider(provider: string): string | undefined {
       return (
         process.env.OPENAI_COMPATIBLE_API_KEY ?? process.env.TOGETHER_API_KEY
       );
+    case "openrouter":
+      // OpenRouter only - never another vendor's key, matching resolveModel.
+      return process.env.OPENROUTER_API_KEY;
     default:
       return undefined;
   }
@@ -680,6 +683,12 @@ async function generate(slugs: string[]) {
     }
 
     // ── ledger: one CostEntry per candidate per slice with real spend ──────
+    // AUDIT TRAIL ONLY. These category "eval_generation" rows record what this
+    // run spent per candidate, but the outputs they paid for are stored as
+    // ModelOutput rows with token counts, and /api/arena/costs prices those
+    // live. The route therefore EXCLUDES eval_generation from its consumption
+    // sum - counting both would double-count every dollar here. Keep writing
+    // them (they are the per-slice record); do not add them to any total.
     for (const candidate of live) {
       const report = reports.get(candidate.slug)!;
       const sliceCost = report.costUsd - (ledgered.get(candidate.slug) ?? 0);

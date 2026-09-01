@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import {
   bothInadequateTagCounts,
   computeAnnotationInsights,
+  corpusSplit,
   isCommunityTaught,
   losingTagCounts,
   pairingSummaries,
@@ -405,6 +406,89 @@ describe("recent decided examples", () => {
     expect(sideB.winnerOutput).toBe("ójó dá");
     expect(sideB.loserName).toBe("Bare Gemini");
     expect(sideB.loserTags).toEqual(["grammar"]);
+  });
+});
+
+describe("corpusSplit", () => {
+  it("splits every comparison into current-pool and retired-arm halves", async () => {
+    const { insights } = await run();
+    const c = insights.corpus;
+    // Five pool matchups (3 decided, 1 tie, 1 both-inadequate) plus one
+    // decided matchup against the retired arm.
+    expect(c.allComparisons).toBe(6);
+    expect(c.allDecided).toBe(4);
+    expect(c.allBothInadequate).toBe(1);
+    expect(c.poolComparisons).toBe(5);
+    expect(c.poolDecided).toBe(3);
+    expect(c.poolBothInadequate).toBe(1);
+    expect(c.legacyComparisons).toBe(1);
+    expect(c.legacyDecided).toBe(1);
+    expect(c.legacyBothInadequate).toBe(0);
+  });
+
+  it("keeps the halves exhaustive, so the reconciliation sentence adds up", async () => {
+    const { insights } = await run();
+    const c = insights.corpus;
+    expect(c.poolComparisons + c.legacyComparisons).toBe(c.allComparisons);
+    expect(c.poolDecided + c.legacyDecided).toBe(c.allDecided);
+    expect(c.poolBothInadequate + c.legacyBothInadequate).toBe(
+      c.allBothInadequate,
+    );
+  });
+
+  it("agrees with poolHeadline on the pool-side counts", async () => {
+    const { insights } = await run();
+    expect(insights.corpus.poolComparisons).toBe(
+      insights.headline.poolComparisons,
+    );
+    expect(insights.corpus.poolDecided).toBe(insights.headline.poolDecided);
+    expect(insights.corpus.poolBothInadequate).toBe(
+      insights.headline.poolBothInadequate,
+    );
+  });
+
+  it("counts a matchup as legacy when either side is off the pool", () => {
+    const row = (
+      aInPool: boolean,
+      bInPool: boolean,
+      winner: string,
+    ): ComparisonRow => ({
+      winner,
+      failureTagsA: [],
+      failureTagsB: [],
+      createdAt: new Date(Date.UTC(2026, 0, 1)),
+      aName: "A",
+      bName: "B",
+      aInPool,
+      bInPool,
+      aCommunityTaught: false,
+      bCommunityTaught: false,
+    });
+    const c = corpusSplit([
+      row(true, false, "a"),
+      row(false, true, "both_inadequate"),
+      row(false, false, "tie"),
+      row(true, true, "b"),
+    ]);
+    expect(c.legacyComparisons).toBe(3);
+    expect(c.poolComparisons).toBe(1);
+    expect(c.poolDecided).toBe(1);
+    expect(c.legacyDecided).toBe(1);
+    expect(c.legacyBothInadequate).toBe(1);
+  });
+
+  it("returns all zeros for an empty corpus rather than NaN", () => {
+    expect(corpusSplit([])).toEqual({
+      allComparisons: 0,
+      allDecided: 0,
+      allBothInadequate: 0,
+      poolComparisons: 0,
+      poolDecided: 0,
+      poolBothInadequate: 0,
+      legacyComparisons: 0,
+      legacyDecided: 0,
+      legacyBothInadequate: 0,
+    });
   });
 });
 

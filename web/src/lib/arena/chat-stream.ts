@@ -18,6 +18,24 @@
  * The route writes events with encodeChatEvent; the client feeds raw fetch
  * chunks through ChatStreamParser, which owns the only subtle part: a chunk
  * boundary can fall mid-line, so partial trailing lines are carried over.
+ *
+ * THE `revision` EVENT AND BACKWARD COMPATIBILITY
+ * ----------------------------------------------
+ * The rag-v4-1 column runs a deterministic repair round (repair-round.ts): its
+ * first attempt is checked, and a dirty one is re-asked ONCE, with the second
+ * answer served. It used to be delivered BUFFERED for that reason - which made
+ * the default-selected model the one column that showed nothing for 30-60s
+ * while two full generations ran. It now streams both attempts, and `revision`
+ * is the seam: emitted between them, it names the rule families the first
+ * attempt broke and tells the client the deltas that follow REPLACE the column
+ * rather than extend it.
+ *
+ * The event is additive on purpose. A client that has never heard of it drops
+ * the line (parseLine ignores unknown types), appends the second attempt's
+ * deltas to the first attempt's text, and is then CORRECTED by the closing
+ * `reply` event, which carries the repaired text and replaces the column
+ * wholesale. Old clients see a flicker of doubled text; they never end up with
+ * the wrong transcript.
  */
 
 /** One model's finished column - the same shape the buffered route returned. */
@@ -33,11 +51,47 @@ export interface ChatReply {
   error: string | null;
 }
 
+/**
+ * What one column is doing right now, when that is not visible as text.
+ *
+ * Tokens narrate themselves - a column that is streaming needs no announcement.
+ * The gaps do: the seconds before the first token, and (on the rag-v4-1 arm)
+ * the pause between a finished first attempt and the repaired one while the
+ * serving lint runs. Those are the windows where a reviewer stares at an empty
+ * panel and concludes the page is broken, so the route names them.
+ *
+ * `retrieving` is emitted by a route that builds context inside the stream;
+ * this one builds it BEFORE the response head (so the durations can ride in the
+ * Server-Timing header, see server-timing.ts), and the client derives the same
+ * phase from "request sent, nothing back yet" - the identical window.
+ */
+export type ColumnStage = "retrieving" | "writing" | "checking" | "revising";
+
 export type ChatStreamEvent =
   /** A token (or token batch) from one model, append to its column. */
   | { type: "delta"; slug: string; text: string }
+  /**
+   * This column's finished first attempt broke the serving lint, so a repaired
+   * second attempt is about to stream: DISCARD what has accumulated, show the
+   * reasons, and treat the deltas that follow as the column's text.
+   */
+  | { type: "revision"; slug: string; reasons: string[] }
+  /**
+   * Advisory progress marker for one column. Carries a fixed enum and a slug,
+   * never text - a client may ignore it entirely and lose nothing but the
+   * status line.
+   */
+  | { type: "stage"; slug: string; stage: ColumnStage }
   /** One model finished (or failed - then reply.error is set). */
   | { type: "reply"; reply: ChatReply };
+
+/** The stage values a wire line may legally carry. */
+const COLUMN_STAGES: readonly string[] = [
+  "retrieving",
+  "writing",
+  "checking",
+  "revising",
+];
 
 /** One event as a wire line, newline-terminated. */
 export function encodeChatEvent(event: ChatStreamEvent): string {
@@ -74,6 +128,14 @@ export class ChatStreamParser {
  */
 export interface StreamingReply extends ChatReply {
   done: boolean;
+  /**
+   * Plain-language rule families the first attempt broke, once a `revision`
+   * event has landed for this column; null while no revision has happened.
+   * Survives the closing `reply` event so the finished column can still say it
+   * was rewritten - the reply event itself stays exactly the buffered ChatReply
+   * contract and carries no repair fields.
+   */
+  revisedFor: string[] | null;
 }
 
 /** Fresh columns for one exchange, in the order the models were selected. */
@@ -91,6 +153,7 @@ export function initStreamingReplies(
     retrievedExemplars: 0,
     error: null,
     done: false,
+    revisedFor: null,
   }));
 }
 
@@ -100,6 +163,12 @@ export function initStreamingReplies(
  * closing `reply` event REPLACES the accumulated column: the server's final
  * text is authoritative, so a dropped delta costs a flicker, never a wrong
  * transcript.
+ *
+ * `revision` is the other replacement point: the repair round's first attempt
+ * is discarded in favour of the second, so the accumulated text is cleared and
+ * the reasons recorded. The reasons then RIDE THROUGH the closing reply event
+ * (which knows nothing about repairs) so a finished column can still show why
+ * it was rewritten.
  */
 export function applyChatEvents(
   replies: StreamingReply[],
@@ -111,10 +180,33 @@ export function applyChatEvents(
     if (ev.type === "delta") {
       const r = bySlug.get(ev.slug);
       if (r && !r.done) r.text += ev.text;
-    } else {
+    } else if (ev.type === "revision") {
+      const r = bySlug.get(ev.slug);
+      if (r && !r.done) {
+        r.text = "";
+        r.revisedFor = ev.reasons;
+      }
+    } else if (ev.type === "reply") {
       const r = bySlug.get(ev.reply.slug);
-      if (r) bySlug.set(ev.reply.slug, { ...ev.reply, done: true });
+      if (r)
+        bySlug.set(ev.reply.slug, {
+          ...ev.reply,
+          done: true,
+          revisedFor: r.revisedFor,
+        });
     }
+    // Anything else - a `stage` marker, or an event type a newer server sends
+    // that this build has never heard of - changes no column text. Matching on
+    // the KNOWN types and ignoring the rest is what makes the protocol
+    // extensible.
+    //
+    // The previous shape was `else { ...ev.reply.slug }`, which threw on
+    // anything that was not a delta. That was never REACHABLE from the wire -
+    // parseLine has always dropped unknown types, so the fold only ever saw
+    // delta and reply, and no deployed client crashes on the new events (pinned
+    // in chat-stream.test.ts and end to end in the chat route's own test). It
+    // was reachable from a hand-built event array, which is how a future caller
+    // would have found it. Matching explicitly closes that, and costs nothing.
   }
   return replies.map((r) => bySlug.get(r.slug) as StreamingReply);
 }
@@ -140,6 +232,27 @@ function parseLine(line: string): ChatStreamEvent[] {
   try {
     const parsed = JSON.parse(trimmed) as ChatStreamEvent;
     if (parsed.type === "delta" || parsed.type === "reply") return [parsed];
+    // A revision with a malformed reasons list is still a revision: the
+    // replacement semantics matter, the wording is decoration.
+    if (parsed.type === "revision")
+      return [
+        {
+          type: "revision",
+          slug: parsed.slug,
+          reasons: Array.isArray(parsed.reasons)
+            ? parsed.reasons.filter((r): r is string => typeof r === "string")
+            : [],
+        },
+      ];
+    if (
+      parsed.type === "stage" &&
+      typeof parsed.slug === "string" &&
+      COLUMN_STAGES.includes(parsed.stage)
+    )
+      return [parsed];
+    // An unrecognised type is DROPPED, not thrown on: the protocol is additive,
+    // and a client one deploy behind the server must degrade to "I saw fewer
+    // events", never to a dead stream.
     return [];
   } catch {
     // A malformed line (e.g. proxy truncation) is dropped rather than

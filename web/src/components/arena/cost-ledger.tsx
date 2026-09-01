@@ -25,6 +25,8 @@ interface LedgerRow {
   label: string;
   amount: number;
   estimated: boolean;
+  /** Already inside the inference figure; listed for audit, not summed. */
+  countedInInference?: boolean;
   createdAt: string;
 }
 interface BurndownRow {
@@ -269,8 +271,17 @@ export function CostLedger() {
       {/* Explicit ledger */}
       {data.ledger.entries.length > 0 && (
         <section className="rounded-lg border border-border bg-surface p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-text-primary">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
             Logged entries
+            <InfoTip width="w-80">
+              Every row written to the cost ledger, kept whole as an audit
+              trail. Rows marked{" "}
+              <span className="font-medium">already in inference</span> record
+              generation whose answers are stored with token counts, so
+              &quot;Inference (estimated)&quot; above already prices them; they
+              are listed here but left out of &quot;Compute consumed&quot; so
+              the same dollar is not counted twice.
+            </InfoTip>
           </h2>
           <table className="w-full text-sm">
             <tbody>
@@ -281,13 +292,30 @@ export function CostLedger() {
                   <td className="py-2 text-text-tertiary">
                     {e.estimated ? "estimate" : "billed"}
                   </td>
-                  <td className="py-2 text-right font-medium text-text-primary tabular-nums">
+                  <td className="py-2 text-text-tertiary">
+                    {e.countedInInference ? "already in inference" : ""}
+                  </td>
+                  <td
+                    className={`py-2 text-right font-medium tabular-nums ${
+                      e.countedInInference
+                        ? "text-text-tertiary"
+                        : "text-text-primary"
+                    }`}
+                  >
                     {usd(e.amount)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <p className="mt-3 text-xs leading-relaxed text-text-tertiary">
+            Rows marked{" "}
+            <span className="font-medium">already in inference</span> are not
+            added to &quot;Compute consumed&quot;: their generations are priced
+            live from stored token counts, which is the single source of truth
+            for generation cost. Ledger consumption counted above:{" "}
+            <span className="tabular-nums">{usd(data.ledger.total)}</span>.
+          </p>
         </section>
       )}
 

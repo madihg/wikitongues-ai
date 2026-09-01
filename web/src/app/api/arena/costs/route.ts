@@ -11,7 +11,23 @@ import { estimateGenerationCostUsd, roundUsd } from "@/lib/arena/pricing";
  *     this is the "Together sessions" line Halim asked for
  *   - ledger:    explicit CostEntry rows (judge calls, manual entries)
  * Inference figures are estimates against a published-rate table (pricing.ts).
+ *
+ * ONE SOURCE OF TRUTH PER DOLLAR. Generation cost is counted exactly once, from
+ * the live token-based computation over every ModelOutput. CostEntry rows in
+ * category "eval_generation" (written by scripts such as train-queue-fill.ts)
+ * describe generation whose outputs are already stored and therefore already
+ * priced above, so they are EXCLUDED from every consumption sum: the ledger
+ * total, the consumption total, the per-provider burn-down and the Together
+ * roll-up. They stay in ledger.entries as an audit trail, flagged
+ * countedInInference: true so the UI can show them as already-counted rather
+ * than hiding them. No CostEntry row is ever deleted or mutated by this route.
  */
+
+/**
+ * Ledger categories whose money is already counted by the live token-based
+ * inference computation. Kept in the ledger listing, kept out of every sum.
+ */
+const COUNTED_IN_INFERENCE_CATEGORIES = new Set(["eval_generation"]);
 
 function providerFromModelId(modelId: string): string {
   const id = (modelId || "").toLowerCase();
@@ -91,17 +107,25 @@ export async function GET() {
     finetuneByProvider.set(j.provider, cur);
   }
 
-  // Ledger — explicit entries. Two different kinds live here and they must
-  // never be summed into one number: category "credits" is CASH leaving the
-  // card (a receipt exists), everything else is CONSUMPTION burning those
-  // credits down. Summing both counts the same dollar twice - once when
-  // bought, once when spent.
+  // Ledger — explicit entries. Three kinds live here and they must never be
+  // summed into one number:
+  //   - "credits" is CASH leaving the card (a receipt exists);
+  //   - "eval_generation" rows describe generation already priced above from
+  //     stored token counts, so counting them again would double-count;
+  //   - everything else is CONSUMPTION that has no other source of truth
+  //     (judge calls, manual entries) and burns the credits down.
   const entries = await prisma.costEntry.findMany({
     orderBy: { createdAt: "desc" },
     take: 200,
   });
   const creditEntries = entries.filter((e) => e.category === "credits");
-  const consumptionEntries = entries.filter((e) => e.category !== "credits");
+  // Consumption the ledger is the ONLY record of. eval_generation is excluded
+  // because the live token-based inference figure already covers it.
+  const consumptionEntries = entries.filter(
+    (e) =>
+      e.category !== "credits" &&
+      !COUNTED_IN_INFERENCE_CATEGORIES.has(e.category),
+  );
   const cashTotal = creditEntries.reduce((s, e) => s + e.amountUsd, 0);
   const ledgerConsumptionTotal = consumptionEntries.reduce(
     (s, e) => s + e.amountUsd,
@@ -124,7 +148,9 @@ export async function GET() {
     (inferenceByProvider.get("together")?.amount ?? 0) +
     togetherFromLedger;
 
-  // Consumption only. Cash is reported beside it, never inside it.
+  // Consumption only. Cash is reported beside it, never inside it, and
+  // ledgerConsumptionTotal already excludes the eval_generation rows that
+  // inferenceTotal accounts for.
   const consumptionTotal =
     inferenceTotal + finetuneTotal + ledgerConsumptionTotal;
 
@@ -194,6 +220,9 @@ export async function GET() {
         label: e.label,
         amount: roundUsd(e.amountUsd),
         estimated: e.estimated,
+        // True when this row's money is already inside the inference figure,
+        // so it is listed for audit but left out of every consumption sum.
+        countedInInference: COUNTED_IN_INFERENCE_CATEGORIES.has(e.category),
         createdAt: e.createdAt,
       })),
     },
