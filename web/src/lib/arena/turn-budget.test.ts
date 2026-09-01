@@ -30,17 +30,32 @@ import {
  */
 
 describe("the turn budget lands inside the platform ceiling", () => {
-  it("uses the smaller of what we declare and what we are given", () => {
-    expect(TURN_BUDGET_MS).toBe(
-      Math.min(CHAT_MAX_DURATION_S, PLATFORM_MAX_DURATION_S) * 1000,
-    );
-    // The property that must hold forever, stated as an inequality rather
-    // than as today's two numbers: a declaration can never buy more than the
-    // platform gives. Today CHAT_MAX_DURATION_S is the larger of the two -
-    // that IS the incident - but reconciling the declaration downwards, or an
-    // upgraded plan raising the ceiling, are both correct states, and a test
-    // that failed on them would be pinning the bug rather than the rule.
+  it("pins the platform ceiling to what production has actually shown", () => {
+    // An observation, not the constant read back to itself: an 89.8s turn
+    // COMPLETED in production on 2026-08-31, so any ceiling below 90s is
+    // contradicted by the log. The value itself (120, from the "Task timed
+    // out after 120 seconds" line of 2026-09-01T15:24:56Z) is documented on
+    // the constant; this test guards the bound the evidence fixes.
+    expect(PLATFORM_MAX_DURATION_S).toBeGreaterThanOrEqual(90);
+    // A declaration can never buy more than the platform gives. Stated as an
+    // inequality rather than today's two numbers, so that lowering the
+    // declaration or raising the plan's ceiling are both accepted states.
     expect(TURN_BUDGET_MS).toBeLessThanOrEqual(PLATFORM_MAX_DURATION_S * 1000);
+  });
+
+  it("spends min(declared, platform) less the closing margin, and nothing else", () => {
+    // The usable budget a turn gets, computed here from the exported inputs
+    // rather than from TURN_BUDGET_MS's own definition: the smaller of the two
+    // durations in seconds, in ms, with the safety margin taken off the end.
+    const usableMs =
+      Math.min(CHAT_MAX_DURATION_S, PLATFORM_MAX_DURATION_S) * 1000 -
+      TURN_SAFETY_MARGIN_MS;
+    expect(turnDeadlineFrom(0)).toBe(usableMs);
+    expect(TURN_BUDGET_MS - TURN_SAFETY_MARGIN_MS).toBe(usableMs);
+    // The margin is real headroom (closing columns takes time) and is not
+    // large enough to eat the turn.
+    expect(TURN_SAFETY_MARGIN_MS).toBeGreaterThan(0);
+    expect(usableMs).toBeGreaterThan(MIN_REASK_BUDGET_MS);
   });
 
   it("leaves real headroom for closing the columns", () => {

@@ -859,14 +859,15 @@ the Bible-for-Children font-run decode; train-queue-fill remainder.
 ## Session State (2026-09-01) - v4.1 shipped and examined: agreement 120.1
 
 METHOD v4.1 (generation-prompt-v4-1.ts): v4 base + perform-don't-describe
-+ dialect honesty + 8 two-source rules + fabrication denylist, 1,148/1,150
-tokens (2 chars headroom - any edit must cut elsewhere). Repair round
-(repair-round.ts): deterministic checker + ONE re-ask, rag-v4-1 only,
-provably no-op elsewhere; chat serves rag-v4-1 buffered so serving ==
-measurement. Exam (exam-rag-v4-1.ts, frontier-fill has no rag-v4-1 mode):
-43/43, $0.29, repair fired 7/43 (all tone saturation). Leak-free strLF
-47.5 [36.8-58.8], agreement 120.1 [93.2-148.9] vs v4 102.1 / v3 99.2 /
-bare 94.2. CIs overlap - v4.1 > v4 is suggestive, not established.
+
+- dialect honesty + 8 two-source rules + fabrication denylist, 1,148/1,150
+  tokens (2 chars headroom - any edit must cut elsewhere). Repair round
+  (repair-round.ts): deterministic checker + ONE re-ask, rag-v4-1 only,
+  provably no-op elsewhere; chat serves rag-v4-1 buffered so serving ==
+  measurement. Exam (exam-rag-v4-1.ts, frontier-fill has no rag-v4-1 mode):
+  43/43, $0.29, repair fired 7/43 (all tone saturation). Leak-free strLF
+  47.5 [36.8-58.8], agreement 120.1 [93.2-148.9] vs v4 102.1 / v3 99.2 /
+  bare 94.2. CIs overlap - v4.1 > v4 is suggestive, not established.
 
 KNOWN ATTRIBUTION FACT (verify agent): the 9 seeded grammar_rule
 RagEntry rows (RE1-RE9, seed-rag-v4-1-grammar.ts, Scope-A clean,
@@ -885,3 +886,82 @@ Halim adding credits unlocks Claude v4/v4.1 exam arms via the
 openai-compatible path. Vercel DATABASE_URL still needs
 connection_limit=10 (Halim). Salem written-permission email = JWAL
 ingestion unlock.
+
+## Session State (2026-09-01, late) - Claude on OpenRouter: v4.1 fixes what v3 broke
+
+Claude Opus 5 arms ran the frozen 43 via OpenRouter (direct Anthropic key
+still dead; OPENROUTER_API_KEY funded with Halim's $20, logged as a
+credits CostEntry under provider "openrouter"). Both arms registered with
+provider "openrouter" so consumption attributes correctly in the burndown.
+86 generations, $1.94 actual, budget stop at $8 never approached.
+
+CLAUDE LADDER (Community Agreement Score, leak-free n=27):
+bare 27.2 | v1 83.3 | v2 62.1 | v3 54.6 | v4 71.5 | v4.1 93.2 [70.5-120.4]
+THE FINDING: v3's grammar rules cost Claude 28.7 points against v1
+(83.3 -> 54.6). v4.1 recovers all of it and passes v1: +38.6 over v3,
++9.9 over v1, and Claude's best score ever. v4.1 is the FIRST method
+version that helps both families - the per-family recipe split (Gemini
+wants rules, Claude wants exemplars) may no longer be needed. CIs overlap
+heavily, so v4.1 > v1 for Claude is suggestive, not established; the v3
+-> v4.1 recovery is large enough to be the real signal.
+Repair round fired 9/43 on Claude v4.1 (7/43 on Gemini): tone saturation
+plus banned characters, i.e. it is doing real work on a second family.
+
+Board top: Gemini v4.1 120.1 | Gemini v4 102.1 | Gemini v3 99.2 |
+bare Gemini 94.2 | CLAUDE v4.1 93.2 | Gemini v2 84.6 | Claude v1 83.3.
+
+NOT logged as a CostEntry on purpose: generation cost is computed live
+from ModelOutput token counts by /api/arena/costs. Adding a row would
+double count - that was the $1.12 bug fixed earlier today.
+
+NEXT: pool decision still open (add Gemini v4.1 and/or Claude v4.1 to
+inPairingPool for blind judgment). The 9 grammar RagEntry rows remain
+unreachable on the v4 retrieval path - a v4.2 retrieval block is the
+open build. GRN is still the only documented corpus permission.
+
+## Session State (2026-09-01, audit) - five-reviewer adversarial audit; public numbers corrected; v4.2 is a decision, not a build
+
+READ FIRST: tasks/project-audit-2026-09-01.md (ranked, verified). Four
+CRITICAL, nine HIGH. The method survived; the story about it did not.
+
+What the audit corrected, in one line each:
+- The 120.1 is ~17 points of reference-count asymmetry (model best-of-k
+  vs a held-out speaker's k-1); like-for-like the best arm is 102.6.
+  Every bar past 100 is partly construction. Option (c) replaces the score.
+- The v4 -> v4.1 gain is tone-mark density; tone-insensitive, v4 and
+  v4.1 are level (-0.36 chrF). The repair round is a post-processor.
+- "The grammar lifts Gemini measurably" was never supported (+1.95
+  chrF, CI [-9.1, +12.9]). Removed from every public surface.
+- The blind preference is ONE pairing (Gemini v3 vs bare Gemini):
+  54/14/21/104, or 25-7 at pair level, p=0.002. v4 and v4.1 have zero
+  human judgments. "One in a million" overstated the independence.
+- The 99% -> 55% both-inadequate fall is a base-model swap, not method.
+- 131 of 238 exam golds were written after rejecting a model output;
+  "written before seeing any model" was wrong for more than half.
+- The Bible corpus (30,907 pairs, 1,262 lexicon rows) is served under a
+  BSN permission that no record contains: two outbound asks, no reply,
+  ingest dated the day the ask was sent. Legal exposure, Halim's call.
+- Ten empty provider outputs are scored as chrF 0 on live arms.
+
+What held: speakers prefer v3 to bare Gemini (every annotator); v4.1
+undid Claude's v3 regression (+15.3, clears zero); Gemini v4.1 > v3 in a
+paired test (+8.3 [1.3, 15.8]), the only Gemini step that does.
+
+Done today in response (all copy, no metric change yet): the public
+page rewritten around the audit (site howItWorks.ts; v4/v4.1 prompts
+published; six-stage story; Sep 1 changelog entry; Aug 12 BSN entry
+corrected), the same changelog text in the app (byte-pinned, sha
+c8f3518b...), the >100 footnote replaced in both, turn-budget ceiling
+set to the observed 120, the overclaiming snapshot comments fixed, a
+correction email drafted (NOT sent) to Daniel and Lydia superseding the
+narrower one, and tasks/notebook-source-2026-09-01.md for NotebookLM.
+
+PENDING HALIM'S DECISION (do not start without him): the v4.2 plan in
+the audit's section 3 - recommended order 0, (c), then (d2)+(a), then
+(b) only with (d3). Also: BSN (obtain written grant or plan removal),
+whether to pool v4.1 for blind judgment, and whether to switch the
+public score to the like-for-like construction now or after (c).
+
+Blocked on Halim: nlm login (interactive Google sign-in) to upload the
+notebook source; OpenRouter route for the six dead-key Claude arms is
+a hygiene fix he can approve in the plan.

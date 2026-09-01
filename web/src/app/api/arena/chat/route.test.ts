@@ -63,7 +63,7 @@ vi.mock("@/lib/arena/retrieval-v4", () => ({
 vi.mock("@/lib/rag", () => ({ searchRag: mockSearchRag }));
 
 /**
- * The turn budget, made testable. A real turn has ~92s of budget, which is not
+ * The turn budget, made testable. A real turn has ~112s of budget, which is not
  * a thing a unit test can wait for, so `turnBudgetMs` shortens the route's
  * deadline and nothing else: TURN_CUTOFF_NOTICE, MIN_REASK_BUDGET_MS and the
  * real hasBudgetForReask gate all come through untouched, so the tests below

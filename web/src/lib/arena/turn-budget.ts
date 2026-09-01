@@ -10,8 +10,8 @@
  * longer one came back as a bare "HTTP 504" card: 0.0s, no text, no
  * explanation. The whole answer was lost, and the page said nothing about why.
  *
- * The route declares `maxDuration = 120`. Declaring a number does not buy it:
- * the deployment is on the HOBBY plan, whose function ceiling is lower, and
+ * The route declares `maxDuration = 120`, and the platform enforces exactly
+ * that (see PLATFORM_MAX_DURATION_S for the log line that proves it). But
  * when the platform kills a function the client gets a gateway error with NO
  * BODY - so nothing the route would like to say at that moment can be said.
  * The only fix that works is to finish, deliberately and early, BEFORE the
@@ -38,20 +38,27 @@ export const CHAT_MAX_DURATION_S = 120;
 /**
  * What the PLATFORM actually enforces, which is the number that matters.
  *
- * The declared 120 was not honoured: that is the incident. Two observations
- * bracket the real ceiling - an 89.8s turn COMPLETED (so it is at or above
- * 90s) and a longer one was killed with a bodiless 504 (so it is below the
- * declared 120s). 100s sits inside that bracket, so it is safe under either
- * reading; it is INFERRED from those two observations, not read from the
- * dashboard. Note what the bracket already rules out: a 60s ceiling, since a
- * 89.8s turn returned successfully.
+ * OBSERVED, not inferred. The Vercel runtime log for this project holds
+ * exactly one error in the seven days to 2026-09-01:
  *
- * THIS IS THE ONE NUMBER TO CONFIRM against the Vercel project settings, and
- * it is single-sourced precisely so that confirming it is a one-line edit. If
- * the plan changes, raise it here and CHAT_MAX_DURATION_S together; nothing
- * else in the codebase encodes a duration.
+ *   "Task timed out after 120 seconds" on /api/arena/chat at
+ *   2026-09-01T15:24:56Z
+ *
+ * That is the platform killing the function at 120s, so the enforced ceiling
+ * IS the declared 120s. An earlier version of this file set 100 on the
+ * inference that a bodiless 504 after an 89.8s turn had completed meant the
+ * ceiling sat somewhere below 120; the log line shows it does not, and that
+ * inference cost every turn 20 seconds it was actually allowed (audit of
+ * 2026-09-01, finding 14). The 89.8s completed turn is still a valid lower
+ * bound, and the test pins it as one.
+ *
+ * The platform gives no body when it kills a function, so the declared
+ * number still has to be finished under deliberately, with the safety margin
+ * below. If the plan or the declared duration changes, change this and
+ * CHAT_MAX_DURATION_S together, and re-read the runtime log before trusting
+ * either; nothing else in the codebase encodes a duration.
  */
-export const PLATFORM_MAX_DURATION_S = 100;
+export const PLATFORM_MAX_DURATION_S = 120;
 
 /**
  * The budget a turn actually has: the smaller of what we asked for and what we
