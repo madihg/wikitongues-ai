@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { bradleyTerry } from "@/lib/arena/bradley-terry";
-import { MIN_DECIDED_PER_CANDIDATE } from "@/lib/arena/era";
+import { MIN_DECIDED_PER_CANDIDATE, POOL_PIVOT_AT } from "@/lib/arena/era";
 
 /**
  * End-to-end proof for the windowed rubric arena, taken at the seam the UI
@@ -21,7 +21,14 @@ import { MIN_DECIDED_PER_CANDIDATE } from "@/lib/arena/era";
  * fixture by the same code under test.
  */
 
-const day = (d: number) => new Date(Date.UTC(2026, 7, d, 12, 0, 0));
+// The window boundary is now the PINNED POOL_PIVOT_AT constant, not a value
+// derived from the fixture. `day(10)` is defined to land exactly on it (a
+// day is >= its own start, so it counts as "since"), and every other `day(d)`
+// keeps its old relative position - `d < 10` before the pivot, `d > 10`
+// after - so the rest of the fixture and its comments need no other change.
+const PIVOT = new Date(POOL_PIVOT_AT);
+const DAY_MS = 24 * 60 * 60 * 1000;
+const day = (d: number) => new Date(PIVOT.getTime() + (d - 10) * DAY_MS);
 
 interface Cand {
   id: string;
@@ -308,12 +315,10 @@ describe("GET /api/arena/leaderboard - what counts as a comparison", () => {
 });
 
 describe("GET /api/arena/leaderboard - the era filter", () => {
-  it("derives the pivot from the first real comparison touching a pool arm", async () => {
+  it("uses the pinned POOL_PIVOT_AT as the window start", async () => {
     const p = await payload();
-    // Day 10. Days 6 and 7 are earlier pool matchups, but one is a demo and
-    // the other is a seed account, so neither may date the window.
-    expect(p.pivotAt).toBe(day(10).toISOString());
-    expect(p.eras.since_pivot.windowStart).toBe(day(10).toISOString());
+    expect(p.pivotAt).toBe(POOL_PIVOT_AT);
+    expect(p.eras.since_pivot.windowStart).toBe(POOL_PIVOT_AT);
     expect(p.eras.all_time.windowStart).toBeNull();
   });
 
@@ -362,25 +367,26 @@ describe("GET /api/arena/leaderboard - the era filter", () => {
   });
 });
 
-describe("GET /api/arena/leaderboard - the derived pivot moves with the pool", () => {
-  it("moves back when a retired arm is put into the pairing pool", async () => {
+describe("GET /api/arena/leaderboard - the pinned pivot no longer moves with the pool", () => {
+  it("stays put when a retired arm is put into the pairing pool", async () => {
     const before = await payload();
-    expect(before.pivotAt).toBe(day(10).toISOString());
+    expect(before.pivotAt).toBe(POOL_PIVOT_AT);
 
-    // The ONLY change: old-y joins the pool. Its earliest comparison is day 1.
+    // Before the fix this would have moved the derived pivot back to day 1
+    // (old-y's earliest comparison). Now pool membership cannot move the
+    // window at all - it is a decision (annotation-pivot-decision.md), not a
+    // side effect of which arms happen to be in the pool right now.
     const mutated = registry().map((c) =>
       c.id === "old-y" ? { ...c, inPairingPool: true } : c,
     );
     install(mutated, fixture());
     const after = await payload();
 
-    expect(after.pivotAt).toBe(day(1).toISOString());
-    expect(after.pivotAt).not.toBe(before.pivotAt);
-    // And the window widens to the whole corpus, as a derived date must.
-    expect(after.eras.since_pivot.comparisons).toBe(21);
+    expect(after.pivotAt).toBe(POOL_PIVOT_AT);
+    expect(after.pivotAt).toBe(before.pivotAt);
   });
 
-  it("moves forward when the current pool arms leave it", async () => {
+  it("stays put when the current pool arms leave it", async () => {
     const mutated = registry().map((c) =>
       c.id === "pool-a" || c.id === "pool-b"
         ? { ...c, inPairingPool: false }
@@ -390,19 +396,18 @@ describe("GET /api/arena/leaderboard - the derived pivot moves with the pool", (
     );
     install(mutated, fixture());
     const p = await payload();
-    // edge-hi's earliest comparison is the pre-pivot day 5 one.
-    expect(p.pivotAt).toBe(day(5).toISOString());
+    expect(p.pivotAt).toBe(POOL_PIVOT_AT);
   });
 
-  it("reports no pivot at all when nothing is in the pool", async () => {
+  it("stays put even when nothing is in the pool", async () => {
     const mutated = registry().map((c) => ({ ...c, inPairingPool: false }));
     install(mutated, fixture());
     const p = await payload();
-    expect(p.pivotAt).toBeNull();
-    expect(p.eras.since_pivot.windowStart).toBeNull();
-    expect(p.eras.since_pivot.comparisons).toBe(0);
-    expect(p.eras.since_pivot.rows).toHaveLength(0);
-    // All time is untouched by the pool flag.
+    expect(p.pivotAt).toBe(POOL_PIVOT_AT);
+    expect(p.eras.since_pivot.windowStart).toBe(POOL_PIVOT_AT);
+    // The since-pivot window is unaffected by the pool flag now too.
+    expect(p.eras.since_pivot.comparisons).toBe(17);
+    // All time is untouched by the pool flag, as always.
     expect(p.eras.all_time.comparisons).toBe(21);
   });
 });

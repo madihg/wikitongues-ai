@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  ALLOWED_PAIRINGS,
   assignedPair,
   computeQueueState,
   goldFirstFor,
@@ -111,6 +112,61 @@ describe("assignedPair", () => {
     );
     const distinct = new Set(pairsForPrompt.map(([i, j]) => `${i},${j}`));
     expect(distinct.size).toBeGreaterThan(1);
+  });
+
+  describe("the ALLOWED_PAIRINGS whitelist", () => {
+    it("is non-empty and set to exactly the two v4.1 pool-prep comparisons", () => {
+      // Single-sourced: this pins the constant's live value so a change to it
+      // is a deliberate, reviewed edit, not a silent drift.
+      expect(ALLOWED_PAIRINGS).toEqual([
+        ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-rag-v3"],
+        ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-tonestrip"],
+      ]);
+    });
+
+    it("only ever draws an allowed pair, in either slug order", () => {
+      const slugs = [
+        "gemini-3-1-pro-rag-v4-1", // 0
+        "gemini-3-1-pro-rag-v3", // 1
+        "gemini-3-1-pro-tonestrip", // 2
+        "gemini-3-1-pro", // 3, not in any allowed pairing
+      ];
+      const allowedIndexPairs = new Set(["0,1", "0,2"]);
+      for (const annotatorId of ANNOTATOR_IDS) {
+        for (const promptId of PROMPT_IDS) {
+          const pair = assignedPair(annotatorId, promptId, slugs.length, slugs);
+          expect(pair).not.toBeNull();
+          const [i, j] = pair!;
+          expect(allowedIndexPairs.has(`${i},${j}`)).toBe(true);
+        }
+      }
+    });
+
+    it("draws both allowed pairs across enough annotators/prompts (never collapses to one)", () => {
+      const slugs = [
+        "gemini-3-1-pro-rag-v4-1",
+        "gemini-3-1-pro-rag-v3",
+        "gemini-3-1-pro-tonestrip",
+      ];
+      const seen = new Set<string>();
+      for (const promptId of PROMPT_IDS) {
+        const [i, j] = assignedPair("ann_1", promptId, slugs.length, slugs)!;
+        seen.add(`${i},${j}`);
+      }
+      expect(seen.size).toBe(2);
+    });
+
+    it("returns null when none of the prompt's outputs form an allowed pair", () => {
+      const slugs = ["gemini-3-1-pro", "gpt-4-1-rag"];
+      expect(assignedPair("ann_1", "ig_orth_001", 2, slugs)).toBeNull();
+    });
+
+    it("without a slugs array, behaves exactly as before the whitelist existed", () => {
+      // A whitelist that the caller cannot honour (no slugs supplied) must
+      // not silently break every existing caller - old behaviour holds.
+      const a = assignedPair("ann_1", "ig_orth_001", 3);
+      expect(a).not.toBeNull();
+    });
   });
 });
 

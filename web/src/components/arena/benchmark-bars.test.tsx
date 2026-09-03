@@ -19,18 +19,29 @@ function cand(
   ciLow: number | null = score,
   ciHigh: number | null = score,
   underpowered = false,
+  nClean = 28,
 ): CandidateScore {
   return {
     name,
     approach,
     n: 40,
-    nClean: 28,
+    nClean,
+    nLikeForLike: nClean,
+    emptyOutputs: 0,
     strippedChrfAll: score === null ? null : score / 2,
     strippedChrfClean: score === null ? null : score / 2,
     agreementScore: score,
     agreementCiLow: ciLow,
     agreementCiHigh: ciHigh,
     agreementUnderpowered: underpowered,
+    agreementScoreLegacy: score,
+    speakerRank: score === null ? null : Math.min(100, Math.max(0, score / 2)),
+    speakerRankCiLow: null,
+    speakerRankCiHigh: null,
+    speakerRankUnderpowered: true,
+    agreementScoreToneInsensitive: score,
+    strippedChrfCleanToneInsensitive: score === null ? null : score / 2,
+    agreementScoreSourcefree: score,
   };
 }
 
@@ -92,7 +103,7 @@ describe("BenchmarkBars", () => {
   it("marks an underpowered CI with a star instead of drawing fake whiskers", () => {
     const html = render(field);
     expect(html).toContain("71.3*");
-    expect(html).toContain("too few leak-free answers for an interval");
+    expect(html).toContain("too few qualifying answers for an interval");
   });
 
   it("folds models beyond topN into a show-all details element", () => {
@@ -108,6 +119,21 @@ describe("BenchmarkBars", () => {
 
   it("renders no details toggle when everything fits above the fold", () => {
     expect(render(field)).not.toContain("<details");
+  });
+
+  it("shows a best-of-N note and flags an arm scored on fewer than the full leak-free exam (finding 27)", () => {
+    const html = render(field);
+    expect(html).toContain("Best of 4 arms examined.");
+    // Every candidate in `field` uses the default nClean=28 == leakFreePrompts
+    // (28), so nothing is flagged yet.
+    expect(html).not.toContain("of 28");
+
+    const partial = [
+      cand("Model A + RAG v3", "retrieval v3", 104.2, 96.5, 111.9, false, 17),
+      ...field.slice(1),
+    ];
+    const flagged = render(partial);
+    expect(flagged).toContain("n=17 of 28");
   });
 
   it("refuses to draw a scale when the ceiling cannot be computed", () => {

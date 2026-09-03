@@ -5,10 +5,13 @@ import {
   buildProtectedSet,
   filterAssembled,
   leakFreePrompts,
+  renderLexPieceForGuard,
+  renderEditPieceForGuard,
   type LeakHit,
   type ProtectedString,
 } from "../src/lib/eval/leak-guard";
 import { stripAnswer, verbosityStats } from "../src/lib/eval/answer-strip";
+import { correctionReason } from "../src/lib/arena/retrieval-v4";
 
 /**
  * STEP 0 - re-score what we already have, before spending a cent on new arms.
@@ -39,28 +42,34 @@ import { stripAnswer, verbosityStats } from "../src/lib/eval/answer-strip";
 
 /**
  * ragContextIds mixes bare RagEntry ids with prefixed ids: `gold:<id>` for
- * ColdAuthorAnswer exemplars (v1 and v2), and - on the v2 serving path -
- * `lex:<LexEntryId>` / `pp:<ParallelPairId>`. Joining the raw array to
- * RagEntry resolves only a third of them and under-reports leakage badly, so
- * the split is done here once, explicitly.
+ * ColdAuthorAnswer exemplars (v1 and v2), `lex:<LexEntryId>` /
+ * `pp:<ParallelPairId>` on the v2 serving path, and `edit:<OutputEditId>` for
+ * corrections (v4+). Joining the raw array to RagEntry resolves only a
+ * fraction of them and under-reports leakage badly, so the split is done
+ * here once, explicitly. `edit:` was added for finding 18
+ * (tasks/project-audit-2026-09-01.md): 210 of 215 v4/v4.1 frozen outputs
+ * carry edit: ids that a splitter checking only gold/lex/pp silently drops.
  */
 export function splitContextIds(ids: string[]): {
   ragEntryIds: string[];
   goldIds: string[];
   lexIds: string[];
   pairIds: string[];
+  editIds: string[];
 } {
   const ragEntryIds: string[] = [];
   const goldIds: string[] = [];
   const lexIds: string[] = [];
   const pairIds: string[] = [];
+  const editIds: string[] = [];
   for (const id of ids) {
     if (id.startsWith("gold:")) goldIds.push(id.slice("gold:".length));
     else if (id.startsWith("lex:")) lexIds.push(id.slice("lex:".length));
     else if (id.startsWith("pp:")) pairIds.push(id.slice("pp:".length));
+    else if (id.startsWith("edit:")) editIds.push(id.slice("edit:".length));
     else ragEntryIds.push(id);
   }
-  return { ragEntryIds, goldIds, lexIds, pairIds };
+  return { ragEntryIds, goldIds, lexIds, pairIds, editIds };
 }
 
 /** One stored frozen-bank output plus who produced it. */
@@ -157,14 +166,16 @@ export async function loadLeakAudit(
   const allGoldIds = new Set<string>();
   const allLexIds = new Set<string>();
   const allPairIds = new Set<string>();
+  const allEditIds = new Set<string>();
   for (const o of outputs) {
-    const { ragEntryIds, goldIds, lexIds, pairIds } = splitContextIds(
+    const { ragEntryIds, goldIds, lexIds, pairIds, editIds } = splitContextIds(
       o.ragContextIds,
     );
     ragEntryIds.forEach((i) => allRagIds.add(i));
     goldIds.forEach((i) => allGoldIds.add(i));
     lexIds.forEach((i) => allLexIds.add(i));
     pairIds.forEach((i) => allPairIds.add(i));
+    editIds.forEach((i) => allEditIds.add(i));
   }
   const ragRows = await prisma.ragEntry.findMany({
     where: { id: { in: [...allRagIds] } },
@@ -186,6 +197,17 @@ export async function loadLeakAudit(
     select: { id: true, igala: true, english: true },
   });
   const pairById = new Map(pairRows.map((r) => [r.id, r]));
+  const editRows = await prisma.outputEdit.findMany({
+    where: { id: { in: [...allEditIds] } },
+    select: {
+      id: true,
+      originalText: true,
+      correctedText: true,
+      rationale: true,
+      segments: true,
+    },
+  });
+  const editById = new Map(editRows.map((r) => [r.id, r]));
 
   // ── per-prompt leak detection over the ASSEMBLED context ─────────────────
   const hits: LeakHit[] = [];
@@ -193,14 +215,18 @@ export async function loadLeakAudit(
   for (const o of outputs) {
     const slug = slugOf.get(o.promptId);
     if (!slug) continue;
-    const { ragEntryIds, goldIds, lexIds, pairIds } = splitContextIds(
+    const { ragEntryIds, goldIds, lexIds, pairIds, editIds } = splitContextIds(
       o.ragContextIds,
     );
     // Each piece is reconstructed the way it was SERVED: same faces, same
-    // concatenation as the serving path (retrieval-v2.ts builds the identical
-    // strings for its own build-time guard, so a v2 hit here would mean the
-    // build-time guard failed - which is exactly what this audit exists to
-    // catch).
+    // concatenation as the serving path (retrieval-v2.ts / retrieval-v4.ts
+    // build the identical strings for their own build-time guards, so a hit
+    // here would mean a build-time guard failed - which is exactly what this
+    // audit exists to catch). The dictionary line goes through
+    // renderLexPieceForGuard (finding 19: toOrthography, not the raw
+    // headword) and the correction goes through renderEditPieceForGuard
+    // (finding 18), both shared with computeMethodMetrics so the two can
+    // never disagree about what was served.
     const pieces = [
       ...ragEntryIds.map((id) => ({
         where: `rag:${id}`,
@@ -214,12 +240,25 @@ export async function loadLeakAudit(
         const l = lexById.get(id);
         return {
           where: `lex:${id}`,
-          text: l ? `${l.headword} ${l.gloss}` : "",
+          text: l ? renderLexPieceForGuard(l.headword, l.gloss) : "",
         };
       }),
       ...pairIds.map((id) => {
         const p = pairById.get(id);
         return { where: `pp:${id}`, text: p ? `${p.english}\n${p.igala}` : "" };
+      }),
+      ...editIds.map((id) => {
+        const e = editById.get(id);
+        return {
+          where: `edit:${id}`,
+          text: e
+            ? renderEditPieceForGuard(
+                e.originalText,
+                e.correctedText,
+                correctionReason(e.segments, e.rationale),
+              )
+            : "",
+        };
       }),
     ].filter((p) => p.text);
     const { report } = filterAssembled(slug, pieces, protectedSet);

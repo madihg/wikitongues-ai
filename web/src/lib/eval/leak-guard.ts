@@ -1,4 +1,5 @@
 import { fullFold, toneFold } from "./normalize";
+import { toOrthography } from "@/lib/lexicon-parse";
 
 /**
  * Contamination guard for the frozen benchmark.
@@ -203,6 +204,47 @@ export function leakFreePrompts(
 ): string[] {
   const leaked = new Set(hits.map((h) => h.promptId));
   return allPromptIds.filter((id) => !leaked.has(id));
+}
+
+/**
+ * Reconstruct one dictionary line's SERVED text from raw stored LexEntry
+ * fields, for leak detection - finding 19 (tasks/project-audit-2026-09-01.md).
+ *
+ * THE BUG THIS FIXES: retrieval-v2.ts's renderDictionaryLine serves
+ * toOrthography(headword), never the raw stored form - the chikhapo lexicon
+ * and stretches of Koelle 1854 store PHONEMIC notation (ɛ ɔ ǯ ŋ, nasal
+ * tildes, macrons), and the model only ever sees the standard-orthography
+ * transliteration. A guard built from the raw headword folds differently: 235
+ * of 2,104 LexEntry rows fold to a different string before and after
+ * toOrthography, and 9 of those match a frozen gold ONLY in the served
+ * (orthographic) form. Checking the raw headword let those 9 rows clear the
+ * guard while the actual served text was the gold answer.
+ *
+ * Both the post-hoc audit (computeMethodMetrics, leak-audit.ts) and any
+ * future guard must build this piece from the SAME function the serving path
+ * uses, so "what was served" can never drift into two implementations.
+ */
+export function renderLexPieceForGuard(
+  headword: string,
+  gloss: string,
+): string {
+  return `${toOrthography(headword)} ${gloss}`;
+}
+
+/**
+ * Reconstruct one correction's SERVED text from raw stored OutputEdit fields,
+ * for leak detection - finding 18. Mirrors retrieval-v4.ts's own build-time
+ * guard piece exactly: original wording, corrected wording, and the composed
+ * Reason line (`correctionReason` in src/lib/arena/retrieval-v4.ts - not
+ * re-imported here to avoid a cycle with leak-guard.ts; callers compute the
+ * reason and pass it in already-composed, or pass null).
+ */
+export function renderEditPieceForGuard(
+  original: string,
+  corrected: string,
+  reason: string | null,
+): string {
+  return `${original}\n${corrected}\n${reason ?? ""}`;
 }
 
 /**
