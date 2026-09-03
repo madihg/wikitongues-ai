@@ -43,6 +43,33 @@
  * default for goldFirst.
  */
 
+/**
+ * ─── THE PAIRING WHITELIST (option (a) pool prep) ──────────────────────────
+ *
+ * Single-sourced: this is the ONLY place ALLOWED_PAIRINGS is defined, and
+ * assignedPair() is the only place that reads it. When non-empty, a pair of
+ * candidate slugs may be drawn for an episode only if it (in either order)
+ * appears here - everything else degrades exactly to the old scheme (every
+ * C(n,2) combination of pairing-eligible outputs is drawable).
+ *
+ * Set for the v4.1 human-judgment pool prep: the two comparisons that
+ * actually test something (v4.1 vs its predecessor, v4.1 vs the
+ * tone-stripped ablation), and nothing else - so adding gemini-3-1-pro-rag-v4-1
+ * and gemini-3-1-pro-tonestrip to the pool cannot dilute annotator time into
+ * combinations nobody asked to measure.
+ */
+export const ALLOWED_PAIRINGS: readonly (readonly [string, string])[] = [
+  ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-rag-v3"],
+  ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-tonestrip"],
+];
+
+/** Whether the (unordered) slug pair is on the whitelist. */
+function pairAllowed(slugA: string, slugB: string): boolean {
+  return ALLOWED_PAIRINGS.some(
+    ([x, y]) => (x === slugA && y === slugB) || (x === slugB && y === slugA),
+  );
+}
+
 /** All index pairs (i<j) over n outputs, in canonical order. */
 function allPairs(n: number): [number, number][] {
   const pairs: [number, number][] = [];
@@ -89,14 +116,26 @@ function fnv1a32(str: string): number {
  * Since the pivot, nOutputs is the count of PAIRING-ELIGIBLE outputs (pool
  * arms only when a pool is active) and the returned indices address that
  * filtered, deterministically ordered list.
+ *
+ * `slugs`, when given (same order/length as the pairable-outputs list this
+ * annotator/prompt pair addresses), restricts the drawable pairs to
+ * ALLOWED_PAIRINGS whenever that whitelist is non-empty - an empty
+ * whitelist, or a missing `slugs` array, is the old behaviour (every
+ * combination drawable). A prompt whose pairable outputs contain no
+ * whitelisted combination returns null, same as "not enough outputs".
  */
 export function assignedPair(
   annotatorId: string,
   promptId: string,
   nOutputs: number,
+  slugs?: string[],
 ): [number, number] | null {
   if (nOutputs < 2) return null;
-  const pairs = allPairs(nOutputs);
+  let pairs = allPairs(nOutputs);
+  if (ALLOWED_PAIRINGS.length > 0 && slugs) {
+    pairs = pairs.filter(([i, j]) => pairAllowed(slugs[i], slugs[j]));
+  }
+  if (pairs.length === 0) return null;
   const index = fnv1a32(`${annotatorId}:${promptId}`) % pairs.length;
   return pairs[index];
 }

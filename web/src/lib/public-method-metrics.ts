@@ -26,6 +26,13 @@ import type {
  * The numbers themselves must come from computeMethodMetrics (the page's
  * single source of figures) - this module only projects and rounds, it never
  * computes a metric of its own.
+ *
+ * `scoring` (tasks/project-audit-2026-09-01.md, option (c), item 8) names
+ * the construction so a consumer parsing this payload cold - a script, a
+ * future maintainer, the marketing repo - can tell WHICH construction
+ * `agreementScore` is without re-deriving it from the numbers. Bump `version`
+ * whenever the construction changes again; never reuse a version number for a
+ * different formula.
  */
 
 /** Same shape as CeilingResult; re-declared so the public surface is spelled
@@ -44,16 +51,36 @@ export interface PublicCandidate {
   approach: Approach;
   n: number;
   nClean: number;
+  nLikeForLike: number;
+  emptyOutputs: number;
   strippedChrfAll: number | null;
   strippedChrfClean: number | null;
+  /** Like-for-like construction (finding 2) - see the module doc. */
   agreementScore: number | null;
   agreementCiLow: number | null;
   agreementCiHigh: number | null;
   agreementUnderpowered: boolean;
+  /** DEPRECATED - the pre-2026-09-03 construction. See
+   * method-metrics.ts's module doc for why it was retired. Kept for one
+   * release so nothing mid-transition loses its number outright. */
+  agreementScoreLegacy: number | null;
+  speakerRank: number | null;
+  speakerRankCiLow: number | null;
+  speakerRankCiHigh: number | null;
+  speakerRankUnderpowered: boolean;
+  agreementScoreToneInsensitive: number | null;
+  strippedChrfCleanToneInsensitive: number | null;
+  agreementScoreSourcefree: number | null;
 }
 
 export interface PublicMethodMetrics {
   computedAt: string;
+  /** Names the score construction so a cold reader of this payload never has
+   * to re-derive it from the numbers. */
+  scoring: {
+    construction: "like-for-like-loo";
+    version: 2;
+  };
   corpus: {
     goldAnswers: number;
     pairwiseComparisons: number;
@@ -75,6 +102,13 @@ export interface PublicMethodMetrics {
   };
   /** The chrF value that anchors Community Agreement Score 100. */
   agreementCeilingChrf: number | null;
+  /** Leak-free prompts with >= 2 distinct real speakers - the prompt set
+   * agreementScore (and its tone-insensitive column) is computed on. */
+  likeForLikePrompts: number;
+  agreementCeilingChrfToneInsensitive: number | null;
+  /** Prompts qualifying for the sourcefree-sensitivity column (finding 7). */
+  nSourcefreePrompts: number;
+  agreementCeilingChrfSourcefree: number | null;
   /** Preference judgments where BOTH sides are current pairing-pool arms -
    * the split the pivot decision is checkpointed on. */
   poolPreference: {
@@ -114,6 +148,7 @@ function ceiling(c: CeilingResult): PublicCeiling {
 export function toPublicMethodMetrics(m: MethodMetrics): PublicMethodMetrics {
   return {
     computedAt: m.computedAt,
+    scoring: { construction: "like-for-like-loo", version: 2 },
     corpus: {
       goldAnswers: m.corpus.goldAnswers,
       pairwiseComparisons: m.corpus.pairwiseComparisons,
@@ -133,6 +168,12 @@ export function toPublicMethodMetrics(m: MethodMetrics): PublicMethodMetrics {
       onePerAnnotator: ceiling(m.ceilings.onePerAnnotator),
     },
     agreementCeilingChrf: score(m.agreementCeilingChrf),
+    likeForLikePrompts: m.likeForLikePrompts,
+    agreementCeilingChrfToneInsensitive: score(
+      m.agreementCeilingChrfToneInsensitive,
+    ),
+    nSourcefreePrompts: m.nSourcefreePrompts,
+    agreementCeilingChrfSourcefree: score(m.agreementCeilingChrfSourcefree),
     poolPreference: {
       poolComparisons: m.corpus.poolComparisons,
       poolBothInadequate: m.corpus.poolBothInadequate,
@@ -147,12 +188,24 @@ export function toPublicMethodMetrics(m: MethodMetrics): PublicMethodMetrics {
       approach: c.approach,
       n: c.n,
       nClean: c.nClean,
+      nLikeForLike: c.nLikeForLike,
+      emptyOutputs: c.emptyOutputs,
       strippedChrfAll: score(c.strippedChrfAll),
       strippedChrfClean: score(c.strippedChrfClean),
       agreementScore: score(c.agreementScore),
       agreementCiLow: score(c.agreementCiLow),
       agreementCiHigh: score(c.agreementCiHigh),
       agreementUnderpowered: c.agreementUnderpowered,
+      agreementScoreLegacy: score(c.agreementScoreLegacy),
+      speakerRank: score(c.speakerRank),
+      speakerRankCiLow: score(c.speakerRankCiLow),
+      speakerRankCiHigh: score(c.speakerRankCiHigh),
+      speakerRankUnderpowered: c.speakerRankUnderpowered,
+      agreementScoreToneInsensitive: score(c.agreementScoreToneInsensitive),
+      strippedChrfCleanToneInsensitive: score(
+        c.strippedChrfCleanToneInsensitive,
+      ),
+      agreementScoreSourcefree: score(c.agreementScoreSourcefree),
     })),
   };
 }

@@ -307,6 +307,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No such candidates" }, { status: 404 });
   }
 
+  // provider "derived" (scripts/derive-tone-stripped-arms.ts) never resolves
+  // to a real endpoint - it exists only to be scored, so a request naming one
+  // gets a clear refusal instead of a provider-probe crash deep in
+  // generateForCandidate.
+  const derivedRequested = candidates.filter((c) => c.provider === "derived");
+  if (derivedRequested.length > 0) {
+    return NextResponse.json(
+      {
+        error: `Cannot chat with a derived arm (measurement-only, never served): ${derivedRequested
+          .map((c) => c.slug)
+          .join(", ")}`,
+      },
+      { status: 400 },
+    );
+  }
+
   // Order the answers the way the caller listed the models, so the columns a
   // reviewer reads left-to-right match the order that was chosen for her.
   // Decided BEFORE retrieval, because the deadline can arrive during retrieval

@@ -1196,15 +1196,15 @@ export default async function HowItWorksPage() {
             identical string - spelling varies, tone marks vary, phrasing
             varies. So the honest yardstick is not &quot;matched the answer
             key&quot; (there is no single answer key) but &quot;agreed with the
-            community as much as its own members agree with each other&quot;. A
-            bar past the 100 line does not mean the model beat the speakers. The
-            model is scored against every community answer for a question, while
-            each speaker is scored against the other speakers only, and that
-            gives models a built-in advantage that grows with the number of
-            answers per question. Scored like-for-like, the best system sits at
-            speaker level. This score is being replaced with one that cannot
-            pass 100 by construction; until then, read a bar past 100 as
-            &quot;at speaker level&quot;, not above it.
+            community as much as its own members agree with each other&quot;.
+            Every bar here is scored LIKE-FOR-LIKE: for each held-out speaker,
+            the model is compared to the same k-1 references that speaker&apos;s
+            own peers are judged against, then averaged over which speaker was
+            held out - never against more answer keys than a speaker gets. A bar
+            past the 100 line is not a construction artifact under this rule: it
+            means the model measured closer to the community&apos;s writing than
+            one speaker measured to another, on the same construction as every
+            other bar.
           </p>
           <p>
             <strong className="text-text-primary">

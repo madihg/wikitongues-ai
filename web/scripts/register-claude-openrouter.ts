@@ -1,4 +1,113 @@
 /**
+ * REPOINT: the six pre-existing Claude candidates still registered against
+ * the dead direct Anthropic key (finding 16 of the 2026-09-01 audit). Every
+ * generation on these rows has been failing at the key since it died; they
+ * are dead weight in the registry until repointed the same way the two v4/
+ * v4.1 arms below already are. Re-pointed IN PLACE (slug, id, lineage,
+ * existing outputs all survive) - provider -> "openrouter", baseModelId ->
+ * the vendor-qualified "anthropic/<model>" id, decodingParams.temperature ->
+ * null (Claude Opus 5 rejects the parameter; harmless on Sonnet/Opus 4.8
+ * too, since parseDecoding maps null to "omit" for every model).
+ *
+ * `claude-opus-5-rag` is ALSO taken OUT of the pairing pool
+ * (inPairingPool: false) as part of this fix: it was the one dead-key arm
+ * still live for pairwise episodes, silently serving failed generations to
+ * annotators. See the summary this script prints for confirmation.
+ */
+const REPOINT_SLUGS = [
+  "claude-sonnet-4-5-baseline",
+  "claude-sonnet-4-5-rag",
+  "claude-opus-5",
+  "claude-opus-5-rag",
+  "claude-opus-5-rag-v2",
+  "claude-opus-5-rag-v3",
+] as const;
+
+/** The only repointed slug that must also leave the pairing pool. */
+const REMOVE_FROM_POOL = "claude-opus-5-rag";
+
+async function repointDeadKeyArms(provider: string) {
+  const summary: string[] = [];
+  for (const slug of REPOINT_SLUGS) {
+    const row = await prisma.candidateModel.findUnique({ where: { slug } });
+    if (!row) {
+      console.log(`  SKIP (not found)                            ${slug}`);
+      continue;
+    }
+    if (
+      row.provider === provider &&
+      row.baseModelId?.startsWith("anthropic/")
+    ) {
+      console.log(`  already repointed                           ${slug}`);
+      continue;
+    }
+    const bareModelId = row.baseModelId?.startsWith("anthropic/")
+      ? row.baseModelId.slice("anthropic/".length)
+      : row.baseModelId;
+    const qualifiedModelId = `anthropic/${bareModelId}`;
+    const existingDecoding =
+      row.decodingParams && typeof row.decodingParams === "object"
+        ? (row.decodingParams as Record<string, unknown>)
+        : {};
+    const decodingParams = {
+      ...existingDecoding,
+      temperature: null,
+      maxTokens:
+        typeof existingDecoding.maxTokens === "number"
+          ? existingDecoding.maxTokens
+          : 4096,
+    } as Prisma.InputJsonValue;
+
+    const data: Prisma.CandidateModelUpdateInput = {
+      provider,
+      baseModelId: qualifiedModelId,
+      decodingParams,
+      apiEndpoint: null,
+      ...(slug === REMOVE_FROM_POOL ? { inPairingPool: false } : {}),
+    };
+    const updated = await prisma.candidateModel.update({
+      where: { slug },
+      data,
+    });
+
+    // verify, do not trust
+    const { decoding } = assembleGenerationRequest(
+      {
+        provider: updated.provider,
+        baseModelId: updated.baseModelId,
+        ragEnabled: updated.ragEnabled,
+        decodingParams: updated.decodingParams,
+      },
+      { userMessage: "probe" },
+    );
+    if (updated.provider !== provider) {
+      throw new Error(
+        `${slug}: provider is ${updated.provider}, expected ${provider}`,
+      );
+    }
+    if (updated.baseModelId !== qualifiedModelId) {
+      throw new Error(
+        `${slug}: baseModelId is ${updated.baseModelId}, expected ${qualifiedModelId}`,
+      );
+    }
+    if (decoding.temperature !== undefined) {
+      throw new Error(
+        `${slug}: decoding resolves temperature to ${String(decoding.temperature)}, expected omitted`,
+      );
+    }
+    if (slug === REMOVE_FROM_POOL && updated.inPairingPool) {
+      throw new Error(`${slug}: inPairingPool is true, expected false`);
+    }
+    const line = `  repointed ${slug.padEnd(28)} -> provider=${provider} model=${qualifiedModelId} temperature=OMITTED${
+      slug === REMOVE_FROM_POOL ? " inPairingPool=false" : ""
+    }`;
+    console.log(line);
+    summary.push(line);
+  }
+  return summary;
+}
+
+/**
  * Register the two Claude Opus 5 arms served through OPENROUTER.
  *
  * WHY OPENROUTER: the direct Anthropic key is dead. Every Claude row in the
@@ -75,6 +184,9 @@ const ARMS = [
 const COLOR = "#e09a58";
 
 async function main() {
+  console.log("Repointing the six dead-key Claude arms to openrouter...");
+  const repointSummary = await repointDeadKeyArms(PROVIDER);
+
   const idBySlug = new Map<string, string>();
 
   // v4 is upserted before v4.1, so v4.1 can resolve its parent id from the
@@ -171,6 +283,16 @@ async function main() {
       `  ok  ${arm.slug.padEnd(24)} provider=${row.provider} model=${row.baseModelId} temperature=OMITTED inPairingPool=false`,
     );
   }
+
+  console.log("\nSummary:");
+  if (repointSummary.length === 0) {
+    console.log("  all six dead-key arms were already repointed.");
+  } else {
+    for (const line of repointSummary) console.log(line);
+  }
+  console.log(
+    `  ${REMOVE_FROM_POOL} removed from the pairing pool (inPairingPool: false) - it was the one dead-key arm still serving pairwise episodes on the dead direct key.`,
+  );
 }
 
 main()

@@ -234,6 +234,30 @@ async function examineArm(slug: string, budgetUsd: number) {
           );
         }
 
+        // The call cost real money (a finding-11 case measured 4,096 output
+        // tokens for zero text), so it counts against the budget and the run
+        // total regardless of what gets stored.
+        const cost = estimateGenerationCostUsd({
+          modelId: result.modelId,
+          tokensIn: result.tokensIn,
+          tokensOut: result.tokensOut,
+        });
+        armCostUsd += cost;
+        spentUsd += cost;
+        tokensIn += result.tokensIn ?? 0;
+        tokensOut += result.tokensOut ?? 0;
+
+        // Finding 11: never persist an empty or whitespace-only provider
+        // output as an answer - a provider failure recorded as a zero-scored
+        // ModelOutput is a language failure that never happened.
+        if (result.text.trim().length === 0) {
+          failed++;
+          console.log(
+            `  ERR ${prompt.promptId}: provider returned empty output (not stored, ~$${spentUsd.toFixed(2)})`,
+          );
+          continue;
+        }
+
         await prisma.modelOutput.create({
           data: {
             promptId: prompt.id,
@@ -247,18 +271,14 @@ async function examineArm(slug: string, budgetUsd: number) {
             tokenCountOut: result.tokensOut ?? null,
             latencyMs: result.latencyMs,
             isDemo: false,
+            repaired: result.repaired,
+            repairFirstPassText: result.firstPassText,
+            repairViolations: result.repaired
+              ? (result.repairViolations as unknown as object)
+              : undefined,
           },
         });
         created++;
-        const cost = estimateGenerationCostUsd({
-          modelId: result.modelId,
-          tokensIn: result.tokensIn,
-          tokensOut: result.tokensOut,
-        });
-        armCostUsd += cost;
-        spentUsd += cost;
-        tokensIn += result.tokensIn ?? 0;
-        tokensOut += result.tokensOut ?? 0;
         records.push({
           slug: prompt.promptId,
           repaired: result.repaired,

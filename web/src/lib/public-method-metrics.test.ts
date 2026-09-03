@@ -47,24 +47,28 @@ function fakePrisma(): PrismaClient {
               answerText: "Omi",
               annotatorId: "annA",
               createdAt: t(1),
+              provenance: "speaker_authored_sourcefree",
             },
             {
               promptId: "P1",
               answerText: "Omi",
               annotatorId: "annA",
               createdAt: t(2),
+              provenance: "speaker_authored_sourcefree",
             },
             {
               promptId: "P1",
               answerText: "Ọmi",
               annotatorId: "annB",
               createdAt: t(3),
+              provenance: "speaker_authored_sourcefree",
             },
             {
               promptId: "P2",
               answerText: "Oji",
               annotatorId: "annB",
               createdAt: t(4),
+              provenance: "speaker_authored_sourcefree",
             },
           ];
         }
@@ -197,13 +201,22 @@ describe("public method-metrics payload - exact public surface", () => {
     const payload = await publicPayload();
     expect(Object.keys(payload).sort()).toEqual([
       "agreementCeilingChrf",
+      "agreementCeilingChrfSourcefree",
+      "agreementCeilingChrfToneInsensitive",
       "benchmark",
       "candidates",
       "ceilings",
       "computedAt",
       "corpus",
+      "likeForLikePrompts",
+      "nSourcefreePrompts",
       "poolPreference",
+      "scoring",
     ]);
+    expect(payload.scoring).toEqual({
+      construction: "like-for-like-loo",
+      version: 2,
+    });
     expect(Object.keys(payload.corpus).sort()).toEqual([
       "annotators",
       "goldAnswers",
@@ -235,12 +248,22 @@ describe("public method-metrics payload - exact public surface", () => {
           "agreementCiHigh",
           "agreementCiLow",
           "agreementScore",
+          "agreementScoreLegacy",
+          "agreementScoreSourcefree",
+          "agreementScoreToneInsensitive",
           "agreementUnderpowered",
           "approach",
+          "emptyOutputs",
           "n",
           "nClean",
+          "nLikeForLike",
+          "speakerRank",
+          "speakerRankCiHigh",
+          "speakerRankCiLow",
+          "speakerRankUnderpowered",
           "strippedChrfAll",
           "strippedChrfClean",
+          "strippedChrfCleanToneInsensitive",
           "name",
         ].sort(),
       );
@@ -311,18 +334,32 @@ function baseMetrics(): MethodMetrics {
       },
     },
     agreementCeilingChrf: 46.06789,
+    likeForLikePrompts: 25,
+    agreementCeilingChrfToneInsensitive: 50.12345,
+    nSourcefreePrompts: 12,
+    agreementCeilingChrfSourcefree: 44.5,
     candidates: [
       {
         name: "GPT + RAG v4",
         approach: "retrieval v4",
         n: 40,
         nClean: 26,
+        nLikeForLike: 24,
+        emptyOutputs: 2,
         strippedChrfAll: 41.98765,
         strippedChrfClean: 39.44444,
         agreementScore: 85.61234,
         agreementCiLow: 78.049,
         agreementCiHigh: 93.151,
         agreementUnderpowered: false,
+        agreementScoreLegacy: 102.6,
+        speakerRank: 62.34567,
+        speakerRankCiLow: 50.1,
+        speakerRankCiHigh: 74.9,
+        speakerRankUnderpowered: false,
+        agreementScoreToneInsensitive: 94.2,
+        strippedChrfCleanToneInsensitive: 47.12,
+        agreementScoreSourcefree: 88.4,
       },
     ],
   };
@@ -341,6 +378,20 @@ describe("toPublicMethodMetrics - rounding", () => {
     expect(p.candidates[0].agreementCiLow).toBe(78);
     expect(p.candidates[0].agreementCiHigh).toBe(93.2);
     expect(p.poolPreference.poolBothInadequateRate).toBe(0.175);
+    // New (finding 2/3/4/8) fields round the same way.
+    expect(p.agreementCeilingChrfToneInsensitive).toBe(50.1);
+    expect(p.agreementCeilingChrfSourcefree).toBe(44.5);
+    expect(p.likeForLikePrompts).toBe(25);
+    expect(p.nSourcefreePrompts).toBe(12);
+    expect(p.candidates[0].agreementScoreLegacy).toBe(102.6);
+    expect(p.candidates[0].speakerRank).toBe(62.3);
+    expect(p.candidates[0].speakerRankCiLow).toBe(50.1);
+    expect(p.candidates[0].speakerRankCiHigh).toBe(74.9);
+    expect(p.candidates[0].agreementScoreToneInsensitive).toBe(94.2);
+    expect(p.candidates[0].strippedChrfCleanToneInsensitive).toBe(47.1);
+    expect(p.candidates[0].agreementScoreSourcefree).toBe(88.4);
+    expect(p.candidates[0].nLikeForLike).toBe(24);
+    expect(p.candidates[0].emptyOutputs).toBe(2);
   });
 
   it("passes nulls through untouched - honest degradation, never a made-up 0", () => {
@@ -350,6 +401,15 @@ describe("toPublicMethodMetrics - rounding", () => {
     m.candidates[0].agreementScore = null;
     m.candidates[0].agreementCiLow = null;
     m.candidates[0].agreementCiHigh = null;
+    m.candidates[0].agreementScoreLegacy = null;
+    m.candidates[0].speakerRank = null;
+    m.candidates[0].speakerRankCiLow = null;
+    m.candidates[0].speakerRankCiHigh = null;
+    m.candidates[0].agreementScoreToneInsensitive = null;
+    m.candidates[0].strippedChrfCleanToneInsensitive = null;
+    m.candidates[0].agreementScoreSourcefree = null;
+    m.agreementCeilingChrfToneInsensitive = null;
+    m.agreementCeilingChrfSourcefree = null;
     m.corpus.poolComparisons = 0;
     m.corpus.poolBothInadequate = 0;
     m.corpus.poolDecided = 0;
@@ -359,6 +419,12 @@ describe("toPublicMethodMetrics - rounding", () => {
     expect(p.candidates[0].agreementScore).toBeNull();
     expect(p.candidates[0].agreementCiLow).toBeNull();
     expect(p.candidates[0].agreementCiHigh).toBeNull();
+    expect(p.candidates[0].agreementScoreLegacy).toBeNull();
+    expect(p.candidates[0].speakerRank).toBeNull();
+    expect(p.candidates[0].agreementScoreToneInsensitive).toBeNull();
+    expect(p.candidates[0].agreementScoreSourcefree).toBeNull();
+    expect(p.agreementCeilingChrfToneInsensitive).toBeNull();
+    expect(p.agreementCeilingChrfSourcefree).toBeNull();
     expect(p.poolPreference.poolBothInadequateRate).toBe(0);
   });
 });

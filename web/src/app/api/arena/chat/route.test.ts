@@ -1212,3 +1212,35 @@ describe("route segment config must survive a real Next build", () => {
     }
   });
 });
+
+describe('provider "derived" is never chattable', () => {
+  it("refuses with a clear 400 when a derived candidate is requested", async () => {
+    const derived = candidate({
+      slug: "gemini-3-1-pro-rag-v4-tonestrip",
+      name: "Gemini 3.1 Pro + Igala RAG v4 (tone-stripped)",
+      provider: "derived",
+    });
+    mockPrisma.candidateModel.findMany.mockResolvedValue([derived]);
+
+    const res = await POST(request(["gemini-3-1-pro-rag-v4-tonestrip"]));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/derived/i);
+    expect(body.error).toContain("gemini-3-1-pro-rag-v4-tonestrip");
+    expect(mockStreamForCandidate).not.toHaveBeenCalled();
+  });
+
+  it("refuses the whole request even when only one of several selected candidates is derived", async () => {
+    const live = candidate({ slug: "live", name: "Live" });
+    const derived = candidate({
+      slug: "derived-arm",
+      name: "Derived",
+      provider: "derived",
+    });
+    mockPrisma.candidateModel.findMany.mockResolvedValue([live, derived]);
+
+    const res = await POST(request(["live", "derived-arm"]));
+    expect(res.status).toBe(400);
+    expect(mockStreamForCandidate).not.toHaveBeenCalled();
+  });
+});

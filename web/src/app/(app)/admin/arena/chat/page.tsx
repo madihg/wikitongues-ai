@@ -22,7 +22,11 @@ export const dynamic = "force-dynamic";
 
 async function ChatSurface() {
   const candidates = await prisma.candidateModel.findMany({
-    where: { archived: false, language: "igala" },
+    // provider "derived" (tone-stripped scoreboard controls, see
+    // scripts/derive-tone-stripped-arms.ts) is a measurement device, not a
+    // chattable model - nothing behind it can ever answer, so it never
+    // reaches the picker's ranking source.
+    where: { archived: false, language: "igala", provider: { not: "derived" } },
     select: {
       slug: true,
       name: true,

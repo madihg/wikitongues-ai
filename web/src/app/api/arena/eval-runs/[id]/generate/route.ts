@@ -58,11 +58,20 @@ export async function POST(
   let generated = 0;
   let failed = 0;
   let costUsd = 0;
+  // Finding 11: provider failures (including an empty-output "success") are
+  // recorded here and surfaced in the run's configSnapshot, never silently
+  // absorbed into a scored ModelOutput.
+  const failures: { promptId: string; reason: string }[] = [];
 
   for (const prompt of prompts) {
     try {
       let result;
       let ragContextIds: string[];
+      let repairInfo: {
+        repaired: boolean;
+        firstPassText: string | null;
+        repairViolations: unknown;
+      } | null = null;
       if (
         candidate.versionLabel === "rag-v4" ||
         candidate.versionLabel === "rag-v4-1"
@@ -104,6 +113,11 @@ export async function POST(
           opts,
         );
         ragContextIds = v4.contextIds;
+        repairInfo = {
+          repaired: result.repaired,
+          firstPassText: result.firstPassText,
+          repairViolations: result.repaired ? result.repairViolations : null,
+        };
       } else if (
         candidate.versionLabel === "rag-v2" ||
         candidate.versionLabel === "rag-v3"
@@ -149,6 +163,21 @@ export async function POST(
         ragContextIds = result.ragContextIds;
       }
 
+      // Finding 11: never persist an empty or whitespace-only provider output
+      // as an answer - a provider failure recorded as a zero-scored
+      // ModelOutput is a language failure that never happened.
+      if (result.text.trim().length === 0) {
+        failed++;
+        failures.push({
+          promptId: prompt.promptId,
+          reason: "empty provider output",
+        });
+        console.error(
+          `eval-run ${id}: empty output for prompt ${prompt.id} (not stored)`,
+        );
+        continue;
+      }
+
       await prisma.modelOutput.create({
         data: {
           promptId: prompt.id,
@@ -163,6 +192,16 @@ export async function POST(
           tokenCountOut: result.tokensOut ?? null,
           latencyMs: result.latencyMs,
           epochId: run.epochId,
+          ...(repairInfo
+            ? {
+                repaired: repairInfo.repaired,
+                repairFirstPassText: repairInfo.firstPassText,
+                repairViolations:
+                  repairInfo.repairViolations !== null
+                    ? (repairInfo.repairViolations as object)
+                    : undefined,
+              }
+            : {}),
         },
       });
       costUsd += estimateGenerationCostUsd({
@@ -173,6 +212,10 @@ export async function POST(
       generated++;
     } catch (e) {
       failed++;
+      failures.push({
+        promptId: prompt.promptId,
+        reason: (e as Error).message?.slice(0, 200) ?? "unknown error",
+      });
       console.error(
         `eval-run ${id}: generation failed for prompt ${prompt.id}`,
         e,
@@ -185,6 +228,15 @@ export async function POST(
     data: {
       status: generated > 0 ? "awaiting_human" : "failed",
       costUsd: roundUsd(costUsd),
+      // The run log: every failure (including empty-output non-persists) is
+      // recorded here, never inferred after the fact from a missing row.
+      configSnapshot: {
+        ...(typeof run.configSnapshot === "object" && run.configSnapshot
+          ? (run.configSnapshot as object)
+          : {}),
+        generateFailureCount: failed,
+        generateFailures: failures,
+      },
     },
   });
 

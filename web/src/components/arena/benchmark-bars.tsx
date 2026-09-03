@@ -32,10 +32,14 @@ function BarChart({
   rows,
   scaleMax,
   bestName,
+  fullN,
 }: {
   rows: CandidateScore[];
   scaleMax: number;
   bestName: string | null;
+  /** The full leak-free exam size - a candidate scored on fewer prompts than
+   * this gets its n flagged (finding 27: "mark n on the bar"). */
+  fullN: number;
 }) {
   const width = LABEL_W + CHART_W + RIGHT_PAD;
   const height = TOP_PAD + rows.length * ROW_H + BOTTOM_PAD;
@@ -159,9 +163,14 @@ function BarChart({
               x={chipW + 8}
               y={midY + 12}
               fontSize="9"
-              fill="var(--text-muted)"
+              fill={
+                c.nClean < fullN
+                  ? "var(--warning-text, #b45309)"
+                  : "var(--text-muted)"
+              }
+              fontWeight={c.nClean < fullN ? 700 : 400}
             >
-              n={c.nClean}
+              {c.nClean < fullN ? `n=${c.nClean} of ${fullN}` : `n=${c.nClean}`}
             </text>
 
             {/* bar */}
@@ -229,8 +238,10 @@ export function BenchmarkBars({
   leakFreePrompts: number;
   topN?: number;
 }) {
-  // Already sorted best-first by the metrics module; agreement score is a
-  // monotone rescaling of the same column, so the order is identical.
+  // Sorted best-first by the metrics module (on strippedChrfClean); rendered
+  // in that same order rather than re-sorted on agreementScore, which uses a
+  // different, smaller prompt set (finding 2's like-for-like construction)
+  // and is not guaranteed to agree on ordering at the margins.
   const scoreable = candidates.filter((c) => c.agreementScore !== null);
 
   if (ceilingChrf === null || scoreable.length === 0) {
@@ -257,10 +268,20 @@ export function BenchmarkBars({
   const rest = scoreable.slice(topN);
   const anyUnderpowered = scoreable.some((c) => c.agreementUnderpowered);
 
+  const anyPartialExam = scoreable.some((c) => c.nClean < leakFreePrompts);
+
   return (
     <div className="rounded-md border border-border bg-surface p-4">
+      <p className="mb-2 text-xs text-text-muted">
+        Best of {scoreable.length} arms examined.
+      </p>
       <div className="overflow-x-auto">
-        <BarChart rows={top} scaleMax={scaleMax} bestName={bestName} />
+        <BarChart
+          rows={top}
+          scaleMax={scaleMax}
+          bestName={bestName}
+          fullN={leakFreePrompts}
+        />
       </div>
       {rest.length > 0 && (
         <details className="mt-2">
@@ -268,25 +289,32 @@ export function BenchmarkBars({
             Show all {scoreable.length} models
           </summary>
           <div className="mt-2 overflow-x-auto">
-            <BarChart rows={rest} scaleMax={scaleMax} bestName={bestName} />
+            <BarChart
+              rows={rest}
+              scaleMax={scaleMax}
+              bestName={bestName}
+              fullN={leakFreePrompts}
+            />
           </div>
         </details>
       )}
       <p className="mt-3 text-xs leading-relaxed text-text-muted">
         100 = one native speaker&apos;s agreement with another (chrF{" "}
-        {ceilingChrf.toFixed(1)} on the same questions, one answer per speaker).
-        Scored on the {leakFreePrompts} leak-free frozen questions; whiskers are
-        95% bootstrap intervals over per-question scores.
+        {ceilingChrf.toFixed(1)}, leave-one-out over deduplicated real
+        speakers). Each model is scored the SAME way: for every held-out
+        speaker, against the k-1 references that speaker&apos;s own peers are
+        judged against, averaged over holdouts - never against more answer keys
+        than a speaker gets. Scored on the {leakFreePrompts} leak-free frozen
+        questions with at least two speakers; whiskers are 95% bootstrap
+        intervals over per-question scores.
         {anyUnderpowered &&
-          " * too few leak-free answers for an interval - point estimate only."}{" "}
-        A bar past the 100 line does not mean the model beat the speakers. The
-        model is scored against every community answer for a question, while
-        each speaker is scored against the other speakers only, and that gives
-        models a built-in advantage that grows with the number of answers per
-        question. Scored like-for-like, the best system sits at speaker level.
-        This score is being replaced with one that cannot pass 100 by
-        construction; until then, read a bar past 100 as &quot;at speaker
-        level&quot;, not above it.
+          " * too few qualifying answers for an interval - point estimate only."}
+        {anyPartialExam &&
+          " n=X of Y marks an arm scored on fewer than the full leak-free set."}{" "}
+        A bar past the 100 line is not a construction artifact here: it means
+        the model measured closer to the community&apos;s writing than one
+        speaker measured to another, on the same like-for-like construction used
+        for every other bar.
       </p>
     </div>
   );

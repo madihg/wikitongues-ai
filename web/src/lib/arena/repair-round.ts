@@ -311,6 +311,15 @@ export interface RepairedGeneration extends CandidateGeneration {
    */
   repairViolations: RepairViolation[] | null;
   /**
+   * The discarded first-pass text, kept ONLY when a re-ask actually ran
+   * (repaired=true) - it is the answer the repair round decided not to serve.
+   * null when the round never ran, or ran and found nothing to fix: there is
+   * nothing "first-pass" to distinguish from the served text in either case
+   * (tasks/project-audit-2026-09-01.md, finding 10/5 - "the repair round's
+   * first pass is unrecoverable").
+   */
+  firstPassText: string | null;
+  /**
    * True when the checker DID find violations but the turn had too little
    * budget left to run a second generation, so the first answer was kept. Only
    * ever true when a budget was supplied - the exam and eval paths supply
@@ -363,6 +372,7 @@ async function runRepairRound(
       ...result,
       repaired: false,
       repairViolations: null,
+      firstPassText: null,
       repairSkippedForTime: false,
     };
   }
@@ -374,6 +384,7 @@ async function runRepairRound(
       ...first,
       repaired: false,
       repairViolations: [],
+      firstPassText: null,
       repairSkippedForTime: false,
     };
   }
@@ -398,6 +409,9 @@ async function runRepairRound(
       ...first,
       repaired: false,
       repairViolations: violations,
+      // The first answer IS what got served here, not a discarded draft -
+      // there is no "first pass" separate from the served text.
+      firstPassText: null,
       repairSkippedForTime: true,
     };
   }
@@ -428,6 +442,8 @@ async function runRepairRound(
     tokensOut: sumTokens(first.tokensOut, second.tokensOut),
     repaired: true,
     repairViolations: violations,
+    // The discarded attempt - never served, kept so the round can be audited.
+    firstPassText: first.text,
     repairSkippedForTime: false,
   };
 }

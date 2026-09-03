@@ -41,6 +41,17 @@ import type { EvalBucket } from "@prisma/client";
  * MIN_DECIDED_PER_PAIRING in src/lib/annotation-insights.ts. */
 export const MIN_DECIDED_PER_CANDIDATE = 5;
 
+/** The pinned annotation pivot: the value derivePivotAt returns against
+ * production as of the 2026-09-01 decision recorded in
+ * tasks/annotation-pivot-decision.md. Pinning it stops the post-pivot window
+ * from silently moving every time the pairing pool changes (adding a new
+ * arm to inPairingPool would otherwise re-derive an EARLIER pivot, since
+ * derivePivotAt takes the first comparison touching any current pool
+ * member) - the window boundary is a decision, not a side effect of pool
+ * membership. derivePivotAt is kept as a test-only cross-check that must
+ * still equal this constant against a fixture reproducing that decision. */
+export const POOL_PIVOT_AT = "2026-08-20T19:38:08.385Z";
+
 /** "since_pivot" is the default: it is the window where speakers are actually
  * deciding. "all_time" stays one click away because hiding the old era would
  * be its own dishonesty. */

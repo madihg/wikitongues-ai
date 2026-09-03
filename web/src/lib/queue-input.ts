@@ -40,8 +40,10 @@ export interface QueuePromptDetail {
   isHoldout: boolean;
   isLongForm: boolean;
   goldCount: number;
-  /** Pairing-eligible outputs, deterministic order. */
-  pairableOutputs: { id: string; outputText: string }[];
+  /** Pairing-eligible outputs, deterministic order. `slug` is the owning
+   *  CandidateModel's slug - what assignedPair's ALLOWED_PAIRINGS whitelist
+   *  matches against. */
+  pairableOutputs: { id: string; outputText: string; slug: string }[];
 }
 
 export interface QueueInputs {
@@ -77,7 +79,7 @@ export async function loadQueueInputs(): Promise<QueueInputs> {
             id: true,
             outputText: true,
             candidateModel: {
-              select: { inPairingPool: true, archived: true },
+              select: { inPairingPool: true, archived: true, slug: true },
             },
           },
         },
@@ -97,12 +99,13 @@ export async function loadQueueInputs(): Promise<QueueInputs> {
       p.modelOutputs.map((o) => ({
         id: o.id,
         outputText: o.outputText,
+        slug: o.candidateModel?.slug ?? "",
         inPool:
           o.candidateModel?.inPairingPool === true &&
           o.candidateModel.archived === false,
       })),
       poolActive,
-    ).map(({ id, outputText }) => ({ id, outputText }));
+    ).map(({ id, outputText, slug }) => ({ id, outputText, slug }));
 
     const detail: QueuePromptDetail = {
       id: p.id,

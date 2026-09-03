@@ -6,6 +6,8 @@ import {
   filterAssembled,
   leakFreePrompts,
   formatLeakReport,
+  renderLexPieceForGuard,
+  renderEditPieceForGuard,
   MIN_PROTECTED_LENGTH,
 } from "./leak-guard";
 
@@ -171,6 +173,70 @@ describe("leakFreePrompts", () => {
       { where: "y", promptId: "p4", tier: "tone" },
     ]);
     expect(subset).toEqual(["p1", "p3"]);
+  });
+});
+
+describe("renderLexPieceForGuard - finding 19", () => {
+  it("builds the guard piece from the RENDERED (toOrthography) line, not the raw phonemic headword", () => {
+    // ig_bank_lex_001's own gold is "Ẹga". The chikhapo lexicon stores this
+    // headword in PHONEMIC notation, "ɛga" - a different base letter (ɛ vs
+    // ẹ) that survives fullFold untouched, so a guard checking the raw
+    // headword sees no match at all. toOrthography maps ɛ -> ẹ before the
+    // guard ever runs, because that mapping is exactly what the model is
+    // served (retrieval-v2.ts's renderDictionaryLine).
+    const protectedSet = buildProtectedSet([
+      { promptId: "ig_bank_lex_001", answerText: "Ẹga" },
+    ]);
+    const rendered = renderLexPieceForGuard("ɛga", "bird");
+    expect(rendered).toBe("ẹga bird");
+
+    const { report } = filterAssembled(
+      "ig_bank_lex_001",
+      [{ where: "lex:1", text: rendered }],
+      protectedSet,
+    );
+    expect(report.pass).toBe(false);
+
+    // MUTATION CHECK: reverting to the raw headword (the bug finding 19
+    // describes) clears the guard on the exact same gold - proving the fix
+    // is load-bearing, not cosmetic.
+    const rawPiece = `ɛga bird`;
+    const { report: rawReport } = filterAssembled(
+      "ig_bank_lex_001",
+      [{ where: "lex:1", text: rawPiece }],
+      protectedSet,
+    );
+    expect(rawReport.pass).toBe(true);
+  });
+});
+
+describe("renderEditPieceForGuard - finding 18", () => {
+  it("matches retrieval-v4.ts's own served correction text exactly", () => {
+    expect(renderEditPieceForGuard("wrong", "Ọmi", "spelling fix")).toBe(
+      "wrong\nỌmi\nspelling fix",
+    );
+    // No reason: retrieval-v4.ts still serves original + corrected + an
+    // empty Reason line (correctionReason returns null, joined as "").
+    expect(renderEditPieceForGuard("wrong", "Ọmi", null)).toBe("wrong\nỌmi\n");
+  });
+
+  it("catches a correction whose SERVED text repeats the prompt's own gold", () => {
+    // Before finding 18, edit: ids were dropped by the splitter entirely -
+    // this piece would never have reached the guard at all.
+    const protectedSet = buildProtectedSet([
+      { promptId: "ig_bank_orth_009", answerText: "Ọkọ" },
+    ]);
+    const piece = renderEditPieceForGuard(
+      "wrong word",
+      "the correct word is Ọkọ",
+      null,
+    );
+    const { report } = filterAssembled(
+      "ig_bank_orth_009",
+      [{ where: "edit:e1", text: piece }],
+      protectedSet,
+    );
+    expect(report.pass).toBe(false);
   });
 });
 

@@ -109,8 +109,17 @@ export async function GET(req: Request) {
   for (const candidate of remaining) {
     const prompt = byPromptId.get(candidate.promptId)!;
     const outputs = prompt.pairableOutputs;
-    const pair = assignedPair(annotatorId, prompt.promptId, outputs.length);
-    if (!pair) continue; // defensive: candidates are already >= 2 outputs
+    const pair = assignedPair(
+      annotatorId,
+      prompt.promptId,
+      outputs.length,
+      outputs.map((o) => o.slug),
+    );
+    // null here means either < 2 outputs (defensive, candidates are already
+    // filtered) or - with a non-empty ALLOWED_PAIRINGS - none of this
+    // prompt's pairable outputs form a whitelisted combination. Either way
+    // there is nothing to serve for this prompt; try the next one.
+    if (!pair) continue;
     const [i, j] = pair;
 
     // Randomly assign A/B to avoid position bias.

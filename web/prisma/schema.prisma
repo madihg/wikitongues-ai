@@ -174,6 +174,15 @@ model ModelOutput {
   isDemo           Boolean     @default(false) // generated inside a demo/testing session
   demoSessionId    String?
   createdAt        DateTime    @default(now())
+  // Repair round provenance (audit finding 5/10, tasks/project-audit-2026-09-01.md):
+  // when the repair round actually re-asked, the discarded first-pass text and
+  // its violations are kept here so the repair round can be evaluated as a
+  // post-processor rather than folded silently into the served answer.
+  // repaired=false and both fields null on every arm that does not run the
+  // repair round, and on a clean rag-v4-1 first pass.
+  repairFirstPassText String?
+  repaired            Boolean  @default(false)
+  repairViolations    Json?
 
   prompt           Prompt               @relation(fields: [promptId], references: [id])
   candidateModel   CandidateModel?      @relation(fields: [candidateModelId], references: [id])

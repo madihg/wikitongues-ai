@@ -925,6 +925,7 @@ READ FIRST: tasks/project-audit-2026-09-01.md (ranked, verified). Four
 CRITICAL, nine HIGH. The method survived; the story about it did not.
 
 What the audit corrected, in one line each:
+
 - The 120.1 is ~17 points of reference-count asymmetry (model best-of-k
   vs a held-out speaker's k-1); like-for-like the best arm is 102.6.
   Every bar past 100 is partly construction. Option (c) replaces the score.
@@ -965,3 +966,174 @@ public score to the like-for-like construction now or after (c).
 Blocked on Halim: nlm login (interactive Google sign-in) to upload the
 notebook source; OpenRouter route for the six dead-key Claude arms is
 a hygiene fix he can approve in the plan.
+
+## Session State (2026-09-03) - Option (a) pool prep for v4.1 human judgment (findings 15/16/17), in progress
+
+Implementing the pool-prep task (era pivot pin, dead-key repoint, pairing
+whitelist, v4.1 train generation, pool enable) in one pass.
+
+1. PINNED PIVOT (finding 17, done, tested): `POOL_PIVOT_AT` exported from
+   `src/lib/arena/era.ts` = "2026-08-20T19:38:08.385Z" (cites
+   tasks/annotation-pivot-decision.md). `/api/arena/leaderboard/route.ts`
+   uses it as the since-pivot window start instead of
+   `derivePivotAt(rows)` - the window can no longer move when pool
+   membership changes. `derivePivotAt` kept, now test-only, with a new
+   era.test.ts case cross-checking it equals POOL_PIVOT_AT on a fixture.
+   Rewrote the leaderboard route.test.ts "moves with the pool" describe
+   block (3 tests) into "stays put" - old behavior asserted the pivot
+   DERIVED and moved; that's exactly what this fix removes. All era +
+   leaderboard + rubric-arena-table tests green.
+
+2. DEAD-KEY ARMS (finding 16, done, RAN against production DB):
+   scripts/register-claude-openrouter.ts extended with `repointDeadKeyArms`
+   - re-points the six provider=anthropic candidates
+     (claude-sonnet-4-5-baseline, claude-sonnet-4-5-rag, claude-opus-5,
+     claude-opus-5-rag, claude-opus-5-rag-v2, claude-opus-5-rag-v3) to
+     provider "openrouter" with baseModelId "anthropic/<original>",
+     decodingParams.temperature: null. claude-opus-5-rag ALSO set
+     inPairingPool: false (was the one dead-key arm still live in the pool).
+     RUN successfully; output confirmed all 6 repointed, v4/v4-1 arms
+     untouched (already openrouter), claude-opus-5-rag out of the pool.
+
+3. PAIRING WHITELIST (done, tested): `ALLOWED_PAIRINGS` in
+                                    src/lib/pairing.ts = [[gemini-3-1-pro-rag-v4-1, gemini-3-1-pro-rag-v3],
+                                    [gemini-3-1-pro-rag-v4-1, gemini-3-1-pro-tonestrip]]. `assignedPair` now
+                                    takes an optional `slugs` array (parallel to the pairable-outputs list)
+                                    and filters candidate index-pairs to ALLOWED_PAIRINGS when both the
+                                    whitelist is non-empty AND slugs are given - no slugs = old behavior
+                                    (every existing caller besides /api/annotations/next is unaffected).
+                                    Threaded `slug` through QueuePromptDetail.pairableOutputs
+                                    (queue-input.ts, from CandidateModel.slug) and into the assignedPair
+                                    call in src/app/api/annotations/next/route.ts. 5 new pairing.test.ts
+                                    cases (only-allowed-pairs drawn, both pairs actually get drawn, null
+                                    when no allowed pair exists among a prompt's outputs, old behavior
+                                    preserved with no slugs array, the constant's exact value pinned).
+
+4. TRAIN OUTPUTS FOR v4.1 (RUNNING against production DB at handoff time):
+   new scripts/train-fill-arm.ts generates gemini-3-1-pro-rag-v4-1 outputs
+   through the SHARED src/lib/arena/frozen-exam.ts assembly
+   (buildV4FamilyTurn + runsRepairRound + generateWithRepairRound), so
+   serving == measurement exactly as scripts/exam-rag-v4-1.ts proved for
+   the frozen 43 - repair round included, repairFirstPassText stored on
+   repair. TARGET SET resolved empirically, not assumed: the 96 train
+   prompts (isHoldout=false) that `gemini-3-1-pro` (bare) already has
+   outputs for - confirmed by exact set match against the sibling
+   session's `gemini-3-1-pro-tonestrip` derived arm's 96 train outputs
+   (byte-identical prompt-id sets). Budget: hard stop $3, measured after
+   every call from stored ModicelOutput token counts (typo: ModelOutput),
+   same rule shape as train-queue-fill.ts's slice stop. Idempotent (skips
+   prompts with an existing non-demo output for this candidate).
+   RAN TO COMPLETION (hit the budget stop, did not error): 62/96 created,
+   0 failed, 7 repaired (2 tone-saturation, 5 banned-character), $2.12
+   this run (198,684 in / 143,377 out tokens). HALTED by the $3 hard cap
+   with 34 prompts still ungenerated - real per-prompt cost ran far above
+   the plan's "~$1" estimate (measured trajectory implies ~$3.2-3.4 for
+   all 96, not ~$1), so THIS IS A DECISION POINT FOR HALIM: raise the cap
+   to finish the remaining 34, or accept 62/96 coverage for pool-prep.
+   Verified against the DB directly: gemini-3-1-pro-rag-v4-1 has exactly
+   62 train ModelOutput rows (isHoldout:false) and its original 43 frozen
+   holdout rows untouched. FOUND AND FIXED (not re-run) a scoping bug in
+   measuredSpendUsd: it summed ALL non-demo outputs for the candidate,
+   which pulled the frozen-43 exam's pre-existing $0.29 spend into the $3
+   train cap and halted one call earlier than the true train-only spend
+   would have - fixed to filter `prompt: { isHoldout: false }`, matching
+   the script's own doc comment and train-queue-fill.ts's precedent. Not
+   re-run after the fix (that would spend more money without a go-ahead).
+   tsc clean on the fix. RESUME: `npx tsx --env-file=.env.local
+scripts/train-fill-arm.ts` picks up exactly where it left off
+   (idempotent - skips the 62 existing outputs).
+
+5. POOL ENABLE - NOT RUN, gated on step 4's own precondition ("ONLY after
+   step 4 completes"). Step 4 did not complete (62/96, budget-halted), so
+   per the task's own ordering this step is correctly withheld pending
+   Halim's budget call above. scripts/enable-v41-pool.ts is written and
+   tsc-clean, ready to run once train-fill-arm.ts reports created+existing
+   = 96: it verifies both v4.1 and tonestrip have >0 train outputs, sets
+   inPairingPool=true on both, DRY-RUNS assignedPair against real DB
+   coverage (read-only, no writes) to prove both ALLOWED_PAIRINGS entries
+   actually get drawn, and prints exact final pool membership.
+
+CURRENT POOL MEMBERSHIP (verified against the DB at handoff, unchanged by
+step 5 since it did not run): gemini-3-1-pro-rag-v3, gemini-3-1-pro only.
+claude-opus-5-rag is OUT (step 2). gemini-3-1-pro-rag-v4-1 and
+gemini-3-1-pro-tonestrip are NOT YET in the pool.
+
+GATES - ALL GREEN for this pool-prep work: `npx eslint` on every touched
+file (era.ts/.test.ts, leaderboard route.ts/.test.ts, pairing.ts/.test.ts,
+queue-input.ts, annotations/next/route.ts, register-claude-openrouter.ts,
+train-fill-arm.ts, enable-v41-pool.ts) - clean, zero output. Full vitest
+suite (`--pool=threads --poolOptions.threads.singleThread`): **79 files,
+1176 tests, all green**, run once at the end per the token-discipline rule.
+`tsc --noEmit` clean on every file this session touched.
+
+PRE-EXISTING, NOT MINE, NOT FIXED (flag to Halim, don't fix blind):
+`npx tsc --noEmit -p .` (whole-project) still shows type errors in
+benchmark-bars.test.tsx, method-metrics.test.ts (4x), and
+public-method-metrics.test.ts - all in files already modified uncommitted
+by an earlier/concurrent session (CandidateScore gained fields like
+nLikeForLike/emptyOutputs that these test files predate; GoldRow gained a
+required `provenance` field the test fixtures don't supply). These do NOT
+fail at the vitest level (the full suite above is 100% green - vitest's
+transform doesn't type-check), only under `tsc --noEmit -p .` on the whole
+project. Unrelated to this session's pairing/era/repointing/generation
+work; a concurrent session was also running eslint/tsc against these same
+files while this session worked. No commits made (repo rule).
+
+SPEND THIS SESSION: $2.12 (train-fill-arm.ts, gemini-3-1-pro-rag-v4-1,
+62 outputs). No other money spent (the openrouter repoint and pairing
+whitelist are DB/code changes only, no generation).
+
+## Session State (2026-09-03) - THE TONE RESULT: a regex beats the method on chrF
+
+Ran audit options (c), (d2) and most of (a). The headline is bad for the
+metric, not necessarily for the method, and it must not be misread.
+
+SCOREBOARD, canonical path (computeMethodMetrics, like-for-like LOO on the
+25 prompts with 2+ real speakers, ceiling 39.3):
+
+  arm                                   new    legacy  toneIns  rank
+  Gemini v4 (TONE-STRIPPED, a regex)    123.2  140.6   87.1     64.0
+  Gemini bare (TONE-STRIPPED, a regex)  111.9  124.4   80.0     58.9
+  Gemini v4.1                           103.1  120.7   87.0     57.3
+  Gemini v4.1 no-repair                  98.7  114.5   90.9     56.0
+  Gemini v3                              90.8   99.7   82.7     54.7
+  Gemini v4                              89.8  102.6   87.1     46.0
+  Claude v4.1                            85.3   93.5   71.6     49.3
+  Gemini bare                            83.4   94.6   80.0     40.0
+  Claude v1                              79.9   83.7   84.0     50.7
+  Claude v4.1 no-repair                  64.1   70.2   70.6     36.7
+
+WHAT THIS MEANS. A regex that deletes tone marks from BARE Gemini output
+(no model call, no retrieval, no prompt) scores 111.9, above every real
+system including v4.1. The same regex over v4 tops the board at 123.2.
+Verified not an artifact: the derived arms are byte-equal to
+stripToneMarks(parent) across 139 outputs, and 76% of the 238 frozen
+golds carry no tone mark at all, so chrF penalises tone-writing models.
+CONCLUSION: the agreement score is dominated by tone-mark density.
+Optimising it further is optimising a regex. The tone-insensitive column
+is the honest ranking, and there everything compresses to 70-91 and the
+order scrambles (v4.1-no-repair 90.9 tops it).
+
+THE REPAIR ROUND SPLITS THE FAMILIES. Gemini: v4.1 103.1 vs no-repair
+98.7, worth +4.4. Claude: v4.1 85.3 vs no-repair 64.1, worth +21.2. For
+Claude it is load-bearing; for Gemini it is mostly cosmetic tone removal.
+
+ALSO SHIPPED: like-for-like agreementScore replaces the asymmetric one
+(legacy kept, deprecated); speakerRank (0-100 by construction);
+tone-insensitive and sourcefree columns; empty outputs excluded and
+counted (Claude v2 had 3); seed accounts excluded consistently; leak
+guard now resolves edit: ids and builds the dictionary piece from the
+RENDERED (toOrthography) line; repair first-pass text stored on
+ModelOutput (migration applied via Supabase MCP after the app role was
+found to lack ALTER); pivot pinned (POOL_PIVOT_AT); six dead-key Claude
+arms re-pointed to OpenRouter; claude-opus-5-rag removed from the pool.
+Deleted scripts/compute-norepair-control.ts: an ad-hoc scorer whose
+stripAnswer misuse made every chrF silently 0 inside a try/catch, which
+is exactly the class of bug the audit exists to catch. Scoring goes
+through computeMethodMetrics only.
+
+NOT DONE, NEEDS HALIM: train-fill-arm.ts halted at its $3 cap with 62/96
+v4.1 train outputs ($2.12 spent, ~3x the estimate); the pool was NOT
+switched to v4.1 because that precondition failed. Option (b) (wire the
+9 grammar entries) should now be considered dead until a metric exists
+that can see grammar: the current one cannot.

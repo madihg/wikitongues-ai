@@ -182,6 +182,8 @@ describe("generateWithRepairRound - rag-v4-1", () => {
     expect(result.text).toBe("Wọla ọdudu");
     expect(result.repaired).toBe(false);
     expect(result.repairViolations).toEqual([]);
+    // Clean first pass IS the served text - nothing was discarded.
+    expect(result.firstPassText).toBeNull();
   });
 
   it("dirty first answer: re-asks ONCE with the violations named and the first answer in context", async () => {
@@ -215,6 +217,8 @@ describe("generateWithRepairRound - rag-v4-1", () => {
     expect(result.repaired).toBe(true);
     expect(result.repairViolations!.length).toBeGreaterThan(0);
     expect(result.text).toBe("Jẹñwu aja");
+    // The discarded first pass is kept, separately from the served text.
+    expect(result.firstPassText).toBe("é-jẹu ádṣa");
   });
 
   it("keeps the second answer even when it is still dirty - one repair, never a loop", async () => {

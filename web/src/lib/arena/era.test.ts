@@ -3,6 +3,7 @@ import {
   ARENA_ERA_LABELS,
   DEFAULT_ARENA_ERA,
   MIN_DECIDED_PER_CANDIDATE,
+  POOL_PIVOT_AT,
   buildEraSlice,
   decidedByCandidate,
   derivePivotAt,
@@ -99,6 +100,29 @@ describe("derivePivotAt", () => {
 
   it("is null when no pool arm has been compared yet", () => {
     expect(derivePivotAt([row("old-x", "old-y", "a", 3)])).toBeNull();
+  });
+
+  it("matches the pinned POOL_PIVOT_AT against a fixture reproducing the 2026-08-20 decision", () => {
+    // Not the miniature corpus() above - a fixture whose first pool-arm
+    // comparison lands exactly on the pinned production timestamp, standing
+    // in for the real annotation-pivot-decision.md rerun. This is the
+    // cross-check the module comment promises: POOL_PIVOT_AT must never
+    // silently drift from what derivePivotAt actually computes.
+    const pivotDate = new Date(POOL_PIVOT_AT);
+    const rows: ArenaComparisonRow[] = [
+      row("old-x", "old-y", "both_inadequate", 1),
+      {
+        candidateA: "gemini-3-1-pro-rag-v3",
+        candidateB: "gemini-3-1-pro",
+        outcome: "a",
+        bucket: "authenticity",
+        createdAt: pivotDate,
+        aInPool: true,
+        bInPool: true,
+      },
+    ];
+    expect(derivePivotAt(rows)?.toISOString()).toBe(pivotDate.toISOString());
+    expect(derivePivotAt(rows)?.toISOString()).toBe(POOL_PIVOT_AT);
   });
 });
 

@@ -222,3 +222,63 @@ describe("the eval-generation route is still buffered", () => {
     expect(storedOutput()).toMatchObject({ outputText: "Agba Ojo" });
   });
 });
+
+describe("repair round provenance is persisted (finding 5/10)", () => {
+  it("stores repaired=true and the discarded first pass when the round re-asked", async () => {
+    setRun("rag-v4-1");
+    scriptGenerations(["sooro", "ojo daa"]);
+    await call();
+
+    expect(storedOutput()).toMatchObject({
+      repaired: true,
+      repairFirstPassText: "sooro",
+    });
+    expect(storedOutput().repairViolations).toBeDefined();
+  });
+
+  it("stores repaired=false and no first-pass text on a clean rag-v4-1 answer", async () => {
+    setRun("rag-v4-1");
+    scriptGenerations(["ojo daa"]);
+    await call();
+
+    expect(storedOutput()).toMatchObject({
+      repaired: false,
+      repairFirstPassText: null,
+    });
+  });
+
+  it("does not stamp repair fields on rag-v4 (no repair round runs there)", async () => {
+    setRun("rag-v4");
+    scriptGenerations(["sooro"]);
+    await call();
+
+    expect(storedOutput()).toMatchObject({
+      repaired: false,
+      repairFirstPassText: null,
+    });
+  });
+});
+
+describe("empty provider output is never persisted (finding 11)", () => {
+  it("skips the ModelOutput, counts it as failed, and records the failure", async () => {
+    setRun("rag-v4");
+    scriptGenerations(["   "]);
+    const res = await call();
+    const body = await res.json();
+
+    expect(mockPrisma.modelOutput.create).not.toHaveBeenCalled();
+    expect(body).toMatchObject({ generated: 0, failed: 1, total: 1 });
+
+    const updateData =
+      mockPrisma.evalRun.update.mock.calls[
+        mockPrisma.evalRun.update.mock.calls.length - 1
+      ][0].data;
+    expect(updateData.status).toBe("failed");
+    expect(updateData.configSnapshot).toMatchObject({
+      generateFailureCount: 1,
+    });
+    expect(updateData.configSnapshot.generateFailures).toEqual([
+      { promptId: PROMPT.promptId, reason: "empty provider output" },
+    ]);
+  });
+});

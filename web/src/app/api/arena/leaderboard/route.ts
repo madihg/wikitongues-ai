@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
 import {
   buildEraSlice,
-  derivePivotAt,
   eraSplit,
+  POOL_PIVOT_AT,
   type ArenaComparisonRow,
   type EraSlice,
 } from "@/lib/arena/era";
@@ -105,7 +105,7 @@ export async function GET() {
     where: { isDemo: false, score: { not: null } },
   });
 
-  const pivotAt = derivePivotAt(rows);
+  const pivotAt = new Date(POOL_PIVOT_AT);
   const candidateIds = candidates.map((c) => c.id);
   const sincePivot = buildEraSlice(rows, {
     era: "since_pivot",

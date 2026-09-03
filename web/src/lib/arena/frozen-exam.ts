@@ -42,7 +42,11 @@ import type { RepairCheckOptions } from "@/lib/arena/repair-round";
  */
 
 /** The version labels whose serving path is the v4 retrieval assembly. */
-export const V4_FAMILY_VERSION_LABELS = ["rag-v4", "rag-v4-1"] as const;
+export const V4_FAMILY_VERSION_LABELS = [
+  "rag-v4",
+  "rag-v4-1",
+  "rag-v4-1-norepair",
+] as const;
 
 export type V4FamilyVersionLabel = (typeof V4_FAMILY_VERSION_LABELS)[number];
 
@@ -56,7 +60,9 @@ export function isV4FamilyVersionLabel(
 
 /** The system prompt served for a v4-family label. */
 export function systemPromptForVersion(label: V4FamilyVersionLabel): string {
-  return label === "rag-v4-1" ? IGALA_SYSTEM_V4_1 : IGALA_SYSTEM_V4;
+  return label === "rag-v4-1" || label === "rag-v4-1-norepair"
+    ? IGALA_SYSTEM_V4_1
+    : IGALA_SYSTEM_V4;
 }
 
 /**
@@ -66,6 +72,13 @@ export function systemPromptForVersion(label: V4FamilyVersionLabel): string {
  */
 export function runsRepairRound(label: V4FamilyVersionLabel): boolean {
   return label === "rag-v4-1";
+}
+
+/**
+ * True when this label uses the v4.1 system prompt (with or without repair round).
+ */
+export function usesV4_1Prompt(label: V4FamilyVersionLabel): boolean {
+  return label === "rag-v4-1" || label === "rag-v4-1-norepair";
 }
 
 export interface ExamTurn {
