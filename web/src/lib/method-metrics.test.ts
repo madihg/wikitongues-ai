@@ -1079,3 +1079,27 @@ describe("computeMethodMetrics - edit: and toOrthography leak-guard fixes wired 
     expect(m.benchmark.leakFreePrompts).toBe(0);
   });
 });
+
+describe("derived control arms announce themselves", () => {
+  // The tone-removal control outscores every real system on this board. If it
+  // ever renders as "retrieval v4" or "untouched", a reader sees a system we
+  // built topping the chart, which is the opposite of what the number means.
+  it("labels a derived arm as a control regardless of its kind or version", () => {
+    expect(approachLabel("rag", "rag-v4", "derived")).toBe(
+      "control (tone removed)",
+    );
+    expect(approachLabel("baseline", null, "derived")).toBe(
+      "control (tone removed)",
+    );
+  });
+
+  it("leaves every real arm's label untouched", () => {
+    expect(approachLabel("rag", "rag-v4-1", "google")).toBe("retrieval v4.1");
+    expect(approachLabel("rag", "rag-v4", "openrouter")).toBe("retrieval v4");
+    expect(approachLabel("baseline", null, "google")).toBe("untouched");
+    expect(approachLabel("sft", null, "openai")).toBe("fine-tuned");
+    // and with no provider argument at all, the pre-change behaviour holds
+    expect(approachLabel("rag", "rag-v3")).toBe("retrieval v3");
+    expect(approachLabel("baseline", null)).toBe("untouched");
+  });
+});
