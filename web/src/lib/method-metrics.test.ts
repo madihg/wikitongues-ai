@@ -1093,6 +1093,15 @@ describe("derived control arms announce themselves", () => {
     );
   });
 
+  it("names the no-repair control instead of dropping it to retrieval v1", () => {
+    // Unknown rag version labels fall through to "retrieval v1"; this one is a
+    // v4.1 arm and was reaching the public board under the oldest method's name.
+    expect(approachLabel("rag", "rag-v4-1-norepair", "google")).toBe(
+      "retrieval v4.1 (no repair)",
+    );
+    expect(approachLabel("rag", "rag-v4-1", "google")).toBe("retrieval v4.1");
+  });
+
   it("leaves every real arm's label untouched", () => {
     expect(approachLabel("rag", "rag-v4-1", "google")).toBe("retrieval v4.1");
     expect(approachLabel("rag", "rag-v4", "openrouter")).toBe("retrieval v4");
