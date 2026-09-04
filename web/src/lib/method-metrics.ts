@@ -115,6 +115,7 @@ export type Approach =
   | "retrieval v4"
   | "retrieval v4.1"
   | "fine-tuned"
+  | "control (tone removed)"
   | "other";
 
 /** One scoreboard row: a non-archived candidate scored both ways. */
@@ -251,7 +252,15 @@ export interface MethodMetrics {
 export function approachLabel(
   kind: string,
   versionLabel: string | null,
+  provider?: string | null,
 ): Approach {
+  // A derived arm is a DIAGNOSTIC, not a system: its text is a mechanical
+  // transform of another arm's output, with no model call behind it. It has to
+  // announce itself, because the tone-removal control currently outranks every
+  // real system on this board (audit of 2026-09-01, finding 5) and a reader
+  // who mistook it for something we built would draw the opposite conclusion
+  // from the one the number supports.
+  if (provider === "derived") return "control (tone removed)";
   if (kind === "baseline") return "untouched";
   if (kind === "rag") {
     if (versionLabel === "rag-v4-1") return "retrieval v4.1";
@@ -490,6 +499,7 @@ export async function computeMethodMetrics(
             name: true,
             kind: true,
             versionLabel: true,
+            provider: true,
             archived: true,
           },
         },
@@ -762,6 +772,7 @@ export async function computeMethodMetrics(
     string,
     {
       kind: string;
+      provider: string;
       versionLabel: string | null;
       scores: { slug: string; str: number }[];
       hypBySlug: Map<string, string>;
@@ -777,6 +788,7 @@ export async function computeMethodMetrics(
     if (!refs || refs.length === 0) continue;
     const entry = byCandidate.get(cm.name) ?? {
       kind: cm.kind,
+      provider: cm.provider,
       versionLabel: cm.versionLabel,
       scores: [],
       hypBySlug: new Map<string, string>(),
@@ -863,7 +875,7 @@ export async function computeMethodMetrics(
 
       return {
         name,
-        approach: approachLabel(c.kind, c.versionLabel),
+        approach: approachLabel(c.kind, c.versionLabel, c.provider),
         n: c.scores.length,
         nClean: cleanScores.length,
         nLikeForLike,
