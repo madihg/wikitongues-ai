@@ -114,6 +114,7 @@ export type Approach =
   | "retrieval v3"
   | "retrieval v4"
   | "retrieval v4.1"
+  | "retrieval v4.1 (no repair)"
   | "fine-tuned"
   | "control (tone removed)"
   | "other";
@@ -263,6 +264,11 @@ export function approachLabel(
   if (provider === "derived") return "control (tone removed)";
   if (kind === "baseline") return "untouched";
   if (kind === "rag") {
+    // Order matters: the no-repair control's label is a PREFIX of the v4.1
+    // label, and it used to fall through the whole chain to "retrieval v1",
+    // which put a v4.1 control on the public board under the name of the
+    // oldest method we have.
+    if (versionLabel === "rag-v4-1-norepair") return "retrieval v4.1 (no repair)";
     if (versionLabel === "rag-v4-1") return "retrieval v4.1";
     if (versionLabel === "rag-v4") return "retrieval v4";
     if (versionLabel === "rag-v3") return "retrieval v3";
