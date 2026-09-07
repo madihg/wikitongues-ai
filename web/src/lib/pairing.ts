@@ -47,7 +47,7 @@
  * ─── THE PAIRING WHITELIST (option (a) pool prep) ──────────────────────────
  *
  * Single-sourced: this is the ONLY place ALLOWED_PAIRINGS is defined, and
- * assignedPair() is the only place that reads it. When non-empty, a pair of
+ * assignedPair() and hasAllowedPair() are the only places that read it. When non-empty, a pair of
  * candidate slugs may be drawn for an episode only if it (in either order)
  * appears here - everything else degrades exactly to the old scheme (every
  * C(n,2) combination of pairing-eligible outputs is drawable).
@@ -57,8 +57,33 @@
  * tone-stripped ablation), and nothing else - so adding gemini-3-1-pro-rag-v4-1
  * and gemini-3-1-pro-tonestrip to the pool cannot dilute annotator time into
  * combinations nobody asked to measure.
+ *
+ * The pair that is ACTUALLY POOLED today (bare Gemini 3.1 Pro vs retrieval
+ * v3, the blind-preference comparison running since the 2026-08-20 pivot)
+ * is listed first. It was missing from 2026-09-03 to 2026-09-07: the
+ * whitelist named only v4.1 pairs while v4.1 was not yet in the pool, so
+ * assignedPair returned null for every prompt and /api/annotations/next
+ * told every annotator they were done while /api/annotator/summary still
+ * counted prompts as remaining. A whitelist that names no pooled pair
+ * silently empties the queue - see hasAllowedPair and the `pairable` flag
+ * on QueuePrompt, which now keep the two routes in agreement, and
+ * loadQueueInputs, which logs loudly when that happens.
+ *
+ * INVARIANT: at least one entry must name two arms that are BOTH in the
+ * pool (CandidateModel.inPairingPool). Unit tests cannot see the pool, so
+ * run `npx tsx --env-file=.env.local scripts/check-queue-servable.ts` after
+ * changing this list or any inPairingPool flag; it exits 1 when the pool
+ * holds pairs the whitelist refuses.
+ *
+ * DECISION DEFERRED to pool-switch time: once v4.1 and tonestrip are pooled
+ * a prompt holding all four arms has THREE drawable pairs, so roughly a
+ * third of episodes would go to bare-vs-v3 and prompts without a v4.1
+ * output (34 of 96 at the 62/96 fill) would serve only bare-vs-v3. Keeping
+ * the entry keeps those prompts servable; removing it concentrates every
+ * episode on the v4.1 comparisons. Decide, edit here, re-run the check.
  */
 export const ALLOWED_PAIRINGS: readonly (readonly [string, string])[] = [
+  ["gemini-3-1-pro-rag-v3", "gemini-3-1-pro"],
   ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-rag-v3"],
   ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-tonestrip"],
 ];
@@ -68,6 +93,23 @@ function pairAllowed(slugA: string, slugB: string): boolean {
   return ALLOWED_PAIRINGS.some(
     ([x, y]) => (x === slugA && y === slugB) || (x === slugB && y === slugA),
   );
+}
+
+/**
+ * Whether ANY whitelisted combination can be drawn from these slugs. Pure.
+ * loadQueueInputs feeds this to computeQueueState as `pairable`, so the
+ * queue never counts a prompt as remaining that assignedPair would refuse
+ * to serve. With an empty whitelist every 2+ set is pairable (old scheme).
+ */
+export function hasAllowedPair(slugs: readonly string[]): boolean {
+  if (slugs.length < 2) return false;
+  if (ALLOWED_PAIRINGS.length === 0) return true;
+  for (let i = 0; i < slugs.length; i++) {
+    for (let j = i + 1; j < slugs.length; j++) {
+      if (pairAllowed(slugs[i], slugs[j])) return true;
+    }
+  }
+  return false;
 }
 
 /** All index pairs (i<j) over n outputs, in canonical order. */
@@ -174,6 +216,14 @@ export interface QueuePrompt {
   isLongForm?: boolean;
   /** Frozen-benchmark prompt: cold-only forever, never pairwise-served. */
   isHoldout?: boolean;
+  /**
+   * Whether the pairing-eligible outputs contain at least one ALLOWED_PAIRINGS
+   * combination (hasAllowedPair over their slugs). Optional: absent means
+   * "unknown, assume yes" (pre-pivot callers). `false` removes the prompt
+   * from the queue exactly as assignedPair would, so remaining/total never
+   * count a prompt /next cannot serve.
+   */
+  pairable?: boolean;
 }
 
 export type QueueLane = "both" | "strong_pair" | "cold_mandatory";
@@ -411,7 +461,9 @@ export function computeQueueState(
   skippedPromptIds: ReadonlySet<string>,
   correctionInputs?: CorrectionInputs,
 ): QueueState {
-  const eligible = prompts.filter((p) => p.outputCount >= 2 && !p.isHoldout);
+  const eligible = prompts.filter(
+    (p) => p.outputCount >= 2 && !p.isHoldout && p.pairable !== false,
+  );
   let completed = 0;
   const remaining: QueuePrompt[] = [];
   for (const prompt of eligible) {

@@ -64,30 +64,18 @@ async function main() {
     );
   }
 
-  // ── flip the flags ───────────────────────────────────────────────────────
-  await prisma.candidateModel.update({
-    where: { slug: V41_SLUG },
-    data: { inPairingPool: true },
-  });
-  await prisma.candidateModel.update({
-    where: { slug: TONESTRIP_SLUG },
-    data: { inPairingPool: true },
-  });
-  console.log(`inPairingPool=true set on ${V41_SLUG} and ${TONESTRIP_SLUG}`);
-
-  // ── dry run: prove the pairing code can draw both allowed pairings ──────
-  const poolRows = await prisma.candidateModel.findMany({
-    where: { inPairingPool: true, archived: false },
+  // ── dry run FIRST, flags flipped only if it passes ──────────────────────
+  // (2026-09-07: the flip used to run before the dry run, so a failing
+  // assertion left v4.1 and tonestrip pooled with no proof they could be
+  // served. Read-only until the assertion below passes.)
+  // Prompts where all three of v3 / v4.1 / tonestrip have an output - the
+  // only prompts that can serve either v4.1 pairing.
+  const relevantSlugs = [V3_SLUG, V41_SLUG, TONESTRIP_SLUG];
+  const relevantRows = await prisma.candidateModel.findMany({
+    where: { slug: { in: relevantSlugs }, archived: false },
     select: { id: true, slug: true },
   });
-  console.log(`pool now: ${poolRows.map((r) => r.slug).join(", ")}`);
-
-  // Prompts where all three of v3 / v4.1 / tonestrip have an output - the
-  // only prompts that can serve either allowed pairing.
-  const relevantSlugs = [V3_SLUG, V41_SLUG, TONESTRIP_SLUG];
-  const relevantIds = poolRows
-    .filter((r) => relevantSlugs.includes(r.slug))
-    .map((r) => r.id);
+  const relevantIds = relevantRows.map((r) => r.id);
   const outputs = await prisma.modelOutput.findMany({
     where: {
       candidateModelId: { in: relevantIds },
@@ -144,16 +132,39 @@ async function main() {
     `dry run - pairings actually drawn: ${[...seenPairs].join("; ") || "(none)"}`,
   );
 
-  const expected = ALLOWED_PAIRINGS.map((p) => [...p].sort().join(" | "));
+  // Only the whitelist entries this dry run can draw at all: both slugs in
+  // the v3/v4.1/tonestrip universe. The bare-vs-v3 entry (the pair pooled
+  // since the pivot) is outside it and is checked by
+  // scripts/check-queue-servable.ts instead.
+  const expected = ALLOWED_PAIRINGS.filter(([a, b]) =>
+    relevantSlugs.includes(a) && relevantSlugs.includes(b),
+  ).map((p) => [...p].sort().join(" | "));
+  if (expected.length === 0) {
+    throw new Error("ALLOWED_PAIRINGS names no v4.1 pairing to dry-run");
+  }
   const missing = expected.filter((e) => !seenPairs.has(e));
   if (missing.length > 0) {
     throw new Error(
-      `dry run did not draw every allowed pairing against real DB coverage: missing ${missing.join(", ")}. ` +
-        `Check output coverage (v3=${v3Prompts.size}, v4.1=${v41Prompts.size}, tonestrip=${tsPrompts.size} train prompts).`,
+      `dry run did not draw every v4.1 pairing against real DB coverage: missing ${missing.join(", ")}. ` +
+        `Check output coverage (v3=${v3Prompts.size}, v4.1=${v41Prompts.size}, tonestrip=${tsPrompts.size} train prompts). No flags were changed.`,
     );
   }
   console.log(
-    "OK: the pairing code draws both allowed pairings against the DB (dry run, no rows written).",
+    `OK: the pairing code draws ${expected.length} v4.1 pairing(s) against the DB (dry run, no rows written).`,
+  );
+
+  // ── flip the flags ───────────────────────────────────────────────────────
+  await prisma.candidateModel.update({
+    where: { slug: V41_SLUG },
+    data: { inPairingPool: true },
+  });
+  await prisma.candidateModel.update({
+    where: { slug: TONESTRIP_SLUG },
+    data: { inPairingPool: true },
+  });
+  console.log(`inPairingPool=true set on ${V41_SLUG} and ${TONESTRIP_SLUG}`);
+  console.log(
+    "Now run: npx tsx --env-file=.env.local scripts/check-queue-servable.ts",
   );
 
   const allActive = await prisma.candidateModel.findMany({

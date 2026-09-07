@@ -1137,3 +1137,62 @@ v4.1 train outputs ($2.12 spent, ~3x the estimate); the pool was NOT
 switched to v4.1 because that precondition failed. Option (b) (wire the
 9 grammar entries) should now be considered dead until a metric exists
 that can see grammar: the current one cannot.
+
+## Session State (2026-09-07) - THE EMPTY QUEUE: whitelist named no pooled pair
+
+Trigger: Agnes reported "nothing to annotate again". Diagnosis, verified
+against production (main@231ff55, deployment dpl_32X2CEmoomsk8dZ9kESEP9dy3UhD):
+
+1. ROOT CAUSE. Commit d7f60c1 (#54, merged + deployed 2026-09-03) introduced
+   `ALLOWED_PAIRINGS` in `web/src/lib/pairing.ts` naming only v4.1 pairs
+   ([v4-1, v3], [v4-1, tonestrip]) as prep for pooling v4.1. But v4.1 was never
+   pooled (train fill stopped at 62/96). The pool (CandidateModel.inPairingPool)
+   is still exactly {gemini-3-1-pro, gemini-3-1-pro-rag-v3}. So every prompt's
+   pairable outputs were [bare, v3], no combination was whitelisted,
+   `assignedPair` returned null for every prompt, and `/api/annotations/next`
+   returned `complete:true` for EVERY annotator from the Sep 3 deploy onward.
+   Last comparison by anyone: 2026-09-03 23:38.
+2. DRIFT. `/api/annotator/summary` counted prompts as remaining (outputCount>=2)
+   without consulting the whitelist, so dashboards showed work (20/30/6/26 for
+   four annotators) that the queue refused to serve. The "cannot drift"
+   comment on the summary route was false for this failure mode.
+3. AGNES SPECIFICALLY. Even with the fix she has 0 remaining: the pool has 98
+   prompts with both arms, 43 are frozen holdouts (never pairwise-served), and
+   she has compared all 55 train prompts (266 comparisons, 305 cold answers).
+   Each annotator sees each prompt at most once, so pooling v4.1 on the SAME
+   prompts gives her nothing new. New work for her needs NEW prompts with
+   pooled outputs: 367 train prompts lack the bare+v3 pair (326 lack bare,
+   363 lack v3). Measured cost: bare ~$0.023/output, v3 ~$0.025/output
+   (token ledger at $2/$12), so ~$0.05 per prompt-pair; 100 prompts ~ $5,
+   all 367 ~ $18. Halim's call.
+
+FIX (this branch, uncommitted at time of writing; see git log for the commit):
+- `ALLOWED_PAIRINGS` now lists the pooled pair first:
+  ["gemini-3-1-pro-rag-v3", "gemini-3-1-pro"], then the two v4.1 pairs.
+- New pure `hasAllowedPair(slugs)` in pairing.ts; `QueuePrompt.pairable?`
+  computed by `loadQueueInputs` from the pairable outputs' slugs;
+  `computeQueueState` drops `pairable === false` prompts from total and
+  remaining, so /summary and /next agree again by construction.
+- Tests (pairing.test.ts, 53 green): whitelist pin updated; regression test
+  that the pooled pair is drawable both orders; exhaustive check that
+  hasAllowedPair agrees with assignedPair over all 64 subsets of six slugs;
+  computeQueueState pairable-flag test. Mutation-tested by removing the
+  pooled pair from the whitelist (expect failures; see session log).
+- `web/scripts/check-queue-servable.ts [email]`: read-only production check
+  that every prompt counted as remaining is servable by assignedPair. Run
+  2026-09-07 after the fix: 465 prompts with outputs, 98 pairable, 0 drift;
+  per-annotator remaining/servable: agadasarah 20/20, blessingbenjamin 30/30,
+  charityogali 6/6, ibrahimabdulraheem 26/26, ajben12 (Agnes) 0/0,
+  amoduaustine 0/0.
+
+LESSON (add to the house rules): a whitelist over DB state has no unit test
+that can see the DB. The runtime guard is `pairable` + the check script; run
+`pnpm tsx scripts/check-queue-servable.ts` after ANY change to
+ALLOWED_PAIRINGS or to inPairingPool flags, before telling annotators the
+queue is open.
+
+NEXT: merge + deploy the fix (restores 82 prompt-episodes for four
+annotators); decide how to give Agnes new work (generate bare+v3 on N new
+train prompts, or pool v4.1 AND add new prompts); tell Agnes the queue was
+broken from Sep 3, not empty because she was done - except that she IS done
+with the current pool.

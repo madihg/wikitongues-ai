@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import {
+  ALLOWED_PAIRINGS,
   EDIT_SKIP_REASON,
+  hasAllowedPair,
   pairingEligibleOutputs,
   qualifyCorrectionTargets,
   type CorrectionInputs,
@@ -124,10 +126,29 @@ export async function loadQueueInputs(): Promise<QueueInputs> {
     queuePrompts.push({
       promptId: p.promptId,
       outputCount: pairableOutputs.length,
+      pairable: hasAllowedPair(pairableOutputs.map((o) => o.slug)),
       goldCount: detail.goldCount,
       isLongForm: detail.isLongForm,
       isHoldout: detail.isHoldout,
     });
+  }
+
+  // A whitelist that names no pooled pair empties the queue silently and
+  // self-consistently (both routes now agree on "nothing to serve"), which
+  // is exactly how the 2026-09-03 outage hid for four days. Make it loud:
+  // the pool is active, prompts hold 2+ pooled outputs, and none of them can
+  // form an ALLOWED_PAIRINGS combination.
+  if (
+    poolActive &&
+    queuePrompts.some((q) => q.outputCount >= 2) &&
+    !queuePrompts.some((q) => q.pairable)
+  ) {
+    const pooled = new Set<string>();
+    for (const p of byPromptId.values())
+      for (const o of p.pairableOutputs) pooled.add(o.slug);
+    console.error(
+      `[queue] ALLOWED_PAIRINGS names no pair that is pooled: pooled arms ${[...pooled].sort().join(", ")}; whitelist ${JSON.stringify(ALLOWED_PAIRINGS)}. Every annotator will be told the queue is empty.`,
+    );
   }
 
   return { poolActive, byPromptId, queuePrompts };
