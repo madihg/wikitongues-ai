@@ -3,6 +3,7 @@ import {
   ALLOWED_PAIRINGS,
   assignedPair,
   computeQueueState,
+  hasAllowedPair,
   goldFirstFor,
   laneFor,
   orderQueueByLane,
@@ -115,13 +116,31 @@ describe("assignedPair", () => {
   });
 
   describe("the ALLOWED_PAIRINGS whitelist", () => {
-    it("is non-empty and set to exactly the two v4.1 pool-prep comparisons", () => {
+    it("is set to the pooled pair plus the two v4.1 pool-prep comparisons", () => {
       // Single-sourced: this pins the constant's live value so a change to it
       // is a deliberate, reviewed edit, not a silent drift.
       expect(ALLOWED_PAIRINGS).toEqual([
+        ["gemini-3-1-pro-rag-v3", "gemini-3-1-pro"],
         ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-rag-v3"],
         ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-tonestrip"],
       ]);
+    });
+
+    it("names the pair that is actually pooled (regression: 2026-09-03 empty queue)", () => {
+      // The pool since the 2026-08-20 pivot is bare Gemini 3.1 Pro vs
+      // retrieval v3. From 2026-09-03 to 2026-09-07 the whitelist listed only
+      // v4.1 pairs while v4.1 was not pooled, so every prompt's pairable
+      // outputs were [bare, v3], no combination was allowed, and /next told
+      // every annotator they were done. This pins the pooled pair as
+      // drawable in both orders, and as the ONLY pair among those two arms.
+      const pooled = ["gemini-3-1-pro", "gemini-3-1-pro-rag-v3"];
+      expect(hasAllowedPair(pooled)).toBe(true);
+      expect(hasAllowedPair([...pooled].reverse())).toBe(true);
+      for (const annotatorId of ANNOTATOR_IDS) {
+        for (const promptId of PROMPT_IDS) {
+          expect(assignedPair(annotatorId, promptId, 2, pooled)).toEqual([0, 1]);
+        }
+      }
     });
 
     it("only ever draws an allowed pair, in either slug order", () => {
@@ -129,9 +148,10 @@ describe("assignedPair", () => {
         "gemini-3-1-pro-rag-v4-1", // 0
         "gemini-3-1-pro-rag-v3", // 1
         "gemini-3-1-pro-tonestrip", // 2
-        "gemini-3-1-pro", // 3, not in any allowed pairing
+        "gemini-3-1-pro", // 3, pairs only with v3 (1)
+        "gpt-4-1-rag", // 4, in no allowed pairing
       ];
-      const allowedIndexPairs = new Set(["0,1", "0,2"]);
+      const allowedIndexPairs = new Set(["0,1", "0,2", "1,3"]);
       for (const annotatorId of ANNOTATOR_IDS) {
         for (const promptId of PROMPT_IDS) {
           const pair = assignedPair(annotatorId, promptId, slugs.length, slugs);
@@ -159,6 +179,28 @@ describe("assignedPair", () => {
     it("returns null when none of the prompt's outputs form an allowed pair", () => {
       const slugs = ["gemini-3-1-pro", "gpt-4-1-rag"];
       expect(assignedPair("ann_1", "ig_orth_001", 2, slugs)).toBeNull();
+      expect(hasAllowedPair(slugs)).toBe(false);
+    });
+
+    it("hasAllowedPair agrees with assignedPair on every slug set", () => {
+      // The queue's `pairable` flag is derived from hasAllowedPair and
+      // assignedPair is what /next actually draws from; they must never
+      // disagree, or remaining/total drifts from what is served again.
+      const universe = [
+        "gemini-3-1-pro",
+        "gemini-3-1-pro-rag-v3",
+        "gemini-3-1-pro-rag-v4-1",
+        "gemini-3-1-pro-tonestrip",
+        "gpt-4-1-rag",
+        "claude-opus-5-rag-v3",
+      ];
+      for (let mask = 0; mask < 1 << universe.length; mask++) {
+        const slugs = universe.filter((_, i) => mask & (1 << i));
+        const served = assignedPair("ann_1", "ig_orth_001", slugs.length, slugs);
+        expect(hasAllowedPair(slugs)).toBe(served !== null);
+      }
+      expect(hasAllowedPair([])).toBe(false);
+      expect(hasAllowedPair(["gemini-3-1-pro"])).toBe(false);
     });
 
     it("without a slugs array, behaves exactly as before the whitelist existed", () => {
@@ -171,6 +213,29 @@ describe("assignedPair", () => {
 });
 
 describe("computeQueueState", () => {
+  it("drops prompts whose pairable flag is false, and counts them in neither total nor remaining", () => {
+    // Regression for the 2026-09-03 empty queue: with only unpairable
+    // prompts, /summary must say 0 remaining exactly as /next says done.
+    const unpairable: QueuePrompt[] = [
+      { promptId: "ig_a", outputCount: 2, pairable: false },
+      { promptId: "ig_b", outputCount: 3, pairable: false },
+    ];
+    const empty = computeQueueState(unpairable, new Set(), new Set());
+    expect(empty.total).toBe(0);
+    expect(empty.remaining).toEqual([]);
+    expect(empty.completed).toBe(0);
+
+    const mixed: QueuePrompt[] = [
+      { promptId: "ig_a", outputCount: 2, pairable: false },
+      { promptId: "ig_b", outputCount: 2, pairable: true },
+      { promptId: "ig_c", outputCount: 2 }, // absent flag: pre-pivot caller, assumed pairable
+    ];
+    const state = computeQueueState(mixed, new Set(["ig_b"]), new Set());
+    expect(state.total).toBe(2);
+    expect(state.completed).toBe(1);
+    expect(state.remaining.map((p) => p.promptId)).toEqual(["ig_c"]);
+  });
+
   const prompts: QueuePrompt[] = [
     { promptId: "ig_orth_001", outputCount: 3 },
     { promptId: "ig_orth_002", outputCount: 2 },

@@ -68,7 +68,12 @@ async function main() {
   console.log(`\n  first 10 served episodes (in order):`);
   for (const p of state.remaining.slice(0, 10)) {
     const detail = byPromptId.get(p.promptId)!;
-    const pair = assignedPair(user.id, p.promptId, p.outputCount);
+    const pair = assignedPair(
+      user.id,
+      p.promptId,
+      p.outputCount,
+      detail.pairableOutputs.map((o) => o.slug),
+    );
     const pairSlugs = pair
       ? await Promise.all(
           pair.map(async (idx) => {
