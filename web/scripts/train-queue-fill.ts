@@ -53,6 +53,7 @@
  * Usage (from web/):
  *   npx tsx --env-file=.env.local scripts/train-queue-fill.ts pool
  *   npx tsx --env-file=.env.local scripts/train-queue-fill.ts generate [slug ...]
+ *   npx tsx --env-file=.env.local scripts/train-queue-fill.ts generate <slug> --provenance <p>
  *   npx tsx --env-file=.env.local scripts/train-queue-fill.ts all [slug ...]
  * generate/all default to the arms flagged inPairingPool in the DB.
  */
@@ -189,9 +190,24 @@ interface TrainPrompt {
   goldCount: number;
 }
 
-async function trainPrompts(): Promise<TrainPrompt[]> {
+/**
+ * Every train prompt, or - with `--provenance <p>` - only the batch written
+ * under that provenance.
+ *
+ * Added 2026-09-13 for the v4.2 prompt bank. The pool arms cover 96 of the
+ * 422 train prompts, so an unscoped `generate` would try to fill all 326
+ * missing ones and run straight into the cap. Scoping by provenance makes
+ * "fill the batch I just seeded, and nothing else" expressible without a
+ * second script duplicating this one's serving branches - which is the whole
+ * reason this script exists.
+ */
+async function trainPrompts(provenance?: string): Promise<TrainPrompt[]> {
   const rows = await prisma.prompt.findMany({
-    where: { isHoldout: false, language: "igala" },
+    where: {
+      isHoldout: false,
+      language: "igala",
+      ...(provenance ? { provenance } : {}),
+    },
     select: {
       id: true,
       promptId: true,
@@ -382,11 +398,24 @@ interface PoolCandidate {
   decodingParams: unknown;
 }
 
-async function generate(slugs: string[]) {
-  const prompts = await trainPrompts();
+async function generate(argv: string[]) {
+  const at = argv.indexOf("--provenance");
+  const provenance = at >= 0 ? argv[at + 1] : undefined;
+  if (at >= 0 && !provenance) {
+    throw new Error("--provenance needs a value");
+  }
+  const slugs = argv.filter(
+    (a, i) => a !== "--provenance" && i !== at + 1,
+  );
+  const prompts = await trainPrompts(provenance);
+  if (provenance && prompts.length === 0) {
+    throw new Error(
+      `no train prompts with provenance "${provenance}" - seed them first`,
+    );
+  }
   const zeroGold = prompts.filter((p) => p.goldCount === 0).length;
   log(
-    `train prompts: ${prompts.length} (${zeroGold} zero-gold served first)\n` +
+    `train prompts: ${prompts.length}${provenance ? ` (provenance ${provenance})` : ""} (${zeroGold} zero-gold served first)\n` +
       `caps: $${HARD_CAP_USD} hard, maxTokens 4096 (google) / 1024 (others), slice ${SLICE_SIZE}\n`,
   );
 
@@ -745,7 +774,9 @@ async function main() {
       await generate(rest);
       break;
     default:
-      log("Usage: train-queue-fill.ts <pool|generate|all> [slug ...]");
+      log(
+        "Usage: train-queue-fill.ts <pool|generate|all> [slug ...] [--provenance <p>]",
+      );
       process.exitCode = 1;
   }
 }

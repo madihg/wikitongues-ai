@@ -19,6 +19,32 @@ import { hasBudgetForReask } from "@/lib/arena/turn-budget";
  *       Corpus tokens shaped vowel-hyphen in 30,907 verses: zero.
  *   (c) tone-mark saturation - pattern 4 (~15 rows: every native edit in the
  *       failure set strips tone; R8.3 grade A says saturate only on request).
+ *   (d) name not preserved  - the 2026-09-01 community finding, rag-v4-2 only.
+ *       In a TRANSLATION request every proper noun in the source must survive
+ *       into the answer unchanged (see below).
+ *
+ * THE 2026-09-01 BUG: CHECK (a) WAS MANUFACTURING THE ERROR IT LOOKS FOR
+ * ----------------------------------------------------------------------
+ * The allowlist has no s, because Igala has no /s/. Applied to a whole answer
+ * it therefore flagged Lagos, Egbuson, Bayelsa, Spring and Montessori - the
+ * proper nouns of an English Wikipedia biography, which the community says
+ * must be copied through untouched - as "letters that do not exist in Igala",
+ * and re-asked the model to rewrite them. It flagged "psychology" the same
+ * way, which is the likeliest reason that fact was dropped from the
+ * translation instead of borrowed. The lint was not merely blind to the
+ * failure Agnes and Charity reported: it was causing it, one turn after the
+ * model got it right.
+ *
+ * THE FIX is a scope, not a weakening. Check (a) exists to catch the model's
+ * OWN inventions - the adsa family, recurring verbatim across unrelated
+ * prompts. A word the model copied out of the question is not an invention,
+ * so `opts.sourceText` exempts any word that already appears in the question.
+ * Fabrications are unaffected: they are, by definition, not in the question.
+ * The exemption applies to every v4-family label including rag-v4-1, because
+ * it is a bug fix rather than a version change - and it is a verified no-op
+ * on the frozen exam (scripts/replay-repair-check.ts replays the stored
+ * rag-v4-1 outputs against both checkers and reports zero differences), so
+ * the published v4.1 numbers still describe the system that produced them.
  *
  * These are generation-side lint, NOT grammar: no check asserts an Igala
  * form, so the sourcing contract does not apply. The repair instruction they
@@ -61,11 +87,30 @@ import { hasBudgetForReask } from "@/lib/arena/turn-budget";
  * which is the only property the numbers depend on.
  */
 
-/** The one versionLabel whose serving path runs the repair round. */
-export const REPAIR_ROUND_VERSION_LABEL = "rag-v4-1";
+/**
+ * The versionLabels whose serving path runs the repair round. rag-v4-2 joins
+ * rag-v4-1: v4.2 is v4.1 plus the named-entity rules, and the round is part
+ * of what those rules need (check (d) is where "names survive" is enforced
+ * rather than merely requested). Every other label keeps the no-op
+ * passthrough, unit-tested below.
+ */
+export const REPAIR_ROUND_VERSION_LABELS = [
+  "rag-v4-1",
+  "rag-v4-2",
+] as const;
+
+/** True when this label's serving path runs the repair round. */
+export function labelRunsRepairRound(label: string | null | undefined): boolean {
+  return (REPAIR_ROUND_VERSION_LABELS as readonly string[]).includes(
+    label as string,
+  );
+}
 
 export type RepairViolationKind =
-  "banned-character" | "hyphenated-prefix" | "tone-saturation";
+  | "banned-character"
+  | "hyphenated-prefix"
+  | "tone-saturation"
+  | "name-not-preserved";
 
 export interface RepairViolation {
   kind: RepairViolationKind;
@@ -134,13 +179,97 @@ function wordViolatesAllowlist(word: string): boolean {
   return false;
 }
 
-/** Words in `text` containing a letter or mark outside the Igala allowlist. */
-export function findAllowlistViolations(text: string): string[] {
+/**
+ * Case-folded word set of a source text, for the copied-word exemption.
+ * Folding is lowercase + NFC so "Lagos" in the question exempts "lagos" or
+ * "Lagos" in the answer, and nothing else.
+ */
+export function sourceWordSet(sourceText: string | undefined): Set<string> {
+  const set = new Set<string>();
+  if (!sourceText) return set;
+  for (const w of sourceText.match(WORD_RE) ?? [])
+    set.add(w.toLowerCase().normalize("NFC"));
+  return set;
+}
+
+/**
+ * Words in `text` containing a letter or mark outside the Igala allowlist,
+ * EXCLUDING words the question already contained (see the header): those are
+ * copied foreign material, which check (a) was never meant to police.
+ */
+export function findAllowlistViolations(
+  text: string,
+  exempt: Set<string> = new Set(),
+): string[] {
   const hits: string[] = [];
   for (const match of text.match(WORD_RE) ?? []) {
+    if (exempt.has(match.toLowerCase().normalize("NFC"))) continue;
     if (wordViolatesAllowlist(match) && !hits.includes(match)) hits.push(match);
   }
   return hits;
+}
+
+// ─── (d) name preservation (rag-v4-2) ───────────────────────────────────────
+
+/**
+ * Capitalized source words that are NOT proper nouns for our purposes: the
+ * model may legitimately render these in Igala, so their absence is not a
+ * violation. Languages and peoples have Igala names; God has an attested
+ * Igala form; English weekday and month names are governed by the dates rule.
+ */
+const NOT_A_NAME = new Set([
+  "i", "igala", "english", "yoruba", "igbo", "hausa", "nigerian", "african",
+  "god", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+  "sunday", "january", "february", "march", "april", "may", "june", "july",
+  "august", "september", "october", "november", "december",
+]);
+
+/** True when the request is a translation - the only shape check (d) fires on. */
+export function isTranslationRequest(sourceText: string | undefined): boolean {
+  return !!sourceText && /\btranslat/i.test(sourceText);
+}
+
+/**
+ * Proper nouns in a source text: capitalized words of 3+ letters that are not
+ * sentence-initial and not in NOT_A_NAME. Sentence-initial words are skipped
+ * because capitalization there carries no information - "Write the Igala..."
+ * would otherwise make "Write" a name.
+ */
+export function findSourceProperNouns(sourceText: string): string[] {
+  const out: string[] = [];
+  // Sentence-initial = first word overall, or the first word after . ! ? : or
+  // a newline. Tracked by scanning the raw text rather than the word list.
+  const re = /[\p{L}\p{M}'’ʼ-]+|[^\p{L}\p{M}\s]|\n/gu;
+  let atStart = true;
+  for (const tok of sourceText.match(re) ?? []) {
+    if (/^[.!?:\n]$/.test(tok)) {
+      atStart = true;
+      continue;
+    }
+    if (!/^[\p{L}\p{M}'’ʼ-]+$/u.test(tok)) continue;
+    const wasStart = atStart;
+    atStart = false;
+    if (wasStart) continue;
+    if (tok.length < 3) continue;
+    if (tok[0] !== tok[0].toUpperCase() || tok[0] === tok[0].toLowerCase())
+      continue;
+    const key = tok.toLowerCase();
+    if (NOT_A_NAME.has(key)) continue;
+    if (!out.includes(tok)) out.push(tok);
+  }
+  return out;
+}
+
+/**
+ * Proper nouns the source supplied and the answer did not keep. Only
+ * meaningful on a translation request: in a question-and-answer turn the
+ * answer has no obligation to repeat a name the question mentioned.
+ */
+export function findDroppedNames(output: string, sourceText: string): string[] {
+  const present = sourceWordSet(output);
+  return findSourceProperNouns(sourceText).filter(
+    (n) => !present.has(n.toLowerCase().normalize("NFC")),
+  );
 }
 
 // ─── (b) hyphenated prefix ──────────────────────────────────────────────────
@@ -219,6 +348,18 @@ export interface RepairCheckOptions {
    * call sites pass a match on the raw user question.
    */
   allowTone?: boolean;
+  /**
+   * The raw question this answer was written from. Enables the copied-word
+   * exemption on check (a) - see the header - and is what check (d) reads
+   * its proper nouns out of. Every v4-family serving path supplies it.
+   */
+  sourceText?: string;
+  /**
+   * Run check (d), name preservation. rag-v4-2 only: it enforces a rule the
+   * v4.2 prompt states and v4.1 does not, so switching it on for v4.1 would
+   * change a measured arm.
+   */
+  checkNames?: boolean;
 }
 
 /**
@@ -230,7 +371,7 @@ export function checkIgalaOutput(
   opts: RepairCheckOptions = {},
 ): RepairViolation[] {
   const violations: RepairViolation[] = [];
-  const badChars = findAllowlistViolations(output);
+  const badChars = findAllowlistViolations(output, sourceWordSet(opts.sourceText));
   if (badChars.length > 0) {
     violations.push({
       kind: "banned-character",
@@ -249,6 +390,17 @@ export function checkIgalaOutput(
         `without the letter-hyphen prefix: ` +
         hyphens.join(", "),
     });
+  }
+  if (opts.checkNames && isTranslationRequest(opts.sourceText)) {
+    const dropped = findDroppedNames(output, opts.sourceText!);
+    if (dropped.length > 0) {
+      violations.push({
+        kind: "name-not-preserved",
+        detail:
+          `a translation keeps every name exactly as the source writes it, ` +
+          `and these are missing from your answer: ${dropped.slice(0, 8).join(", ")}`,
+      });
+    }
   }
   if (!opts.allowTone && isToneSaturated(output)) {
     violations.push({
@@ -273,6 +425,7 @@ export const REPAIR_VIOLATION_LABELS: Record<RepairViolationKind, string> = {
   "banned-character": "letters that are not in the Igala alphabet",
   "hyphenated-prefix": "a hyphenated prefix Igala does not use",
   "tone-saturation": "tone marks the question did not ask for",
+  "name-not-preserved": "a name from the source that was changed or dropped",
 };
 
 /** The labels for one violation set, one per kind, in check order. */
@@ -365,7 +518,7 @@ async function runRepairRound(
   opts: RepairCheckOptions,
   budget?: RepairRoundBudget,
 ): Promise<RepairedGeneration> {
-  if (candidate.versionLabel !== REPAIR_ROUND_VERSION_LABEL) {
+  if (!labelRunsRepairRound(candidate.versionLabel)) {
     // The no-op guarantee: one call, untouched args, unchanged result.
     const result = await run(args);
     return {

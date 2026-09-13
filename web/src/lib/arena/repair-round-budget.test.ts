@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { CandidateGeneration, GenerateArgs } from "@/lib/arena/providers";
 import {
-  REPAIR_ROUND_VERSION_LABEL,
+  REPAIR_ROUND_VERSION_LABELS,
   describeViolations,
   generateWithRepairRound,
   streamWithRepairRound,
@@ -75,7 +75,7 @@ describe("the re-ask is taken when the budget allows it", () => {
     const m = scriptedModel(DIRTY, CLEAN);
     const onRevision = vi.fn();
     const result = await streamWithRepairRound(
-      { versionLabel: REPAIR_ROUND_VERSION_LABEL },
+      { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
       baseArgs,
       m.stream,
       { onDelta: () => {}, onRevision },
@@ -95,7 +95,7 @@ describe("the re-ask is taken when the budget allows it", () => {
   it("still sums both calls into the accounting", async () => {
     const m = scriptedModel(DIRTY, CLEAN);
     const result = await generateWithRepairRound(
-      { versionLabel: REPAIR_ROUND_VERSION_LABEL },
+      { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
       baseArgs,
       m.generate,
       {},
@@ -112,7 +112,7 @@ describe("the re-ask is skipped when the budget is spent", () => {
     const m = scriptedModel(DIRTY, CLEAN);
     const onRevision = vi.fn();
     const result = await streamWithRepairRound(
-      { versionLabel: REPAIR_ROUND_VERSION_LABEL },
+      { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
       baseArgs,
       m.stream,
       { onDelta: () => {}, onRevision },
@@ -133,7 +133,7 @@ describe("the re-ask is skipped when the budget is spent", () => {
   it("reports the violations through the same channel, marked not-applied", async () => {
     const onRevision = vi.fn();
     const result = await streamWithRepairRound(
-      { versionLabel: REPAIR_ROUND_VERSION_LABEL },
+      { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
       baseArgs,
       scriptedModel(DIRTY, CLEAN).stream,
       { onDelta: () => {}, onRevision },
@@ -163,7 +163,7 @@ describe("the re-ask is skipped when the budget is spent", () => {
     for (const [left, expectedCalls] of cases) {
       const m = scriptedModel(DIRTY, CLEAN);
       await generateWithRepairRound(
-        { versionLabel: REPAIR_ROUND_VERSION_LABEL },
+        { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
         baseArgs,
         m.generate,
         {},
@@ -177,7 +177,7 @@ describe("the re-ask is skipped when the budget is spent", () => {
     const m = scriptedModel(CLEAN);
     const onRevision = vi.fn();
     const result = await streamWithRepairRound(
-      { versionLabel: REPAIR_ROUND_VERSION_LABEL },
+      { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
       baseArgs,
       m.stream,
       { onDelta: () => {}, onRevision },
@@ -232,7 +232,7 @@ describe("no budget passed = the pre-deadline behaviour, byte for byte", () => {
     it(`${name}: identical to the same call with an explicit undefined`, async () => {
       const implicit = scriptedModel(...texts);
       const explicit = scriptedModel(...texts);
-      const label = { versionLabel: REPAIR_ROUND_VERSION_LABEL };
+      const label = { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] };
 
       const a = await generateWithRepairRound(
         label,
@@ -260,7 +260,7 @@ describe("no budget passed = the pre-deadline behaviour, byte for byte", () => {
     // no deadline there is nothing to be late for: the exam re-asks.
     const m = scriptedModel(DIRTY, CLEAN);
     const result = await generateWithRepairRound(
-      { versionLabel: REPAIR_ROUND_VERSION_LABEL },
+      { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
       baseArgs,
       m.generate,
     );

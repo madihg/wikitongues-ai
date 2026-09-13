@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  REPAIR_ROUND_VERSION_LABEL,
+  REPAIR_ROUND_VERSION_LABELS,
   REPAIR_VIOLATION_LABELS,
   checkIgalaOutput,
   describeViolations,
@@ -173,7 +173,7 @@ describe("generateWithRepairRound - rag-v4-1", () => {
   it("clean first answer: one call, no repair, violations recorded as empty", async () => {
     const generate = vi.fn(async () => gen("Wọla ọdudu"));
     const result = await generateWithRepairRound(
-      { versionLabel: REPAIR_ROUND_VERSION_LABEL },
+      { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
       baseArgs,
       generate,
     );
@@ -414,7 +414,7 @@ describe("streamWithRepairRound", () => {
     const m = scriptedModel("Wọla ọdudu");
     const onRevision = vi.fn();
     const result = await streamWithRepairRound(
-      { versionLabel: REPAIR_ROUND_VERSION_LABEL },
+      { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
       baseArgs,
       m.stream,
       { onDelta: () => {}, onRevision },
@@ -545,7 +545,7 @@ describe("streamed and buffered rounds are the same round", () => {
     it(`${name}: identical result and identical requests`, async () => {
       const buffered = scriptedModel(...texts);
       const streamed = scriptedModel(...texts);
-      const label = { versionLabel: REPAIR_ROUND_VERSION_LABEL };
+      const label = { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] };
 
       const a = await generateWithRepairRound(
         label,

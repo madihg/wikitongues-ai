@@ -6,7 +6,11 @@ import {
   describeViolations,
   streamWithRepairRound,
 } from "@/lib/arena/repair-round";
-import { buildV4FamilyTurn } from "@/lib/arena/frozen-exam";
+import {
+  buildV4FamilyTurn,
+  isV4FamilyVersionLabel,
+  runsRepairRound,
+} from "@/lib/arena/frozen-exam";
 import {
   encodeChatEvent,
   type ChatReply,
@@ -332,17 +336,19 @@ export async function POST(req: Request) {
     .map((s) => bySlug.get(s))
     .filter((c): c is NonNullable<typeof c> => Boolean(c));
 
-  // rag-v2/rag-v3/rag-v4/rag-v4-1 candidates use their versioned retrieval
-  // paths exclusively, so the v1 retrieval below only runs when a v1 RAG
-  // candidate is actually selected - v1 composition for v1 candidates stays
-  // byte-identical either way.
+  // rag-v2/rag-v3 and every v4-FAMILY candidate use their versioned
+  // retrieval paths exclusively, so the v1 retrieval below only runs when a
+  // v1 RAG candidate is actually selected - v1 composition for v1 candidates
+  // stays byte-identical either way. The v4 family is asked as a SET
+  // (frozen-exam.ts owns the list) so a new arm cannot be half-wired: before
+  // this, rag-v4-1-norepair fell through to v1 retrieval here while the
+  // build below never ran for it.
   const needsRetrieval = candidates.some(
     (c) =>
       c.ragEnabled &&
       c.versionLabel !== "rag-v2" &&
       c.versionLabel !== "rag-v3" &&
-      c.versionLabel !== "rag-v4" &&
-      c.versionLabel !== "rag-v4-1",
+      !isV4FamilyVersionLabel(c.versionLabel),
   );
 
   // The three per-version context builds are independent of each other, so
@@ -364,10 +370,10 @@ export async function POST(req: Request) {
   // corrections block - so sharing would either change the v2/v3 serving
   // (forbidden: those paths are frozen for comparability) or serve v4
   // candidates a context nobody registered. Same synthetic-holdout guard.
-  // rag-v4-1 SHARES the v4 build: v4.1 changes only the system prompt and
-  // adds the repair round, never the retrieval composition (the spec pins
-  // retrieval-v4.ts unchanged), so the two labels share one build the same
-  // way rag-v2 and rag-v3 share the v2 build.
+  // Every other v4-FAMILY label SHARES the v4 build: v4.1 and v4.2 change
+  // only the system prompt and add the repair round, never the retrieval
+  // composition (the spec pins retrieval-v4.ts unchanged), so they share one
+  // build the same way rag-v2 and rag-v3 share the v2 build.
   const chatQuery = {
     promptId: "__chat__",
     text: userMessage,
@@ -398,9 +404,7 @@ export async function POST(req: Request) {
             (ms) => (retrievalV2Ms = ms),
           )
         : Promise.resolve<RetrievalV2Result | null>(null),
-      candidates.some(
-        (c) => c.versionLabel === "rag-v4" || c.versionLabel === "rag-v4-1",
-      )
+      candidates.some((c) => isV4FamilyVersionLabel(c.versionLabel))
         ? timeStage(
             () => buildRetrievalV4(prisma, chatQuery),
             (ms) => (retrievalV4Ms = ms),
@@ -489,8 +493,14 @@ export async function POST(req: Request) {
           (candidate.versionLabel === "rag-v2" ||
             candidate.versionLabel === "rag-v3") &&
           v2 !== null;
-        const isV4 = candidate.versionLabel === "rag-v4" && v4 !== null;
-        const isV41 = candidate.versionLabel === "rag-v4-1" && v4 !== null;
+        // v4Label is the ONE place the column's v4-family identity is
+        // decided; isRepaired follows from the shared label registry, so the
+        // repaired arms and the plain ones can never disagree with the exam.
+        const v4Label = isV4FamilyVersionLabel(candidate.versionLabel)
+          ? candidate.versionLabel
+          : null;
+        const isV4Family = v4Label !== null && v4 !== null;
+        const isRepaired = isV4Family && runsRepairRound(v4Label);
         // Every delta is BOTH sent and remembered: the remembered copy is
         // what a deadline-cut column serves as its partial answer, so the
         // reviewer keeps the text she was already reading.
@@ -531,14 +541,13 @@ export async function POST(req: Request) {
           // and the frozen exam use, so chat cannot drift from the measured
           // composition. The only addition is conversationHistory: chat is a
           // conversation, the exam is one prompt.
-          const v4Turn =
-            isV4 || isV41
-              ? buildV4FamilyTurn(
-                  isV41 ? "rag-v4-1" : "rag-v4",
-                  { text: userMessage, bucket: null },
-                  v4!,
-                )
-              : null;
+          const v4Turn = isV4Family
+            ? buildV4FamilyTurn(
+                v4Label,
+                { text: userMessage, bucket: null },
+                v4!,
+              )
+            : null;
           // Every arm announces that its provider call has started, so a
           // column that has not produced a token yet still says something
           // truer than nothing. On the repaired arm the wrapper below also
@@ -547,7 +556,7 @@ export async function POST(req: Request) {
           // `writing` again as it goes out.
           sendStage("writing");
           let attempt = 0;
-          const result = isV41
+          const result = isRepaired
             ? await streamWithRepairRound(
                 candidate,
                 { ...v4Turn!.args, conversationHistory: history },
@@ -591,7 +600,7 @@ export async function POST(req: Request) {
                 // the first answer instead of losing both to a 504.
                 { deadlineMs: deadlineAt },
               )
-            : isV4
+            : isV4Family
               ? await streamForCandidate(
                   candidate,
                   { ...v4Turn!.args, conversationHistory: history },
@@ -632,7 +641,7 @@ export async function POST(req: Request) {
             // corrections) material - the audit-trail ids minus the gold
             // exemplars.
             retrievedChunks:
-              isV4 || isV41
+              isV4Family
                 ? v4!.contextIds.filter((id) => !id.startsWith("gold:")).length
                 : isV2
                   ? v2!.contextIds.filter((id) => !id.startsWith("gold:"))
@@ -641,7 +650,7 @@ export async function POST(req: Request) {
                     ? ragContext.length
                     : 0,
             retrievedExemplars:
-              isV4 || isV41
+              isV4Family
                 ? v4!.exampleTurns.length
                 : isV2
                   ? v2!.exampleTurns.length
