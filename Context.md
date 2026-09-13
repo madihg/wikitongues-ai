@@ -1196,3 +1196,161 @@ annotators); decide how to give Agnes new work (generate bare+v3 on N new
 train prompts, or pool v4.1 AND add new prompts); tell Agnes the queue was
 broken from Sep 3, not empty because she was done - except that she IS done
 with the current pool.
+
+## Session State (2026-09-13) - v4.2: NAMES ARE NOT TRANSLATED, and 124 new prompts
+
+Two asks in one: fix the proper-noun failure Agnes and Charity reported on
+the 2026-09-01 call, and give every annotator new work aimed at what the
+model still gets wrong.
+
+### 1. THE FINDING THAT CHANGED THE PICTURE
+
+Re-read the Sep 1 transcript (Granola 186f285e-d447-4a2d-8afe-b97757f9f547,
+Agnes Abah + Charity reviewing a live English-Wikipedia-to-Igala
+translation). The headline is easy to miss: **the grammar was judged good.**
+"It is written like good grammar." Every failure the reviewers named was
+about foreign material, not Igala:
+  - proper nouns respelled (Igala has no /s/, so the model moved s to ch:
+    Lagos, Egbuson, Bayelsa, Green Spring Montessori all altered);
+  - a fact DROPPED for want of a word ("he didn't tell us what he studied");
+  - one cardinal direction wrong (and the speakers disagreed with each other
+    about the right one, on the call, in real time);
+  - one year expression wrong ("instead of Igba, you get Ichekpa").
+Charity gave the rule directly: "Wikipedia has a rule whereby you don't
+translate a name of a person, a name of a place, or a name of organization
+... Lagos is still Lagos." Agnes confirmed institution names stay English
+even when multi-word: asked whether "Green Spring Montessori" stays English,
+"Yes, we use the English."
+
+So the frontier has moved off grammar and onto named entities, lexical gaps,
+and a register (encyclopedic third-person prose) our corpus has never held.
+
+### 2. THE SERVING LINT WAS CAUSING THE BUG
+
+Not a missing rule - an active one, pushing the wrong way. The repair
+round's character allowlist (E5) contains no s, correctly, for IGALA words.
+It was applied to the whole answer. Verified empirically against the live
+checker: on a correct translation preserving every name, it returns
+
+  banned-character: "these words use letters that do not exist in Igala
+  (Igala has no s, z, x, q, v ...): Egbuson, Bayelsa, Spring, Montessori,
+  Lagos, psychology"
+
+and re-asks the model to rewrite them, keeping the second answer regardless.
+The model got it right and the lint talked it out of it, one turn later.
+"psychology" being flagged the same way is the likeliest reason that fact
+was dropped rather than borrowed: borrowing was penalised, omitting was not.
+BOTH failures Agnes reported trace to this one checker.
+
+### 3. WHAT SHIPPED
+
+**The fix, in two complementary halves** (neither sufficient alone):
+- `repair-round.ts`: `opts.sourceText` exempts any word the QUESTION already
+  contained from the allowlist. A scope, not a weakening - check (a) exists
+  to catch the model's own inventions, and a copied name is not one.
+  Fabrications are by definition absent from the question, so they are still
+  caught. Applied to rag-v4-1 as well, as a BUG FIX, on evidence:
+  `scripts/replay-repair-check.ts` replays the checker over all 406 stored
+  v4-family outputs both ways and reports **0 verdict changes**, so the
+  published v4.1 numbers still describe the system that produced them.
+- New check (d) `name-not-preserved`, rag-v4-2 only: on a TRANSLATION request
+  every proper noun in the source must survive into the answer. Gated on
+  translation shape because a Q&A turn has no duty to repeat a name.
+- `generation-prompt-v4-2.ts` = v4.1 plus exactly three lines (the test
+  DIFFS the two constants and pins that only three differ):
+    NE1 METHOD 9  - names are copied letter for letter, across every word,
+                    even letters Igala lacks. Procedural, so the sourcing
+                    contract does not apply; the one claim it leans on
+                    (Igala has no s) is already grade A/B via the allowlist.
+    NE2 METHOD 10 - never drop a fact for want of a word. v4.1 step 4 covered
+                    coinage; nothing covered SILENCE, and silence is what we
+                    observed.
+    NE3 ORTHOGRAPHY - the allowlist sentence is SCOPED to Igala words.
+                    Unscoped it said any other letter means "the word is
+                    wrong", which condemns Lagos: the prompt contradicted
+                    itself the moment a name contained an s.
+- Budget: v4.1 sat at EXACTLY its 1,150-token ceiling. v4.2 is 1,287 under a
+  ceiling raised to 1,300, deliberately and on the record, which is the one
+  thing the v4.1 spec asked of anyone who needed the room.
+- `frozen-exam.ts` now owns rag-v4-2; the chat route and the eval-generation
+  route were rewired to ask the SHARED registry (isV4FamilyVersionLabel,
+  runsRepairRound) instead of comparing label strings inline. That also fixed
+  a latent half-wiring: rag-v4-1-norepair used to fall through to v1
+  retrieval in the chat route while the v4 build never ran for it.
+- Registered but NOT pooled: `scripts/register-rag-v4-2.ts`,
+  `scripts/static-leak-check-v4-2.ts` (PASS, negative control live, 139
+  protected strings).
+
+**124 new prompts** (`prisma/seed-prompt-bank-v42.ts`, provenance
+`claude_authored_v42_2026_09_13`, namespace ig_v42_<short>_NNN), authored and
+adversarially critiqued in nine families, each probing a MEASURED failure:
+names 20, gaps 16, directions 12, time 12, encyclopedic 16, formulas 16,
+numbers 10, questions 10, syntax 12. Verified before landing: 0
+near-duplicates of the 422 existing train prompts (Jaccard over content
+words, threshold 0.55, max observed 0.50), 0 internal duplicates, all buckets
+valid, and a Scope-A gate inside the seed script itself (with a spiked
+negative control) that refuses to write if any prompt text collides with
+frozen gold.
+
+The design rule that shaped the split: **what we can source becomes a rule,
+what is contested becomes a question.** Names and omission are procedural and
+doubly-sourced, so they are rules. The cardinal directions were contested by
+the speakers themselves and the year word is single-sourced and garbled in
+transcription, so they are prompts. Same for the yes/no question particle
+(two native corrections vs 0/558 Bible verses) and the encyclopedic-register
+tension (v4.1's REGISTER line prescribes ~7-word first/second-person
+sentences, which is wrong for a Wikipedia article - but we have no evidence
+yet, so we collect it rather than legislate it).
+
+`scripts/train-queue-fill.ts` gained `--provenance <p>` so the audited
+serving path could fill just this batch instead of all 326 uncovered train
+prompts. No second script duplicating the serving branches.
+
+### 4. WHAT IS DELIBERATELY NOT DONE
+
+- **v4.2 is NOT pooled.** Read the 2026-09-07 empty queue first: pool
+  membership is a DB flag AND an ALLOWED_PAIRINGS entry, and a whitelist
+  naming no pooled pair empties every queue silently. The new prompts get
+  the CURRENT pooled pair (bare Gemini vs v3), which is the right science
+  anyway: it measures the named-entity failure rate BEFORE the fix, giving
+  v4.2 a pre-registered baseline to beat.
+- The nine RE1-RE9 grammar_rule rows are still unreachable (buildRetrievalV4
+  reads no RagEntry rows). The formulas family will keep failing until a
+  retrieval iteration serves them. That is the next real lever.
+- Option (b) stays dead until a metric can see grammar.
+
+### 5. WHAT LANDED IN PRODUCTION, MEASURED
+
+Output generation for the two pooled arms ran via
+`train-queue-fill.ts generate ... --provenance claude_authored_v42_2026_09_13`:
+
+  gemini-3-1-pro          created 118, failed 6, ~$3.10
+  gemini-3-1-pro-rag-v3   created 115, failed 9, ~$4.20
+  measured pool-arm train spend, all runs: $7.31 of the $15 cap
+
+**The 15 failures are all one cause: the Google API prepayment credits ran
+out mid-run** ("Your prepayment credits are depleted"), not a code fault.
+Result: 113 of the 124 new prompts have BOTH pooled arms and are servable;
+7 have one arm, 4 have none. The 11 incomplete ones are
+ig_v42_auth_006, ig_v42_cult_001, ig_v42_gram_009, ig_v42_gram_019,
+ig_v42_reg_010, ig_v42_reg_012, ig_v42_reg_013, ig_v42_reg_014,
+ig_v42_reg_015, ig_v42_reg_016, ig_v42_reg_017 - mostly the register
+formulas family. TO FINISH: top up Google credit, then re-run the SAME
+command; it is idempotent and will fill only the gaps (~$0.60).
+
+Queue after the fill (`scripts/check-queue-servable.ts`, 0 drift):
+211 pairable prompts, total 168 per annotator. Agnes 113 remaining (was 0),
+agadasarah 132, blessingbenjamin 142, ibrahimabdulraheem 136,
+charityogali 119, amoduaustine 113. Everyone has work again.
+
+Public changelog gained a Sep 13 entry in BOTH places (app CHANGELOG and the
+site's content/en/howItWorks.ts), and the site's byte-parity hash pin was
+recomputed to cf782377142c44cf64d6b477ff67692f2c01bfd804d9d3037a1998249cc541f6
+with the entry count raised to 10. The site is a SEPARATE repo and needs its
+own commit and deploy.
+
+NEXT: top up Google credit and re-run the fill for the 11 gaps; run the v4.2
+exam on the frozen 43 and compare to v4.1 (the tone caveat still applies -
+rank by blind speaker judgment, not chrF); decide whether the encyclopedic
+register earns a conditional REGISTER line; wire grammar_rule rows into a v5
+retrieval so the formulas layer is reachable.

@@ -102,6 +102,10 @@ const CHANGELOG = [
     date: "Sep 3, 2026",
     text: "The score was rebuilt so that a model is judged the way a speaker is judged: against the same answers, with the same one left out. The old construction stays beside it, marked deprecated, so the change is visible rather than silent. Then a control settled what the score has actually been measuring. Taking bare Gemini's answers and deleting the tone marks, with no model and no method involved at all, scores higher than every real system we have built. The community writes tone marks on about a quarter of its answers, so a measure built on letter overlap rewards leaving them off. Read plainly: the scoreboard has been ranking tone-mark habits as much as Igala. A tone-insensitive column now sits beside the main one, and it presses every system into a narrow band with the order scrambled. The repair round, which asks a model to rewrite an answer that breaks the spelling rules, turns out to be worth little to Gemini and a great deal to Claude. None of this touches the human result: speakers judging blind still prefer the v3 package to the plain model.",
   },
+  {
+    date: "Sep 13, 2026",
+    text: "Names are not translated. Reviewing a live Wikipedia translation on Sep 1, Igala speakers judged the grammar good and found the failures were elsewhere: the model was respelling people, places and schools because Igala has no s, and it dropped a fact it had no Igala word for. The cause was partly ours - a serving check meant to catch invented words was flagging the copied names as illegal letters and asking the model to rewrite them. Serving v4.2 copies names letter for letter and never drops a fact for want of a word. 124 new questions went to the annotators, aimed at what is still open: the direction words the speakers themselves disagreed about, year expressions, borrowed words, and how Igala reads in an encyclopedia.",
+  },
 ];
 
 export default async function HowItWorksPage() {

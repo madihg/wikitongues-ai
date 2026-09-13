@@ -2,7 +2,11 @@ import type { GenerateArgs } from "@/lib/arena/providers";
 import type { RetrievalV4Result } from "@/lib/arena/retrieval-v4";
 import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
-import type { RepairCheckOptions } from "@/lib/arena/repair-round";
+import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
+import {
+  labelRunsRepairRound,
+  type RepairCheckOptions,
+} from "@/lib/arena/repair-round";
 
 /**
  * The v4-family SERVING ASSEMBLY, extracted as one pure function so a frozen
@@ -28,6 +32,7 @@ import type { RepairCheckOptions } from "@/lib/arena/repair-round";
  *
  *   rag-v4    -> IGALA_SYSTEM_V4    , no repair round
  *   rag-v4-1  -> IGALA_SYSTEM_V4_1  , repair round
+ *   rag-v4-2  -> IGALA_SYSTEM_V4_2  , repair round + name check
  *
  * The repair round is not decided here either. generateWithRepairRound keys
  * off the candidate's versionLabel and is a documented, unit-tested no-op
@@ -46,6 +51,7 @@ export const V4_FAMILY_VERSION_LABELS = [
   "rag-v4",
   "rag-v4-1",
   "rag-v4-1-norepair",
+  "rag-v4-2",
 ] as const;
 
 export type V4FamilyVersionLabel = (typeof V4_FAMILY_VERSION_LABELS)[number];
@@ -60,6 +66,7 @@ export function isV4FamilyVersionLabel(
 
 /** The system prompt served for a v4-family label. */
 export function systemPromptForVersion(label: V4FamilyVersionLabel): string {
+  if (label === "rag-v4-2") return IGALA_SYSTEM_V4_2;
   return label === "rag-v4-1" || label === "rag-v4-1-norepair"
     ? IGALA_SYSTEM_V4_1
     : IGALA_SYSTEM_V4;
@@ -67,11 +74,20 @@ export function systemPromptForVersion(label: V4FamilyVersionLabel): string {
 
 /**
  * True when this label's serving path runs the deterministic repair round.
- * Mirrors REPAIR_ROUND_VERSION_LABEL; pinned equal to it by test so the two
- * can never disagree.
+ * Delegates to repair-round.ts rather than restating the list: the round is
+ * decided in exactly one place, and this stays a reporting helper.
  */
 export function runsRepairRound(label: V4FamilyVersionLabel): boolean {
-  return label === "rag-v4-1";
+  return labelRunsRepairRound(label);
+}
+
+/**
+ * True when this label enforces the v4.2 named-entity rules - the repair
+ * round's check (d). v4.2 only: it enforces a rule v4.1's prompt does not
+ * state, so switching it on for v4.1 would change a measured arm.
+ */
+export function checksNames(label: V4FamilyVersionLabel): boolean {
+  return label === "rag-v4-2";
 }
 
 /**
@@ -101,6 +117,12 @@ export function buildV4FamilyTurn(
       goldExamples: retrieval.exampleTurns,
       systemPromptOverride: systemPromptForVersion(label),
     },
-    opts: { allowTone: /\btone/i.test(prompt.text) },
+    opts: {
+      allowTone: /\btone/i.test(prompt.text),
+      // The raw question, for the repair round's copied-word exemption
+      // (every v4-family label) and its name check (v4.2 only).
+      sourceText: prompt.text,
+      checkNames: checksNames(label),
+    },
   };
 }

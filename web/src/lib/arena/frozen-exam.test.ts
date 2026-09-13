@@ -4,13 +4,18 @@ import { join } from "node:path";
 import {
   buildV4FamilyTurn,
   isV4FamilyVersionLabel,
+  checksNames,
   runsRepairRound,
   systemPromptForVersion,
   V4_FAMILY_VERSION_LABELS,
 } from "./frozen-exam";
-import { REPAIR_ROUND_VERSION_LABEL } from "./repair-round";
+import {
+  labelRunsRepairRound,
+  REPAIR_ROUND_VERSION_LABELS,
+} from "./repair-round";
 import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
+import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
 import type { RetrievalV4Result } from "./retrieval-v4";
 
 /** A retrieval result with every block distinguishable, so the assembled user
@@ -36,11 +41,51 @@ describe("v4-family label switch", () => {
     expect(IGALA_SYSTEM_V4_1).not.toBe(IGALA_SYSTEM_V4);
   });
 
-  it("runs the repair round for exactly the label the serving wrapper does", () => {
+  it("runs the repair round for exactly the labels the serving wrapper does", () => {
+    // The registry is single-sourced in repair-round.ts; this pins that
+    // frozen-exam's reporting helper cannot drift from the thing that
+    // actually decides, for every label in the family.
     for (const label of V4_FAMILY_VERSION_LABELS) {
-      expect(runsRepairRound(label)).toBe(label === REPAIR_ROUND_VERSION_LABEL);
+      expect(runsRepairRound(label)).toBe(labelRunsRepairRound(label));
     }
     expect(runsRepairRound("rag-v4")).toBe(false);
+    expect(runsRepairRound("rag-v4-1")).toBe(true);
+    expect(runsRepairRound("rag-v4-2")).toBe(true);
+    expect(runsRepairRound("rag-v4-1-norepair")).toBe(false);
+    // Every repaired label must BE in the v4 family, or the chat route's
+    // dispatch would never reach it.
+    for (const label of REPAIR_ROUND_VERSION_LABELS) {
+      expect(isV4FamilyVersionLabel(label)).toBe(true);
+    }
+  });
+
+  it("serves each label its own system prompt, and v4.2 checks names", () => {
+    expect(systemPromptForVersion("rag-v4-2")).toBe(IGALA_SYSTEM_V4_2);
+    expect(systemPromptForVersion("rag-v4-1")).toBe(IGALA_SYSTEM_V4_1);
+    expect(systemPromptForVersion("rag-v4")).toBe(IGALA_SYSTEM_V4);
+    // v4.2's rules are the ONLY ones that make the name check legitimate:
+    // switching it on for a label whose prompt never asked for it would
+    // change a measured arm.
+    expect(checksNames("rag-v4-2")).toBe(true);
+    for (const label of V4_FAMILY_VERSION_LABELS) {
+      if (label !== "rag-v4-2") expect(checksNames(label)).toBe(false);
+    }
+  });
+
+  it("passes the raw question through as sourceText for every v4-family label", () => {
+    // The copied-word exemption and the name check both read it. A label that
+    // silently lost it would restore the 2026-09-01 bug for that arm.
+    for (const label of V4_FAMILY_VERSION_LABELS) {
+      const turn = buildV4FamilyTurn(
+        label,
+        { text: "Translate this into Igala: Ada lives in Lagos.", bucket: null },
+        retrieval(),
+      );
+      expect(turn.opts.sourceText).toBe(
+        "Translate this into Igala: Ada lives in Lagos.",
+      );
+      expect(turn.opts.checkNames).toBe(label === "rag-v4-2");
+    }
   });
 
   it("recognises only the v4 family", () => {

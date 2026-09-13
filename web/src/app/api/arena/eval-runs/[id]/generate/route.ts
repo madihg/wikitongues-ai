@@ -9,7 +9,10 @@ import { buildRetrievalV4 } from "@/lib/arena/retrieval-v4";
 import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
 import { generateWithRepairRound } from "@/lib/arena/repair-round";
-import { buildV4FamilyTurn } from "@/lib/arena/frozen-exam";
+import {
+  buildV4FamilyTurn,
+  isV4FamilyVersionLabel,
+} from "@/lib/arena/frozen-exam";
 
 /**
  * Generate the candidate's answers on the frozen held-out bank. Uses the
@@ -72,10 +75,7 @@ export async function POST(
         firstPassText: string | null;
         repairViolations: unknown;
       } | null = null;
-      if (
-        candidate.versionLabel === "rag-v4" ||
-        candidate.versionLabel === "rag-v4-1"
-      ) {
+      if (isV4FamilyVersionLabel(candidate.versionLabel)) {
         // The v4 serving path: v2's composition plus the corrections block
         // and the register-guarded, source-diversified parallel retrieval,
         // under IGALA_SYSTEM_V4. Its own buildRetrievalV4 call - never shared
@@ -89,6 +89,10 @@ export async function POST(
         // kept regardless. generateWithRepairRound is a no-op passthrough
         // for rag-v4 (unit-tested), so the v4 arm's serving and accounting
         // stay byte-identical.
+        //
+        // rag-v4-2 = v4.1 plus the named-entity rules (2026-09-01 community
+        // call) and the repair round's name check. The label set lives in
+        // frozen-exam.ts, so adding an arm never means editing this branch.
         const v4 = await buildRetrievalV4(prisma, {
           promptId: prompt.promptId,
           text: prompt.text,
