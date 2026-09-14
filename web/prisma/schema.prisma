@@ -76,7 +76,13 @@ enum CostCategory {
   eval_generation // candidate answer generation on the held-out bank
   judge // LLM-as-judge triage calls
   inference // ad-hoc / learner-tutor inference
-  credits // money leaving the card: credit purchases and invoices (receipts)
+  credits // prepaid API credit purchases and API invoices (receipts). Cash, and
+  // the only cash the per-provider burn-down can draw down.
+  subscription // plan seats and consumer-plan top-ups (Claude Max, and the
+  // "prepaid extra usage" top-ups that sit on it). Cash, but NOT credits: it
+  // buys the team's own tooling, not API balance, so it has no consumption
+  // counterpart in this database and must stay out of the burn-down or it
+  // would read as a balance that never burns. Added 2026-09-14.
   other
 }
 

@@ -35,9 +35,20 @@ interface BurndownRow {
   consumed: number;
   remainingEstimate: number;
 }
+interface ClaudeRollup {
+  subscription: number;
+  credits: number;
+  cash: number;
+  consumption: number;
+  providers: string[];
+  entries: LedgerRow[];
+}
 interface CostData {
   grandTotal: number;
   cashTotal: number;
+  creditsTotal?: number;
+  subscriptionTotal?: number;
+  claude?: ClaudeRollup;
   burndown: BurndownRow[];
   togetherTotal: number;
   inference: { total: number; calls: number; byProvider: ProviderAmount[] };
@@ -84,15 +95,22 @@ export function CostLedger() {
           <div className="flex items-center gap-1 text-xs text-text-tertiary">
             Cash spent
             <InfoTip width="w-72">
-              Money that actually left the card: credit purchases and invoices,
-              each backed by a receipt logged in the ledger below. This is the
-              number to give a funder.
+              Money that actually left the card: prepaid API credits, and the
+              plan subscriptions the team works on. Each one is backed by a
+              receipt logged in the ledger below. This is the number to give a
+              funder. It is not the same money as &quot;Compute consumed&quot;
+              and the two are never added.
             </InfoTip>
           </div>
           <div className="mt-1 text-2xl font-semibold text-text-primary tabular-nums">
             {usd(data.cashTotal)}
           </div>
-          <div className="mt-1 text-xs text-text-muted">from receipts</div>
+          <div className="mt-1 text-xs text-text-muted">
+            {data.creditsTotal !== undefined &&
+            data.subscriptionTotal !== undefined
+              ? `${usd(data.creditsTotal)} API credits + ${usd(data.subscriptionTotal)} subscriptions`
+              : "from receipts"}
+          </div>
         </div>
         <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
           <div className="flex items-center gap-1 text-xs text-text-tertiary">
@@ -135,6 +153,94 @@ export function CostLedger() {
           </div>
         </div>
       </div>
+
+      {/* What Claude has cost, in one place. The subscription is the large
+          half and the easiest to miss: it never shows up in a burn-down or a
+          token count, because it buys the team's own tooling rather than API
+          balance. Cash and consumption stay on separate lines here for the
+          same reason they do at the top - they are different money. */}
+      {data.claude && (
+        <section className="rounded-lg border border-border bg-surface p-5 shadow-sm">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+            What Claude has cost
+            <InfoTip width="w-80">
+              Every dollar this project has spent on Claude, from{" "}
+              {data.claude.providers.join(" and ")}. The subscription is plan
+              seats and the prepaid extra-usage top-ups that sit on them: real
+              cash, but it buys no API balance, so it appears in no burn-down.
+              Consumption is the measured burn of Claude models, priced from
+              stored token counts. Cash and consumption are different money and
+              are never added together.
+            </InfoTip>
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-4">
+            <div>
+              <div className="text-xs text-text-tertiary">Subscription</div>
+              <div className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
+                {usd(data.claude.subscription)}
+              </div>
+              <div className="mt-1 text-xs text-text-muted">plan seats</div>
+            </div>
+            <div>
+              <div className="text-xs text-text-tertiary">API credits</div>
+              <div className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
+                {usd(data.claude.credits)}
+              </div>
+              <div className="mt-1 text-xs text-text-muted">prepaid</div>
+            </div>
+            <div>
+              <div className="text-xs text-text-tertiary">Cash total</div>
+              <div className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
+                {usd(data.claude.cash)}
+              </div>
+              <div className="mt-1 text-xs text-text-muted">off the card</div>
+            </div>
+            <div>
+              <div className="text-xs text-text-tertiary">
+                Model burn (measured)
+              </div>
+              <div className="mt-1 text-xl font-semibold text-text-primary tabular-nums">
+                {usd(data.claude.consumption)}
+              </div>
+              <div className="mt-1 text-xs text-text-muted">
+                not added to cash
+              </div>
+            </div>
+          </div>
+          {data.claude.entries.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-text-tertiary">
+                    <th className="pb-2 pr-4">Date</th>
+                    <th className="pb-2 pr-4">Kind</th>
+                    <th className="pb-2 pr-4">What it was</th>
+                    <th className="pb-2 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.claude.entries.map((e) => (
+                    <tr key={e.id} className="border-b border-border/50">
+                      <td className="py-2 pr-4 whitespace-nowrap text-text-secondary tabular-nums">
+                        {new Date(e.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="py-2 pr-4 whitespace-nowrap text-text-secondary">
+                        {e.category === "subscription"
+                          ? "subscription"
+                          : "credits"}
+                      </td>
+                      <td className="py-2 pr-4 text-text-primary">{e.label}</td>
+                      <td className="py-2 text-right tabular-nums text-text-primary">
+                        {usd(e.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Credits burn-down, only for providers with a recorded purchase */}
       {data.burndown.length > 0 && (
