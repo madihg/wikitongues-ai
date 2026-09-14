@@ -1354,3 +1354,86 @@ exam on the frozen 43 and compare to v4.1 (the tone caveat still applies -
 rank by blind speaker judgment, not chrF); decide whether the encyclopedic
 register earns a conditional REGISTER line; wire grammar_rule rows into a v5
 retrieval so the formulas layer is reachable.
+
+## Session State (2026-09-14) - THE SUBSCRIPTION WAS THE COST NOBODY WAS COUNTING
+
+Halim added $50 of Gemini credits and asked for them in the tally, plus
+"the cost of Claude I've paid this far over the project" as its own section.
+
+### THE FINDING
+
+The ledger held three credit purchases ($20 Anthropic API, $20 Google, $20
+OpenRouter) and nothing else off the card. It was missing, entirely, the
+largest cost of the project: the Claude Max subscription the work is done on.
+Recovered from the Anthropic receipt emails, one agent per receipt:
+
+  Jun 11  $200.00  Max 20x   #2035-7959-7424   Jun 11-Jul 11
+  Jul 11  $100.00  Max 5x    #2932-1423-5334   Jul 11-Aug 11
+  Jul 13  $106.47  Max 20x   #2229-8867-6624   mid-cycle upgrade, $200 list
+                                                less $93.53 proration
+  Aug 13  $200.00  Max 20x   #2732-2182-1355   Aug 13-Sep 13
+  Sep 13  $100.00  Max 5x    #2465-3930-1869   Sep 13-Oct 13
+  Aug 21   $45.00 x3         #2190-4041-6160, #2672-3129-7060, #2538-6506-0895
+                             "Prepaid extra usage, Individual plan"
+  TOTAL   $841.47
+
+THE SHAPE OF THE SPEND, now that it is visible:
+
+  cash off the card        $951.47
+    of which subscription  $841.47   (88%)
+    of which API credits   $110.00
+  measured model burn       $27.84   over 2,652 generations, all providers
+    of which Claude          $5.74
+
+The tooling costs about thirty times the API. Every cost conversation this
+project has had was about the $27.84.
+
+### DECISIONS MADE, AND WHY
+
+1. NEW CostCategory `subscription`, not `credits`. A plan seat is cash, but it
+   buys no API balance. Booking it as credits would put it in the per-provider
+   burn-down, where it would read as a purchased balance that never burns.
+   Migration applied via Supabase MCP (the app role lacks ALTER TYPE), so
+   `_prisma_migrations` does not carry the row - the same known ledger gap as
+   20260820120000 and 20260903. The SQL is checked in at
+   prisma/migrations/20260914120000_add_subscription_cost_category/.
+2. The three Aug 21 "prepaid extra usage, Individual plan" charges go to
+   `subscription`, labelled in the receipt's own words. They are plan-side
+   top-ups, not API credits: nothing on them names an API and they buy no API
+   balance.
+3. THE MAY 8 RECEIPT ($100.00, #2083-0747-1704, covering May 8-Jun 8) IS NOT
+   LOGGED. It is real but pre-dates the project: the first session state here
+   is 2026-06-22, and Jun 11 is the first payment whose service period
+   overlaps the work. Logging it would overstate the project. One command
+   adds it if the accounting window should start earlier.
+4. NO ALLOCATION. The rows carry the full amounts Halim paid, because that is
+   what the receipts say. He uses the same subscription for other work;
+   splitting it between projects is his call, not a number for a script to
+   invent. Flagged to him rather than silently resolved.
+5. The Claude roll-up attributes by provider {anthropic, openrouter}.
+   OpenRouter is in because every Claude arm has been served through it since
+   the direct key lapsed on 2026-09-01. If a non-Claude model is ever served
+   through OpenRouter that attribution stops being exact, and CLAUDE_PROVIDERS
+   in the costs route is the single place to fix it.
+
+### WHAT SHIPPED
+
+- `subscription` in the CostCategory enum, schema and migration.
+- `/api/arena/costs`: cashTotal now spans credits AND subscriptions, with
+  creditsTotal and subscriptionTotal broken out; the burn-down still draws on
+  credits ONLY; a new `claude` block reports subscription, credits, cash and
+  measured model burn, with cash and burn never summed.
+- Cost ledger UI: a "What Claude has cost" section with those four figures and
+  the receipt rows behind them; the cash card now says how it splits.
+- `scripts/log-claude-and-credits-2026-09-14.ts`: the nine receipt rows,
+  idempotent by receipt number, every row estimated=false because every row is
+  a receipt. Re-running creates nothing (verified).
+- Tests: three new cases in the costs route test (subscription is cash but not
+  burn-down; the Claude roll-up spans two providers and excludes google; the
+  model burn sits beside the cash, not inside it). Mutation-tested by letting
+  subscriptions into creditEntries - fails exactly those three.
+
+NEXT: if the subscription should be split between Wikitongues and Halim's
+other work, decide the fraction and log a compensating row (the ledger is
+append-only, never edited). The May 8 receipt is a one-command add if the
+window should start in May.

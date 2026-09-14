@@ -12,6 +12,18 @@ import { estimateGenerationCostUsd, roundUsd } from "@/lib/arena/pricing";
  *   - ledger:    explicit CostEntry rows (judge calls, manual entries)
  * Inference figures are estimates against a published-rate table (pricing.ts).
  *
+ * THREE KINDS OF MONEY, never summed into one number:
+ *   - CREDITS      prepaid API balance. Cash off the card, and the only cash
+ *                  the per-provider burn-down can draw down.
+ *   - SUBSCRIPTION plan seats and consumer-plan top-ups (Claude Max, and the
+ *                  "prepaid extra usage" charges that sit on it). Also cash,
+ *                  but it buys the team's own tooling rather than API balance,
+ *                  so it has no consumption counterpart here. It is reported
+ *                  beside credits, counted in cashTotal, and kept OUT of the
+ *                  burn-down, where it would otherwise read as a purchased
+ *                  balance that never burns.
+ *   - CONSUMPTION  the burn itself, priced live from stored token counts.
+ *
  * ONE SOURCE OF TRUTH PER DOLLAR. Generation cost is counted exactly once, from
  * the live token-based computation over every ModelOutput. CostEntry rows in
  * category "eval_generation" (written by scripts such as train-queue-fill.ts)
@@ -28,6 +40,20 @@ import { estimateGenerationCostUsd, roundUsd } from "@/lib/arena/pricing";
  * inference computation. Kept in the ledger listing, kept out of every sum.
  */
 const COUNTED_IN_INFERENCE_CATEGORIES = new Set(["eval_generation"]);
+
+/** Ledger categories that are CASH off the card rather than consumption. */
+const CASH_CATEGORIES = new Set(["credits", "subscription"]);
+
+/**
+ * Providers whose spend is Claude spend, for the Claude roll-up.
+ *
+ * anthropic is direct. openrouter is here because every Claude arm has been
+ * served through it since the direct Anthropic key lapsed (2026-09-01) - the
+ * ledger row for those credits says so in its own label. If a non-Claude model
+ * is ever served through OpenRouter, this attribution stops being exact and
+ * this set is the one place to fix.
+ */
+const CLAUDE_PROVIDERS = new Set(["anthropic", "openrouter"]);
 
 function providerFromModelId(modelId: string): string {
   const id = (modelId || "").toLowerCase();
@@ -119,14 +145,25 @@ export async function GET() {
     take: 200,
   });
   const creditEntries = entries.filter((e) => e.category === "credits");
+  const subscriptionEntries = entries.filter(
+    (e) => e.category === "subscription",
+  );
   // Consumption the ledger is the ONLY record of. eval_generation is excluded
   // because the live token-based inference figure already covers it.
   const consumptionEntries = entries.filter(
     (e) =>
-      e.category !== "credits" &&
+      !CASH_CATEGORIES.has(e.category) &&
       !COUNTED_IN_INFERENCE_CATEGORIES.has(e.category),
   );
-  const cashTotal = creditEntries.reduce((s, e) => s + e.amountUsd, 0);
+  const creditsTotal = creditEntries.reduce((s, e) => s + e.amountUsd, 0);
+  const subscriptionTotal = subscriptionEntries.reduce(
+    (s, e) => s + e.amountUsd,
+    0,
+  );
+  // All money off the card. Subscriptions belong here - they are as real a
+  // cash cost as a credit purchase - but they are NOT in cashByProvider below,
+  // which feeds the burn-down.
+  const cashTotal = creditsTotal + subscriptionTotal;
   const ledgerConsumptionTotal = consumptionEntries.reduce(
     (s, e) => s + e.amountUsd,
     0,
@@ -154,9 +191,11 @@ export async function GET() {
   const consumptionTotal =
     inferenceTotal + finetuneTotal + ledgerConsumptionTotal;
 
-  // Per-provider burn-down where we know both sides: credits bought minus
+  // Per-provider burn-down where we know both sides: CREDITS bought minus
   // consumption estimated/billed. Only providers with a recorded purchase
   // appear - a burn-down against unknown credits would be an invented number.
+  // Subscription rows are deliberately absent: they buy no API balance, so
+  // including them would show a permanent unburnt remainder that is not real.
   const providers = new Set<string>([...cashByProvider.keys()]);
   const burndown = [...providers].map((provider) => {
     const purchased = cashByProvider.get(provider) ?? 0;
@@ -174,10 +213,58 @@ export async function GET() {
     };
   });
 
+  // ── The Claude roll-up ──────────────────────────────────────────────────
+  // What Claude has cost this project, in one place, because it is the answer
+  // to a question that keeps being asked and the ledger could only answer it
+  // by hand. Cash and consumption stay separate here too: `cash` is receipts,
+  // `consumption` is the measured burn of Claude models, and the two are
+  // never added. The subscription is the large half and it is easy to miss,
+  // because it never appears in a burn-down or a token count.
+  const claudeSubscription = subscriptionEntries
+    .filter((e) => CLAUDE_PROVIDERS.has(e.provider))
+    .reduce((s, e) => s + e.amountUsd, 0);
+  const claudeCredits = creditEntries
+    .filter((e) => CLAUDE_PROVIDERS.has(e.provider))
+    .reduce((s, e) => s + e.amountUsd, 0);
+  const claudeConsumption = [...CLAUDE_PROVIDERS].reduce(
+    (s, p) =>
+      s +
+      (inferenceByProvider.get(p)?.amount ?? 0) +
+      (finetuneByProvider.get(p)?.amount ?? 0) +
+      consumptionEntries
+        .filter((e) => e.provider === p)
+        .reduce((a, e) => a + e.amountUsd, 0),
+    0,
+  );
+  const claudeEntries = entries.filter(
+    (e) => CASH_CATEGORIES.has(e.category) && CLAUDE_PROVIDERS.has(e.provider),
+  );
+
   return NextResponse.json({
     // Kept for the existing UI: now consumption-only, with cash split out.
     grandTotal: roundUsd(consumptionTotal),
     cashTotal: roundUsd(cashTotal),
+    creditsTotal: roundUsd(creditsTotal),
+    subscriptionTotal: roundUsd(subscriptionTotal),
+    claude: {
+      // Cash off the card for Claude: plan seats plus API credits.
+      subscription: roundUsd(claudeSubscription),
+      credits: roundUsd(claudeCredits),
+      cash: roundUsd(claudeSubscription + claudeCredits),
+      // Measured burn of Claude models. A DIFFERENT money from the cash above:
+      // reported beside it, never added to it.
+      consumption: roundUsd(claudeConsumption),
+      providers: [...CLAUDE_PROVIDERS],
+      entries: claudeEntries.map((e) => ({
+        id: e.id,
+        category: e.category,
+        provider: e.provider,
+        label: e.label,
+        amount: roundUsd(e.amountUsd),
+        estimated: e.estimated,
+        createdAt: e.createdAt,
+      })),
+    },
     burndown,
     togetherTotal: roundUsd(togetherTotal),
     inference: {
@@ -213,6 +300,8 @@ export async function GET() {
     ledger: {
       total: roundUsd(ledgerConsumptionTotal),
       cashTotal: roundUsd(cashTotal),
+      creditsTotal: roundUsd(creditsTotal),
+      subscriptionTotal: roundUsd(subscriptionTotal),
       entries: entries.map((e) => ({
         id: e.id,
         category: e.category,

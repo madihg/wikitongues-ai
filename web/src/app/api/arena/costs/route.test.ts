@@ -183,6 +183,115 @@ describe("GET /api/arena/costs", () => {
     });
   });
 
+  it("counts subscriptions as cash but keeps them out of the burn-down", async () => {
+    // A plan seat is real money off the card, so it belongs in cashTotal. It
+    // buys no API balance, so putting it in the burn-down would show a
+    // purchased balance that never burns - the failure this category exists
+    // to prevent.
+    mockPrisma.costEntry.findMany.mockResolvedValue([
+      entry({
+        id: "sub-1",
+        category: "subscription",
+        provider: "anthropic",
+        amountUsd: 200,
+        estimated: false,
+      }),
+      entry({
+        id: "cred-1",
+        category: "credits",
+        provider: "anthropic",
+        amountUsd: 20,
+        estimated: false,
+      }),
+    ]);
+    const b = await body();
+    expect(b.cashTotal).toBe(220);
+    expect(b.creditsTotal).toBe(20);
+    expect(b.subscriptionTotal).toBe(200);
+    // Consumption is untouched by either.
+    expect(b.grandTotal).toBe(0);
+    // The burn-down draws on CREDITS only: $20 bought, nothing consumed.
+    const anthropic = b.burndown.find(
+      (x: { provider: string }) => x.provider === "anthropic",
+    );
+    expect(anthropic.purchased).toBe(20);
+    expect(anthropic.remainingEstimate).toBe(20);
+  });
+
+  it("rolls Claude spend up across anthropic and openrouter", async () => {
+    // OpenRouter is in the roll-up because every Claude arm is served through
+    // it since the direct key lapsed. Cash and consumption stay separate.
+    mockPrisma.costEntry.findMany.mockResolvedValue([
+      entry({
+        id: "sub-1",
+        category: "subscription",
+        provider: "anthropic",
+        amountUsd: 100,
+        estimated: false,
+      }),
+      entry({
+        id: "cred-1",
+        category: "credits",
+        provider: "anthropic",
+        amountUsd: 20,
+        estimated: false,
+      }),
+      entry({
+        id: "cred-2",
+        category: "credits",
+        provider: "openrouter",
+        amountUsd: 20,
+        estimated: false,
+      }),
+      // A non-Claude provider must not leak into the roll-up.
+      entry({
+        id: "cred-3",
+        category: "credits",
+        provider: "google",
+        amountUsd: 50,
+        estimated: false,
+      }),
+    ]);
+    const b = await body();
+    expect(b.claude.subscription).toBe(100);
+    expect(b.claude.credits).toBe(40);
+    expect(b.claude.cash).toBe(140);
+    // Cash total spans every provider; the roll-up is Claude only.
+    expect(b.cashTotal).toBe(190);
+    // Four cash rows exist, three of them Claude's.
+    expect(b.claude.entries.map((e: { id: string }) => e.id).sort()).toEqual([
+      "cred-1",
+      "cred-2",
+      "sub-1",
+    ]);
+    expect(b.claude.providers.sort()).toEqual(["anthropic", "openrouter"]);
+  });
+
+  it("reports measured Claude model burn beside the cash, never inside it", async () => {
+    mockPrisma.modelOutput.findMany.mockResolvedValue([
+      {
+        modelId: "anthropic/claude-opus-5",
+        tokenCountIn: 1_000_000,
+        tokenCountOut: 0,
+        candidateModel: { provider: "openrouter" },
+      },
+    ]);
+    mockPrisma.costEntry.findMany.mockResolvedValue([
+      entry({
+        id: "sub-1",
+        category: "subscription",
+        provider: "anthropic",
+        amountUsd: 100,
+        estimated: false,
+      }),
+    ]);
+    const b = await body();
+    expect(b.claude.consumption).toBeGreaterThan(0);
+    // The burn is NOT folded into the cash figure.
+    expect(b.claude.cash).toBe(100);
+    expect(b.claude.consumption).not.toBe(b.claude.cash);
+  });
+
   it("passes the auth guard's error straight through", async () => {
     const forbidden = { error: { status: 403 }, userId: null, role: null };
     mockRequireResearcher.mockResolvedValue(forbidden);

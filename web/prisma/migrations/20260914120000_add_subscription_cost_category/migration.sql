@@ -1,0 +1,12 @@
+-- Add the `subscription` cost category.
+--
+-- Plan seats (Claude Max) and consumer-plan "prepaid extra usage" top-ups are
+-- cash off the card, like `credits`, but they do not buy API balance. Booking
+-- them as `credits` would put them into the per-provider burn-down, where they
+-- would read as a purchased balance that never burns down. They get their own
+-- category instead, reported beside credits and excluded from the burn-down.
+--
+-- Applied to production via the Supabase MCP on 2026-09-14 (the app role lacks
+-- ALTER TYPE), so `_prisma_migrations` does not carry this row - the same
+-- known ledger gap as 20260820120000 and 20260903. Recorded in Context.md.
+ALTER TYPE "wikitongues"."CostCategory" ADD VALUE IF NOT EXISTS 'subscription';
