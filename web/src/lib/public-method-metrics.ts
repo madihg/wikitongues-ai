@@ -1,6 +1,7 @@
 import type {
   Approach,
   CeilingResult,
+  HumanRoundsPublicPair,
   MethodMetrics,
 } from "@/lib/method-metrics";
 
@@ -121,6 +122,10 @@ export interface PublicMethodMetrics {
   };
   /** Sorted by leak-free score, best first - the order MethodMetrics ships. */
   candidates: PublicCandidate[];
+  /** Blind pool judgments by pair of arms and by judged round, each round
+   * also expressed "out of every 10 questions". Names and approach labels
+   * only - the same strings the scoreboard already carries - plus counts. */
+  humanRounds: HumanRoundsPublicPair[];
 }
 
 /** Round to a fixed number of decimals without floating-point drift in output.
@@ -207,5 +212,33 @@ export function toPublicMethodMetrics(m: MethodMetrics): PublicMethodMetrics {
       ),
       agreementScoreSourcefree: score(c.agreementScoreSourcefree),
     })),
+    // Field by field, never a spread: a private field added to the rounds
+    // later cannot ride across the boundary by accident.
+    humanRounds: m.humanRounds.map((p) => ({
+      a: { name: p.a.name, approach: p.a.approach },
+      b: { name: p.b.name, approach: p.b.approach },
+      rounds: p.rounds.map(publicRound),
+      all: publicRound(p.all),
+    })),
+  };
+}
+
+function publicRound(r: HumanRoundsPublicPair["all"]) {
+  return {
+    key: r.key,
+    label: r.label,
+    from: r.from,
+    to: r.to,
+    n: r.n,
+    aWins: r.aWins,
+    bWins: r.bWins,
+    ties: r.ties,
+    bothInadequate: r.bothInadequate,
+    perTen: {
+      a: r.perTen.a,
+      b: r.perTen.b,
+      tie: r.perTen.tie,
+      neither: r.perTen.neither,
+    },
   };
 }

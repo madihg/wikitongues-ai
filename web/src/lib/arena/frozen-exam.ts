@@ -1,8 +1,13 @@
 import type { GenerateArgs } from "@/lib/arena/providers";
 import type { RetrievalV4Result } from "@/lib/arena/retrieval-v4";
-import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
+import {
+  buildUserTurnV4,
+  buildUserTurnV43,
+  IGALA_SYSTEM_V4,
+} from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
+import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
 import {
   labelRunsRepairRound,
   type RepairCheckOptions,
@@ -33,6 +38,14 @@ import {
  *   rag-v4    -> IGALA_SYSTEM_V4    , no repair round
  *   rag-v4-1  -> IGALA_SYSTEM_V4_1  , repair round
  *   rag-v4-2  -> IGALA_SYSTEM_V4_2  , repair round + name check
+ *   rag-v4-3  -> IGALA_SYSTEM_V4_2  , repair round + name check, PLUS the
+ *                grammar block (src/lib/arena/grammar-block.ts) at the head
+ *                of the user turn. The system prompt is byte-identical to
+ *                v4.2 on purpose: a v4.2 -> v4.3 delta isolates exactly
+ *                {grammar rules finally being served}.
+ *   rag-v4-4  -> IGALA_SYSTEM_V4_4  , everything v4.3 does, with the eleven
+ *                lines the Sep 13-23 annotation round amended (see
+ *                generation-prompt-v4-4.ts); the v4.3/v4.4 delta is the prompt.
  *
  * The repair round is not decided here either. generateWithRepairRound keys
  * off the candidate's versionLabel and is a documented, unit-tested no-op
@@ -52,7 +65,14 @@ export const V4_FAMILY_VERSION_LABELS = [
   "rag-v4-1",
   "rag-v4-1-norepair",
   "rag-v4-2",
+  "rag-v4-3",
+  "rag-v4-4",
 ] as const;
+
+/** The labels whose user turn carries the grammar block. */
+export function servesGrammarBlock(label: V4FamilyVersionLabel): boolean {
+  return label === "rag-v4-3" || label === "rag-v4-4";
+}
 
 export type V4FamilyVersionLabel = (typeof V4_FAMILY_VERSION_LABELS)[number];
 
@@ -66,7 +86,8 @@ export function isV4FamilyVersionLabel(
 
 /** The system prompt served for a v4-family label. */
 export function systemPromptForVersion(label: V4FamilyVersionLabel): string {
-  if (label === "rag-v4-2") return IGALA_SYSTEM_V4_2;
+  if (label === "rag-v4-4") return IGALA_SYSTEM_V4_4;
+  if (label === "rag-v4-2" || label === "rag-v4-3") return IGALA_SYSTEM_V4_2;
   return label === "rag-v4-1" || label === "rag-v4-1-norepair"
     ? IGALA_SYSTEM_V4_1
     : IGALA_SYSTEM_V4;
@@ -87,7 +108,7 @@ export function runsRepairRound(label: V4FamilyVersionLabel): boolean {
  * state, so switching it on for v4.1 would change a measured arm.
  */
 export function checksNames(label: V4FamilyVersionLabel): boolean {
-  return label === "rag-v4-2";
+  return label === "rag-v4-2" || label === "rag-v4-3" || label === "rag-v4-4";
 }
 
 /**
@@ -110,10 +131,23 @@ export function buildV4FamilyTurn(
   label: V4FamilyVersionLabel,
   prompt: { text: string; bucket: string | null },
   retrieval: RetrievalV4Result,
+  /** The grammar block for this prompt. Read ONLY for labels that serve it;
+   * every other label ignores it, so passing one to a v4.2 turn cannot change
+   * v4.2 (pinned by test). */
+  grammar?: { grammarBlock: string },
 ): ExamTurn {
+  const userMessage =
+    servesGrammarBlock(label) && grammar && grammar.grammarBlock.length > 0
+      ? buildUserTurnV43(
+          prompt.text,
+          retrieval,
+          grammar.grammarBlock,
+          prompt.bucket,
+        )
+      : buildUserTurnV4(prompt.text, retrieval, prompt.bucket);
   return {
     args: {
-      userMessage: buildUserTurnV4(prompt.text, retrieval, prompt.bucket),
+      userMessage,
       goldExamples: retrieval.exampleTurns,
       systemPromptOverride: systemPromptForVersion(label),
     },

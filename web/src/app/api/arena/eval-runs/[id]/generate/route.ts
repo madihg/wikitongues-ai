@@ -12,7 +12,9 @@ import { generateWithRepairRound } from "@/lib/arena/repair-round";
 import {
   buildV4FamilyTurn,
   isV4FamilyVersionLabel,
+  servesGrammarBlock,
 } from "@/lib/arena/frozen-exam";
+import { buildGrammarBlock } from "@/lib/arena/grammar-block";
 
 /**
  * Generate the candidate's answers on the frozen held-out bank. Uses the
@@ -105,10 +107,20 @@ export async function POST(
         // src/lib/arena/frozen-exam.ts, shared with the frozen-exam runner,
         // so an output stored by an offline exam and one stored here cannot
         // drift apart.
+        // rag-v4-3 adds the grammar block as its own leg (never inside the
+        // shared v4 build); its ids join the audit trail as grammar:<id>.
+        const grammar = servesGrammarBlock(candidate.versionLabel)
+          ? await buildGrammarBlock(prisma, {
+              promptId: prompt.promptId,
+              text: prompt.text,
+              isHoldout: prompt.isHoldout,
+            })
+          : null;
         const { args, opts } = buildV4FamilyTurn(
           candidate.versionLabel,
           prompt,
           v4,
+          grammar ?? undefined,
         );
         result = await generateWithRepairRound(
           candidate,
@@ -116,7 +128,7 @@ export async function POST(
           (a) => generateForCandidate(candidate, a),
           opts,
         );
-        ragContextIds = v4.contextIds;
+        ragContextIds = [...v4.contextIds, ...(grammar?.grammarIds ?? [])];
         repairInfo = {
           repaired: result.repaired,
           firstPassText: result.firstPassText,

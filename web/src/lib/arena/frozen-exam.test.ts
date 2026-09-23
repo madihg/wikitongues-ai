@@ -16,6 +16,7 @@ import {
 import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
+import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
 import type { RetrievalV4Result } from "./retrieval-v4";
 
 /** A retrieval result with every block distinguishable, so the assembled user
@@ -59,16 +60,21 @@ describe("v4-family label switch", () => {
     }
   });
 
-  it("serves each label its own system prompt, and v4.2 checks names", () => {
+  it("serves each label its own system prompt, and only the v4.2-rule labels check names", () => {
     expect(systemPromptForVersion("rag-v4-2")).toBe(IGALA_SYSTEM_V4_2);
+    // v4.3 is the v4.2 prompt byte for byte plus a grammar block in the user
+    // turn, so it serves the v4.2 system prompt and inherits the name check.
+    expect(systemPromptForVersion("rag-v4-3")).toBe(IGALA_SYSTEM_V4_2);
+    // v4.4 is the only label on its own prompt: the eleven amended lines.
+    expect(systemPromptForVersion("rag-v4-4")).toBe(IGALA_SYSTEM_V4_4);
     expect(systemPromptForVersion("rag-v4-1")).toBe(IGALA_SYSTEM_V4_1);
     expect(systemPromptForVersion("rag-v4")).toBe(IGALA_SYSTEM_V4);
     // v4.2's rules are the ONLY ones that make the name check legitimate:
     // switching it on for a label whose prompt never asked for it would
     // change a measured arm.
-    expect(checksNames("rag-v4-2")).toBe(true);
+    const nameChecked = new Set(["rag-v4-2", "rag-v4-3", "rag-v4-4"]);
     for (const label of V4_FAMILY_VERSION_LABELS) {
-      if (label !== "rag-v4-2") expect(checksNames(label)).toBe(false);
+      expect(checksNames(label)).toBe(nameChecked.has(label));
     }
   });
 
@@ -78,13 +84,18 @@ describe("v4-family label switch", () => {
     for (const label of V4_FAMILY_VERSION_LABELS) {
       const turn = buildV4FamilyTurn(
         label,
-        { text: "Translate this into Igala: Ada lives in Lagos.", bucket: null },
+        {
+          text: "Translate this into Igala: Ada lives in Lagos.",
+          bucket: null,
+        },
         retrieval(),
       );
       expect(turn.opts.sourceText).toBe(
         "Translate this into Igala: Ada lives in Lagos.",
       );
-      expect(turn.opts.checkNames).toBe(label === "rag-v4-2");
+      expect(turn.opts.checkNames).toBe(
+        label === "rag-v4-2" || label === "rag-v4-3" || label === "rag-v4-4",
+      );
     }
   });
 

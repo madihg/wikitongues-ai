@@ -1437,3 +1437,62 @@ NEXT: if the subscription should be split between Wikitongues and Halim's
 other work, decide the fraction and log a compensating row (the ledger is
 append-only, never edited). The May 8 receipt is a one-command add if the
 window should start in May.
+
+## Session State (2026-09-23, in progress, Fable 5.1)
+
+Five-part request: (a) how-it-works human-verdict chart, (b) white paper
+one-pager + Google Doc + email, (c) ingest latest annotations into the RAG,
+(d) Ejeba 2023 JWAL concord paper line by line into the RAG, (e) apply the
+Fable 5.1 prompting guide.
+
+DONE SO FAR
+- App: `humanRounds` in method-metrics (+public projection), POOL_ROUNDS in
+  era.ts, `arena/human-rounds.ts` (+tests), v4.3 grammar leg
+  (`arena/grammar-block.ts`, `buildUserTurnV43`, chat/eval-runs/exam routes),
+  `scripts/register-rag-v4-3.ts` (NOT run). tsc clean; 144 tests pass in the
+  touched suites (3 label-set tests updated for v4.3).
+- Site: `HumanVerdicts.tsx` "Out of every ten questions" chart, tolerant
+  `parseHumanRounds`, content section `verdicts`; tsc clean, 21 tests pass.
+- Google Doc (Languages Unseen format, institutional register):
+  https://docs.google.com/document/d/1r_zNmz2bXav2TPkNG4kll3vFCBR4ypNnuWPhgj-mfJs/edit
+- Gmail DRAFT (not sent; Halim to read the doc first because it challenges
+  his framing): to Andy/Erin/Isaac, cc Sonja/Emily/Lydia/Daniel, subject
+  "[white paper] Igala brief + references", 83/90 body words.
+- JWAL paper added to the NotebookLM notebook (source ef561e37...).
+- Workflow wf_686246dd-68e: Extract (3 agents) and Diff done; Mine
+  (judgments, corrections) running at 12:07. Result lands in
+  scratchpad/jwal-workflow-result.json.
+
+PENDING (in order): lint both repos -> app PR A (chart + v4.3 code) merge ->
+site PR A merge -> verify live chart; from the workflow: rule inventory
+`tasks/jwal-ejeba-2023-rule-inventory.md` + `prisma/seed-rag-v4-3-grammar.ts`
+(seed with lint + Scope-A gate + embeddings) -> register v4.3 -> leak check ->
+exams v4.2 + v4.3 -> changelog Sep 23 in app CHANGELOG then site (byte-identical
+hash re-pin, count 10 -> 11) -> app PR B + site PR B -> re-run v42 fill (11
+prompts) -> check-queue-servable -> final Context.md.
+
+### 2026-09-23, 12:45 progress (same session)
+
+DB state changed (idempotent scripts, re-runnable):
+- prisma/seed-rag-v4-3-grammar.ts ran: 15 grammar_rule rows created and
+  embedded (6 Ejeba served rows, 2 Ejeba notes, 6 community-verified rows
+  from the Sep 13-23 mine, 1 open-questions note); the 3 Aug 13 abstract
+  Ejeba rows relabelled verificationStatus=scholarship_note (never deleted).
+  Scope-A gate needed two rounds of schematizing: the words for child, goat,
+  house, market, mother, money, god, water, hand, sun, road, morning are
+  frozen gold and now appear as [bracketed English] in the rows.
+- Candidates registered, NOT pooled: gemini-3-1-pro-rag-v4-3 (v4.2 prompt +
+  grammar block) and gemini-3-1-pro-rag-v4-4 (v4.4 prompt + grammar block).
+- v4.4 = generation-prompt-v4-4.ts: twelve named line edits over v4.2 (task
+  narration, institution class word, lo ti, ñ negator, yí = this, efu/efẹwọ,
+  dates month-ordinal day-cardinal, oñ demoted, Yoruba imports, pet words).
+  1,473 tokens under a 1,500 ceiling. static-leak-check-v4-4 PASS.
+- Grammar block: rows with status scholarship_note are skipped
+  (GRAMMAR_NOTE_STATUS). Smoke test: 1-2 rows served per question because
+  rows run 1,000-1,400 chars against a 2,200 cap (being raised).
+
+Judgment mine, three things Halim must know: (1) rounds are the SAME v3 arm
+on different question batches, so the chart is labelled by batch and says
+so; (2) annotator_8 marks every pair a tie and writes the answer in the
+explanation (32 rows = "no verdict"): someone should ask them to pick;
+(3) the lead since Sep 13 is real but thin (59% of decided, p=0.02).

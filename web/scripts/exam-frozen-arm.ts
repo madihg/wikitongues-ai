@@ -48,8 +48,10 @@
 import { prisma } from "@/lib/prisma";
 import { generateForCandidate } from "@/lib/arena/providers";
 import { buildRetrievalV4 } from "@/lib/arena/retrieval-v4";
+import { buildGrammarBlock } from "@/lib/arena/grammar-block";
 import {
   buildV4FamilyTurn,
+  servesGrammarBlock,
   isV4FamilyVersionLabel,
   runsRepairRound,
 } from "@/lib/arena/frozen-exam";
@@ -207,7 +209,22 @@ async function examineArm(slug: string, budgetUsd: number) {
         bucket: prompt.bucket,
         isHoldout: true,
       });
-      const { args, opts } = buildV4FamilyTurn(label, prompt, v4);
+      // rag-v4-3: the grammar block is its own leg, exactly as in the
+      // eval-runs route, so an exam output and a route output are assembled
+      // by the same two calls in the same order.
+      const grammar = servesGrammarBlock(label)
+        ? await buildGrammarBlock(prisma, {
+            promptId: prompt.promptId,
+            text: prompt.text,
+            isHoldout: true,
+          })
+        : null;
+      const { args, opts } = buildV4FamilyTurn(
+        label,
+        prompt,
+        v4,
+        grammar ?? undefined,
+      );
 
       let retried = false;
       try {
@@ -266,7 +283,7 @@ async function examineArm(slug: string, budgetUsd: number) {
             candidateModelId: candidate.id,
             bucket: prompt.bucket,
             outputText: result.text,
-            ragContextIds: v4.contextIds,
+            ragContextIds: [...v4.contextIds, ...(grammar?.grammarIds ?? [])],
             tokenCountIn: result.tokensIn ?? null,
             tokenCountOut: result.tokensOut ?? null,
             latencyMs: result.latencyMs,

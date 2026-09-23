@@ -1,4 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
+import {
+  buildHumanRounds,
+  type HumanRoundCounts,
+  type HumanRoundRow,
+} from "@/lib/arena/human-rounds";
 import { chrfMulti } from "@/lib/eval/chrf";
 import { stripAnswer } from "@/lib/eval/answer-strip";
 import { stripToneMarks } from "@/lib/eval/tone";
@@ -202,6 +207,14 @@ export interface CandidateScore {
   agreementScoreSourcefree: number | null;
 }
 
+/** One judged pair of arms, round by round - see src/lib/arena/human-rounds.ts. */
+export interface HumanRoundsPublicPair {
+  a: { name: string; approach: Approach };
+  b: { name: string; approach: Approach };
+  rounds: HumanRoundCounts[];
+  all: HumanRoundCounts;
+}
+
 export interface MethodMetrics {
   computedAt: string;
   corpus: CorpusCounts;
@@ -239,6 +252,9 @@ export interface MethodMetrics {
   agreementCeilingChrfSourcefree: number | null;
   /** Sorted by leak-free score, best first; unscoreable rows last. */
   candidates: CandidateScore[];
+  /** Blind pool judgments grouped by pair of arms and by judged round - the
+   * data behind the public "out of every 10 questions" chart. */
+  humanRounds: HumanRoundsPublicPair[];
 }
 
 // ─── pure helpers (exported for tests) ──────────────────────────────────────
@@ -268,7 +284,8 @@ export function approachLabel(
     // label, and it used to fall through the whole chain to "retrieval v1",
     // which put a v4.1 control on the public board under the name of the
     // oldest method we have.
-    if (versionLabel === "rag-v4-1-norepair") return "retrieval v4.1 (no repair)";
+    if (versionLabel === "rag-v4-1-norepair")
+      return "retrieval v4.1 (no repair)";
     if (versionLabel === "rag-v4-1") return "retrieval v4.1";
     if (versionLabel === "rag-v4") return "retrieval v4";
     if (versionLabel === "rag-v3") return "retrieval v3";
@@ -468,6 +485,7 @@ export async function computeMethodMetrics(
     pairwiseAnnotators,
     coldAnnotators,
     editAnnotators,
+    poolJudgmentRows,
   ] = await Promise.all([
     // The ONE benchmark-gold read. consentBenchmark is enforced in the query,
     // never downstream - the same consent rule collect.ts carries, for the
@@ -568,6 +586,45 @@ export async function computeMethodMetrics(
       where: { isDemo: false, ...REAL_CONTRIBUTOR },
       distinct: ["annotatorId"],
       select: { annotatorId: true },
+    }),
+    // Every pool judgment with the identity of both arms, for the round-by-
+    // round human verdict. Same pool rule and same seed-account exclusion as
+    // the pool counts above, so the chart and the counts cannot disagree.
+    prisma.pairwiseComparison.findMany({
+      where: {
+        isDemo: false,
+        ...REAL_CONTRIBUTOR,
+        modelOutputA: { candidateModel: { inPairingPool: true } },
+        modelOutputB: { candidateModel: { inPairingPool: true } },
+      },
+      select: {
+        createdAt: true,
+        winner: true,
+        modelOutputA: {
+          select: {
+            candidateModel: {
+              select: {
+                name: true,
+                kind: true,
+                versionLabel: true,
+                provider: true,
+              },
+            },
+          },
+        },
+        modelOutputB: {
+          select: {
+            candidateModel: {
+              select: {
+                name: true,
+                kind: true,
+                versionLabel: true,
+                provider: true,
+              },
+            },
+          },
+        },
+      },
     }),
   ]);
 
@@ -912,6 +969,37 @@ export async function computeMethodMetrics(
         (a.strippedChrfClean ?? Number.NEGATIVE_INFINITY),
     );
 
+  // Round-by-round human verdict. Rows a fake or a partial select cannot
+  // describe (no candidate on one side) are skipped rather than crashing the
+  // whole metrics computation - the chart shows fewer judgments, the page
+  // still renders.
+  const humanRoundRows: HumanRoundRow[] = [];
+  for (const r of poolJudgmentRows as Array<{
+    createdAt: Date;
+    winner: string;
+    modelOutputA?: { candidateModel?: HumanRoundRow["a"] | null } | null;
+    modelOutputB?: { candidateModel?: HumanRoundRow["b"] | null } | null;
+  }>) {
+    const a = r.modelOutputA?.candidateModel;
+    const b = r.modelOutputB?.candidateModel;
+    if (!a || !b || !r.createdAt || !r.winner) continue;
+    humanRoundRows.push({ createdAt: r.createdAt, winner: r.winner, a, b });
+  }
+  const humanRounds: HumanRoundsPublicPair[] = buildHumanRounds(
+    humanRoundRows,
+  ).map((p) => ({
+    a: {
+      name: p.a.name,
+      approach: approachLabel(p.a.kind, p.a.versionLabel, p.a.provider),
+    },
+    b: {
+      name: p.b.name,
+      approach: approachLabel(p.b.kind, p.b.versionLabel, p.b.provider),
+    },
+    rounds: p.rounds,
+    all: p.all,
+  }));
+
   return {
     computedAt: new Date().toISOString(),
     corpus: {
@@ -941,5 +1029,6 @@ export async function computeMethodMetrics(
     nSourcefreePrompts,
     agreementCeilingChrfSourcefree,
     candidates,
+    humanRounds,
   };
 }

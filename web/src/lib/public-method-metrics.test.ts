@@ -208,6 +208,7 @@ describe("public method-metrics payload - exact public surface", () => {
       "ceilings",
       "computedAt",
       "corpus",
+      "humanRounds",
       "likeForLikePrompts",
       "nSourcefreePrompts",
       "poolPreference",
@@ -338,6 +339,7 @@ function baseMetrics(): MethodMetrics {
     agreementCeilingChrfToneInsensitive: 50.12345,
     nSourcefreePrompts: 12,
     agreementCeilingChrfSourcefree: 44.5,
+    humanRounds: [],
     candidates: [
       {
         name: "GPT + RAG v4",
