@@ -1438,61 +1438,129 @@ other work, decide the fraction and log a compensating row (the ledger is
 append-only, never edited). The May 8 receipt is a one-command add if the
 window should start in May.
 
-## Session State (2026-09-23, in progress, Fable 5.1)
+## Session State (2026-09-23, Fable 5.1)
 
-Five-part request: (a) how-it-works human-verdict chart, (b) white paper
-one-pager + Google Doc + email, (c) ingest latest annotations into the RAG,
-(d) Ejeba 2023 JWAL concord paper line by line into the RAG, (e) apply the
-Fable 5.1 prompting guide.
+Five-part request from Halim (Sep 23): (a) a how-it-works chart showing
+speakers' verdicts and version-to-version progress for a lay reader; (b) a
+white-paper one-pager as a Google Doc in his format, references on page 2,
+emailed to Andrew Smart and the Google group; (c) ingest the latest
+annotations into the RAG and update the model; (d) read Salem's Ejeba 2023
+JWAL concord paper line by line into the RAG; (e) apply the Fable 5.1
+prompting guide.
 
-DONE SO FAR
-- App: `humanRounds` in method-metrics (+public projection), POOL_ROUNDS in
-  era.ts, `arena/human-rounds.ts` (+tests), v4.3 grammar leg
-  (`arena/grammar-block.ts`, `buildUserTurnV43`, chat/eval-runs/exam routes),
-  `scripts/register-rag-v4-3.ts` (NOT run). tsc clean; 144 tests pass in the
-  touched suites (3 label-set tests updated for v4.3).
-- Site: `HumanVerdicts.tsx` "Out of every ten questions" chart, tolerant
-  `parseHumanRounds`, content section `verdicts`; tsc clean, 21 tests pass.
-- Google Doc (Languages Unseen format, institutional register):
+### SHIPPED (all merged, all deployed)
+
+App PR #60 (squash, main, Vercel production):
+- `humanRounds` on /api/public/method-metrics: per pooled question batch
+  (POOL_ROUNDS in era.ts), out of every ten questions: ours / plain / draw
+  / neither. Live: batch 1 (Aug 20 to Sep 12) 0.9 / 3.3 / 1.0 / 4.8 of 246;
+  batch 2 (since Sep 13) 2.4 / 3.5 / 2.9 / 1.2 of 274. Wins credited by arm,
+  never by A/B position.
+- v4.3 = v4.2 prompt byte for byte + a retrieved GRAMMAR block at the head
+  of the user turn (src/lib/arena/grammar-block.ts): K=3 grammar_rule rows,
+  keyword-ranked, store-common words ignored (COMMON_WORD_SHARE 1/3 once the
+  store has 6+ rows), trailing-s stem, 3,200-char cap, leak-guarded on
+  frozen prompts, rows with verificationStatus scholarship_note never
+  served. Wired as its own retrieval leg in chat, eval-runs and the exam.
+- v4.4 = v4.3 + twelve prompt lines amended from the Sep 13-23 corrections
+  (src/lib/generation-prompt-v4-4.ts names each with its evidence): task
+  narration banned for text, institution class word may lead (Banki
+  Access), lo ti for destinations, negator spelled ñ (three lines), yí =
+  this, efu/efẹwọ, dates month-ordinal then day-cardinal then digits, oñ
+  demoted, eight Yoruba imports and eight pet words banned. 1,473 tokens
+  under a 1,500 ceiling. scripts/static-leak-check-v4-4.ts PASS (after
+  replacing two market examples that were frozen gold).
+- rag-v4-3 and rag-v4-4 in REPAIR_ROUND_VERSION_LABELS and checksNames.
+- Sep 23 changelog entry (app CHANGELOG constant; site copy byte-identical,
+  hash re-pinned, count 11).
+- tasks/jwal-ejeba-2023-rule-inventory.md: all 178 rules of the paper with
+  page, category, grade, status against what we serve, and where each now
+  lives; the ship list and contradictions; what the seed wrote.
+
+Site PR #2 + #3 (squash, main, Vercel production, verified live in the
+browser at wikitongues-ai-site.vercel.app/how-it-works#verdicts):
+- HumanVerdicts section "Out of every ten questions": dot rows per batch,
+  label and caption stacked above the dots, legend, reading sentence, the
+  why-not-per-version and why-not-not-corrected note. Copy states that the
+  same v3 package sits in both batches (rows show the questions and judges
+  changing, not the model), "ahead, not far ahead", and that a draw covers
+  no-verdict rows.
+
+Database (idempotent scripts, both re-run to prove it):
+- prisma/seed-rag-v4-3-grammar.ts: 15 grammar_rule rows created and
+  embedded (6 Ejeba served, 2 Ejeba notes, 6 community-verified from the
+  Sep 13-23 mine, 1 open-questions note); the 3 Aug 13 abstract Ejeba rows
+  relabelled scholarship_note (never deleted). grammar_rule rows: 30, of
+  which 6 notes. Scope-A gate caught 19 then 2 hits; the words for child,
+  goat, house, market, mother, money, god, water, hand, sun, road, morning
+  are frozen gold and are bracketed in English in the rows.
+- Candidates registered, NOT pooled: gemini-3-1-pro-rag-v4-3 (parent v4.2)
+  and gemini-3-1-pro-rag-v4-4 (parent v4.3).
+- v42 prompt fill re-run after the Google top-up: 123/124 rag-v3 outputs;
+  ig_v42_cult_001 truncates at the 4,096-token cap on rag-v3 (temperature 0,
+  deterministic) and stays unpaired. check-queue-servable OK, 178 servable.
+- Frozen exam, all three arms complete (43/43 each, ~$2.80 total; the
+  Supabase pooler dropped the connection three times mid-arm, P1001, and a
+  resume loop finished the job because the script skips existing outputs).
+  RESULT (agreement score, 100 = speaker agreeing with speaker; then the
+  tone-insensitive column, which tone marks cannot game; then speakerRank):
+    v4.4  105.3 (CI 81-129)  tone-ins 94.7  speakerRank 62.7  <- best real arm on every column
+    v4.1  103.1              tone-ins 87.0  speakerRank 57.3
+    v4.3  101.3              tone-ins 88.0  speakerRank 59.3
+    v4.2   96.4              tone-ins 89.8  speakerRank 59.3
+    v3     90.8 / bare 83.4 (tone-ins 82.7 / 80.0)
+    controls: v4 tone-stripped 123.2 (tone-ins 87.1), bare tone-stripped 111.9 (tone-ins 80.0)
+  Reading: v4.2's name rules cost letter-overlap on this exam (96.4 vs
+  v4.1's 103.1: few name prompts, and copied names score nothing against
+  respelled gold); the grammar block recovers +5 (v4.3) and the twelve
+  amended lines add +4 (v4.4). v4.4 is the first real system to beat both
+  tone-stripped controls on the tone-insensitive column (94.7 vs 87.1 /
+  80.0). CIs overlap by ±25, so the order is suggestive, not significant;
+  the blind round is the test that counts, and none of v4.x has sat it.
+
+Documents:
+- Google Doc "Igala, judged by its speakers - white paper brief (Sep 2026)"
+  in the Wikitongues Drive folder, Languages Unseen format, institutional
+  register, references on page 2 from the NotebookLM notebook:
   https://docs.google.com/document/d/1r_zNmz2bXav2TPkNG4kll3vFCBR4ypNnuWPhgj-mfJs/edit
-- Gmail DRAFT (not sent; Halim to read the doc first because it challenges
-  his framing): to Andy/Erin/Isaac, cc Sonja/Emily/Lydia/Daniel, subject
-  "[white paper] Igala brief + references", 83/90 body words.
-- JWAL paper added to the NotebookLM notebook (source ef561e37...).
-- Workflow wf_686246dd-68e: Extract (3 agents) and Diff done; Mine
-  (judgments, corrections) running at 12:07. Result lands in
-  scratchpad/jwal-workflow-result.json.
+  The "What the speakers decided" paragraph was rewritten in place (Composio
+  GOOGLEDOCS_REPLACE_ALL_TEXT) after the mine showed the two rounds are the
+  same v3 arm on different batches.
+- Gmail DRAFT, not sent: to Andy, Erin, Isaac; cc Sonja, Emily, Lydia,
+  Daniel; subject "[white paper] Igala brief + references"; 83/90 body
+  words. Halim should read the doc first: it challenges his framing
+  (fine-tuning was underpowered, not disproven; RLHF was never run; the
+  community's Wikipedia work may have taught the frontier model already).
+- JWAL Anniversary Volume 50 PDF added to the NotebookLM notebook.
 
-PENDING (in order): lint both repos -> app PR A (chart + v4.3 code) merge ->
-site PR A merge -> verify live chart; from the workflow: rule inventory
-`tasks/jwal-ejeba-2023-rule-inventory.md` + `prisma/seed-rag-v4-3-grammar.ts`
-(seed with lint + Scope-A gate + embeddings) -> register v4.3 -> leak check ->
-exams v4.2 + v4.3 -> changelog Sep 23 in app CHANGELOG then site (byte-identical
-hash re-pin, count 10 -> 11) -> app PR B + site PR B -> re-run v42 fill (11
-prompts) -> check-queue-servable -> final Context.md.
+### WHAT THE MINES FOUND (for Halim, not yet acted on)
 
-### 2026-09-23, 12:45 progress (same session)
+1. annotator_8 marks every pair a tie since Sep 13 (32 rows) and writes the
+   correct answer in the explanation, once naming a winner. Ask them to
+   pick. Their translations are gold candidates after review.
+2. The lead since Sep 13 is real but thin: 96 vs 66 of 162 decided votes,
+   sign test p=0.022, prompt-cluster CI on the per-10 margin (-0.0, 2.2).
+3. Every one of the 180 corrections sits on a chosen answer or a draw.
+4. Ours loses on directions (0/5), names in the v3 arm (fixed in v4.2),
+   and task narration; wins register (12/3), lexicon (29/15), numerals
+   (12/12 decided).
+5. Open for Salem/Agnes: na as pronoun or particle; du vs di; opata for
+   south; teacher; younger brother; borrowed academic nouns (keep English
+   or respell, s to ch); the yes-no final particle (a / á / ba, three
+   annotators, no corpus leg); book titles; next/last year, season, Sunday.
+6. The repos live in iCloud Drive; node_modules reads time out (memory
+   icloud-node-modules-timeouts). Suggest moving repos out of ~/Documents.
 
-DB state changed (idempotent scripts, re-runnable):
-- prisma/seed-rag-v4-3-grammar.ts ran: 15 grammar_rule rows created and
-  embedded (6 Ejeba served rows, 2 Ejeba notes, 6 community-verified rows
-  from the Sep 13-23 mine, 1 open-questions note); the 3 Aug 13 abstract
-  Ejeba rows relabelled verificationStatus=scholarship_note (never deleted).
-  Scope-A gate needed two rounds of schematizing: the words for child, goat,
-  house, market, mother, money, god, water, hand, sun, road, morning are
-  frozen gold and now appear as [bracketed English] in the rows.
-- Candidates registered, NOT pooled: gemini-3-1-pro-rag-v4-3 (v4.2 prompt +
-  grammar block) and gemini-3-1-pro-rag-v4-4 (v4.4 prompt + grammar block).
-- v4.4 = generation-prompt-v4-4.ts: twelve named line edits over v4.2 (task
-  narration, institution class word, lo ti, ñ negator, yí = this, efu/efẹwọ,
-  dates month-ordinal day-cardinal, oñ demoted, Yoruba imports, pet words).
-  1,473 tokens under a 1,500 ceiling. static-leak-check-v4-4 PASS.
-- Grammar block: rows with status scholarship_note are skipped
-  (GRAMMAR_NOTE_STATUS). Smoke test: 1-2 rows served per question because
-  rows run 1,000-1,400 chars against a 2,200 cap (being raised).
+### NEXT
 
-Judgment mine, three things Halim must know: (1) rounds are the SAME v3 arm
-on different question batches, so the chart is labelled by batch and says
-so; (2) annotator_8 marks every pair a tie and writes the answer in the
-explanation (32 rows = "no verdict"): someone should ask them to pick;
-(3) the lead since Sep 13 is real but thin (59% of decided, p=0.02).
+- Halim's call: pool v4.4 against bare Gemini and v3 (ALLOWED_PAIRINGS +
+  an enable-pool script + train-queue fill for v4.4 on the 178 servable
+  prompts, ~$3-5 of Gemini + check-queue-servable) so the next annotation
+  round yields version-to-version human data and the chart grows a row per
+  version. Recommended: v4.4 leads every exam column.
+- Fix ig_v42_cult_001 for rag-v3 (raise maxTokens for that fill or accept
+  one unpaired prompt).
+- Send the Andrew/Google email once Halim has read the doc.
+- Older pending: FFWD application page-1 answers; Claude subscription
+  allocation; May 8 receipt; Culture in the Code PDF into the notebook.
+
