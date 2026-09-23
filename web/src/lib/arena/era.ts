@@ -52,6 +52,52 @@ export const MIN_DECIDED_PER_CANDIDATE = 5;
  * still equal this constant against a fixture reproducing that decision. */
 export const POOL_PIVOT_AT = "2026-08-20T19:38:08.385Z";
 
+/**
+ * THE JUDGED ROUNDS - fixed history, like the CHANGELOG, not a derivation.
+ *
+ * The public "out of every 10 questions" chart splits the pool judgments into
+ * rounds so a reader can see movement over time without a statistics
+ * lecture. A round boundary is a date on which the QUESTIONS changed, because
+ * that is the only honest reason to split: comparing rounds that differ only
+ * by calendar would invite reading noise as progress.
+ *
+ *   round-1  the annotation pivot (POOL_PIVOT_AT) until the day before the
+ *            v4.2 prompt bank went live. Judged the original claude_authored_v1
+ *            bank.
+ *   round-2  from 2026-09-13, the day prisma/seed-prompt-bank-v42.ts landed
+ *            124 new questions aimed at the model's measured failures (names,
+ *            directions, dates, numbers, encyclopedic register, formulas).
+ *
+ * Verified against production on 2026-09-23: splitting by this date and
+ * splitting by prompt provenance give the same rounds to within three
+ * judgments (three old-bank questions were judged after the boundary). Add a
+ * round here when the questions change again; never move an existing one.
+ */
+export interface PoolRoundDef {
+  key: string;
+  /** Plain-words label a layperson reads on the chart. */
+  label: string;
+  /** ISO instant, inclusive. */
+  from: string;
+  /** ISO instant, exclusive; null = open-ended (the current round). */
+  to: string | null;
+}
+
+export const POOL_ROUNDS: readonly PoolRoundDef[] = [
+  {
+    key: "round-1",
+    label: "first batch of questions, Aug 20 to Sep 12",
+    from: POOL_PIVOT_AT,
+    to: "2026-09-13T00:00:00.000Z",
+  },
+  {
+    key: "round-2",
+    label: "new batch of questions, since Sep 13",
+    from: "2026-09-13T00:00:00.000Z",
+    to: null,
+  },
+];
+
 /** "since_pivot" is the default: it is the window where speakers are actually
  * deciding. "all_time" stays one click away because hiding the old era would
  * be its own dishonesty. */

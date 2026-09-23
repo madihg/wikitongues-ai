@@ -10,7 +10,12 @@ import {
   buildV4FamilyTurn,
   isV4FamilyVersionLabel,
   runsRepairRound,
+  servesGrammarBlock,
 } from "@/lib/arena/frozen-exam";
+import {
+  buildGrammarBlock,
+  type GrammarBlockResult,
+} from "@/lib/arena/grammar-block";
 import {
   encodeChatEvent,
   type ChatReply,
@@ -423,6 +428,16 @@ export async function POST(req: Request) {
               answer: string;
             }[],
           }),
+      // The grammar block is its OWN leg, never folded into the v4 build:
+      // the v4 build is shared by every v4-family column and is frozen for
+      // comparability. Only a rag-v4-3 column reads this result.
+      candidates.some(
+        (c) =>
+          isV4FamilyVersionLabel(c.versionLabel) &&
+          servesGrammarBlock(c.versionLabel),
+      )
+        ? buildGrammarBlock(prisma, chatQuery)
+        : Promise.resolve<GrammarBlockResult | null>(null),
     ]),
     retrievalAlarm.reached,
   ]);
@@ -435,7 +450,7 @@ export async function POST(req: Request) {
       headers: chatStreamHeaders(),
     });
   }
-  const [v2, v4, v1] = built;
+  const [v2, v4, v1, grammar] = built;
   const { ragContext, goldExamples } = v1;
 
   // STREAMING, NOT BUFFERING. The buffered version held the response until
@@ -546,6 +561,7 @@ export async function POST(req: Request) {
                 v4Label,
                 { text: userMessage, bucket: null },
                 v4!,
+                grammar ?? undefined,
               )
             : null;
           // Every arm announces that its provider call has started, so a
@@ -640,23 +656,23 @@ export async function POST(req: Request) {
             // For v2/v4, "chunks" is the served lexicon + parallel (+ v4
             // corrections) material - the audit-trail ids minus the gold
             // exemplars.
-            retrievedChunks:
-              isV4Family
-                ? v4!.contextIds.filter((id) => !id.startsWith("gold:")).length
-                : isV2
-                  ? v2!.contextIds.filter((id) => !id.startsWith("gold:"))
-                      .length
-                  : candidate.ragEnabled
-                    ? ragContext.length
-                    : 0,
-            retrievedExemplars:
-              isV4Family
-                ? v4!.exampleTurns.length
-                : isV2
-                  ? v2!.exampleTurns.length
-                  : candidate.ragEnabled
-                    ? goldExamples.length
-                    : 0,
+            retrievedChunks: isV4Family
+              ? v4!.contextIds.filter((id) => !id.startsWith("gold:")).length +
+                (servesGrammarBlock(v4Label) && grammar
+                  ? grammar.grammarIds.length
+                  : 0)
+              : isV2
+                ? v2!.contextIds.filter((id) => !id.startsWith("gold:")).length
+                : candidate.ragEnabled
+                  ? ragContext.length
+                  : 0,
+            retrievedExemplars: isV4Family
+              ? v4!.exampleTurns.length
+              : isV2
+                ? v2!.exampleTurns.length
+                : candidate.ragEnabled
+                  ? goldExamples.length
+                  : 0,
             error: null,
           };
         } catch (e) {

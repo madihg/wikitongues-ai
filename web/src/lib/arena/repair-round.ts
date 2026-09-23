@@ -97,10 +97,14 @@ import { hasBudgetForReask } from "@/lib/arena/turn-budget";
 export const REPAIR_ROUND_VERSION_LABELS = [
   "rag-v4-1",
   "rag-v4-2",
+  "rag-v4-3",
+  "rag-v4-4",
 ] as const;
 
 /** True when this label's serving path runs the repair round. */
-export function labelRunsRepairRound(label: string | null | undefined): boolean {
+export function labelRunsRepairRound(
+  label: string | null | undefined,
+): boolean {
   return (REPAIR_ROUND_VERSION_LABELS as readonly string[]).includes(
     label as string,
   );
@@ -218,10 +222,34 @@ export function findAllowlistViolations(
  * Igala form; English weekday and month names are governed by the dates rule.
  */
 const NOT_A_NAME = new Set([
-  "i", "igala", "english", "yoruba", "igbo", "hausa", "nigerian", "african",
-  "god", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
-  "sunday", "january", "february", "march", "april", "may", "june", "july",
-  "august", "september", "october", "november", "december",
+  "i",
+  "igala",
+  "english",
+  "yoruba",
+  "igbo",
+  "hausa",
+  "nigerian",
+  "african",
+  "god",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
 ]);
 
 /** True when the request is a translation - the only shape check (d) fires on. */
@@ -371,7 +399,10 @@ export function checkIgalaOutput(
   opts: RepairCheckOptions = {},
 ): RepairViolation[] {
   const violations: RepairViolation[] = [];
-  const badChars = findAllowlistViolations(output, sourceWordSet(opts.sourceText));
+  const badChars = findAllowlistViolations(
+    output,
+    sourceWordSet(opts.sourceText),
+  );
   if (badChars.length > 0) {
     violations.push({
       kind: "banned-character",

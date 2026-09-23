@@ -35,14 +35,22 @@ describe("the bug: the allowlist flagged names the community says to keep", () =
   it("flags every s-bearing proper noun when it has no source to compare against", () => {
     // This is the SHIPPED behaviour before the fix, kept as a test so the
     // regression is visible rather than remembered.
-    const answer = "Egbuson chi ọma Bayelsa, i la Green Spring Montessori ki de Lagos.";
+    const answer =
+      "Egbuson chi ọma Bayelsa, i la Green Spring Montessori ki de Lagos.";
     expect(findAllowlistViolations(answer)).toEqual(
-      expect.arrayContaining(["Egbuson", "Bayelsa", "Spring", "Montessori", "Lagos"]),
+      expect.arrayContaining([
+        "Egbuson",
+        "Bayelsa",
+        "Spring",
+        "Montessori",
+        "Lagos",
+      ]),
     );
   });
 
   it("exempts those same words once the question they came from is supplied", () => {
-    const answer = "Egbuson chi ọma Bayelsa, i la Green Spring Montessori ki de Lagos.";
+    const answer =
+      "Egbuson chi ọma Bayelsa, i la Green Spring Montessori ki de Lagos.";
     expect(findAllowlistViolations(answer, sourceWordSet(SOURCE))).toEqual([]);
     expect(checkIgalaOutput(answer, { sourceText: SOURCE })).toEqual([]);
   });
@@ -51,25 +59,35 @@ describe("the bug: the allowlist flagged names the community says to keep", () =
     // "he didn't tell us what he studied": psychology trips the allowlist on
     // its s, so borrowing it was penalised and omitting it was not.
     expect(findAllowlistViolations("i kọ psychology")).toEqual(["psychology"]);
-    expect(findAllowlistViolations("i kọ psychology", sourceWordSet(SOURCE))).toEqual([]);
+    expect(
+      findAllowlistViolations("i kọ psychology", sourceWordSet(SOURCE)),
+    ).toEqual([]);
   });
 
   it("still catches the model's OWN inventions, which are never in the question", () => {
     // The adsa family: zero-attested, recurring verbatim across unrelated
     // prompts. The exemption is a scope, not a weakening.
-    const v = checkIgalaOutput("ádṣa é-jẹu ki de Lagos", { sourceText: SOURCE });
+    const v = checkIgalaOutput("ádṣa é-jẹu ki de Lagos", {
+      sourceText: SOURCE,
+    });
     expect(v.map((x) => x.kind)).toContain("banned-character");
-    expect(v.find((x) => x.kind === "banned-character")!.detail).toContain("ádṣa");
-    expect(v.find((x) => x.kind === "banned-character")!.detail).not.toContain("Lagos");
+    expect(v.find((x) => x.kind === "banned-character")!.detail).toContain(
+      "ádṣa",
+    );
+    expect(v.find((x) => x.kind === "banned-character")!.detail).not.toContain(
+      "Lagos",
+    );
   });
 
   it("matches case-insensitively but nothing looser", () => {
     expect(sourceWordSet("Visit Lagos").has("lagos")).toBe(true);
-    expect(findAllowlistViolations("lagos", sourceWordSet("Visit Lagos"))).toEqual([]);
+    expect(
+      findAllowlistViolations("lagos", sourceWordSet("Visit Lagos")),
+    ).toEqual([]);
     // A DIFFERENT word that merely starts the same is not exempt.
-    expect(findAllowlistViolations("Lagosia", sourceWordSet("Visit Lagos"))).toEqual([
-      "Lagosia",
-    ]);
+    expect(
+      findAllowlistViolations("Lagosia", sourceWordSet("Visit Lagos")),
+    ).toEqual(["Lagosia"]);
   });
 
   it("is a no-op when no source is supplied, so untouched call sites keep their behaviour", () => {
@@ -82,21 +100,35 @@ describe("finding the names a source supplies", () => {
   it("takes capitalized words that are not sentence-initial", () => {
     const found = findSourceProperNouns(SOURCE);
     expect(found).toEqual(
-      expect.arrayContaining(["Egbuson", "Bayelsa", "Nigeria", "Green", "Spring", "Montessori", "Lagos"]),
+      expect.arrayContaining([
+        "Egbuson",
+        "Bayelsa",
+        "Nigeria",
+        "Green",
+        "Spring",
+        "Montessori",
+        "Lagos",
+      ]),
     );
   });
 
   it("skips sentence-initial words, where capitalization means nothing", () => {
     // "Write" and "Translate" are not names, and neither is the first word
     // after a full stop or a colon.
-    expect(findSourceProperNouns("Write the Igala word for water.")).toEqual([]);
-    expect(findSourceProperNouns("Translate: Ada went home. Musa stayed.")).toEqual([]);
+    expect(findSourceProperNouns("Write the Igala word for water.")).toEqual(
+      [],
+    );
+    expect(
+      findSourceProperNouns("Translate: Ada went home. Musa stayed."),
+    ).toEqual([]);
     expect(findSourceProperNouns("She met Ada. Musa stayed.")).toEqual(["Ada"]);
   });
 
   it("skips languages, peoples, God and English calendar words, which do have Igala forms", () => {
     expect(
-      findSourceProperNouns("He speaks Igala and English, thanks God every Sunday in March."),
+      findSourceProperNouns(
+        "He speaks Igala and English, thanks God every Sunday in March.",
+      ),
     ).toEqual([]);
   });
 
@@ -108,7 +140,9 @@ describe("finding the names a source supplies", () => {
 describe("check (d): names must survive a translation", () => {
   it("fires only on a translation request", () => {
     expect(isTranslationRequest(SOURCE)).toBe(true);
-    expect(isTranslationRequest("How do people in Idah greet each other?")).toBe(false);
+    expect(
+      isTranslationRequest("How do people in Idah greet each other?"),
+    ).toBe(false);
     expect(isTranslationRequest(undefined)).toBe(false);
     // A question-and-answer turn has no obligation to repeat a name.
     expect(
@@ -125,16 +159,23 @@ describe("check (d): names must survive a translation", () => {
     expect(dropped).toEqual(
       expect.arrayContaining(["Egbuson", "Bayelsa", "Lagos", "Montessori"]),
     );
-    const v = checkIgalaOutput(mangled, { sourceText: SOURCE, checkNames: true });
+    const v = checkIgalaOutput(mangled, {
+      sourceText: SOURCE,
+      checkNames: true,
+    });
     expect(v.map((x) => x.kind)).toContain("name-not-preserved");
-    expect(v.find((x) => x.kind === "name-not-preserved")!.detail).toContain("Lagos");
+    expect(v.find((x) => x.kind === "name-not-preserved")!.detail).toContain(
+      "Lagos",
+    );
   });
 
   it("passes an answer that kept every name", () => {
     const good =
       "Timini Egbuson chi ọma Bayelsa ki de Nigeria. I la Green Spring Montessori ki de Lagos, i kọ psychology.";
     expect(findDroppedNames(good, SOURCE)).toEqual([]);
-    expect(checkIgalaOutput(good, { sourceText: SOURCE, checkNames: true })).toEqual([]);
+    expect(
+      checkIgalaOutput(good, { sourceText: SOURCE, checkNames: true }),
+    ).toEqual([]);
   });
 
   it("stays off unless the caller asks for it, so v4.1 is unchanged", () => {
@@ -145,10 +186,17 @@ describe("check (d): names must survive a translation", () => {
 });
 
 describe("which labels run the round", () => {
-  it("is v4.1 and v4.2, and nothing else", () => {
-    expect([...REPAIR_ROUND_VERSION_LABELS]).toEqual(["rag-v4-1", "rag-v4-2"]);
+  it("is v4.1 through v4.4, and nothing else", () => {
+    expect([...REPAIR_ROUND_VERSION_LABELS]).toEqual([
+      "rag-v4-1",
+      "rag-v4-2",
+      "rag-v4-3",
+      "rag-v4-4",
+    ]);
+    expect(labelRunsRepairRound("rag-v4-4")).toBe(true);
     expect(labelRunsRepairRound("rag-v4-1")).toBe(true);
     expect(labelRunsRepairRound("rag-v4-2")).toBe(true);
+    expect(labelRunsRepairRound("rag-v4-3")).toBe(true);
     expect(labelRunsRepairRound("rag-v4")).toBe(false);
     expect(labelRunsRepairRound("rag-v4-1-norepair")).toBe(false);
     expect(labelRunsRepairRound("rag-v3")).toBe(false);

@@ -167,3 +167,25 @@ export function buildUserTurnV4(
     "\n\n",
   );
 }
+
+/**
+ * The rag-v4-3 user turn: buildUserTurnV4 with the GRAMMAR block in front.
+ * Grammar rules are the most general material and the least sensitive to
+ * position, so they take the seat farthest from the question - the same
+ * reasoning that put the corrections block first in v4. Everything after
+ * the grammar block is buildUserTurnV4 byte for byte, so with an empty block
+ * this returns exactly what v4.2 would have sent (pinned by test).
+ */
+export function buildUserTurnV43(
+  question: string,
+  retrieval: {
+    correctionsBlock: string;
+    parallelBlock: string;
+    dictionaryBlock: string;
+  },
+  grammarBlock: string,
+  bucket: string | null,
+): string {
+  const base = buildUserTurnV4(question, retrieval, bucket);
+  return grammarBlock.length > 0 ? `${grammarBlock}\n\n${base}` : base;
+}
