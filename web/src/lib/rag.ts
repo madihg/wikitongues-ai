@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import type { RagEntry } from "@prisma/client";
 import OpenAI from "openai";
+import { V4_5_ONLY_CHUNK_TYPES } from "./arena/grammar-chunk-types";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -50,16 +51,21 @@ async function searchRagVector(
   // hence the explicit OPERATOR(extensions.<=>) form. We qualify rather than
   // widening search_path because Supabase pools connections - a session-level
   // SET is not guaranteed to survive between statements, but this SQL is.
+  // The v4.5-only grammar rows (V4_5_ONLY_CHUNK_TYPES) are served by the
+  // rag-v4-5 grammar block alone; the v1 path must never retrieve them, or
+  // seeding them would change every rag-v1 column. Bound as a text[] param.
   const results = await prisma.$queryRawUnsafe<RagEntry[]>(
     `SELECT id, language, "chunkType", topic, content, source,
             "verificationStatus", "annotatorId", "createdAt", "updatedAt"
      FROM "RagEntry"
      WHERE language = $1 AND embedding IS NOT NULL
+       AND NOT ("chunkType" = ANY($4::text[]))
      ORDER BY embedding OPERATOR(extensions.<=>) $2::extensions.vector
      LIMIT $3`,
     language,
     vectorLiteral,
     limit,
+    [...V4_5_ONLY_CHUNK_TYPES],
   );
 
   return results;
@@ -75,9 +81,12 @@ async function searchRagKeyword(
     .split(/\s+/)
     .filter((w) => w.length > 2);
 
+  // Same exclusion as the vector path: v4.5-only rows never reach v1.
+  const notV45 = { notIn: [...V4_5_ONLY_CHUNK_TYPES] };
+
   if (words.length === 0) {
     return prisma.ragEntry.findMany({
-      where: { language },
+      where: { language, chunkType: notV45 },
       take: limit,
       orderBy: { updatedAt: "desc" },
     });
@@ -86,6 +95,7 @@ async function searchRagKeyword(
   return prisma.ragEntry.findMany({
     where: {
       language,
+      chunkType: notV45,
       OR: words.flatMap((word) => [
         { content: { contains: word, mode: "insensitive" } },
         { topic: { contains: word, mode: "insensitive" } },

@@ -1,122 +1,110 @@
 import { IGALA_SYSTEM_V4_4 } from "./generation-prompt-v4-4";
 
 /**
- * System prompt for the rag-v4-5 serving path: IGALA_SYSTEM_V4_4 with ten
- * lines amended. The amendments trace to the Salem Ejeba and Lydia Wiernik
- * write-up of 2026-09-25 ("Igala grammar writeup: Patching the holes in the
- * model"), read rule by rule and diffed against what we serve in
- * tasks/salem-lydia-writeup-2026-09-25-inventory.md (82 rules, graded by
- * evidence class), with Halim's decisions of 2026-10-08
- * (tasks/prd-salem-writeup-ingest-2026-10-08.md); to a 2026-10-08 read of
- * the 249 unjudged v4.4 train answers against the speakers' gold on the same
- * prompts; and to the three-lens review of the first v4.5 draft, adjudicated
- * the same day, every claim re-checked against the gold before it landed.
- * Retrieval, the repair round and the name check are v4.4's, unchanged. The
- * grammar block reads v4.4's rows plus the v4.5 rows
- * (prisma/seed-rag-v4-5-grammar.ts, chunkType grammar_rule_v4_5, which no
- * other label reads), so a v4.4/v4.5 delta is these lines plus those rows.
+ * System prompt for the rag-v4-5 serving path: IGALA_SYSTEM_V4_4 with
+ * fourteen lines amended. The amendments trace to the Salem Ejeba and Lydia
+ * Wiernik write-up of 2026-09-25 ("Igala grammar writeup: Patching the holes
+ * in the model"), diffed against what we serve in
+ * tasks/salem-lydia-writeup-2026-09-25-inventory.md, with Halim's decisions
+ * of 2026-10-08 (tasks/prd-salem-writeup-ingest-2026-10-08.md); to the read
+ * of v4.4's 249 unjudged train answers against the speakers' gold; and to
+ * two review rounds of the same day, every claim re-counted before it
+ * landed. Retrieval, the repair round and the name check are v4.4's. Three
+ * things differ besides these lines, all for rag-v4-5 only: the grammar
+ * block also reads the v4.5 rows (prisma/seed-rag-v4-5-grammar.ts, chunkType
+ * grammar_rule_v4_5, plus grammar_rule_v4_5_tone when the question asks for
+ * tone); the dictionary block loses its tone accents unless the question
+ * asks for tone (buildV4FamilyTurn); and nothing else reads those rows
+ * (src/lib/arena/grammar-chunk-types.ts, src/lib/rag.ts).
  *
  * Bar for a prompt line, unchanged: two evidence classes (grade B) or three
  * (A), or a correction of a form the prompt itself asserts. The write-up and
- * Ejeba (2023) count as ONE class, the same author; the Bible corpus and the
- * community's corrections and gold are the other two. Every rule here is
- * restated; no sentence of the write-up appears. Gold counts are over the
- * 1,446 gold answers of the Oct 8 review export unless a line says
- * otherwise.
+ * Ejeba (2023) count as ONE class; the Bible corpus and the community's
+ * corrections and gold are the other two. Every rule is restated; no
+ * sentence of the write-up appears. Gold counts are over the 1,446 gold
+ * answers of the Oct 8 review export; corpus counts are ParallelPair rows.
  *
- *  COMP Every ki needs a job, stated once (W-3.2-1, W-3.2-3, W-3.2-13).
- *       Measured: a standalone ki in 31% of v4.4 answers against 15.5% of
- *       speakers' answers. v4.4's "kì/ki starts a new clause" read as a
- *       licence (inventory contradiction 1), and the jobs of kì were listed
- *       three ways on three lines. The kẹ line now holds the one list:
+ *  COMP Every ki needs a job, listed once (W-3.2-1, W-3.2-3, W-3.2-13):
  *       relativizer after a noun (ku before ma/mẹ, ku = ki + u); may or
- *       must-not before a verb; ki or ku after tọdu and (i)chẹñwu (gold:
- *       chẹñwu ki/ku 30, tọdu ku/ki 21; corpus ichewñ ku 704/753); kakini or
- *       ka ki ni after say, tell, know or want (gold: after chẹ, ka, ñwu,
- *       tẹnẹ 'want', mọ 'know'; never after 'hear', so hear is not listed).
- *       Anything else starts a new sentence. The kí/kì tone contrast is NOT
- *       in the prompt: gold writes kakini for 'that' after saying, kí only 9
- *       times (two annotators), and speakers strip the tone when they touch
- *       it. The relative-clause line loses its duplicate list and lẹ MAY
- *       close a relative clause (31 gold relatives close with lẹ; on two
- *       prompts with 14 gold answers none does).
- *  NUM  Number-agreement guard (W-3.1-2, W-3.1-3, W-3.1-10). Only du/kó
- *       (take), tinyo/rinyo (throw away), tẹ/jọ (keep, set down), tọ/nyu/ru
- *       (put in) and gwugwu/jọ (sit) change for number; no verb changes for
- *       person. Glosses per row 42657b2c, tasks/igala-grammar-deduced.md
- *       R5.6 and tasks/grammar-evidence-scholarship.md 1.3 (tẹ is keep, not
- *       sit). gwugwu clears the bar on the community leg: 11 gold answers,
- *       four annotators; plural jọ for sit has one gold token. Corpus leg for
- *       the rest: du/kó 137/77 rows, tinyo/rinyo 356/761, no
- *       person-inflected verb anywhere.
- *  VAR  One variety per answer (W-4-2, W-4-3), Halim's decision of
- *       2026-10-08, written as a constraint the model can obey: the model
- *       holds no material saying which forms are Idah, so it keeps to the
- *       Central Igala of its references, mixes no two areas' forms unless
- *       asked to compare, and names Central Igala when asked. The
- *       dialect-honesty sentence it joins is kept verbatim. No Ibaji or
- *       Ogwugwu form is asserted (contradiction 12: the ra ban stands).
- *  ELI  Elision is optional (contradiction 3): gold contracts in 32.4% of
- *       answers and the same annotators write both forms of one phrase, so
- *       the first vowel MAY be dropped; "never add or strip a word-initial
- *       vowel" stays (grade A). 'to/for' is ñwu or ñwi, written whole even
- *       before a vowel (gold ñwu/nwu 231, ñwi/nwi 81, ñw' 7). The efu clause
- *       is v4.4's unchanged: speakers do write ef' before a vowel and served
- *       row v4.3 locative writes ef'ọdọ, so the draft's "ef' is rare" is
- *       withdrawn. REGISTER's "apostrophized elision" becomes "optional
- *       elision" to match.
- *  NEG  The negative is one nasal at the end of the clause, spelled as the
- *       speakers spell it (ñ, -n or 'ñ): gold has a free-standing ñ 48 times
- *       from five annotators, -n 11, 'ñ 12, so the draft's "attached" rule
- *       is withdrawn and the spelling is not legislated. Never the Yoruba
- *       prohibitive má (both annotators who saw it rejected it); preverbal
- *       ma is left alone, being the plural pronoun and the speakers' own
- *       why-not frame.
- *  INC  The incompletive á is fused to its verb (alọ, 'where are you
- *       going', annotator_8) or written a' (a'jẹñwu, 'is eating',
- *       annotator_3; a' forms 31 times in gold), never a word on its own:
- *       v4.4 wrote "a chi", "a di", "a lo" as two words 168 times, fused 37,
- *       and "the standalone word á" taught it.
- *  POSS The -wñ ban names the forms, not the ending: never chẹwñ (v4.4's
- *       own invention) or bẹwñ (corrected by annotator_5); the possessive
- *       his/her is ñwu, -wn or -wñ (annotator_6 writes -wñ after the word
- *       for mother; annotator_8 writes ọlawn, ugbo-wn), and ewñ 'what'
- *       feeds a served why-frame. The example is schematized as
- *       "[mother] wñ": spelled out, it is the whole gold answer of a frozen
- *       prompt, and the Scope-A check caught it.
- *  TONE The draft's tone exception (always tone kí/kì and jọ/jọ̀) is
- *       withdrawn: gold leaves ki unmarked 107 times against 48 kì (one
- *       annotator) and 9 kí, and the line would have toned every legitimate
- *       ki. The kí/kì contrast is served by a v4.5 row only when a question
- *       asks for tone; jọ/jọ̀ is a note (the Bible marks no tone, so the
- *       corpus cannot attest the mark). REGISTER now says dictionary and
- *       example forms give the letters and their tone marks stay off unless
- *       asked: the dictionary block arrives toned and tells the model to copy
- *       forms exactly, the likeliest reason v4.4 toned 69% of its answers.
- *       That shared user turn is v4.4's too and is not touched. The prompt's
- *       own àmì becomes ami (the mark distinguishes nothing; gold writes ami,
- *       àmì and am'); á keeps its mark (it is what tells it from a = we),
- *       as do kó, kì and yí.
+ *       must-not before a verb, one may-clause per blessing; ki or ku after
+ *       tọdu and (i)chẹñwu (gold 21 and 30; corpus todu ku/ki 202/272,
+ *       (i)chewñ ku/ki 264/229 bigrams), kẹ = ki + ẹ there (annotator_7;
+ *       annotator_5 writes kẹ for ki + ẹ); ka ki or kaki = when, while
+ *       before a clause of time ('we were farming when the rain started':
+ *       annotators 4, 5, 7); kakini, ka ki ni or kaki after say, tell or
+ *       want, never dropped. The first draft had "know" there on a misread
+ *       token: kẹ mọ kaki is 'drink while', not 'know that'. The measured
+ *       excess (a standalone ki in 31% of v4.4 answers against 15.5% of
+ *       speakers') is density, not jobless ki: no v4.4 sentence opens with
+ *       ki, and the words before its standalone ki are listed jobs (ọjọ 27,
+ *       the blessing; ichẹñwu 22; ka 19; ẹnẹ 15; tọdu 11). Speakers bless in
+ *       one clause (evidence-full, authenticity 5), hence the may-clause
+ *       limit. The joining line now separates clauses in sequence (a new
+ *       sentence, not oñ) from a clause inside another (keeps its linker),
+ *       and lẹ MAY close a relative clause (31 gold relatives do; on two
+ *       prompts with 14 gold answers none does). No toned kí: gold writes
+ *       kakini for 'that', kí 22 times (19 by one annotator), never opening
+ *       a that-clause.
+ *  KI   ki untoned everywhere in the prompt (negation, relative, gate): gold
+ *       ki 461, kì 139 (133 by one annotator), kí 22; with kí gone the mark
+ *       distinguishes nothing.
+ *  NUM  Number guard (W-3.1-2, W-3.1-3, W-3.1-10): du/kó (take), tinyo/rinyo
+ *       (throw away), tẹ/jọ (keep, set down), tọ/nyu/ru (put in); none for
+ *       person. Glosses per row 42657b2c, deduced R5.6 and scholarship 1.3.
+ *       Corpus: du/kó 137/77, tinyo/rinyo 356/761, no person-inflected verb.
+ *       Sit is not listed: gwugwu (11 gold, 3 annotators) has one plural jọ
+ *       token beside it, and the commoner gwanẹ (9 gold, 4 annotators) takes
+ *       a plural subject unchanged; row 2 records gwugwu as data.
+ *  VAR  One form per word (W-4-2, W-4-3; Halim's decision of 2026-10-08),
+ *       as something the model can check: the references are not all
+ *       Central (170 gold answers are tagged ankpa, and example turns carry
+ *       no dialect), so where they give two area forms for one word the
+ *       model uses one, unless asked to compare, and says it follows the
+ *       Central (Idah) usage of its references when asked. No Ibaji or
+ *       Ogwugwu form is asserted (the ra ban stands).
+ *  ELI  Elision is optional (contradiction 3: gold contracts in 32.4% of
+ *       answers); "never add or strip a word-initial vowel" stays (grade A).
+ *       'to/for' is ñwu or ñwi, ñwi before a vowel (63 of 67), written
+ *       whole; ñw' is rare (5). The ban on plain n is withdrawn: gold writes
+ *       nwu 45, nwi 12, nw' 2, and the write-up treats nw and ñw as one word
+ *       spelled two ways. The efu clause is v4.4's (speakers write ef'
+ *       before a vowel; the served v4.3 locative row writes ef'ọdọ).
+ *  NEG  One nasal at the end of the clause, spelled as speakers spell it:
+ *       free-standing ñ 48 (5 annotators), -n 51 (3), 'ñ 27 (5), fused 20
+ *       (4). Never the Yoruba prohibitive má; preverbal ma (they; the
+ *       why-not frame) is left alone.
+ *  INC  The incompletive stands before its verb, apart, fused or with an
+ *       apostrophe: on 'the child is eating' 15 of 24 gold answers write it
+ *       apart (annotators 3, 4, 5), and the export has 17 toned standalone
+ *       á; fused alọ and ajẹñwu, apostrophe a'loti (all train prompts).
+ *       v4.4's "the standalone word á" is replaced, and so is the first
+ *       draft's "never a word on its own".
+ *  POSS The -wñ ban names forms: never chẹwñ (v4.4's invention) or bẹwñ
+ *       (corrected); the possessive his/her is ñwu, -wn or wñ after the
+ *       noun (ọlawn, annotator_8, a train prompt), and ewñ 'what' feeds a
+ *       served why-frame. No frozen-gold shape is used as the example.
+ *  TONE No tone exception line: tone marks stay off unless asked, METHOD 6
+ *       says so beside "copy attested letters", and METHOD 3 asks for the
+ *       dictionary's letters, not its forms (the dictionary arrives toned
+ *       and told the model to copy it exactly, the likeliest reason v4.4
+ *       toned 69% of its answers). àmì becomes ami; á keeps its mark (it is
+ *       what tells it from a = we), as do kó and yí. The kí/kì contrast is
+ *       a row gated in code to tone questions; jọ/jọ̀ is a note.
  *  TRIM ORTHOGRAPHY drops the vowel list and the digraph sentence (the
- *       allowlist in the same line enumerates both) and "Mark tone as the
- *       dictionary and examples do", which REGISTER contradicts. METHOD 1
- *       drops its restated tail.
+ *       allowlist enumerates both) and "Mark tone as the dictionary and
+ *       examples do"; METHOD 1 drops its restated tail.
  *
  * NOT changed, on purpose: the presentative yì, hyphenated àma- and the
- * compound idioms, ìpọ́lú for Paul, the negator spelling ń, pronoun
- * doubling, nwu as a free possessive (inventory contradictions 4 to 11);
- * the factive/non-factive kí/kì reading (waits for a blind judgment by
- * three annotators); the register-weight ask (no failing outputs named
- * yet). The static Scope-A check (scripts/static-leak-check-v4-5.ts) runs
- * before this prompt serves.
+ * compound idioms, ìpọ́lú for Paul, the negator spelling ń, pronoun doubling
+ * (inventory contradictions 4 to 9); the factive/non-factive kí/kì reading;
+ * the register-weight ask. The static Scope-A check
+ * (scripts/static-leak-check-v4-5.ts) runs before this prompt serves.
  *
- * Token ceiling 1,650 (v4.4 sat at 1,473 of 1,500), pinned in the test with
- * the reason beside it. The next version pays for its lines by cutting a
- * rule, not by raising this again.
+ * Token ceiling 1,650 (v4.4 sat at 1,473 of 1,500), pinned in the test.
+ * The next version pays for its lines by cutting a rule.
  *
- * The prompt is built on first use, not at import (igalaSystemV45): if a
- * v4.4 line ever stops matching an edit, only a rag-v4-5 request fails, and
- * every route that merely imports the v4 family keeps serving.
+ * Built on first use, not at import (igalaSystemV45): if a v4.4 line ever
+ * stops matching an edit, only a rag-v4-5 request fails.
  */
 
 interface LineEdit {
@@ -137,7 +125,7 @@ function swap(line: string, from: string, to: string): string {
 
 const EDITS: LineEdit[] = [
   {
-    // TRIM (METHOD 1): the restated tail asserts nothing new.
+    // TRIM (METHOD 1).
     find: "1. Understand what the question MEANS before you write.",
     replaceLine: (l) =>
       swap(
@@ -147,44 +135,59 @@ const EDITS: LineEdit[] = [
       ),
   },
   {
-    // VAR: one variety, the Central Igala of the references; the honesty
-    // sentence it joins stays verbatim.
+    // TONE (METHOD 3): the dictionary gives letters.
+    find: "3. Use the DICTIONARY for the words your ANSWER needs",
+    replaceLine: (l) =>
+      swap(l, "in those exact Igala forms.", "in those exact letters."),
+  },
+  {
+    // TONE (METHOD 6): copy letters; tone marks off unless asked.
+    find: "6. Spelling is meaning:",
+    replaceLine: (l) =>
+      swap(
+        l,
+        "Copy attested spellings character for character.",
+        "Copy attested letters exactly; tone marks stay off unless asked.",
+      ),
+  },
+  {
+    // VAR: one form per word, checkable against the references.
     find: "8. Never assert which town or area uses a form",
     replaceLine: (l) =>
       swap(
         l,
         "8. Never assert",
-        "8. Keep to one variety in an answer, the Central Igala of your references; never mix forms from two areas unless the question asks to compare them. If asked which variety you write, say Central Igala. Never assert",
+        "8. Keep to one form of each word in an answer: where your references give two area forms for one word, use one, unless asked to compare. If asked, say you follow the Central (Idah) usage of your references. Never assert",
       ),
   },
   {
-    // NEG: one clause-final nasal, spelled as speakers spell it; never the
-    // Yoruba prohibitive.
+    // NEG + KI.
     find: "Negation: ONLY a clause-final nasal",
-    replaceLine: (l) =>
-      swap(
+    replaceLine: (l) => {
+      let out = swap(
         l,
-        "Negation: ONLY a clause-final nasal, written ñ;",
-        "Negation: ONE nasal at the end of the clause (ñ, -n or 'ñ), never the Yoruba prohibitive má;",
-      ),
+        "Negation: ONLY a clause-final nasal, written ñ; prohibition: subject + kì + verb ... ñ.",
+        "Negation: ONE nasal at the end of the clause (ñ, -n or 'ñ), never the Yoruba prohibitive má; prohibition: subject + ki + verb ... ñ.",
+      );
+      out = swap(out, "Subject + kì + verb WITHOUT", "Subject + ki + verb WITHOUT");
+      return out;
+    },
   },
   {
-    // COMP: lẹ MAY close a relative clause; the relativizer list moves to
-    // the one enumeration on the kẹ line.
+    // COMP + KI: lẹ MAY close; the relativizer list moves to the kẹ line.
     find: "The = lẹ AFTER the noun;",
     replaceLine: (l) => {
       let out = swap(
         l,
         "lẹ also closes relative clauses (head + kì ... lẹ);",
-        "lẹ may also close a relative clause (head + kì ... lẹ);",
+        "lẹ may also close a relative clause (head + ki ... lẹ);",
       );
       out = swap(out, " Relativizer kì (singular), ku before plural ma/me.", "");
       return out;
     },
   },
   {
-    // ELI: the first vowel MAY be dropped. 'to/for' written whole, ñwi named.
-    // The efu clause is v4.4's, unchanged.
+    // ELI: optional elision; 'to/for' whole; plain n no longer banned.
     find: "Elision: vowel meets vowel",
     replaceLine: (l) => {
       let out = swap(
@@ -195,18 +198,28 @@ const EDITS: LineEdit[] = [
       out = swap(
         out,
         "'to/for' is ñwu before a consonant, ñw' before a vowel - never nwi or plain nw.",
-        "'to/for' is ñwu or ñwi, written whole even before a vowel (ñw' is rare) - never with plain n (nwi, nw).",
+        "'to/for' is ñwu or ñwi (ñwi before a vowel), written whole; ñw' is rare.",
       );
       return out;
     },
   },
   {
-    // NUM: the closed set of number-agreeing verbs; nothing for person.
-    // TONE: àmì -> ami (the mark distinguishes nothing in the prompt).
+    // NUM + TONE (àmì -> ami).
     find: "du = take one, kó = take many.",
     replaceLine: (l) =>
       swap(l, "Plural àmì/abọ", "Plural ami/abọ") +
-      " Only these verbs change for number: du/kó, tinyo/rinyo (throw away), tẹ/jọ (keep, set down), tọ/nyu/ru (put in), gwugwu/jọ (sit); every other verb keeps one form; none changes for person.",
+      " Only these verbs change for number: du/kó, tinyo/rinyo (throw away), tẹ/jọ (keep, set down), tọ/nyu/ru (put in); every other verb keeps one form; none changes for person.",
+  },
+  {
+    // COMP: clauses in sequence vs a clause inside another; tọdu and
+    // ichẹñwu move to the job list on the next line.
+    find: "Joining: kpai links nouns",
+    replaceLine: (l) =>
+      swap(
+        l,
+        "clauses are joined by a new sentence (oñ is Bible register the community rewrites); tọdu = because; ichẹñwu = if.",
+        "clauses in sequence are joined by a new sentence, not oñ (Bible register); a clause inside another keeps its linker (next line).",
+      ),
   },
   {
     // COMP: every ki needs a job, listed once.
@@ -215,29 +228,34 @@ const EDITS: LineEdit[] = [
       swap(
         l,
         "kẹ links verbs; kì/ki starts a new clause - never swap them.",
-        "kẹ links verbs only. Every ki needs a job: after a noun, who or which (ku before ma/mẹ; ku is also ki + u); before a verb, may or must-not; after tọdu or (i)chẹñwu, ki or ku; after say, tell, know or want, the linker kakini or ka ki ni, never dropped. A ki with no such job is wrong: start a new sentence.",
+        "Every ki needs a job: after a noun, who or which (ku before ma/mẹ; ku = ki + u); before a verb, may or must-not, one may-clause per blessing; after tọdu (because) or (i)chẹñwu (if), ki or ku (kẹ = ki + ẹ); before a clause of time, ka ki or kaki = when, while; after say, tell or want, kakini, ka ki ni or kaki, never dropped. A ki with no job is wrong: start a new sentence.",
       ),
   },
   {
-    // INC: the incompletive fuses or takes an apostrophe.
+    // INC: apart, fused or with an apostrophe, right before the verb.
     find: "Igala has no hyphenated prefixes",
     replaceLine: (l) =>
       swap(
         l,
         "The incompletive is the standalone word á;",
-        "The incompletive á is fused to its verb (alọ) or written a' (a'jẹñwu), never a word on its own;",
+        "The incompletive á stands right before its verb: apart (a jẹñwu), fused (alọ, ajẹñwu) or as a' (a'loti);",
       ),
   },
   {
-    // ELI, NEG, TONE, POSS in REGISTER.
+    // KI: the small-word gate.
+    find: "Every small word must have a job.",
+    replaceLine: (l) =>
+      swap(
+        l,
+        "(lẹ, á, kì, ku, kpai, oñ, the final ñ)",
+        "(lẹ, á, ki, ku, kpai, oñ, the final ñ)",
+      ),
+  },
+  {
+    // ELI, NEG, POSS in REGISTER.
     find: "Write like the community, not scripture:",
     replaceLine: (l) => {
       let out = swap(l, "apostrophized elision", "optional elision");
-      out = swap(
-        out,
-        "no tone marks unless the question asks for them,",
-        "no tone marks unless the question asks for them (dictionary and example forms give the letters; leave their marks off),",
-      );
       out = swap(
         out,
         "negative nasal written ñ.",
@@ -246,14 +264,13 @@ const EDITS: LineEdit[] = [
       out = swap(
         out,
         "never end a word in -wñ.",
-        "never chẹwñ or bẹwñ, but the possessive his/her is ñwu, -wn or -wñ ([mother] wñ).",
+        "never chẹwñ or bẹwñ, but the possessive his/her is ñwu, -wn or wñ after the noun (ọlawn).",
       );
       return out;
     },
   },
   {
-    // TRIM (ORTHOGRAPHY): the vowel list and the digraph sentence repeat the
-    // allowlist; the tone sentence contradicts REGISTER.
+    // TRIM (ORTHOGRAPHY).
     find: "Seven vowels: a e ẹ i o ọ u;",
     replaceLine: (l) => {
       let out = swap(

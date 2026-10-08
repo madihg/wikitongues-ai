@@ -13,7 +13,11 @@ import {
   labelRunsRepairRound,
   REPAIR_ROUND_VERSION_LABELS,
 } from "./repair-round";
-import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
+import {
+  buildUserTurnV4,
+  buildUserTurnV43,
+  IGALA_SYSTEM_V4,
+} from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
 import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
@@ -270,5 +274,44 @@ describe("the streamed chat path and the buffered exam path stay one system", ()
     const { conversationHistory, ...rest } = chat;
     expect(rest).toEqual(exam.args);
     expect(conversationHistory).toHaveLength(1);
+  });
+});
+
+describe("the v4.5 dictionary block: tone accents off unless the question asks", () => {
+  // A toned dictionary block, as retrieval-v2's renderer emits it.
+  const toned = (): RetrievalV4Result =>
+    ({
+      ...retrieval(),
+      dictionaryBlock: "DICTIONARY\nchild = ọ́mà\nwhat = ẹ́ñwû",
+    }) as RetrievalV4Result;
+  const grammar = { grammarBlock: "GRAMMAR" };
+  const plain = { text: "How do you say child?", bucket: null };
+  const askTone = { text: "Mark the tones: how do you say child?", bucket: null };
+
+  it("leaves every other label's user turn byte-identical, toned dictionary and all", () => {
+    for (const label of V4_FAMILY_VERSION_LABELS) {
+      if (label === "rag-v4-5") continue;
+      const r = toned();
+      const turn = buildV4FamilyTurn(label, plain, r, grammar);
+      const expected =
+        label === "rag-v4-3" || label === "rag-v4-4"
+          ? buildUserTurnV43(plain.text, r, "GRAMMAR", null)
+          : buildUserTurnV4(plain.text, r, null);
+      expect(turn.args.userMessage).toBe(expected);
+      expect(turn.args.userMessage).toContain("ọ́mà");
+    }
+  });
+
+  it("strips the accents for rag-v4-5, keeping ñ and the dotted vowels", () => {
+    const turn = buildV4FamilyTurn("rag-v4-5", plain, toned(), grammar);
+    expect(turn.args.userMessage).toContain("child = ọma\nwhat = ẹñwu");
+    expect(turn.args.userMessage).not.toContain("ọ́mà");
+    expect(turn.opts.allowTone).toBe(false);
+  });
+
+  it("keeps the accents for rag-v4-5 when the question asks for tone", () => {
+    const turn = buildV4FamilyTurn("rag-v4-5", askTone, toned(), grammar);
+    expect(turn.args.userMessage).toContain("ọ́mà");
+    expect(turn.opts.allowTone).toBe(true);
   });
 });

@@ -6,8 +6,10 @@ import {
 } from "../../../prisma/seed-rag-v4-5-grammar";
 import {
   GRAMMAR_CHUNK_TYPE_V4_5,
+  GRAMMAR_CHUNK_TYPE_V4_5_TONE,
   GRAMMAR_NOTE_STATUS,
   MAX_GRAMMAR_CHARS,
+  V4_5_ONLY_CHUNK_TYPES,
 } from "./grammar-block";
 import { containsWholeWord } from "@/lib/eval/leak-guard";
 import { fullFold } from "@/lib/eval/normalize";
@@ -32,20 +34,26 @@ describe("v4.5 grammar rows", () => {
     V4_5_GRAMMAR_ENTRIES.find((e) => e.topic.includes(needle))!;
   const linkers = byTopic("every ki needs a job");
   const concord = byTopic("do not conjugate");
-  const tone = byTopic("only when the question asks for tone");
+  const tone = byTopic("for a question that asks for tone");
 
   it("passes the seed's draft lint", () => {
     expect(lintDrafts(V4_5_GRAMMAR_ENTRIES)).toEqual([]);
   });
 
-  it("every row is chunkType grammar_rule_v4_5, never grammar_rule, so only rag-v4-5 reads it", () => {
+  it("every row is a v4.5-only chunkType, never grammar_rule; the tone row has its own, gated to tone questions", () => {
     expect(GRAMMAR_CHUNK_TYPE_V4_5).toBe("grammar_rule_v4_5");
+    expect(GRAMMAR_CHUNK_TYPE_V4_5_TONE).toBe("grammar_rule_v4_5_tone");
     for (const e of V4_5_GRAMMAR_ENTRIES) {
-      expect(e.chunkType).toBe(GRAMMAR_CHUNK_TYPE_V4_5);
+      expect(V4_5_ONLY_CHUNK_TYPES).toContain(e.chunkType);
     }
+    expect(tone.chunkType).toBe(GRAMMAR_CHUNK_TYPE_V4_5_TONE);
+    expect(
+      V4_5_GRAMMAR_ENTRIES.filter((e) => e.chunkType === GRAMMAR_CHUNK_TYPE_V4_5_TONE),
+    ).toEqual([tone]);
   });
 
   it("seeds three served rows and six notes, topics unique", () => {
+    // Served = not a note; the tone row is served, but only on tone questions.
     expect(served).toHaveLength(3);
     expect(notes).toHaveLength(6);
     expect(new Set(V4_5_GRAMMAR_ENTRIES.map((e) => e.topic)).size).toBe(
@@ -69,30 +77,39 @@ describe("v4.5 grammar rows", () => {
     expect(2 * 1400).toBeLessThan(MAX_GRAMMAR_CHARS);
   });
 
-  it("linkers row: every job, lẹ optional, kakini after saying, no toned kí taught", () => {
+  it("linkers row: every job, lẹ optional, kaki for when, kakini after saying (not knowing), no toned kí", () => {
     for (const s of [
       "tọdu (because)",
       "chẹñwu (if)",
-      "ku also writes ki + u",
-      "kakini or ka ki ni, never dropped",
-      "lẹ may close the clause",
+      "ku also writes ki + u (I), and kẹ writes ki + ẹ (you)",
+      "speakers bless in one may-clause",
+      "ka ki or kaki is when, while",
+      "saying, telling or wanting the linker is kakini, ka ki ni or kaki, never dropped",
+      "lẹ may close it",
       "A ki with none of these jobs is wrong",
     ]) {
       expect(linkers.content).toContain(s);
     }
+    expect(linkers.content).not.toContain("knowing");
     expect(`${linkers.topic}\n${linkers.content}`).not.toContain("kí");
+    expect(linkers.source).toContain("todu ku 202, todu ki 272, (i)chewñ ku 264, (i)chewñ ki 229");
+    expect(linkers.source).not.toContain("704/753");
   });
 
-  it("concord row: tẹ is keep, gwugwu is sit, none changes for person", () => {
+  it("concord row: tẹ is keep; gwugwu is attested singular data, its plural jọ a single token", () => {
     expect(concord.content).toContain("tẹ / jọ = keep, set down");
-    expect(concord.content).toContain("gwugwu / jọ = sit, one or several");
+    expect(concord.content).toContain("gwugwu (sit) is attested for one person; its plural jọ has a single gold token");
     expect(concord.content).toContain("never a change for person");
-    expect(concord.content).not.toMatch(/tẹ[^;]*sit/);
+    expect(concord.content).not.toContain("gwugwu / jọ");
+    expect(concord.topic).not.toContain("gwugwu");
   });
 
-  it("tone row applies only when tone is asked for, and writes no standalone á", () => {
-    expect(tone.content.startsWith("Use this only when a question asks for tone marks.")).toBe(true);
+  it("tone row: only for tone questions, no kí for 'that', kakini kept; no row writes a standalone á", () => {
+    expect(tone.content.startsWith("This row is served only when the question asks for tone.")).toBe(true);
     expect(tone.content).toContain("Without a request for tone, write ki unmarked.");
+    expect(tone.content).toContain("kakini and ka ki ni keep their community spelling");
+    expect(`${tone.topic}\n${tone.content}`).not.toContain("kí");
+    expect(tone.content).not.toContain("that-clause");
     for (const e of V4_5_GRAMMAR_ENTRIES) {
       expect(containsWholeWord(`${e.topic}\n${e.content}`, "á")).toBe(false);
     }
@@ -130,12 +147,12 @@ describe("v4.5 grammar rows", () => {
     for (const form of [
       "kakini",
       "ka ki ni",
-      "kí",
       "kì",
       "jọ̀",
       "tinyo / rinyo",
       "tọ / nyu / ru",
-      "gwugwu / jọ",
+      "gwugwu (sit)",
+      "kaki",
       "Uñ",
       "kpali / kpari",
       "ukpakẹlẹ / ukpankẹrẹ",

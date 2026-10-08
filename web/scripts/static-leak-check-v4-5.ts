@@ -1,17 +1,19 @@
 /**
  * v4.5 copy of static-leak-check-v4-4.ts: the served prompt under test is
  * igalaSystemV45(), and the NINE draft rows of prisma/seed-rag-v4-5-grammar.ts
- * (chunkType grammar_rule_v4_5) are checked beside it, together with every
- * row already stored under that chunkType (none before the seed runs; after
- * it, the stored text is checked, not only the drafts). The seed runs the
- * same gate itself before inserting. Every earlier prompt is a control.
+ * (chunkTypes grammar_rule_v4_5 and grammar_rule_v4_5_tone) are checked
+ * beside it, together with every row already stored under those chunkTypes
+ * (none before the seed runs; after it, the stored text is checked, not only
+ * the drafts). The seed runs the same gate itself before inserting. Every
+ * earlier prompt is a control.
  *
  * SCOPE-A LEAK CHECK against the REAL frozen protected set for the v4.5
  * system prompt - the text that ships on every rag-v4-5 request - with the
  * v4.4, v4.2, v4.1, v4 and v3 prompts as passing controls.
  *
  * v4.5's amended lines carry Igala forms: the ki-word linkers, the
- * number-agreeing verb pairs, alọ and a'jẹñwu, the possessive -wñ, and the elision
+ * number-agreeing verb pairs, the incompletive examples (a jẹñwu, alọ,
+ * ajẹñwu, a'loti), the possessive example ọlawn, and the elision
  * examples v4.2 already carried. The rows carry the write-up's dialect
  * forms as data. None of them
  * is a sentence, but a one-word frozen gold would collide with a one-word
@@ -37,7 +39,7 @@ import { IGALA_SYSTEM_V4_2 } from "../src/lib/generation-prompt-v4-2";
 import { IGALA_SYSTEM_V4_4 } from "../src/lib/generation-prompt-v4-4";
 import { igalaSystemV45 } from "../src/lib/generation-prompt-v4-5";
 import { V4_5_GRAMMAR_ENTRIES } from "../prisma/seed-rag-v4-5-grammar";
-import { GRAMMAR_CHUNK_TYPE_V4_5 } from "../src/lib/arena/grammar-block";
+import { V4_5_ONLY_CHUNK_TYPES } from "../src/lib/arena/grammar-chunk-types";
 
 async function main() {
   const prisma = new PrismaClient();
@@ -93,11 +95,11 @@ async function main() {
 
     // Rows already stored under the v4.5 chunkType (0 before the seed).
     const stored = await prisma.ragEntry.findMany({
-      where: { language: "igala", chunkType: GRAMMAR_CHUNK_TYPE_V4_5 },
+      where: { language: "igala", chunkType: { in: [...V4_5_ONLY_CHUNK_TYPES] } },
       select: { id: true, topic: true, content: true },
     });
     console.log(
-      `stored ${GRAMMAR_CHUNK_TYPE_V4_5} rows: ${stored.length}  draft rows: ${V4_5_GRAMMAR_ENTRIES.length}\n`,
+      `stored v4.5-only rows (${V4_5_ONLY_CHUNK_TYPES.join(", ")}): ${stored.length}  draft rows: ${V4_5_GRAMMAR_ENTRIES.length}\n`,
     );
 
     // Whole blocks first (the real serving shape), then per line and per row

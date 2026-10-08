@@ -18,6 +18,7 @@ import {
   buildGrammarBlocksByRowSet,
   grammarRowSetKey,
 } from "@/lib/arena/grammar-block";
+import { asksForTone } from "@/lib/arena/tone-request";
 import {
   encodeChatEvent,
   type ChatReply,
@@ -387,6 +388,9 @@ export async function POST(req: Request) {
     bucket: null,
     isHoldout: true,
   };
+  // The same predicate buildGrammarBlock applies to chatQuery.text, so the
+  // row-set keys below name exactly the rows each block read.
+  const chatAllowsTone = asksForTone(userMessage);
   //
   // Each leg is timed SEPARATELY even though they run concurrently: they are
   // the stages a "the v4 arm feels slow" report needs disambiguated, and a
@@ -444,6 +448,7 @@ export async function POST(req: Request) {
               isV4FamilyVersionLabel(l) && servesGrammarBlock(l),
           ),
         (label) => buildGrammarBlock(prisma, chatQuery, label),
+        chatAllowsTone,
       ),
     ]),
     retrievalAlarm.reached,
@@ -526,7 +531,8 @@ export async function POST(req: Request) {
         // This column's own grammar block: the one built for its row set.
         const grammar =
           v4Label !== null
-            ? (grammarByRowSet?.get(grammarRowSetKey(v4Label)) ?? null)
+            ? (grammarByRowSet?.get(grammarRowSetKey(v4Label, chatAllowsTone)) ??
+              null)
             : null;
         // Every delta is BOTH sent and remembered: the remembered copy is
         // what a deadline-cut column serves as its partial answer, so the

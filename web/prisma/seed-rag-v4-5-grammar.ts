@@ -6,10 +6,12 @@ import {
   containsWholeWord,
 } from "../src/lib/eval/leak-guard";
 import { fullFold } from "../src/lib/eval/normalize";
+import { GRAMMAR_NOTE_STATUS } from "../src/lib/arena/grammar-block";
 import {
   GRAMMAR_CHUNK_TYPE_V4_5,
-  GRAMMAR_NOTE_STATUS,
-} from "../src/lib/arena/grammar-block";
+  GRAMMAR_CHUNK_TYPE_V4_5_TONE,
+  V4_5_ONLY_CHUNK_TYPES,
+} from "../src/lib/arena/grammar-chunk-types";
 
 /**
  * Seed the v4.5 grammar rows: the rules of the Salem Ejeba and Lydia
@@ -18,20 +20,24 @@ import {
  * we serve in tasks/salem-lydia-writeup-2026-09-25-inventory.md, revised
  * after the three-lens review of the same day against the speakers' gold.
  *
- * SCOPED TO v4.5. Every row here is chunkType grammar_rule_v4_5
- * (GRAMMAR_CHUNK_TYPE_V4_5), not grammar_rule. The grammar block reads rows
- * by chunkType (grammarChunkTypesFor in src/lib/arena/grammar-block.ts):
- * rag-v4-5 reads grammar_rule plus these, every other label reads
- * grammar_rule alone. So seeding this file cannot change what the live,
- * pooled v4.4 arm is served, nor the v4.3/v4.4 exams, nor the common-word
- * statistics their ranking computes over the store.
+ * SCOPED TO v4.5. Every row here is chunkType grammar_rule_v4_5, or
+ * grammar_rule_v4_5_tone for the tone row (src/lib/arena/grammar-chunk-types.ts),
+ * never grammar_rule. The grammar block reads rows by chunkType
+ * (grammarChunkTypesFor): rag-v4-5 reads grammar_rule plus grammar_rule_v4_5,
+ * and the tone row's chunkType only when the question asks for tone
+ * (asksForTone, the repair round's own predicate); every other label reads
+ * grammar_rule alone; the v1 search in src/lib/rag.ts excludes both. So
+ * seeding this file cannot change what the live, pooled v4.4 arm is served,
+ * nor the v4.3/v4.4 exams, nor the common-word statistics their ranking
+ * computes over the store, nor any rag-v1 column.
  *
  * WHY THESE ROWS EXIST
  * --------------------
- * The served rows carry the forms behind three v4.5 prompt lines: every ki
- * needs a job (with the attested linkers after tọdu, chẹñwu and verbs of
- * saying); only a closed set of verbs changes for number and none for
- * person; and, only when a question asks for tone, the kí/kì contrast.
+ * The served rows carry the forms behind the v4.5 prompt lines: every ki
+ * needs a job (with the attested linkers after tọdu, chẹñwu, before a clause
+ * of time, and after verbs of saying); only a closed set of verbs changes
+ * for number and none for person; and, only for a question that asks for
+ * tone (gated in code, not by keyword match), the low-tone kì.
  * Everything single-class (the Ibaji and Ogwugwu alternations, jọ/jọ̀, the
  * s/ch statement, the kw/gw argument, the one-variety observation) is a
  * scholarship_note with attribution, which the block skips.
@@ -89,47 +95,48 @@ export interface SeedEntry {
 }
 
 const CHUNK = GRAMMAR_CHUNK_TYPE_V4_5;
+const CHUNK_TONE = GRAMMAR_CHUNK_TYPE_V4_5_TONE;
 
 // ─── Served rows (grade B: two evidence classes) ─────────────────────────────
 
 const served: SeedEntry[] = [
-  // ROW clause linkers - retrieve for: that, said that, told, know, want,
-  // if, because, who, which, clause.
+  // ROW clause linkers - retrieve for: that, said that, told, if, because,
+  // when, while, who, which, clause, blessing.
   {
     chunkType: CHUNK,
     topic:
-      "Igala clause linkers - every ki needs a job: who or which after a noun (ku before ma, mẹ), may or must-not before a verb, ki or ku after tọdu (because) and chẹñwu (if), kakini or ka ki ni after say, tell, know, want; a ki with no job is wrong (that, said, told, if, because, who, which, clause)",
+      "Igala clause linkers - every ki needs a job: who or which after a noun (ku before ma, mẹ), may or must-not before a verb, ki or ku after tọdu (because) and chẹñwu (if), ka ki or kaki = when, while, kakini or ka ki ni after say, tell, want; a ki with no job is wrong (that, said, if, because, when, while, who, which, blessing)",
     content:
-      "Igala keeps a linker where English may drop 'that', and every ki-word in a sentence has one of these jobs. After a noun it is the relativizer who, which (head + ki + clause; lẹ may close the clause, and often does not). Before the plural clitics ma and mẹ it is ku, and ku also writes ki + u (I). Before a verb it carries may (a wish or blessing) or, with the clause-final nasal, must-not. After tọdu (because) and ichẹñwu or chẹñwu (if) speakers write ki or ku (in gold, chẹñwu ki or ku 30 times, tọdu ku or ki 21; all seven speakers on 'if it rains'). After a verb of saying, telling, knowing or wanting the linker is kakini or ka ki ni, never dropped (corpus kakini 7,356 rows, always present; gold writes both spellings). A ki with none of these jobs is wrong: two complete thoughts are two sentences. Community writing leaves these words untoned.\n\nExamples:\n- chẹñwu ki + clause = if ...; tọdu ku + clause = because ...\n- i kakini ... = he or she said that ... (also i ka ki ni ...)\n- [head noun] ki ... (lẹ) = the one who ...",
+      "Igala keeps a linker where English may drop 'that', and every ki-word has one of these jobs. After a noun it is the relativizer who, which (head + ki + clause; lẹ may close it, and often does not). Before ma and mẹ it is ku; ku also writes ki + u (I), and kẹ writes ki + ẹ (you). Before a verb it carries may (a wish or blessing; speakers bless in one may-clause, not a string of them) or, with the clause-final nasal, must-not. After tọdu (because) and ichẹñwu or chẹñwu (if) speakers write ki or ku. Before a clause of time, ka ki or kaki is when, while. After a verb of saying, telling or wanting the linker is kakini, ka ki ni or kaki, never dropped. A ki with none of these jobs is wrong: two complete thoughts are two sentences. Community writing leaves these words untoned.\n\nExamples:\n- chẹñwu ki + clause = if ...; tọdu ku + clause = because ...\n- ka ki + clause = when ... (a clause of time)\n- i kakini ... = he or she said that ... (also i ka ki ni ...)",
     source:
       SOURCE_WRITEUP +
-      " Evidence grade B: scholarship (W-3.2-3, W-3.2-13) + corpus (kakini 7,356 Bible rows; ichewñ ku 704/753; tasks/igala-grammar-deduced.md R10.1, R10.3, R10.4) + community (gold of the Oct 8 review export: chẹñwu ki/ku 30, tọdu ku/ki 21, kakini or ka ki ni after say, tell, announce, know and want; rows 003f68fc and 5deb2dc1). Measured over-use: a standalone ki in 31% of v4.4 train answers against 15.5% of gold. The write-up's kí/kì tone contrast is in the tone row, served only when a question asks for tone; its belief-against-fact reading is not served.",
+      " Evidence grade B: scholarship (W-3.2-3, W-3.2-13) + corpus (ParallelPair bigrams: todu ku 202, todu ki 272, (i)chewñ ku 264, (i)chewñ ki 229; kakini 7,356 rows, always present) + community (gold of the Oct 8 review export, 1,446 answers: chẹñwu ki/ku 30, tọdu ku/ki 21; ka ki or kaki for 'when' from annotators 4, 5, 7; kakini, ka ki ni or kaki after say, tell, announce and want; kẹ after chẹñwu from annotator_7; one-clause blessings per evidence-full authenticity 5; rows 003f68fc and 5deb2dc1). The measured excess (a standalone ki in 31% of v4.4 train answers against 15.5% of gold) is density: no v4.4 sentence opens with ki, and every word before its standalone ki is a listed job (ọjọ 27, ichẹñwu 22, ka 19, ẹnẹ 15). The write-up's kí/kì tone contrast and its belief-against-fact reading are not served here.",
     verificationStatus: "community_verified",
   },
   // ROW concord guard - retrieve for: agreement, plural verb, conjugate,
-  // he, she, they, we, went, came, sit.
+  // he, she, they, we, went, came.
   {
     chunkType: CHUNK,
     topic:
-      "Igala verbs do not conjugate - only du/kó, tinyo/rinyo, tẹ/jọ, tọ/nyu/ru and gwugwu/jọ change for number; no verb changes for person (agreement, plural verb, conjugate, he, she, they, we, went, sit)",
+      "Igala verbs do not conjugate - only du/kó, tinyo/rinyo, tẹ/jọ and tọ/nyu/ru change for number; every other verb keeps one form, and no verb changes for person (agreement, plural verb, conjugate, he, she, they, we, went)",
     content:
-      "An Igala verb has one form whoever the subject is: a bare verb is the completed form for I, you, he, she, we and they alike. Number shows on a closed set only: du / kó = take, carry (bring with wa); tinyo / rinyo = throw away, be lost; tẹ / jọ = keep, set down; tọ / nyu / ru = put into one place, several into one, several into several; gwugwu / jọ = sit, one or several. With these the number of the object (of the subject, for sit) picks the form: du ugba wa = bring the plate; kó ugba wa = bring the plates. Every other verb keeps one form for one and many (wa, lọ, li, ka, che). Never build a second form by analogy: no r- form but rinyo, no plural form outside this set, never a change for person.\n\nExamples:\n- u lọ = I went; i lọ = he or she went; ma lọ = they went\n- du ugba wa = bring the plate; kó ugba wa = bring the plates\n- u li = I saw; ma li = they saw",
+      "An Igala verb has one form whoever the subject is: a bare verb is the completed form for I, you, he, she, we and they alike. Number shows on a closed set only: du / kó = take, carry (bring with wa); tinyo / rinyo = throw away, be lost; tẹ / jọ = keep, set down; tọ / nyu / ru = put into one place, several into one, several into several. With these the number of the object picks the form: du ugba wa = bring the plate; kó ugba wa = bring the plates. Every other verb keeps one form for one and many (wa, lọ, li, ka, che). gwugwu (sit) is attested for one person; its plural jọ has a single gold token, and the commoner sit verb gwanẹ keeps one form with a plural subject. Never build a second form by analogy: no r- form but rinyo, no plural form outside this set, never a change for person.\n\nExamples:\n- u lọ = I went; i lọ = he or she went; ma lọ = they went\n- du ugba wa = bring the plate; kó ugba wa = bring the plates\n- u li = I saw; ma li = they saw",
     source:
       SOURCE_WRITEUP +
-      " Evidence grade B: scholarship (W-3.1-2, W-3.1-3, W-3.1-10, with Ejeba 2023) + corpus (du/kó 137/77 rows, tinyo/rinyo 356/761, no person-inflected verb; tasks/grammar-evidence-scholarship.md 1.3, tasks/igala-grammar-deduced.md R5.6; glosses per row 42657b2c) + community for gwugwu (11 gold answers, four annotators; plural jọ for sit, one gold token). gwugwu has 0 Bible hits.",
+      " Evidence grade B: scholarship (W-3.1-2, W-3.1-3, W-3.1-10, with Ejeba 2023) + corpus (du/kó 137/77 rows, tinyo/rinyo 356/761, no person-inflected verb; tasks/grammar-evidence-scholarship.md 1.3, tasks/igala-grammar-deduced.md R5.6; glosses per row 42657b2c). Sit, as data only: gwugwu 11 gold answers from three annotators, 0 Bible hits; plural jọ one gold token; gwanẹ 9 gold answers from four annotators, unchanged with a plural subject.",
     verificationStatus: "external_sourced",
   },
-  // ROW tone of the linker, only when asked - retrieve for: tone, tone
-  // marks, accent, mark the tones, diacritics.
+  // ROW tone of the linker - its own chunkType, read only when the question
+  // asks for tone (grammarChunkTypesFor + asksForTone).
   {
-    chunkType: CHUNK,
+    chunkType: CHUNK_TONE,
     topic:
-      "Igala tone marks on ki, only when the question asks for tone - kí (high) opens a that-clause; kì (low) is who, which, and the kì of may and must-not (tone, tone marks, mark the tones, accent, diacritics)",
+      "Igala tone marks on ki, for a question that asks for tone - the relativizer (who, which) and the ki of may and must-not take a low tone, kì; kakini and ka ki ni stay as the community writes them (tone, tone marks, accent, diacritics)",
     content:
-      "Use this only when a question asks for tone marks. Community writing leaves ki unmarked: in the Oct 2026 gold, 107 ki-words carry no mark, 48 carry a low tone (one annotator) and 9 a high tone (two annotators). When tones are asked for, mark the linker by its job as the 2026 write-up does: kí with a high tone where it opens a that-clause, kì with a low tone as the relativizer (head + kì + clause) and in the prohibition and blessing frames (subject + kì + verb). The two are spelled alike and the mark is the only difference, so a toned answer must not guess. kakini and ka ki ni after a verb of saying keep their community spelling. Without a request for tone, write ki unmarked.\n\nExamples:\n- [verb] + kí + clause = ... that ... (high; only when tone is asked for)\n- [head noun] kì ... = the one who ... (low)\n- subject + kì + verb ... ñ = must not (low)",
+      "This row is served only when the question asks for tone. Community writing leaves ki unmarked: in the Oct 2026 gold, 461 ki-words carry no mark, 139 a low tone and 22 a high tone, and one annotator writes almost all the marked ones. When tones are asked for, mark the relativizer with a low tone (head + kì + clause), and the ki of the prohibition and the blessing too (subject + kì + verb), as the 2026 write-up and the speakers who tone both do. After a verb of saying, telling or wanting, kakini and ka ki ni keep their community spelling; do not replace them with a toned ki. Without a request for tone, write ki unmarked.\n\nExamples:\n- [head noun] kì ... = the one who ... (low)\n- subject + kì + verb ... ñ = must not (low)\n- i kakini ... = he or she said that ... (unchanged)",
     source:
       SOURCE_WRITEUP +
-      " Evidence grade B: scholarship (W-3.2-7) + community (speakers who tone ki write the relativizer low: kì 48 of the toned ki-words in the Oct 8 gold, 36/140 in tasks/grammar-evidence-community.md section 6; kí 9 tokens). Gold tone rate 27.4%, annotator-driven: the no-marks default stands, and this row applies only to questions that ask for tone.",
+      " Evidence grade B: scholarship (W-3.2-7, the relativizer kì low) + community (kì 139 in the Oct 8 gold from three annotators, 133 of them one annotator; 36/140 in tasks/grammar-evidence-community.md section 6). The write-up's high-tone kí for 'that' is single-class (gold kí 22, none opening a that-clause after a verb of saying) and is not served. Gold tone rate 27.4%: the no-marks default stands, and this row's chunkType is read only for questions that ask for tone.",
     verificationStatus: "community_verified",
   },
 ];
@@ -194,9 +201,9 @@ const notes: SeedEntry[] = [
   {
     chunkType: CHUNK,
     topic:
-      "Igala dialect note - one variety per answer: no speaker community mixes dialects in a sentence; the model keeps to the Central Igala of its references (dialect, variety, Idah, Ibaji, Ankpa, Dekina, Ogwugwu, Bassa, mix)",
+      "Igala dialect note - one variety per answer: no speaker community mixes dialects in a sentence; the model keeps one form of each word and names Central (Idah) usage when asked (dialect, variety, Idah, Ibaji, Ankpa, Dekina, Ogwugwu, Bassa, mix)",
     content:
-      "Note only, scholarship (one class) as a claim about Igala; served in prompt v4.5 as a constraint on Halim's decision of 2026-10-08, and recorded here with its open questions. The write-up observes that model output has blended two or more varieties inside one sentence, that no natural variety of Igala does so, and that every output should hold to exactly one variety. The model has no material saying which forms belong to which area, so the line tells it to keep to the Central Igala of its references and to say so when asked, not to produce a named area's forms. The platform's dialect list records Central as general_idah (478 gold answers; Ankpa 170, from one annotator; Ibaji 1; Ogugu 2; 688 unset). Which town counts as Central (Idah, Dekina as in Ejeba 2023's data, or Ankpa) is a question put to the authors, as is which forms were mixed (lexical such as Uñ against Ẹnwu, phonological such as r against l, or orthographic). Retrieval itself can place general_idah and ankpa gold side by side, so the prompt line is the only guard today.",
+      "Note only, scholarship (one class) as a claim about Igala; served in prompt v4.5 as a constraint on Halim's decision of 2026-10-08, and recorded here with its open questions. The write-up observes that model output has blended two or more varieties inside one sentence, that no natural variety of Igala does so, and that every output should hold to exactly one variety. The model has no material saying which forms belong to which area, and its references are not all Central (170 gold answers are tagged ankpa; example turns carry no dialect), so the line asks for one form of each word per answer and, when asked, for the model to say it follows the Central (Idah) usage of its references. The platform's dialect list records Central as general_idah (478 gold answers; Ankpa 170, from one annotator; Ibaji 1; Ogugu 2; 688 unset). Which town counts as Central (Idah, Dekina as in Ejeba 2023's data, or Ankpa) is a question put to the authors, as is which forms were mixed (lexical such as Uñ against Ẹnwu, phonological such as r against l, or orthographic). Retrieval itself can place general_idah and ankpa gold side by side, so the prompt line is the only guard today.",
     source:
       SOURCE_WRITEUP +
       " Evidence grade C: scholarship only (W-4-1 to W-4-3). Default variety: Halim's decision, tasks/prd-salem-writeup-ingest-2026-10-08.md. Gold dialect counts from the Oct 8 review export (1,446 answers).",
@@ -243,7 +250,7 @@ export function lintDrafts(
         );
       }
     }
-    if (text.includes("—") || text.includes("–")) {
+    if (text.includes("\u2014") || text.includes("\u2013")) {
       problems.push(`dash in "${e.topic}"`);
     }
     const folded = fullFold(text);
@@ -408,13 +415,14 @@ async function main() {
       console.log(`  + ${e.topic}${vector ? "" : " (no embedding)"}`);
     }
 
+    const v45Types = { in: [...V4_5_ONLY_CHUNK_TYPES] };
     const total = await prisma.ragEntry.count({
-      where: { language: LANGUAGE, chunkType: CHUNK },
+      where: { language: LANGUAGE, chunkType: v45Types },
     });
     const noteCount = await prisma.ragEntry.count({
       where: {
         language: LANGUAGE,
-        chunkType: CHUNK,
+        chunkType: v45Types,
         verificationStatus: GRAMMAR_NOTE_STATUS,
       },
     });
@@ -422,7 +430,7 @@ async function main() {
       `\nv4.5 grammar seed: ${created} created (${embedded} embedded), ${skipped} skipped as already present.`,
     );
     console.log(
-      `${CHUNK} rows for "${LANGUAGE}" now: ${total}, of which ${noteCount} are notes the block skips. No grammar_rule row was touched.`,
+      `v4.5-only rows (${V4_5_ONLY_CHUNK_TYPES.join(", ")}) for "${LANGUAGE}" now: ${total}, of which ${noteCount} are notes the block skips. No grammar_rule row was touched.`,
     );
   } finally {
     await prisma.$disconnect();

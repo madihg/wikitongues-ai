@@ -6,6 +6,12 @@ import {
   type LeakReport,
 } from "@/lib/eval/leak-guard";
 import { fullFold } from "@/lib/eval/normalize";
+import { asksForTone } from "@/lib/arena/tone-request";
+import {
+  GRAMMAR_CHUNK_TYPE,
+  GRAMMAR_CHUNK_TYPE_V4_5,
+  GRAMMAR_CHUNK_TYPE_V4_5_TONE,
+} from "@/lib/arena/grammar-chunk-types";
 
 /**
  * THE GRAMMAR BLOCK - the retrieval leg the v4 family never had.
@@ -64,29 +70,29 @@ export const MIN_GRAMMAR_SCORE = 2;
  */
 export const GRAMMAR_NOTE_STATUS = "scholarship_note";
 
-/** The chunkType every grammar-block label reads (v4.3, v4.4, v4.5). */
-export const GRAMMAR_CHUNK_TYPE = "grammar_rule";
-/**
- * The chunkType of the rows seeded for v4.5 only
- * (prisma/seed-rag-v4-5-grammar.ts). A separate chunkType rather than a
- * migration: the block query reads rows by chunkType, so rows under this
- * one are invisible to every label but rag-v4-5, and the live, pooled v4.4
- * arm and the v4.3/v4.4 exams keep reading exactly the store they were
- * measured on (the common-word statistics in rankGrammarRules included).
- */
-export const GRAMMAR_CHUNK_TYPE_V4_5 = "grammar_rule_v4_5";
+// The grammar chunkTypes (and why v4.5 has its own) live in a dependency-free
+// module so the v1 search in src/lib/rag.ts can exclude them too.
+export {
+  GRAMMAR_CHUNK_TYPE,
+  GRAMMAR_CHUNK_TYPE_V4_5,
+  GRAMMAR_CHUNK_TYPE_V4_5_TONE,
+  V4_5_ONLY_CHUNK_TYPES,
+} from "@/lib/arena/grammar-chunk-types";
 
 /**
- * The chunkTypes a label's grammar block reads. Every label reads
- * grammar_rule alone, exactly as before v4.5 existed; rag-v4-5 also reads
- * its own rows. Unknown, null or absent labels get the default.
+ * The chunkTypes a label's grammar block reads. Every label but rag-v4-5
+ * reads grammar_rule alone, exactly as before v4.5 existed, whatever the
+ * question; rag-v4-5 adds its own rows, and its tone row only when the
+ * question asks for tone. Unknown, null or absent labels get the default.
  */
 export function grammarChunkTypesFor(
   label?: string | null,
+  allowTone: boolean = false,
 ): readonly string[] {
-  return label === "rag-v4-5"
-    ? [GRAMMAR_CHUNK_TYPE, GRAMMAR_CHUNK_TYPE_V4_5]
-    : [GRAMMAR_CHUNK_TYPE];
+  if (label !== "rag-v4-5") return [GRAMMAR_CHUNK_TYPE];
+  return allowTone
+    ? [GRAMMAR_CHUNK_TYPE, GRAMMAR_CHUNK_TYPE_V4_5, GRAMMAR_CHUNK_TYPE_V4_5_TONE]
+    : [GRAMMAR_CHUNK_TYPE, GRAMMAR_CHUNK_TYPE_V4_5];
 }
 
 /**
@@ -213,8 +219,11 @@ export interface GrammarBlockResult {
 }
 
 /** The key of a label's row set: labels with the same key share one block. */
-export function grammarRowSetKey(label?: string | null): string {
-  return grammarChunkTypesFor(label).join("+");
+export function grammarRowSetKey(
+  label?: string | null,
+  allowTone: boolean = false,
+): string {
+  return grammarChunkTypesFor(label, allowTone).join("+");
 }
 
 /** One grammar block per distinct row set, keyed by grammarRowSetKey. */
@@ -225,14 +234,17 @@ export type GrammarBlocksByRowSet = ReadonlyMap<string, GrammarBlockResult>;
  * one block per distinct row set the given labels need, concurrently, and
  * never twice for the same set, so a v4.3 and a v4.4 column still share one
  * block while a v4.5 column gets its own. null when no label needs a block.
+ * `allowTone` is asksForTone of the turn's question, the same text every
+ * column's block is built from, so the keys match what buildGrammarBlock reads.
  */
 export async function buildGrammarBlocksByRowSet(
   labels: readonly string[],
   build: (label: string) => Promise<GrammarBlockResult>,
+  allowTone: boolean = false,
 ): Promise<GrammarBlocksByRowSet | null> {
   const labelByKey = new Map<string, string>();
   for (const l of labels) {
-    const key = grammarRowSetKey(l);
+    const key = grammarRowSetKey(l, allowTone);
     if (!labelByKey.has(key)) labelByKey.set(key, l);
   }
   if (labelByKey.size === 0) return null;
@@ -248,8 +260,9 @@ export async function buildGrammarBlocksByRowSet(
  * run through the same leak guard as every other served piece, against the
  * prompt's own benchmark gold, and a hit drops the rule.
  *
- * `label` picks the rows (grammarChunkTypesFor): omitted, or any label but
- * rag-v4-5, the query is the pre-v4.5 one byte for byte (pinned by test).
+ * `label` picks the rows (grammarChunkTypesFor, with asksForTone on the
+ * prompt's own text): omitted, or any label but rag-v4-5, the query is the
+ * pre-v4.5 one byte for byte (pinned by test).
  */
 export async function buildGrammarBlock(
   prisma: PrismaClient,
@@ -263,7 +276,7 @@ export async function buildGrammarBlock(
 ): Promise<GrammarBlockResult> {
   const language = prompt.language ?? "igala";
   const words = contentWords(prompt.text);
-  const chunkTypes = grammarChunkTypesFor(label);
+  const chunkTypes = grammarChunkTypesFor(label, asksForTone(prompt.text));
   const stored = await prisma.ragEntry.findMany({
     where: {
       language,

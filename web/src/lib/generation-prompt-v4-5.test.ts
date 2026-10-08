@@ -5,11 +5,11 @@ import { igalaSystemV45, V4_5_EDIT_COUNT } from "./generation-prompt-v4-5";
 const linesOf = (s: string) => s.split("\n").filter((l) => l.trim().length > 0);
 
 /**
- * v4.5 is v4.4 with ten lines amended (generation-prompt-v4-5.ts names each
- * and its evidence). What these pin: the amendment is exactly those ten
- * lines and nothing else moved; each line says what the evidence says and
- * no longer says what the review refuted; the prompt stays under its raised
- * ceiling; and the house style holds.
+ * v4.5 is v4.4 with fourteen lines amended (generation-prompt-v4-5.ts names
+ * each with its counts). What these pin: the amendment is exactly those
+ * lines and nothing else moved; each line says what the recounted evidence
+ * says and no longer says what two review rounds refuted; the prompt stays
+ * under its raised ceiling; and the house style holds.
  */
 describe("igalaSystemV45", () => {
   const v45 = igalaSystemV45();
@@ -22,84 +22,92 @@ describe("igalaSystemV45", () => {
     expect(igalaSystemV45()).toBe(v45);
   });
 
-  it("amends exactly ten v4.4 lines, one for one, and adds no new line", () => {
-    expect(V4_5_EDIT_COUNT).toBe(10);
-    expect(removed).toHaveLength(10);
-    expect(added).toHaveLength(10);
+  it("amends exactly fourteen v4.4 lines, one for one, and adds no new line", () => {
+    expect(V4_5_EDIT_COUNT).toBe(14);
+    expect(removed).toHaveLength(14);
+    expect(added).toHaveLength(14);
     expect(b).toHaveLength(a.length);
-    // Same order: every unchanged line sits where v4.4 had it.
     a.forEach((line, i) => {
       if (!removed.includes(line)) expect(b[i]).toBe(line);
     });
   });
 
-  it("COMP: every ki needs a job, listed once, and the attested linkers are among the jobs", () => {
+  it("COMP: every ki needs a job, listed once, with every attested linker among the jobs", () => {
     expect(v45).toContain(
-      "kẹ links verbs only. Every ki needs a job: after a noun, who or which (ku before ma/mẹ; ku is also ki + u); before a verb, may or must-not; after tọdu or (i)chẹñwu, ki or ku; after say, tell, know or want, the linker kakini or ka ki ni, never dropped. A ki with no such job is wrong: start a new sentence.",
+      "Verbs chain with kẹ: one action then another is V kẹ V. Every ki needs a job: after a noun, who or which (ku before ma/mẹ; ku = ki + u); before a verb, may or must-not, one may-clause per blessing; after tọdu (because) or (i)chẹñwu (if), ki or ku (kẹ = ki + ẹ); before a clause of time, ka ki or kaki = when, while; after say, tell or want, kakini, ka ki ni or kaki, never dropped. A ki with no job is wrong: start a new sentence.",
     );
     expect(v45).not.toContain("kì/ki starts a new clause");
-    // The relativizer is no longer listed a second way on the lẹ line.
-    expect(v45).not.toContain("Relativizer kì (singular), ku before plural ma/me.");
-    // The prompt does not teach a toned kí for 'that' (gold writes kakini).
+    expect(v45).not.toContain("kẹ links verbs only");
+    // "know" was a misread token (kẹ mọ kaki = drink while).
+    expect(v45).not.toContain("know or want");
+    // No toned kí is taught for 'that'.
     expect(v45).not.toContain("kí");
-    // The serial-verb frame and the kept kì frames are untouched.
-    expect(v45).toContain("Verbs chain with kẹ: one action then another is V kẹ V.");
-    expect(v45).toContain("prohibition: subject + kì + verb ... ñ.");
-    expect(v45).toContain("Subject + kì + verb WITHOUT the nasal is a wish or blessing");
   });
 
-  it("COMP: lẹ MAY close a relative clause, it is not required", () => {
+  it("COMP: clauses in sequence take a new sentence; a clause inside another keeps its linker", () => {
     expect(v45).toContain(
-      "The = lẹ AFTER the noun; lẹ may also close a relative clause (head + kì ... lẹ); never yí for 'the' (yí = this).",
+      "Joining: kpai links nouns, never number words; clauses in sequence are joined by a new sentence, not oñ (Bible register); a clause inside another keeps its linker (next line). muda = but (rather) - contrast only, never 'must'.",
     );
-    expect(v45).not.toContain("lẹ also closes relative clauses");
+    // tọdu and ichẹñwu moved into the job list.
+    expect(v45).not.toContain("tọdu = because; ichẹñwu = if.");
+    expect(v45).toContain(
+      "The = lẹ AFTER the noun; lẹ may also close a relative clause (head + ki ... lẹ); never yí for 'the' (yí = this).",
+    );
   });
 
-  it("TONE: no tone exception line; dictionary and example tones stay off unless asked", () => {
+  it("KI: ki is untoned everywhere in the prompt, the gate and the negation frames included", () => {
+    expect(v45).not.toContain("kì");
+    expect(v45).toContain("(lẹ, á, ki, ku, kpai, oñ, the final ñ)");
+    expect(v45).toContain("prohibition: subject + ki + verb ... ñ.");
+    expect(v45).toContain("Subject + ki + verb WITHOUT the nasal is a wish or blessing");
+  });
+
+  it("TONE: no tone exception line; METHOD 3 and 6 ask for letters and keep tone off unless asked", () => {
     expect(v45).not.toContain("One exception, where the mark is the whole meaning");
     expect(v45).not.toContain("jọ̀");
     expect(v45).toContain(
-      "no tone marks unless the question asks for them (dictionary and example forms give the letters; leave their marks off)",
+      "3. Use the DICTIONARY for the words your ANSWER needs, in those exact letters.",
     );
-    // àmì untoned; á, kó, kì and yí keep the marks that distinguish them.
+    expect(v45).toContain(
+      "Copy attested letters exactly; tone marks stay off unless asked.",
+    );
+    expect(v45).toContain("no tone marks unless the question asks for them");
     expect(v45).not.toContain("àmì");
     expect(v45).toContain("Plural ami/abọ ONLY for people and animals");
-    expect(v45).toContain("du = take one, kó = take many.");
     expect(v45).toContain("preverbal á = not yet complete");
   });
 
-  it("NUM: the closed set with glosses from the evidence (tẹ is keep, gwugwu is sit); none for person", () => {
+  it("NUM: the closed set with glosses from the evidence; sit is not listed", () => {
     expect(v45).toContain(
-      "Only these verbs change for number: du/kó, tinyo/rinyo (throw away), tẹ/jọ (keep, set down), tọ/nyu/ru (put in), gwugwu/jọ (sit); every other verb keeps one form; none changes for person.",
+      "Only these verbs change for number: du/kó, tinyo/rinyo (throw away), tẹ/jọ (keep, set down), tọ/nyu/ru (put in); every other verb keeps one form; none changes for person.",
     );
-    expect(v45).not.toContain("tẹ/jọ (keep, sit)");
+    expect(v45).not.toContain("gwugwu");
+    expect(v45).not.toContain("(keep, sit)");
   });
 
-  it("VAR: one variety, the Central Igala of the references, as a constraint the model can obey", () => {
+  it("VAR: one form per word, checkable against the references; Central (Idah) named when asked", () => {
     expect(v45).toContain(
-      "8. Keep to one variety in an answer, the Central Igala of your references; never mix forms from two areas unless the question asks to compare them. If asked which variety you write, say Central Igala. Never assert which town or area uses a form unless your reference material says so - saying you do not know is correct.",
+      "8. Keep to one form of each word in an answer: where your references give two area forms for one word, use one, unless asked to compare. If asked, say you follow the Central (Idah) usage of your references. Never assert which town or area uses a form unless your reference material says so - saying you do not know is correct.",
     );
-    expect(v45).not.toContain("unless the question names another");
     for (const w of ["Ogwugwu", "Ibaji", "Uñ", "kpari", "ikerenku"]) {
       expect(v45).not.toContain(w);
     }
     expect(v45).toContain("ra for 'buy'");
   });
 
-  it("ELI: optional elision, ñwu/ñwi whole, and v4.4's efu clause unchanged", () => {
+  it("ELI: optional elision; ñwu/ñwi whole; no ban on plain n; v4.4's efu clause unchanged", () => {
     expect(v45).toContain(
       "the FIRST vowel may be dropped, apostrophe at the joint (w'ọla, k'ọla, aj'ẹñwu); both words written whole is also correct.",
     );
-    expect(v45).not.toContain("-> drop the FIRST vowel");
     expect(v45).toContain("Never add or strip a word-initial vowel.");
     expect(v45).toContain(
-      "'to/for' is ñwu or ñwi, written whole even before a vowel (ñw' is rare) - never with plain n (nwi, nw).",
+      "'to/for' is ñwu or ñwi (ñwi before a vowel), written whole; ñw' is rare.",
     );
-    // The served v4.3 locative row writes ef'ọdọ; the prompt must agree.
+    expect(v45).not.toContain("plain n");
+    expect(v45).not.toContain("never nwi");
     expect(v45).toContain(
       "'in' is efu, clipped to ef' only before a vowel (ef'ọdọ 2021), never before a consonant; before a town name it is efẹwọ.",
     );
-    expect(v45).not.toContain("the clipped ñw' and ef' are rare");
     expect(v45).toContain("optional elision");
     expect(v45).not.toContain("apostrophized elision");
   });
@@ -109,28 +117,24 @@ describe("igalaSystemV45", () => {
       "Negation: ONE nasal at the end of the clause (ñ, -n or 'ñ), never the Yoruba prohibitive má;",
     );
     expect(v45).toContain("the negative nasal at the clause end.");
-    expect(v45).not.toContain("attached to the last word");
     expect(v45).not.toContain("negative nasal written ñ");
-    expect(v45).toContain("A nasal added for any other reason makes a different word.");
   });
 
-  it("INC: the incompletive fuses or takes an apostrophe, each with an attested form", () => {
+  it("INC: the incompletive stands before its verb, apart, fused or as a', all attested on train prompts", () => {
     expect(v45).toContain(
-      "The incompletive á is fused to its verb (alọ) or written a' (a'jẹñwu), never a word on its own; a noun keeps its own first vowel inside the word.",
+      "The incompletive á stands right before its verb: apart (a jẹñwu), fused (alọ, ajẹñwu) or as a' (a'loti); a noun keeps its own first vowel inside the word.",
     );
     expect(v45).not.toContain("the standalone word á");
-    expect(v45).toContain(
-      "Igala has no hyphenated prefixes - never é- or any vowel + hyphen fused to a word.",
-    );
+    expect(v45).not.toContain("never a word on its own");
+    expect(v45).not.toContain("a'jẹñwu");
   });
 
-  it("POSS: the ban names chẹwñ and bẹwñ; the possessive -wn / -wñ is allowed", () => {
-    // The example is schematized: spelled out it is a frozen gold answer.
+  it("POSS: the ban names chẹwñ and bẹwñ; the possessive is allowed, with a non-frozen example", () => {
     expect(v45).toContain(
-      "never chẹwñ or bẹwñ, but the possessive his/her is ñwu, -wn or -wñ ([mother] wñ).",
+      "never chẹwñ or bẹwñ, but the possessive his/her is ñwu, -wn or wñ after the noun (ọlawn).",
     );
     expect(v45).not.toContain("never end a word in -wñ");
-    expect(v45).toContain("Never Bible forms like Jihofa or taku;");
+    expect(v45).not.toContain("[mother]");
     expect(v45).toContain("he/she i|u|-wn");
   });
 
@@ -141,9 +145,6 @@ describe("igalaSystemV45", () => {
     expect(v45).not.toContain("word-for-word Igala is not Igala");
     expect(v45).toContain("ẹ and ọ are separate letters, required where attested.");
     expect(v45).toContain(
-      "Igala words use ONLY these letters: a b ch d e ẹ f g gb gw i j k kp kw l m n ñ ñm ñw nw ny o ọ p r t u w y",
-    );
-    expect(v45).toContain(
       "This rule is about Igala words: a name or loanword copied from the question keeps its own letters.",
     );
     expect(v45).toContain(
@@ -151,13 +152,11 @@ describe("igalaSystemV45", () => {
     );
   });
 
-  it("keeps every v4.4 line it does not name, the small-word gate included", () => {
+  it("keeps every v4.4 line it does not name", () => {
     for (const s of [
       "Banki Access",
       "A destination follows a motion verb with ti: lo ti Idah, lo t'Ankpa.",
       "Dates: the month first, as an ordinal (ọchu + ẹkẹ-numeral)",
-      "kpai links nouns, never number words",
-      "(lẹ, á, kì, ku, kpai, oñ, the final ñ)",
       "utokown, kwotejugede, chokalatu",
       "Give the answer only.",
     ]) {
@@ -166,13 +165,11 @@ describe("igalaSystemV45", () => {
   });
 
   it("stays under the 1,650-token ceiling and above v4.4", () => {
-    // v4.4 sat at 1,473 under 1,500. The write-up's lines (the ki-job list,
-    // the number guard, one variety, optional elision) and the four
-    // speaker-form corrections (ñwu/ñwi, the negative nasal, the
-    // incompletive, the possessive) do not fit under 1,500 even after the
-    // TRIM edit cut every sentence the allowlist already stated, so the
-    // ceiling is 1,650, the most the brief allowed, and it is pinned here.
-    // The next version pays for its lines by cutting a rule.
+    // v4.4 sat at 1,473 under 1,500. The ki-job list, the joining split, the
+    // number guard, one form per word, optional elision and the four
+    // speaker-form corrections do not fit under 1,500 even after TRIM cut
+    // every sentence the allowlist already stated, so the ceiling is 1,650,
+    // the most the brief allowed. The next version pays by cutting a rule.
     expect(v45.length / 4).toBeLessThanOrEqual(1650);
     expect(v45.length).toBeGreaterThan(IGALA_SYSTEM_V4_4.length);
   });
