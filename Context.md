@@ -352,7 +352,7 @@ Orchestrated (Fable lead, Opus/Sonnet/Haiku executors, ~12 agents): call analysi
 
 1. Queue: assignedPair() FNV-1a hash in pairing.ts - each annotator sees each prompt ONCE, different annotators get different pairs, full C(n,2) team coverage, every model in every queue; computeQueueState() shared by /next+/summary (no drift). firstPairs/MAX_SHOWS_PER_PROMPT deleted.
 2. Skip: POST /api/annotations/skip -> PromptFlag reason="skip" (no admin UI reads PromptFlag, no collision); excluded from queue, not counted completed.
-3. Episode UX (annotation-interface.tsx): step bar "1 Your answer -> 2 Compare -> 3 Why -> 4 Score"; teaching-frame explainer; TWO-BOX gold (Igala required + englishGloss optional; Lydia's design) + collapsed instructionIg bonus box; redundancy killed (cold answer = the correction; optional "small fixable error" toggle); "Why? Explain in English" + Sarah's odudu example, REQUIRED >=10 chars on both_inadequate; per-category goldHint in buckets.ts (proverb ambiguity answered in-flow); confidence never preselected + nudge copy ("honest 1 or 2 is just as useful as a 4" - live data showed 95% pinned at 4, habitual); skip button; draft autosave covers new fields; cold-lock survives Back (source-free guarantee).
+3. Episode UX (annotation-interface.tsx): step bar "1 Your answer -> 2 Compare -> 3 Why -> 4 Score"; teaching-frame explainer; TWO-BOX gold (Igala required + englishGloss optional; Lydia's design) + collapsed instructionIg bonus box; redundancy killed (cold answer = the correction; optional "small fixable error" toggle); "Why? Explain in English" + Sarah's [morning] example, REQUIRED >=10 chars on both_inadequate; per-category goldHint in buckets.ts (proverb ambiguity answered in-flow); confidence never preselected + nudge copy ("honest 1 or 2 is just as useful as a 4" - live data showed 95% pinned at 4, habitual); skip button; draft autosave covers new fields; cold-lock survives Back (source-free guarantee).
 4. Generation: IGALA_FORCING_INSTRUCTION in src/lib/generation-prompt.ts (explicitly NOT Yoruba/Igbo/Pidgin; English only if prompt asks; wired via arena providers), empty vetted-only IGALA_FEW_SHOT_EXAMPLES array ready; ~600 unjudged outputs regenerated (frozen = annotation-referenced, never deleted). Old English-mixed outputs are GONE for new work.
 5. Rubric page /annotator/rubric (all roles): 8 axes + 0/3/5 anchors + category-scoping matrix + "appears after you pick a winner" callout; renders from buckets.ts config. Nav: My Work, Rubric (all), Annotations (researcher).
 6. Time on Platform (admin dashboard): sessionize() in time-sessions.ts (30-min gap, 5-min lead-in, 14 tests), /api/admin/time-spent, per-user total/7-day/sessions/last-active. ESTIMATE from submission timestamps; non-submitting browsing invisible.
@@ -361,7 +361,7 @@ Orchestrated (Fable lead, Opus/Sonnet/Haiku executors, ~12 agents): call analysi
 
 **REVIEWS:** seam-reviewer (opus): found the RETURNING blocker pre-ship (fixed); all 5 agent seams clean. Earlier ui review + content review from prior batch also clean.
 
-**LIVE DATA ANALYSIS (Jul 17-21, old flow):** ~140 pairwise, 99% both_inadequate conf 4 (benchmark headline: frontier models fail Igala essentially always; only 1 decided winner - no model ranking possible). ~140 gold/salvage answers (~100 deduped = 10-20% of SFT target in 4 days). FREE calibration finding for Lydia: lexical agreement near-perfect across 4 annotators (odudu unanimous), orthographic conventions DIVERGE (Ọdudu/Òdúdú/ódùdù; spacing/elision variants of "Ọma lẹ a jẹ ñwu") -> week-1 calibration = spelling conventions, not vocabulary. Data-quality: "Wrong output" copy-paste explanations ~80% (fix ships), confidence habit-pinned at 4, Austine not started (flag to Agnes). Igala answers appearing in Why field (Charity/Abdulraheem) = recoverable gold.
+**LIVE DATA ANALYSIS (Jul 17-21, old flow):** ~140 pairwise, 99% both_inadequate conf 4 (benchmark headline: frontier models fail Igala essentially always; only 1 decided winner - no model ranking possible). ~140 gold/salvage answers (~100 deduped = 10-20% of SFT target in 4 days). FREE calibration finding for Lydia: lexical agreement near-perfect across 4 annotators ([morning] unanimous), orthographic conventions DIVERGE ([morning]/[morning]/[morning]; spacing/elision variants of "[child] lẹ a jẹ ñwu") -> week-1 calibration = spelling conventions, not vocabulary. Data-quality: "Wrong output" copy-paste explanations ~80% (fix ships), confidence habit-pinned at 4, Austine not started (flag to Agnes). Igala answers appearing in Why field (Charity/Abdulraheem) = recoverable gold.
 
 **IN FLIGHT at commit time:** lex-rewriter (ig_lex_001 + ig_bank_lex_030 -> pure-vocab per Lydia's one-target rule; PromptEdit audit; frozen outputs preserved) - seed.ts/seed-prompt-bank.ts edits land as follow-up commit. generation-fixer verification report (report-only).
 
@@ -401,7 +401,7 @@ There is no shared helper enforcing this and no type-level reminder. If a second
 
 **What landed:** `web/prisma/build-lexicon-curated.ts` (run twice, idempotent: second run inserts 0) + pure parsers in `web/src/lib/lexicon-parse.ts` with 24 tests in `web/src/lib/lexicon-parse.test.ts`. Parsed the 36 cleaned RagEntry vocabulary/historical_wordlist rows into 842 LexEntry rows: wiktionary 136 @ conf 1.0, chikhapo 482 @ 0.8, koelle 224 @ 0.6. 769 distinct headwords, 645 distinct glossFolded keys. The Blench cross-source-variation row is deliberately NOT parsed (prose for speakers, its source string also cites Wiktionary - detectFamily checks Blench first).
 
-**Curation rules enforced in code (tested):** ASJP lines (digit 5 / ~) skipped; >4-word Igala sides skipped as sentences; max 3 senses per headword, senses split on ';' only; Wiktionary template residue cleaned (empty parens, leading commas, dangling truncated clauses dropped); chikhapo flagged mis-glosses excluded (obɪǯɪ́m-emu, ómi-rain line; 'water' removed from óǯí, 'wall' from ɔ̀dɔ̀) - those stay with the community review queue, NOT re-laundered as facts. Koelle 1854 'ṓmi - Rain' kept on purpose at 0.6 (only the chikhapo lines were flagged). Provenance suffix on every row's source: curated under source licence, recorded Halim Madi 2026-08-12, confirm licence terms before public release.
+**Curation rules enforced in code (tested):** ASJP lines (digit 5 / ~) skipped; >4-word Igala sides skipped as sentences; max 3 senses per headword, senses split on ';' only; Wiktionary template residue cleaned (empty parens, leading commas, dangling truncated clauses dropped); chikhapo flagged mis-glosses excluded (obɪǯɪ́m-emu, [water]-rain line; 'water' removed from óǯí, 'wall' from ɔ̀dɔ̀) - those stay with the community review queue, NOT re-laundered as facts. Koelle 1854 [water] - Rain' kept on purpose at 0.6 (only the chikhapo lines were flagged). Provenance suffix on every row's source: curated under source licence, recorded Halim Madi 2026-08-12, confirm licence terms before public release.
 
 **BASELINE TO BEAT: coverage 0.442 (38/86)** - share of the 43 frozen prompts' distinct stopword-filtered English content words hitting >=1 LexEntry by glossFolded EXACT match (no stemming, deliberately strict). Misses include inflected forms (cooks, goes, sells, sleeps, runs, ate, children) and culture terms (egwu, masquerade, proverb, blessing, greet). The alignment-induced lexicon must beat 0.442 on the same metric (rerun the script to recompute). Gates at ship time: tsc 0, vitest 508/508 green, eslint pending in this session (was still running).
 
@@ -409,8 +409,8 @@ There is no shared helper enforcing this and no type-level reminder. If a second
 
 **Trigger:** Agnes's live test (2026-08-11 granola): model output is Igala words
 without Igala syntax - "the first sentence is saying three different things",
-"I can't comprehend it". Spelling precision changes meaning (Ojọ/Ojọn nasal,
-Onokotu/Nokotu prefix, oko homographs). Halim's directive: extract lexicon +
+"I can't comprehend it". Spelling precision changes meaning ([god]/Ojọn nasal,
+Onokotu/Nokotu prefix, [money] homographs). Halim's directive: extract lexicon +
 grammar from all permitted sources, restructure the RAG per the research, sniff
 test, recreate the models.
 
@@ -454,7 +454,7 @@ was -9.0 pre-gate). READ THIS RIGHT: the frozen benchmark is 88% single-word
 lookup and cannot measure sentence structure - the thing v2 exists for and the
 thing Agnes judged broken. Qualitatively v2 stories are now 3 short one-thought
 sentences (vs the incoherent mush Agnes saw) and both GPT-4.1 and Llama produce
-"Wọla ọdudu abogijo" for the elder-greeting. Both v1 and v2 stay live in chat
+"[frozen answer] abogijo" for the elder-greeting. Both v1 and v2 stay live in chat
 so Agnes judges structure directly; v1 remains the lookup champion.
 
 **Known issues / next:** ọmọ (prohibited) still slips into stories; Llama v2
@@ -1632,7 +1632,7 @@ Done in this order, each step checked:
   across the flag flip can judge one prompt twice (the submit route dedupes
   per pair, not per prompt); a pre-existing draft key is A/B-order
   sensitive, so a reload loses a draft about half the time regardless.
-- Flag flip: [FILLED AFTER MERGE]
+- Flag flip: ran Oct 8 after 12:00 UTC, once PR #62 was live (see the 2026-10-08 session state).
 
 ### 2. Austine's ties - "what's their name, write an email"
 
@@ -1675,7 +1675,7 @@ run: it moves the directory this session works in.
 
 ### PRs
 
-- App: [FILLED AFTER MERGE]
+- App: madihg/wikitongues-ai#62, squash-merged Oct 8 as 717bd5b (the Sep 28 branch, after the Oct 8 review fixes).
 - Site: madihg/wikitongues-web-ai branch verdicts-every-pair (every judged
   pair gets a panel, version-vs-version head to head, computed margin
   phrase, Sep 28 changelog, 42 tests). Merge after the flag flip.
@@ -1736,8 +1736,15 @@ three repair suites, 1259 tests overall, typecheck and lint clean:
 - New read-only export: web/scripts/export-annotation-review.ts (frozen gold
   excluded by query; annotators pseudonymised) feeds the bank design.
 
-Flag flip: [FILLED AFTER MERGE]
-PRs: [FILLED AFTER MERGE]
+Flag flip: 2026-10-08T12:00:11Z, scripts/enable-v44-pool.ts (preconditions
+OK; dry run drew all three pairings; inPairingPool true on v4.4 only). Pool =
+bare, v3, v4.4. check-queue-servable: 234 pairable prompts, 0 unpairable,
+every remaining prompt servable; per annotator remaining: Agnes 18, Austine
+62, Blessing 81, Sarah 87, Charity 105, Ibrahim 149. Note what this shows:
+an annotator sees each PROMPT once, so pooling a third arm only reopens the
+prompts a speaker has not judged yet (Agnes: 18). The relief for the team is
+the new bank, not the new arm.
+PRs: app madihg/wikitongues-ai#62 merged as 717bd5b (live by 11:36 UTC: the public endpoint showed retrieval v4.4 labels and round-3); site madihg/wikitongues-web-ai#4 squash-merged after the flip as afe0d3a (every judged pair gets a panel; copy says Oct 8).
 
 ### Phase 1 (US-006): the write-up inventory
 
@@ -1765,4 +1772,193 @@ bank-spec.json, bank-written-*.json, bank-final.json. Then:
 web/prisma/seed-prompt-bank-v45.ts on the v42 pattern (create-only,
 Scope-A gate with spiked negative control, Jaccard dedupe), fill train
 outputs for bare + v3 + v4.4, check-queue-servable, PR.
-Bank status: [FILLED WHEN SEEDED]
+Bank status: SEEDED 2026-10-08 ~22:45 UTC. prisma/seed-prompt-bank-v45.ts,
+data in src/lib/prompt-bank-v45.ts (tested offline by prompt-bank-v45.test.ts),
+provenance claude_authored_v45_2026_10_08, 108 of 108 created; gates at seed
+time: near-duplicates none (max Jaccard 0.36 train, 0.31 frozen), Scope A PASS
+(139 protected strings, control live). The linter caught 58 Scope-A hits in
+the drafted notes and that factual-bucket notes are SHOWN to annotators as
+"Reference - fact-check against this" (they were handing speakers the forms
+we want them to produce; three named v4.4): all rewritten in English. 23
+more notes named speaker pseudonyms or the arm; neutralised, originals kept
+in each row's rationale (never stored). Train answers for bare, v3 and v4.4
+on the batch, Oct 8: bare 108/108 ($3.19), v3 95/108 ($3.56; 13 failed
+at the quota), v4.4 0/108 (quota). The queue ALREADY serves 95 of the 108 on
+bare-vs-v3 pairs (assignedPair draws only from arms with an answer):
+remaining per annotator went Agnes 18 -> 110, Sarah 87 -> 182, Austine 62
+-> 157, Blessing 81 -> 176, Charity 105 -> 195, Ibrahim 149 -> 244. A
+background job (task b5ft6ytcy) waits for the quota reset, then fills v4.4
+and v3's 13 and re-checks the queue.
+
+### Phase 2 and 3 branches (built by worktree agents, under adversarial review)
+
+- v4.5: branch `v4-5-complementiser-one-variety` at 0d1f14c, worktree
+  .claude/worktrees/agent-a27e90c97737a48fa. Ten v4.4 lines amended by
+  string edits (generation-prompt-v4-5.ts): COMP (a ki-word opens a clause
+  only as kì who/which or kí that; otherwise a new sentence), GATE (kí in
+  the small-word list), TONE (always tone kí/kì and jọ̀ vs jọ, the one
+  exception to no-marks), NUM (closed set of number-agreeing verbs, none
+  for person), VAR (one variety, Central/Idah default, named when asked),
+  ELI (first vowel MAY drop), TRIM (vowel list, digraph sentence, "Mark
+  tone as the dictionary does" removed; the last likely caused v4.4's 69%
+  toned answers), plus G1-G4 from the v4.4-vs-gold read (efu/ñwu written
+  whole, negator attached, incompletive fused, -wñ ban scoped to the Bible
+  ending). 1,638 tokens; ceiling raised to 1,650 (pinned, reasoned). Eight
+  rows in prisma/seed-rag-v4-5-grammar.ts (3 served: complementiser
+  community_verified, concord guard external_sourced, tone homographs
+  community_verified; 5 scholarship_note). register-rag-v4-5.ts,
+  static-leak-check-v4-5.ts (PASS, 139 protected strings, control live),
+  labels wired everywhere (not in ALLOWED_PAIRINGS or the pool). Gates:
+  87 files / 1,282 tests. Builder's questions, my answers: register-weight
+  line left out (no failing outputs); statuses agreed; "never nwi" kept as
+  an n-vs-ñ spelling ban; kí/kì factive pairs and gwùgwú not seeded until
+  Salem answers. Review workflow wf_0beb8d18-cec (4 lenses, 2 skeptics per
+  finding) running.
+- Reference form: branch `reference-form-second-pass` at b80c041, worktree
+  .claude/worktrees/agent-af7e83edbf7424ab8. reference-form.ts
+  (REFERENCE_FORM_SYSTEM, renderReferenceForm, referenceFormReport,
+  REFERENCE_FORM_LABELS = [rag-v4-5]), chat route emits an additive
+  {type:"reference"} event after settle for v4.5 only, racing the deadline,
+  failures warned; chat-column-body shows "Reference form (second pass, not
+  judged)". Migration 20261008120000_model_output_reference_form adds five
+  nullable columns; NOTHING writes them yet because the chat route stores no
+  ModelOutput row (builder flagged it). 11 of 17 ModelOutput queries select
+  all columns, so the migration must be applied BEFORE the schema change
+  deploys. scripts/reference-form-samples.ts (20 v4.4 train answers, no DB
+  writes), static-leak-check-reference-form.ts (PASS, control live),
+  tasks/dual-layer-feasibility-2026-10-08.md (placeholder for the aggregate).
+  Gates: 86 files / 1,316 tests. Review workflow wf_69512d06-4fa running.
+
+### Oct 8 afternoon: usage limit, then review adjudication (Opus 5.5)
+
+A Fable usage limit (reset 4:10pm Accra) killed 6 bank writers, the bank
+linter, one reviewer per branch and every verifier (90 agents). Resumed on
+Opus 5.5. The bank workflow was resumed from cache (wf_56bdcd2a-a6f; the 9
+analyses, the spec and 4 writer groups replay). The raw review findings
+(v4.5: 28 from 3 lenses; reference form: 16 from 2 lenses) were adjudicated
+by hand, not re-verified by agents; each builder must check every claim
+against the code before fixing and report refutations.
+
+The decisive finding: buildGrammarBlock serves EVERY non-note grammar_rule
+row with no version filter (grammar-block.ts:207), so seeding v4.5's served
+rows as chunkType grammar_rule would have changed the live pooled v4.4 arm
+mid-round. Fix ordered: v4.5 rows get chunkType grammar_rule_v4_5 and
+grammarChunkTypesFor(label) serves them to rag-v4-5 only; every caller
+passes the label. Rule for the future: any new served RagEntry row is
+version-scoped, never added to the shared grammar_rule pool while an arm
+that reads it is pooled.
+
+Other v4.5 decisions: COMP rewritten as one enumeration that keeps every
+attested linker (kì relative, ku before ma/me, kì may/must-not, ki/ku after
+tọdu and ichẹñwu, kakini after say/tell/know); the prompt does NOT teach
+"kí = that after saying" (rows and gold say kakini). TONE line dropped from
+the prompt (would tone every ki); kí/kì contrast stays in the row for tone
+questions; jọ̀ demoted to a note (Bible marks no tone, so one class). VAR
+reworded as a constraint the model can obey. G1 keeps only the ñw' half
+(speakers do write ef'). G2 no longer legislates the nasal's spelling. G4
+names chẹwñ/bẹwñ instead of banning the -wñ ending (it is the possessive).
+Reference form: the five referenceForm* columns and the migration are
+removed from the branch (nothing writes them; 11 of 17 ModelOutput queries
+select all columns, so a schema-first deploy would break routes); the
+second pass gets a deadline floor, an exact system prompt, a "rendering"
+stage, cost on the event, and report fixes (keep dot-below and tilde in the
+comparison key; flag only NEW s-words).
+
+v4.5 after review: branch at 17d41bb (1,648/1,650 tokens, 1,292 tests,
+Scope-A PASS; the leak check caught that the suggested possessive example
+spelled out the whole frozen gold of ig_bank_orth_007, bracketed as
+[mother] wñ). Nine rows, all chunkType grammar_rule_v4_5 (3 served, 6
+notes). Builder deviations accepted: kakini after say/tell/know/want, not
+hear (no gold after hear); "never the Yoruba prohibitive má" (preverbal ma
+is the plural pronoun); incompletive examples alọ and a'jẹñwu (afu reads as
+another word); the ki unmarked share is ~65% with annotator_8, ~90%
+without. Weakest line kept: gwugwu/jọ (sit), plural jọ on one gold token
+plus the write-up; the bank's concd family tests it directly.
+v4.6 candidates: the NEVER list bans forms speakers write: abẹki 'or' (9
+gold answers) and ati 'until' (14).
+Reference form after review: branch at b102762 (1,342 tests, Scope-A PASS),
+no storage, 20s MIN_REFERENCE_BUDGET_MS provisional. Pre-merge verification
+workflow (4 checks incl. a trial merge of both branches) running.
+
+Reference-form samples (pre-fix baseline, 20 v4.4 train answers, $0.68):
+20/20 rendered; mean toned share 72%; 0 apostrophes left; 34 words dropped
+(30 of them one truncated answer: tokensOut 4092 at the 4096 cap; four more
+samples above 3,900), 7 added; mean latency 24.6s, max 37.5s. The pass
+guesses restored vowels and changes letters (d'ẹnyọ -> dá ẹ́nyọ́, efẹwọ split
+into èfù [goat], ñ -> ń) despite the "leave it if unsure" rule; it faithfully
+tones wrong words (Nnọ). Fixes sent to the builder: own 8192 budget plus a
+truncation guard, MIN_REFERENCE_BUDGET_MS 40s (measured), a "letters
+changed" count, and a stricter rule 2 (never split a fused word; restore a
+vowel only where the full word is attested in the same answer or in the
+authors' examples). Samples go to Salem only when Halim sends them.
+
+
+### THE APP REPO IS PUBLIC (found 2026-10-08) - rule for every session
+
+madihg/wikitongues-ai and madihg/wikitongues-web-ai are PUBLIC on GitHub.
+Anything committed is published. The Scope-A gates only ever checked SERVED
+text (prompts, seeded rows); documents were never checked. Run on 2026-10-08,
+the guard found frozen gold answers in our documents: 645 hits in the new
+evidence doc, 23 in the bank's design fields, 12 in the inventory (already
+pushed in #62), and 9 in older sections of THIS file that have been on GitHub
+for weeks. Nearly all are the single-word answers of the frozen
+ig_bank_orth_* and ig_bank_lex_* prompts (water, child, money, farm, god...),
+which are dictionary words and also sit in the public lexicon, so the
+exposure is low-severity; history was NOT rewritten (Halim's call).
+RULE: before committing any document or source file that quotes Igala, run
+  npx tsx --env-file=.env.local scripts/leak-check-files.ts <files...>
+(paragraph-level checkStatic against the real frozen set, spiked control,
+exit 1 on a hit). Fix hits by bracketing the English gloss ([water]), as the
+seeds do. All files in the v4.5 bank PR were schematized this way and pass;
+the bank's served fields (texts, notes) were unchanged by it.
+
+Reference form after the samples and verification: branch at d03aa5e
+(30d097a + d03aa5e on top of b102762): own 8,192-token budget for Google
+plus a refusal guard (empty, within 8 of the cap, or more than a quarter of
+the words missing), MIN_REFERENCE_BUDGET_MS 40,000 (measured), the report
+aligns words in order and counts lettersChanged and vowelsRestored, rule 2
+restores a vowel only where the full word is attested in the answer or is
+the authors' example and never splits an unapostrophed word, rule 4 keeps
+dotted vowels and ñ under the marks; createComposerLock() is pure and
+tested; an empty-text reference event ends the "rendering" phase; the exact
+call skips few-shot turns. 1,363 tests, leak check PASS. Samples re-run on
+the fixed prompt in progress (tasks/reference-form-samples-2026-10-08-after-fixes.md
+on that branch). Merge order: v4.5 first, then this branch rebased with the
+verifier's merged-tree test patch (scratchpad/merged-route-test-fix.patch).
+
+v4.5 after the pre-merge verification: branch at 0a0a5c9 (14 edits, 1,648
+tokens, 90 files / 1,309 tests, leak check PASS). Corrections from the
+whole-export counts: the incompletive may be apart, fused or a' (15 of 24
+answers write it apart on the child-is-eating prompt); to/for prefers ñwu/ñwi
+without banning plain n (gold nwu 45, nwi 12); ki enumeration gained the
+time linker kaki and kẹ = ki + ẹ, and "one may-clause per blessing" (the
+real excess is density, not jobless ki); "know" dropped from the say-linker
+verbs (kẹ mọ kaki means drink while); line 24 now separates sequence from
+embedding; ki untoned in the prompt frames; dictionary tone accents
+stripped for v4.5 only unless the question asks for tone; the tone row has
+its own chunkType read only for tone questions and is kept served (source
+discloses 133 of 139 kì from one annotator); gwugwu/jọ out of NUM; v1
+searchRag excludes both v4.5 chunkTypes; route-v45.test.ts pins mixed
+turns. Corpus bigrams for the header: todu ku 202, todu ki 272, ichewñ ku
+264, ichewñ ki 229. Final check workflow wf_d7e69abb-7c6 running.
+Reference-form samples on the fixed prompt ($0.85): 20/20 rendered, the
+chat guard hides 1 (a dropped stretch, source of 41 of the 43 "letters
+changed"), 2 real letter changes in the other 19, 5 vowels restored, 20
+contractions left standing, mean latency 26.5s (19 of 20 under 40s, one at
+52s). The sample files quote model Igala that hits the frozen set, so they
+are NOT committed (public repo); kept in the scratchpad for-salem folder
+for Halim to share privately. The branch will be squash-merged without the
+baseline sample file the builder committed.
+
+
+### GEMINI 3.1 PRO DAILY CAP: 250 requests per model per day (found 2026-10-08)
+
+The Google project behind GOOGLE_GENERATIVE_AI_API_KEY is capped at 250
+generate requests per day for gemini-3.1-pro (quotaId
+GenerateRequestsPerDayPerProjectPerModel; Flash is separate and was fine).
+Every pooled arm (bare, v3, v4.4) and every v4-family exam runs on it, and a
+v4-family answer can cost two requests (repair round). Oct 8 hit it exactly:
+40 reference-form samples + 108 bare + ~100 v3. Plan Gemini work per day:
+a 108-prompt batch for three arms is ~360 requests (two days), a frozen
+exam of one v4 arm is ~43-86. Failed 429s are not billed and do not consume
+quota. Raising the tier is a billing decision for Halim.
