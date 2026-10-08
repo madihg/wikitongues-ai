@@ -8,7 +8,7 @@ import {
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
 import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
-import { IGALA_SYSTEM_V4_5 } from "@/lib/generation-prompt-v4-5";
+import { igalaSystemV45 } from "@/lib/generation-prompt-v4-5";
 import {
   labelRunsRepairRound,
   type RepairCheckOptions,
@@ -47,11 +47,11 @@ import {
  *   rag-v4-4  -> IGALA_SYSTEM_V4_4  , everything v4.3 does, with the eleven
  *                lines the Sep 13-23 annotation round amended (see
  *                generation-prompt-v4-4.ts); the v4.3/v4.4 delta is the prompt.
- *   rag-v4-5  -> IGALA_SYSTEM_V4_5  , everything v4.4 does, with the ten
- *                lines the Ejeba and Wiernik write-up of 2026-09-25 and the
- *                speakers'-gold read of v4.4's answers amended (see
- *                generation-prompt-v4-5.ts); the v4.4/v4.5 delta is the
- *                prompt. Built and examined, not pooled.
+ *   rag-v4-5  -> igalaSystemV45()   , everything v4.4 does, with the ten
+ *                lines generation-prompt-v4-5.ts names, and a grammar block
+ *                that also reads the v4.5 rows (chunkType
+ *                grammar_rule_v4_5, grammarChunkTypesFor), which no other
+ *                label reads. Built and examined, not pooled.
  *
  * The repair round is not decided here either. generateWithRepairRound keys
  * off the candidate's versionLabel and is a documented, unit-tested no-op
@@ -93,7 +93,7 @@ export function isV4FamilyVersionLabel(
 
 /** The system prompt served for a v4-family label. */
 export function systemPromptForVersion(label: V4FamilyVersionLabel): string {
-  if (label === "rag-v4-5") return IGALA_SYSTEM_V4_5;
+  if (label === "rag-v4-5") return igalaSystemV45();
   if (label === "rag-v4-4") return IGALA_SYSTEM_V4_4;
   if (label === "rag-v4-2" || label === "rag-v4-3") return IGALA_SYSTEM_V4_2;
   return label === "rag-v4-1" || label === "rag-v4-1-norepair"

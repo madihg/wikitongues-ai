@@ -2,13 +2,13 @@
  * Register the rag-v4-5 candidate - the single v4.5 arm, cloned from the
  * rag-v4-4 row.
  *
- * v4.5 is v4.4 with ONE change: the system prompt is IGALA_SYSTEM_V4_5, the
- * v4.4 prompt with ten lines amended, six from the Salem Ejeba and Lydia
- * Wiernik write-up of 2026-09-25 and four from the speakers'-gold read of
- * v4.4's train answers (src/lib/generation-prompt-v4-5.ts names each).
- * Retrieval, the grammar block, the repair round and the name check are
- * v4.4's, unchanged, so a v4.4 -> v4.5 delta measures exactly {those ten
- * lines}. Decoding is copied from the v4.4 row (temperature 0, verified).
+ * v4.5 is v4.4 with two changes: the system prompt is igalaSystemV45(), the
+ * v4.4 prompt with ten lines amended from the Salem Ejeba and Lydia Wiernik
+ * write-up of 2026-09-25 and the speakers' gold
+ * (src/lib/generation-prompt-v4-5.ts names each), and the grammar block also
+ * reads the v4.5 rows (chunkType grammar_rule_v4_5, which no other label
+ * reads). Retrieval, the repair round and the name check are v4.4's,
+ * unchanged. Decoding is copied from the v4.4 row (temperature 0, verified).
  *
  * DO NOT run before scripts/static-leak-check-v4-5.ts passes: the amended
  * lines carry Igala forms, and every one must clear Scope A.
@@ -66,19 +66,23 @@ async function main() {
     parentCandidateId: v4.id,
     color: v4.color,
     isPublic: v4.isPublic,
-    // Explicit, not defaulted: the v4.5 arm stays OUT of the pairing pool.
-    // It is examined against v4.4 first; pooling is a later data edit AND
-    // an ALLOWED_PAIRINGS entry, never a side effect of this script.
+    // Explicit, not defaulted, and set on CREATE only (see the upsert):
+    // the v4.5 arm starts OUT of the pairing pool. It is examined against
+    // v4.4 first; pooling is a later data edit AND an ALLOWED_PAIRINGS
+    // entry, never a side effect of this script.
     inPairingPool: false,
   };
 
   const existing = await prisma.candidateModel.findUnique({
     where: { slug: SLUG },
   });
+  // A rerun must never touch the pool flag: false on create only, so a
+  // rerun after a future pool flip cannot silently un-pool the arm.
+  const { inPairingPool, ...updatable } = data;
   await prisma.candidateModel.upsert({
     where: { slug: SLUG },
-    update: data,
-    create: { ...data, slug: SLUG },
+    update: updatable,
+    create: { ...data, inPairingPool, slug: SLUG },
   });
   console.log(
     `  ${existing ? "updated" : "CREATED"}  ${SLUG.padEnd(28)} ${NAME}  (from ${V4_SLUG})`,

@@ -1,17 +1,19 @@
 /**
  * v4.5 copy of static-leak-check-v4-4.ts: the served prompt under test is
- * IGALA_SYSTEM_V4_5, and the EIGHT draft grammar_rule rows of
- * prisma/seed-rag-v4-5-grammar.ts are checked beside it (the seed runs the
- * same gate itself before inserting; this script lets the rows be checked
- * without touching the database). Every earlier prompt runs as a control.
+ * igalaSystemV45(), and the NINE draft rows of prisma/seed-rag-v4-5-grammar.ts
+ * (chunkType grammar_rule_v4_5) are checked beside it, together with every
+ * row already stored under that chunkType (none before the seed runs; after
+ * it, the stored text is checked, not only the drafts). The seed runs the
+ * same gate itself before inserting. Every earlier prompt is a control.
  *
  * SCOPE-A LEAK CHECK against the REAL frozen protected set for the v4.5
  * system prompt - the text that ships on every rag-v4-5 request - with the
  * v4.4, v4.2, v4.1, v4 and v3 prompts as passing controls.
  *
- * v4.5's amended lines carry Igala forms: the small words kí, kì, jọ, jọ̀,
- * the number-agreeing verb pairs, and the elision examples v4.2 already
- * carried. The rows carry the write-up's dialect forms as data. None of them
+ * v4.5's amended lines carry Igala forms: the ki-word linkers, the
+ * number-agreeing verb pairs, alọ and a'jẹñwu, the possessive -wñ, and the elision
+ * examples v4.2 already carried. The rows carry the write-up's dialect
+ * forms as data. None of them
  * is a sentence, but a one-word frozen gold would collide with a one-word
  * form, which is exactly what the inventory warned of (the write-up spells
  * gold words the gate bracketed before: child, pot). So the NEGATIVE CONTROL
@@ -33,8 +35,9 @@ import { IGALA_SYSTEM_V4 } from "../src/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "../src/lib/generation-prompt-v4-1";
 import { IGALA_SYSTEM_V4_2 } from "../src/lib/generation-prompt-v4-2";
 import { IGALA_SYSTEM_V4_4 } from "../src/lib/generation-prompt-v4-4";
-import { IGALA_SYSTEM_V4_5 } from "../src/lib/generation-prompt-v4-5";
+import { igalaSystemV45 } from "../src/lib/generation-prompt-v4-5";
 import { V4_5_GRAMMAR_ENTRIES } from "../prisma/seed-rag-v4-5-grammar";
+import { GRAMMAR_CHUNK_TYPE_V4_5 } from "../src/lib/arena/grammar-block";
 
 async function main() {
   const prisma = new PrismaClient();
@@ -88,30 +91,43 @@ async function main() {
       `negative control: LIVE - spiked gold flagged (${spikeReport.hitCount} hit(s), as required)\n`,
     );
 
+    // Rows already stored under the v4.5 chunkType (0 before the seed).
+    const stored = await prisma.ragEntry.findMany({
+      where: { language: "igala", chunkType: GRAMMAR_CHUNK_TYPE_V4_5 },
+      select: { id: true, topic: true, content: true },
+    });
+    console.log(
+      `stored ${GRAMMAR_CHUNK_TYPE_V4_5} rows: ${stored.length}  draft rows: ${V4_5_GRAMMAR_ENTRIES.length}\n`,
+    );
+
     // Whole blocks first (the real serving shape), then per line and per row
     // for triage.
     const blocks = [
-      { where: "IGALA_SYSTEM_V4_5", text: IGALA_SYSTEM_V4_5 },
+      { where: "igalaSystemV45()", text: igalaSystemV45() },
       { where: "IGALA_SYSTEM_V4_4 (control)", text: IGALA_SYSTEM_V4_4 },
       { where: "IGALA_SYSTEM_V4_2 (control)", text: IGALA_SYSTEM_V4_2 },
       { where: "IGALA_SYSTEM_V4_1 (control)", text: IGALA_SYSTEM_V4_1 },
       { where: "IGALA_SYSTEM_V4 (control)", text: IGALA_SYSTEM_V4 },
       { where: "IGALA_SYSTEM_V3 (control)", text: IGALA_SYSTEM_V3 },
-      ...IGALA_SYSTEM_V4_5.split("\n")
+      ...igalaSystemV45().split("\n")
         .map((line, i) => ({
           where: `v4.5 line ${i + 1}: ${line.slice(0, 48)}`,
           text: line,
         }))
         .filter((b) => b.text.trim().length > 0),
       ...V4_5_GRAMMAR_ENTRIES.map((e) => ({
-        where: `v4.5 row: ${e.topic.slice(0, 64)}`,
+        where: `v4.5 draft row: ${e.topic.slice(0, 64)}`,
         text: `${e.topic}\n${e.content}`,
+      })),
+      ...stored.map((r) => ({
+        where: `v4.5 stored row ${r.id}`,
+        text: `${r.topic}\n${r.content}`,
       })),
     ];
     const report = checkStatic(blocks, protectedSet);
     if (report.pass) {
       console.log(
-        `SCOPE A: PASS - no frozen gold answer appears in the v4.5 prompt, the ${V4_5_GRAMMAR_ENTRIES.length} v4.5 rows, or the v3/v4/v4.1/v4.2/v4.4 controls.`,
+        `SCOPE A: PASS - no frozen gold answer appears in the v4.5 prompt, the ${V4_5_GRAMMAR_ENTRIES.length} v4.5 draft rows, the ${stored.length} stored v4.5 rows, or the v3/v4/v4.1/v4.2/v4.4 controls.`,
       );
     } else {
       console.log(`SCOPE A: FAIL - ${report.hitCount} hit(s):`);

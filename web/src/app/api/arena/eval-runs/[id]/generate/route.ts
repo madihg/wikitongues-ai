@@ -110,11 +110,15 @@ export async function POST(
         // rag-v4-3 adds the grammar block as its own leg (never inside the
         // shared v4 build); its ids join the audit trail as grammar:<id>.
         const grammar = servesGrammarBlock(candidate.versionLabel)
-          ? await buildGrammarBlock(prisma, {
-              promptId: prompt.promptId,
-              text: prompt.text,
-              isHoldout: prompt.isHoldout,
-            })
+          ? await buildGrammarBlock(
+              prisma,
+              {
+                promptId: prompt.promptId,
+                text: prompt.text,
+                isHoldout: prompt.isHoldout,
+              },
+              candidate.versionLabel,
+            )
           : null;
         const { args, opts } = buildV4FamilyTurn(
           candidate.versionLabel,

@@ -64,6 +64,31 @@ export const MIN_GRAMMAR_SCORE = 2;
  */
 export const GRAMMAR_NOTE_STATUS = "scholarship_note";
 
+/** The chunkType every grammar-block label reads (v4.3, v4.4, v4.5). */
+export const GRAMMAR_CHUNK_TYPE = "grammar_rule";
+/**
+ * The chunkType of the rows seeded for v4.5 only
+ * (prisma/seed-rag-v4-5-grammar.ts). A separate chunkType rather than a
+ * migration: the block query reads rows by chunkType, so rows under this
+ * one are invisible to every label but rag-v4-5, and the live, pooled v4.4
+ * arm and the v4.3/v4.4 exams keep reading exactly the store they were
+ * measured on (the common-word statistics in rankGrammarRules included).
+ */
+export const GRAMMAR_CHUNK_TYPE_V4_5 = "grammar_rule_v4_5";
+
+/**
+ * The chunkTypes a label's grammar block reads. Every label reads
+ * grammar_rule alone, exactly as before v4.5 existed; rag-v4-5 also reads
+ * its own rows. Unknown, null or absent labels get the default.
+ */
+export function grammarChunkTypesFor(
+  label?: string | null,
+): readonly string[] {
+  return label === "rag-v4-5"
+    ? [GRAMMAR_CHUNK_TYPE, GRAMMAR_CHUNK_TYPE_V4_5]
+    : [GRAMMAR_CHUNK_TYPE];
+}
+
 /**
  * The instruction on top of the block. Written to the Claude Fable 5.1
  * prompting guidance: literal about what the notes are, what to do when they
@@ -187,11 +212,44 @@ export interface GrammarBlockResult {
   leakReport: LeakReport;
 }
 
+/** The key of a label's row set: labels with the same key share one block. */
+export function grammarRowSetKey(label?: string | null): string {
+  return grammarChunkTypesFor(label).join("+");
+}
+
+/** One grammar block per distinct row set, keyed by grammarRowSetKey. */
+export type GrammarBlocksByRowSet = ReadonlyMap<string, GrammarBlockResult>;
+
+/**
+ * For a turn that serves several columns at once (the chat route): build
+ * one block per distinct row set the given labels need, concurrently, and
+ * never twice for the same set, so a v4.3 and a v4.4 column still share one
+ * block while a v4.5 column gets its own. null when no label needs a block.
+ */
+export async function buildGrammarBlocksByRowSet(
+  labels: readonly string[],
+  build: (label: string) => Promise<GrammarBlockResult>,
+): Promise<GrammarBlocksByRowSet | null> {
+  const labelByKey = new Map<string, string>();
+  for (const l of labels) {
+    const key = grammarRowSetKey(l);
+    if (!labelByKey.has(key)) labelByKey.set(key, l);
+  }
+  if (labelByKey.size === 0) return null;
+  const built = await Promise.all(
+    [...labelByKey].map(async ([key, l]) => [key, await build(l)] as const),
+  );
+  return new Map(built);
+}
+
 /**
  * Build the block for one prompt. Prisma injected, like the v2/v4 builders,
  * so tests run against a fake. On a frozen prompt every candidate rule is
  * run through the same leak guard as every other served piece, against the
  * prompt's own benchmark gold, and a hit drops the rule.
+ *
+ * `label` picks the rows (grammarChunkTypesFor): omitted, or any label but
+ * rag-v4-5, the query is the pre-v4.5 one byte for byte (pinned by test).
  */
 export async function buildGrammarBlock(
   prisma: PrismaClient,
@@ -201,11 +259,17 @@ export async function buildGrammarBlock(
     language?: string;
     isHoldout: boolean;
   },
+  label?: string | null,
 ): Promise<GrammarBlockResult> {
   const language = prompt.language ?? "igala";
   const words = contentWords(prompt.text);
+  const chunkTypes = grammarChunkTypesFor(label);
   const stored = await prisma.ragEntry.findMany({
-    where: { language, chunkType: "grammar_rule" },
+    where: {
+      language,
+      chunkType:
+        chunkTypes.length === 1 ? chunkTypes[0] : { in: [...chunkTypes] },
+    },
     select: { id: true, topic: true, content: true, verificationStatus: true },
   });
   const rows = stored.filter(

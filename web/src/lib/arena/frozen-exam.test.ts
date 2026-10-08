@@ -17,7 +17,7 @@ import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
 import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
-import { IGALA_SYSTEM_V4_5 } from "@/lib/generation-prompt-v4-5";
+import { igalaSystemV45 } from "@/lib/generation-prompt-v4-5";
 import type { RetrievalV4Result } from "./retrieval-v4";
 
 /** A retrieval result with every block distinguishable, so the assembled user
@@ -69,8 +69,8 @@ describe("v4-family label switch", () => {
     // v4.4 and v4.5 each sit on their own prompt: the amended lines are
     // the whole delta between neighbours.
     expect(systemPromptForVersion("rag-v4-4")).toBe(IGALA_SYSTEM_V4_4);
-    expect(systemPromptForVersion("rag-v4-5")).toBe(IGALA_SYSTEM_V4_5);
-    expect(IGALA_SYSTEM_V4_5).not.toBe(IGALA_SYSTEM_V4_4);
+    expect(systemPromptForVersion("rag-v4-5")).toBe(igalaSystemV45());
+    expect(igalaSystemV45()).not.toBe(IGALA_SYSTEM_V4_4);
     expect(systemPromptForVersion("rag-v4-1")).toBe(IGALA_SYSTEM_V4_1);
     expect(systemPromptForVersion("rag-v4")).toBe(IGALA_SYSTEM_V4);
     // v4.2's rules are the ONLY ones that make the name check legitimate:

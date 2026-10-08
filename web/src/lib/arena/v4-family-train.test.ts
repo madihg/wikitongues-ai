@@ -27,8 +27,8 @@ vi.mock("@/lib/arena/retrieval-v4", () => ({
   },
 }));
 vi.mock("@/lib/arena/grammar-block", () => ({
-  buildGrammarBlock: async (_p: unknown, args: unknown) => {
-    calls.grammar.push(args);
+  buildGrammarBlock: async (_p: unknown, args: object, label?: string) => {
+    calls.grammar.push({ ...args, label });
     return {
       grammarBlock: "GRAMMAR NOTES",
       grammarIds: ["grammar:g1"],
@@ -89,8 +89,9 @@ describe("generateV4FamilyTrainAnswer", () => {
         isHoldout: false,
       }),
     ]);
+    // The label reaches the block builder, so it reads this label's row set.
     expect(calls.grammar).toEqual([
-      expect.objectContaining({ isHoldout: false }),
+      expect.objectContaining({ isHoldout: false, label: "rag-v4-4" }),
     ]);
     expect(a.gen.repaired).toBe(false);
     expect(a.gen.text).toBe("Musa dodo efẹwọ Idah.");
