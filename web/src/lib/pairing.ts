@@ -86,6 +86,15 @@ export const ALLOWED_PAIRINGS: readonly (readonly [string, string])[] = [
   ["gemini-3-1-pro-rag-v3", "gemini-3-1-pro"],
   ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-rag-v3"],
   ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-tonestrip"],
+  // 2026-09-23, Halim's call after the exam: v4.4 (the v4.2 prompt with
+  // twelve community-sourced amendments plus the grammar block) enters the
+  // blind round against the two arms the community has already judged, so
+  // the first version-to-version human data reads directly off the chart.
+  // Enabled by scripts/enable-v44-pool.ts once the arm's train outputs
+  // exist; the v3-vs-bare entry stays so prompts without a v4.4 output
+  // remain servable.
+  ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro"],
+  ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro-rag-v3"],
 ];
 
 /** Whether the (unordered) slug pair is on the whitelist. */
