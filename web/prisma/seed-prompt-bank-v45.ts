@@ -138,7 +138,7 @@ async function main() {
       throw new Error(`promptId outside the v45 namespace: ${p.promptId}`);
     if (p.text.length < 25 || p.text.length > 420)
       throw new Error(`${p.promptId}: text length ${p.text.length} outside 25-420`);
-    if (/—/.test(p.text + (p.expectedCulturalContext ?? "")))
+    if (/\u2014/.test(p.text + (p.expectedCulturalContext ?? "")))
       throw new Error(`${p.promptId}: em dash`);
   }
   const clashes = await prisma.prompt.findMany({

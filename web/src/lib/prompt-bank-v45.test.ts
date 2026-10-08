@@ -61,7 +61,7 @@ describe("the v4.5 prompt bank", () => {
       expect(p.text.length, p.promptId).toBeGreaterThanOrEqual(25);
       expect(p.text.length, p.promptId).toBeLessThanOrEqual(420);
       const all = `${p.text}\n${p.expectedCulturalContext ?? ""}\n${p.rationale}\n${p.targetRule}`;
-      expect(all, p.promptId).not.toMatch(/[—–]/);
+      expect(all, p.promptId).not.toMatch(/[\u2014\u2013]/);
       expect(all, p.promptId).not.toMatch(/\p{Extended_Pictographic}/u);
       expect(p.text.toLowerCase(), p.promptId).not.toMatch(/\bplease\b/);
     }
