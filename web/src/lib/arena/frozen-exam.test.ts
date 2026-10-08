@@ -282,7 +282,7 @@ describe("the v4.5 dictionary block: tone accents off unless the question asks",
   const toned = (): RetrievalV4Result =>
     ({
       ...retrieval(),
-      dictionaryBlock: "DICTIONARY\nchild = ọ́mà\nwhat = ẹ́ñwû",
+      dictionaryBlock: "DICTIONARY\nwork = ùkọ́lọ̀\nwhat = ẹ́ñwû",
     }) as RetrievalV4Result;
   const grammar = { grammarBlock: "GRAMMAR" };
   const plain = { text: "How do you say child?", bucket: null };
@@ -298,20 +298,20 @@ describe("the v4.5 dictionary block: tone accents off unless the question asks",
           ? buildUserTurnV43(plain.text, r, "GRAMMAR", null)
           : buildUserTurnV4(plain.text, r, null);
       expect(turn.args.userMessage).toBe(expected);
-      expect(turn.args.userMessage).toContain("ọ́mà");
+      expect(turn.args.userMessage).toContain("ùkọ́lọ̀");
     }
   });
 
   it("strips the accents for rag-v4-5, keeping ñ and the dotted vowels", () => {
     const turn = buildV4FamilyTurn("rag-v4-5", plain, toned(), grammar);
-    expect(turn.args.userMessage).toContain("child = ọma\nwhat = ẹñwu");
-    expect(turn.args.userMessage).not.toContain("ọ́mà");
+    expect(turn.args.userMessage).toContain("work = ukọlọ\nwhat = ẹñwu");
+    expect(turn.args.userMessage).not.toContain("ùkọ́lọ̀");
     expect(turn.opts.allowTone).toBe(false);
   });
 
   it("keeps the accents for rag-v4-5 when the question asks for tone", () => {
     const turn = buildV4FamilyTurn("rag-v4-5", askTone, toned(), grammar);
-    expect(turn.args.userMessage).toContain("ọ́mà");
+    expect(turn.args.userMessage).toContain("ùkọ́lọ̀");
     expect(turn.opts.allowTone).toBe(true);
   });
 });

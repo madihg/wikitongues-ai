@@ -90,8 +90,8 @@ beforeEach(() => {
   mockBuildRetrievalV4.mockResolvedValue(V4);
   mockSearchRag.mockResolvedValue([]);
   mockStreamForCandidate.mockImplementation(async (_c: unknown, _a: unknown, onDelta: (d: string) => void) => {
-    onDelta("ojo daa");
-    return { text: "ojo daa", modelId: "gpt-x", latencyMs: 1, tokensIn: 1, tokensOut: 1, ragContextIds: [] };
+    onDelta("ugbo daa");
+    return { text: "ugbo daa", modelId: "gpt-x", latencyMs: 1, tokensIn: 1, tokensOut: 1, ragContextIds: [] };
   });
 });
 
@@ -151,11 +151,11 @@ describe("chat route: v4.4 and v4.5 columns in one turn", () => {
   });
 
   it("a toned dictionary reaches v4.4 as is and v4.5 untoned", async () => {
-    mockBuildRetrievalV4.mockResolvedValue({ ...V4, dictionaryBlock: "DICTIONARY\nchild = ọ́mà" });
+    mockBuildRetrievalV4.mockResolvedValue({ ...V4, dictionaryBlock: "DICTIONARY\nwork = ùkọ́lọ̀" });
     mockPrisma.candidateModel.findMany.mockResolvedValue([cand("v44", "rag-v4-4"), cand("v45", "rag-v4-5")]);
     await drain(await POST(req(["v44", "v45"])));
-    expect(firstCallFor("v44").userMessage).toContain("child = ọ́mà");
-    expect(firstCallFor("v45").userMessage).toContain("child = ọma");
-    expect(firstCallFor("v45").userMessage).not.toContain("ọ́mà");
+    expect(firstCallFor("v44").userMessage).toContain("work = ùkọ́lọ̀");
+    expect(firstCallFor("v45").userMessage).toContain("work = ukọlọ");
+    expect(firstCallFor("v45").userMessage).not.toContain("ùkọ́lọ̀");
   });
 });

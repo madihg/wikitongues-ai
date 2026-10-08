@@ -12,7 +12,7 @@ describe("asksForTone", () => {
 
 describe("stripToneAccents", () => {
   it("removes grave, acute, circumflex and caron, and keeps ñ and the dotted vowels", () => {
-    expect(stripToneAccents("kì kí Ẹ́ñwû ọ́ma ẹ̀ jọ̀ ǎ")).toBe("ki ki Ẹñwu ọma ẹ jọ a");
+    expect(stripToneAccents("kì kí Ẹ́ñwû ùkọ́lọ̀ ẹ̀ jọ̀ ǎ")).toBe("ki ki Ẹñwu ukọlọ ẹ jọ a");
     expect(stripToneAccents("ñwu ẹñwu ọdọ")).toBe("ñwu ẹñwu ọdọ");
   });
 
