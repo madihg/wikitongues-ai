@@ -123,6 +123,7 @@ export type Approach =
   | "retrieval v4.2"
   | "retrieval v4.3"
   | "retrieval v4.4"
+  | "retrieval v4.5"
   | "fine-tuned"
   | "control (tone removed)"
   | "other";
@@ -297,6 +298,7 @@ export function approachLabel(
     if (versionLabel === "rag-v4-2") return "retrieval v4.2";
     if (versionLabel === "rag-v4-3") return "retrieval v4.3";
     if (versionLabel === "rag-v4-4") return "retrieval v4.4";
+    if (versionLabel === "rag-v4-5") return "retrieval v4.5";
     if (versionLabel === "rag-v4") return "retrieval v4";
     if (versionLabel === "rag-v3") return "retrieval v3";
     return versionLabel === "rag-v2" ? "retrieval v2" : "retrieval v1";

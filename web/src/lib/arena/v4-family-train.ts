@@ -58,11 +58,15 @@ export async function generateV4FamilyTrainAnswer(
     retrievalCache?.set(prompt.promptId, v4);
   }
   const grammar = servesGrammarBlock(label)
-    ? await buildGrammarBlock(prisma, {
-        promptId: prompt.promptId,
-        text: prompt.text,
-        isHoldout: false,
-      })
+    ? await buildGrammarBlock(
+        prisma,
+        {
+          promptId: prompt.promptId,
+          text: prompt.text,
+          isHoldout: false,
+        },
+        label,
+      )
     : null;
   const { args, opts } = buildV4FamilyTurn(
     label,

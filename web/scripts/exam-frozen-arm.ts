@@ -213,11 +213,15 @@ async function examineArm(slug: string, budgetUsd: number) {
       // eval-runs route, so an exam output and a route output are assembled
       // by the same two calls in the same order.
       const grammar = servesGrammarBlock(label)
-        ? await buildGrammarBlock(prisma, {
-            promptId: prompt.promptId,
-            text: prompt.text,
-            isHoldout: true,
-          })
+        ? await buildGrammarBlock(
+            prisma,
+            {
+              promptId: prompt.promptId,
+              text: prompt.text,
+              isHoldout: true,
+            },
+            label,
+          )
         : null;
       const { args, opts } = buildV4FamilyTurn(
         label,

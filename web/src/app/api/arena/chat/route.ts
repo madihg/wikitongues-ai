@@ -11,11 +11,14 @@ import {
   isV4FamilyVersionLabel,
   runsRepairRound,
   servesGrammarBlock,
+  type V4FamilyVersionLabel,
 } from "@/lib/arena/frozen-exam";
 import {
   buildGrammarBlock,
-  type GrammarBlockResult,
+  buildGrammarBlocksByRowSet,
+  grammarRowSetKey,
 } from "@/lib/arena/grammar-block";
+import { asksForTone } from "@/lib/arena/tone-request";
 import {
   encodeChatEvent,
   type ChatReply,
@@ -385,6 +388,9 @@ export async function POST(req: Request) {
     bucket: null,
     isHoldout: true,
   };
+  // The same predicate buildGrammarBlock applies to chatQuery.text, so the
+  // row-set keys below name exactly the rows each block read.
+  const chatAllowsTone = asksForTone(userMessage);
   //
   // Each leg is timed SEPARATELY even though they run concurrently: they are
   // the stages a "the v4 arm feels slow" report needs disambiguated, and a
@@ -430,14 +436,20 @@ export async function POST(req: Request) {
           }),
       // The grammar block is its OWN leg, never folded into the v4 build:
       // the v4 build is shared by every v4-family column and is frozen for
-      // comparability. Only a rag-v4-3 column reads this result.
-      candidates.some(
-        (c) =>
-          isV4FamilyVersionLabel(c.versionLabel) &&
-          servesGrammarBlock(c.versionLabel),
-      )
-        ? buildGrammarBlock(prisma, chatQuery)
-        : Promise.resolve<GrammarBlockResult | null>(null),
+      // comparability. Only the labels servesGrammarBlock names read it.
+      // Labels can read different row sets (rag-v4-5 adds its own chunkType,
+      // grammarChunkTypesFor), so one block is built per distinct set the
+      // turn's columns need, keyed by that set, and a column reads its own.
+      buildGrammarBlocksByRowSet(
+        candidates
+          .map((c) => c.versionLabel)
+          .filter(
+            (l): l is V4FamilyVersionLabel =>
+              isV4FamilyVersionLabel(l) && servesGrammarBlock(l),
+          ),
+        (label) => buildGrammarBlock(prisma, chatQuery, label),
+        chatAllowsTone,
+      ),
     ]),
     retrievalAlarm.reached,
   ]);
@@ -450,7 +462,7 @@ export async function POST(req: Request) {
       headers: chatStreamHeaders(),
     });
   }
-  const [v2, v4, v1, grammar] = built;
+  const [v2, v4, v1, grammarByRowSet] = built;
   const { ragContext, goldExamples } = v1;
 
   // STREAMING, NOT BUFFERING. The buffered version held the response until
@@ -516,6 +528,12 @@ export async function POST(req: Request) {
           : null;
         const isV4Family = v4Label !== null && v4 !== null;
         const isRepaired = isV4Family && runsRepairRound(v4Label);
+        // This column's own grammar block: the one built for its row set.
+        const grammar =
+          v4Label !== null
+            ? (grammarByRowSet?.get(grammarRowSetKey(v4Label, chatAllowsTone)) ??
+              null)
+            : null;
         // Every delta is BOTH sent and remembered: the remembered copy is
         // what a deadline-cut column serves as its partial answer, so the
         // reviewer keeps the text she was already reading.

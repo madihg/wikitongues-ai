@@ -6,6 +6,12 @@ import {
   type LeakReport,
 } from "@/lib/eval/leak-guard";
 import { fullFold } from "@/lib/eval/normalize";
+import { asksForTone } from "@/lib/arena/tone-request";
+import {
+  GRAMMAR_CHUNK_TYPE,
+  GRAMMAR_CHUNK_TYPE_V4_5,
+  GRAMMAR_CHUNK_TYPE_V4_5_TONE,
+} from "@/lib/arena/grammar-chunk-types";
 
 /**
  * THE GRAMMAR BLOCK - the retrieval leg the v4 family never had.
@@ -63,6 +69,31 @@ export const MIN_GRAMMAR_SCORE = 2;
  * prompt"; this is where the block enforces it.
  */
 export const GRAMMAR_NOTE_STATUS = "scholarship_note";
+
+// The grammar chunkTypes (and why v4.5 has its own) live in a dependency-free
+// module so the v1 search in src/lib/rag.ts can exclude them too.
+export {
+  GRAMMAR_CHUNK_TYPE,
+  GRAMMAR_CHUNK_TYPE_V4_5,
+  GRAMMAR_CHUNK_TYPE_V4_5_TONE,
+  V4_5_ONLY_CHUNK_TYPES,
+} from "@/lib/arena/grammar-chunk-types";
+
+/**
+ * The chunkTypes a label's grammar block reads. Every label but rag-v4-5
+ * reads grammar_rule alone, exactly as before v4.5 existed, whatever the
+ * question; rag-v4-5 adds its own rows, and its tone row only when the
+ * question asks for tone. Unknown, null or absent labels get the default.
+ */
+export function grammarChunkTypesFor(
+  label?: string | null,
+  allowTone: boolean = false,
+): readonly string[] {
+  if (label !== "rag-v4-5") return [GRAMMAR_CHUNK_TYPE];
+  return allowTone
+    ? [GRAMMAR_CHUNK_TYPE, GRAMMAR_CHUNK_TYPE_V4_5, GRAMMAR_CHUNK_TYPE_V4_5_TONE]
+    : [GRAMMAR_CHUNK_TYPE, GRAMMAR_CHUNK_TYPE_V4_5];
+}
 
 /**
  * The instruction on top of the block. Written to the Claude Fable 5.1
@@ -187,11 +218,51 @@ export interface GrammarBlockResult {
   leakReport: LeakReport;
 }
 
+/** The key of a label's row set: labels with the same key share one block. */
+export function grammarRowSetKey(
+  label?: string | null,
+  allowTone: boolean = false,
+): string {
+  return grammarChunkTypesFor(label, allowTone).join("+");
+}
+
+/** One grammar block per distinct row set, keyed by grammarRowSetKey. */
+export type GrammarBlocksByRowSet = ReadonlyMap<string, GrammarBlockResult>;
+
+/**
+ * For a turn that serves several columns at once (the chat route): build
+ * one block per distinct row set the given labels need, concurrently, and
+ * never twice for the same set, so a v4.3 and a v4.4 column still share one
+ * block while a v4.5 column gets its own. null when no label needs a block.
+ * `allowTone` is asksForTone of the turn's question, the same text every
+ * column's block is built from, so the keys match what buildGrammarBlock reads.
+ */
+export async function buildGrammarBlocksByRowSet(
+  labels: readonly string[],
+  build: (label: string) => Promise<GrammarBlockResult>,
+  allowTone: boolean = false,
+): Promise<GrammarBlocksByRowSet | null> {
+  const labelByKey = new Map<string, string>();
+  for (const l of labels) {
+    const key = grammarRowSetKey(l, allowTone);
+    if (!labelByKey.has(key)) labelByKey.set(key, l);
+  }
+  if (labelByKey.size === 0) return null;
+  const built = await Promise.all(
+    [...labelByKey].map(async ([key, l]) => [key, await build(l)] as const),
+  );
+  return new Map(built);
+}
+
 /**
  * Build the block for one prompt. Prisma injected, like the v2/v4 builders,
  * so tests run against a fake. On a frozen prompt every candidate rule is
  * run through the same leak guard as every other served piece, against the
  * prompt's own benchmark gold, and a hit drops the rule.
+ *
+ * `label` picks the rows (grammarChunkTypesFor, with asksForTone on the
+ * prompt's own text): omitted, or any label but rag-v4-5, the query is the
+ * pre-v4.5 one byte for byte (pinned by test).
  */
 export async function buildGrammarBlock(
   prisma: PrismaClient,
@@ -201,11 +272,17 @@ export async function buildGrammarBlock(
     language?: string;
     isHoldout: boolean;
   },
+  label?: string | null,
 ): Promise<GrammarBlockResult> {
   const language = prompt.language ?? "igala";
   const words = contentWords(prompt.text);
+  const chunkTypes = grammarChunkTypesFor(label, asksForTone(prompt.text));
   const stored = await prisma.ragEntry.findMany({
-    where: { language, chunkType: "grammar_rule" },
+    where: {
+      language,
+      chunkType:
+        chunkTypes.length === 1 ? chunkTypes[0] : { in: [...chunkTypes] },
+    },
     select: { id: true, topic: true, content: true, verificationStatus: true },
   });
   const rows = stored.filter(

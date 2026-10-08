@@ -13,10 +13,15 @@ import {
   labelRunsRepairRound,
   REPAIR_ROUND_VERSION_LABELS,
 } from "./repair-round";
-import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
+import {
+  buildUserTurnV4,
+  buildUserTurnV43,
+  IGALA_SYSTEM_V4,
+} from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
 import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
+import { igalaSystemV45 } from "@/lib/generation-prompt-v4-5";
 import type { RetrievalV4Result } from "./retrieval-v4";
 
 /** A retrieval result with every block distinguishable, so the assembled user
@@ -65,14 +70,22 @@ describe("v4-family label switch", () => {
     // v4.3 is the v4.2 prompt byte for byte plus a grammar block in the user
     // turn, so it serves the v4.2 system prompt and inherits the name check.
     expect(systemPromptForVersion("rag-v4-3")).toBe(IGALA_SYSTEM_V4_2);
-    // v4.4 is the only label on its own prompt: the eleven amended lines.
+    // v4.4 and v4.5 each sit on their own prompt: the amended lines are
+    // the whole delta between neighbours.
     expect(systemPromptForVersion("rag-v4-4")).toBe(IGALA_SYSTEM_V4_4);
+    expect(systemPromptForVersion("rag-v4-5")).toBe(igalaSystemV45());
+    expect(igalaSystemV45()).not.toBe(IGALA_SYSTEM_V4_4);
     expect(systemPromptForVersion("rag-v4-1")).toBe(IGALA_SYSTEM_V4_1);
     expect(systemPromptForVersion("rag-v4")).toBe(IGALA_SYSTEM_V4);
     // v4.2's rules are the ONLY ones that make the name check legitimate:
     // switching it on for a label whose prompt never asked for it would
     // change a measured arm.
-    const nameChecked = new Set(["rag-v4-2", "rag-v4-3", "rag-v4-4"]);
+    const nameChecked = new Set([
+      "rag-v4-2",
+      "rag-v4-3",
+      "rag-v4-4",
+      "rag-v4-5",
+    ]);
     for (const label of V4_FAMILY_VERSION_LABELS) {
       expect(checksNames(label)).toBe(nameChecked.has(label));
     }
@@ -94,7 +107,10 @@ describe("v4-family label switch", () => {
         "Translate this into Igala: Ada lives in Lagos.",
       );
       expect(turn.opts.checkNames).toBe(
-        label === "rag-v4-2" || label === "rag-v4-3" || label === "rag-v4-4",
+        label === "rag-v4-2" ||
+          label === "rag-v4-3" ||
+          label === "rag-v4-4" ||
+          label === "rag-v4-5",
       );
     }
   });
@@ -258,5 +274,44 @@ describe("the streamed chat path and the buffered exam path stay one system", ()
     const { conversationHistory, ...rest } = chat;
     expect(rest).toEqual(exam.args);
     expect(conversationHistory).toHaveLength(1);
+  });
+});
+
+describe("the v4.5 dictionary block: tone accents off unless the question asks", () => {
+  // A toned dictionary block, as retrieval-v2's renderer emits it.
+  const toned = (): RetrievalV4Result =>
+    ({
+      ...retrieval(),
+      dictionaryBlock: "DICTIONARY\nwork = ùkọ́lọ̀\nwhat = ẹ́ñwû",
+    }) as RetrievalV4Result;
+  const grammar = { grammarBlock: "GRAMMAR" };
+  const plain = { text: "How do you say child?", bucket: null };
+  const askTone = { text: "Mark the tones: how do you say child?", bucket: null };
+
+  it("leaves every other label's user turn byte-identical, toned dictionary and all", () => {
+    for (const label of V4_FAMILY_VERSION_LABELS) {
+      if (label === "rag-v4-5") continue;
+      const r = toned();
+      const turn = buildV4FamilyTurn(label, plain, r, grammar);
+      const expected =
+        label === "rag-v4-3" || label === "rag-v4-4"
+          ? buildUserTurnV43(plain.text, r, "GRAMMAR", null)
+          : buildUserTurnV4(plain.text, r, null);
+      expect(turn.args.userMessage).toBe(expected);
+      expect(turn.args.userMessage).toContain("ùkọ́lọ̀");
+    }
+  });
+
+  it("strips the accents for rag-v4-5, keeping ñ and the dotted vowels", () => {
+    const turn = buildV4FamilyTurn("rag-v4-5", plain, toned(), grammar);
+    expect(turn.args.userMessage).toContain("work = ukọlọ\nwhat = ẹñwu");
+    expect(turn.args.userMessage).not.toContain("ùkọ́lọ̀");
+    expect(turn.opts.allowTone).toBe(false);
+  });
+
+  it("keeps the accents for rag-v4-5 when the question asks for tone", () => {
+    const turn = buildV4FamilyTurn("rag-v4-5", askTone, toned(), grammar);
+    expect(turn.args.userMessage).toContain("ùkọ́lọ̀");
+    expect(turn.opts.allowTone).toBe(true);
   });
 });

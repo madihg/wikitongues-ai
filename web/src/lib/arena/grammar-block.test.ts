@@ -2,9 +2,15 @@ import { describe, it, expect } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import {
   buildGrammarBlock,
+  buildGrammarBlocksByRowSet,
+  GRAMMAR_CHUNK_TYPE,
+  GRAMMAR_CHUNK_TYPE_V4_5,
+  GRAMMAR_CHUNK_TYPE_V4_5_TONE,
   GRAMMAR_NOTE_STATUS,
   GRAMMAR_INTRO,
   GRAMMAR_K,
+  grammarChunkTypesFor,
+  grammarRowSetKey,
   MAX_GRAMMAR_CHARS,
   rankGrammarRules,
   renderGrammarBlock,
@@ -12,7 +18,7 @@ import {
   COMMON_WORD_MIN_ROWS,
 } from "./grammar-block";
 import { buildUserTurnV4, buildUserTurnV43 } from "@/lib/generation-prompt-v4";
-import { buildV4FamilyTurn } from "./frozen-exam";
+import { buildV4FamilyTurn, V4_FAMILY_VERSION_LABELS } from "./frozen-exam";
 import type { RetrievalV4Result } from "./retrieval-v4";
 
 /**
@@ -165,6 +171,153 @@ describe("buildGrammarBlock", () => {
   });
 });
 
+describe("row sets per label (the v4.5 rows reach rag-v4-5 only)", () => {
+  /** A fake that records every findMany `where` and serves rows by chunkType. */
+  function recordingPrisma() {
+    const wheres: unknown[] = [];
+    const store = [
+      {
+        id: "base-1",
+        chunkType: GRAMMAR_CHUNK_TYPE,
+        topic: "zebra quokka - the base rule",
+        content: "zebra quokka",
+        verificationStatus: "community_verified",
+      },
+      {
+        id: "v45-1",
+        chunkType: GRAMMAR_CHUNK_TYPE_V4_5,
+        topic: "zebra quokka - the v4.5 rule",
+        content: "zebra quokka",
+        verificationStatus: "community_verified",
+      },
+      {
+        id: "v45-tone",
+        chunkType: GRAMMAR_CHUNK_TYPE_V4_5_TONE,
+        topic: "zebra quokka tone - the v4.5 tone rule",
+        content: "zebra quokka tone",
+        verificationStatus: "community_verified",
+      },
+    ];
+    const prisma = {
+      ragEntry: {
+        findMany: async (args: {
+          where: { chunkType: string | { in: string[] } };
+        }) => {
+          wheres.push(args.where);
+          const ct = args.where.chunkType;
+          const wanted = typeof ct === "string" ? [ct] : ct.in;
+          return store.filter((r) => wanted.includes(r.chunkType));
+        },
+      },
+      prompt: { findUnique: async () => null },
+    } as unknown as PrismaClient;
+    return { prisma, wheres };
+  }
+  const prompt = { promptId: "p-z", text: "zebra quokka", isHoldout: false };
+
+  it("every label but rag-v4-5 reads grammar_rule alone; rag-v4-5 adds its rows, and its tone row only on a tone question", () => {
+    expect(grammarChunkTypesFor()).toEqual(["grammar_rule"]);
+    expect(grammarChunkTypesFor(null, true)).toEqual(["grammar_rule"]);
+    for (const label of V4_FAMILY_VERSION_LABELS) {
+      for (const allowTone of [false, true]) {
+        expect(grammarChunkTypesFor(label, allowTone)).toEqual(
+          label !== "rag-v4-5"
+            ? ["grammar_rule"]
+            : allowTone
+              ? ["grammar_rule", "grammar_rule_v4_5", "grammar_rule_v4_5_tone"]
+              : ["grammar_rule", "grammar_rule_v4_5"],
+        );
+      }
+    }
+  });
+
+  it("the tone row reaches rag-v4-5 only when the question asks for tone, never v4.4", async () => {
+    const { prisma, wheres } = recordingPrisma();
+    const toneQ = { ...prompt, text: "mark the tone on zebra quokka" };
+    const v45 = await buildGrammarBlock(prisma, toneQ, "rag-v4-5");
+    const v44 = await buildGrammarBlock(prisma, toneQ, "rag-v4-4");
+    expect(wheres[0]).toEqual({
+      language: "igala",
+      chunkType: {
+        in: ["grammar_rule", "grammar_rule_v4_5", "grammar_rule_v4_5_tone"],
+      },
+    });
+    expect(wheres[1]).toEqual({ language: "igala", chunkType: "grammar_rule" });
+    expect(v45.grammarIds).toContain("grammar:v45-tone");
+    expect(v44.grammarIds).not.toContain("grammar:v45-tone");
+    // Without the word "tone" the row is not even read for v4.5.
+    const plainV45 = await buildGrammarBlock(prisma, prompt, "rag-v4-5");
+    expect(plainV45.grammarIds).not.toContain("grammar:v45-tone");
+  });
+
+  it("v4.4's query is byte-identical to the pre-v4.5 query, with or without a label", async () => {
+    const { prisma, wheres } = recordingPrisma();
+    const before = { language: "igala", chunkType: "grammar_rule" };
+    const noLabel = await buildGrammarBlock(prisma, prompt);
+    const v44 = await buildGrammarBlock(prisma, prompt, "rag-v4-4");
+    const v43 = await buildGrammarBlock(prisma, prompt, "rag-v4-3");
+    expect(wheres).toEqual([before, before, before]);
+    for (const r of [noLabel, v44, v43]) {
+      expect(r.grammarIds).toEqual(["grammar:base-1"]);
+      expect(r.grammarBlock).not.toContain("the v4.5 rule");
+    }
+  });
+
+  it("rag-v4-5 reads both chunkTypes and can serve its own rows", async () => {
+    const { prisma, wheres } = recordingPrisma();
+    const r = await buildGrammarBlock(prisma, prompt, "rag-v4-5");
+    expect(wheres).toEqual([
+      {
+        language: "igala",
+        chunkType: { in: ["grammar_rule", "grammar_rule_v4_5"] },
+      },
+    ]);
+    expect(r.grammarIds).toEqual(
+      expect.arrayContaining(["grammar:base-1", "grammar:v45-1"]),
+    );
+  });
+
+  it("a multi-column turn builds one block per row set, never twice for one set", async () => {
+    const built: string[] = [];
+    const build = async (label: string) => {
+      built.push(label);
+      return {
+        grammarBlock: `BLOCK ${grammarRowSetKey(label)}`,
+        grammarIds: [],
+        leakReport: { pass: true, hitCount: 0, hits: [] },
+      };
+    };
+    expect(await buildGrammarBlocksByRowSet([], build)).toBeNull();
+    const byKey = await buildGrammarBlocksByRowSet(
+      ["rag-v4-3", "rag-v4-4", "rag-v4-5", "rag-v4-4"],
+      build,
+    );
+    // v4.3 and v4.4 share one block; v4.5 gets its own.
+    expect(built).toEqual(["rag-v4-3", "rag-v4-5"]);
+    expect(byKey!.get(grammarRowSetKey("rag-v4-4"))!.grammarBlock).toBe(
+      "BLOCK grammar_rule",
+    );
+    expect(byKey!.get(grammarRowSetKey("rag-v4-5"))!.grammarBlock).toBe(
+      "BLOCK grammar_rule+grammar_rule_v4_5",
+    );
+    // On a tone question the v4.5 key names the tone chunkType too, and the
+    // v4.4 key does not move.
+    expect(grammarRowSetKey("rag-v4-5", true)).toBe(
+      "grammar_rule+grammar_rule_v4_5+grammar_rule_v4_5_tone",
+    );
+    expect(grammarRowSetKey("rag-v4-4", true)).toBe("grammar_rule");
+    const toneKeys = await buildGrammarBlocksByRowSet(
+      ["rag-v4-4", "rag-v4-5"],
+      build,
+      true,
+    );
+    expect([...toneKeys!.keys()]).toEqual([
+      "grammar_rule",
+      "grammar_rule+grammar_rule_v4_5+grammar_rule_v4_5_tone",
+    ]);
+  });
+});
+
 describe("grammar notes stay in the store", () => {
   it("never serves a scholarship_note row, however well it matches", async () => {
     // Grade-C rows (one evidence class) are stored for the v1 path and the
@@ -214,9 +367,9 @@ describe("the v4.3 turn", () => {
     expect(buildUserTurnV43(prompt.text, retrieval, "", null)).toBe(v4);
   });
 
-  it("only rag-v4-3 and rag-v4-4 read the block; every other label ignores it", () => {
+  it("only rag-v4-3, rag-v4-4 and rag-v4-5 read the block; every other label ignores it", () => {
     const grammar = { grammarBlock: "GRAMMAR" };
-    for (const label of ["rag-v4-3", "rag-v4-4"] as const) {
+    for (const label of ["rag-v4-3", "rag-v4-4", "rag-v4-5"] as const) {
       const turn = buildV4FamilyTurn(label, prompt, retrieval, grammar);
       expect(turn.args.userMessage.startsWith("GRAMMAR\n\n")).toBe(true);
     }

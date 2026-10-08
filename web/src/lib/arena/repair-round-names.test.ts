@@ -190,13 +190,15 @@ describe("check (d): names must survive a translation", () => {
 });
 
 describe("which labels run the round", () => {
-  it("is v4.1 through v4.4, and nothing else", () => {
+  it("is v4.1 through v4.5, and nothing else", () => {
     expect([...REPAIR_ROUND_VERSION_LABELS]).toEqual([
       "rag-v4-1",
       "rag-v4-2",
       "rag-v4-3",
       "rag-v4-4",
+      "rag-v4-5",
     ]);
+    expect(labelRunsRepairRound("rag-v4-5")).toBe(true);
     expect(labelRunsRepairRound("rag-v4-4")).toBe(true);
     expect(labelRunsRepairRound("rag-v4-1")).toBe(true);
     expect(labelRunsRepairRound("rag-v4-2")).toBe(true);

@@ -8,6 +8,8 @@ import {
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
 import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
+import { igalaSystemV45 } from "@/lib/generation-prompt-v4-5";
+import { asksForTone, stripToneAccents } from "@/lib/arena/tone-request";
 import {
   labelRunsRepairRound,
   type RepairCheckOptions,
@@ -46,6 +48,14 @@ import {
  *   rag-v4-4  -> IGALA_SYSTEM_V4_4  , everything v4.3 does, with the eleven
  *                lines the Sep 13-23 annotation round amended (see
  *                generation-prompt-v4-4.ts); the v4.3/v4.4 delta is the prompt.
+ *   rag-v4-5  -> igalaSystemV45()   , everything v4.4 does, with the
+ *                fourteen lines generation-prompt-v4-5.ts names; a grammar
+ *                block that also reads the v4.5 rows (grammar_rule_v4_5, and
+ *                grammar_rule_v4_5_tone only on a tone question;
+ *                grammarChunkTypesFor), which no other label reads; and a
+ *                dictionary block with its tone accents stripped unless the
+ *                question asks for tone (below). Built and examined, not
+ *                pooled.
  *
  * The repair round is not decided here either. generateWithRepairRound keys
  * off the candidate's versionLabel and is a documented, unit-tested no-op
@@ -56,7 +66,8 @@ import {
  * decision procedure.
  *
  * R8.3: allowTone is true exactly when the question itself asks about tone -
- * the same /\btone/i test the serving routes apply to the RAW question text.
+ * the same /\btone/i test the serving routes apply to the RAW question text
+ * (asksForTone, src/lib/arena/tone-request.ts, shared with the grammar block).
  */
 
 /** The version labels whose serving path is the v4 retrieval assembly. */
@@ -67,11 +78,12 @@ export const V4_FAMILY_VERSION_LABELS = [
   "rag-v4-2",
   "rag-v4-3",
   "rag-v4-4",
+  "rag-v4-5",
 ] as const;
 
 /** The labels whose user turn carries the grammar block. */
 export function servesGrammarBlock(label: V4FamilyVersionLabel): boolean {
-  return label === "rag-v4-3" || label === "rag-v4-4";
+  return label === "rag-v4-3" || label === "rag-v4-4" || label === "rag-v4-5";
 }
 
 export type V4FamilyVersionLabel = (typeof V4_FAMILY_VERSION_LABELS)[number];
@@ -86,6 +98,7 @@ export function isV4FamilyVersionLabel(
 
 /** The system prompt served for a v4-family label. */
 export function systemPromptForVersion(label: V4FamilyVersionLabel): string {
+  if (label === "rag-v4-5") return igalaSystemV45();
   if (label === "rag-v4-4") return IGALA_SYSTEM_V4_4;
   if (label === "rag-v4-2" || label === "rag-v4-3") return IGALA_SYSTEM_V4_2;
   return label === "rag-v4-1" || label === "rag-v4-1-norepair"
@@ -108,7 +121,12 @@ export function runsRepairRound(label: V4FamilyVersionLabel): boolean {
  * state, so switching it on for v4.1 would change a measured arm.
  */
 export function checksNames(label: V4FamilyVersionLabel): boolean {
-  return label === "rag-v4-2" || label === "rag-v4-3" || label === "rag-v4-4";
+  return (
+    label === "rag-v4-2" ||
+    label === "rag-v4-3" ||
+    label === "rag-v4-4" ||
+    label === "rag-v4-5"
+  );
 }
 
 /**
@@ -136,15 +154,29 @@ export function buildV4FamilyTurn(
    * v4.2 (pinned by test). */
   grammar?: { grammarBlock: string },
 ): ExamTurn {
+  const allowTone = asksForTone(prompt.text);
+  // rag-v4-5 only: unless the question asks for tone, the dictionary block
+  // reaches the model with its tone accents removed (letters, ñ and the
+  // dotted vowels kept). The block arrives toned and tells the model to copy
+  // forms exactly, which taught v4.4 to tone 69% of its answers against the
+  // REGISTER rule. Every other label gets the retrieval object untouched, so
+  // its user turn is byte-identical to before (pinned by test).
+  const served =
+    label === "rag-v4-5" && !allowTone
+      ? {
+          ...retrieval,
+          dictionaryBlock: stripToneAccents(retrieval.dictionaryBlock),
+        }
+      : retrieval;
   const userMessage =
     servesGrammarBlock(label) && grammar && grammar.grammarBlock.length > 0
       ? buildUserTurnV43(
           prompt.text,
-          retrieval,
+          served,
           grammar.grammarBlock,
           prompt.bucket,
         )
-      : buildUserTurnV4(prompt.text, retrieval, prompt.bucket);
+      : buildUserTurnV4(prompt.text, served, prompt.bucket);
   return {
     args: {
       userMessage,
@@ -152,7 +184,7 @@ export function buildV4FamilyTurn(
       systemPromptOverride: systemPromptForVersion(label),
     },
     opts: {
-      allowTone: /\btone/i.test(prompt.text),
+      allowTone,
       // The raw question, for the repair round's copied-word exemption
       // (every v4-family label) and its name check (v4.2 only).
       sourceText: prompt.text,

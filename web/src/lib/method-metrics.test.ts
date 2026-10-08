@@ -489,6 +489,7 @@ describe("pure helpers", () => {
     expect(approachLabel("rag", "rag-v4-2")).toBe("retrieval v4.2");
     expect(approachLabel("rag", "rag-v4-3")).toBe("retrieval v4.3");
     expect(approachLabel("rag", "rag-v4-4")).toBe("retrieval v4.4");
+    expect(approachLabel("rag", "rag-v4-5")).toBe("retrieval v4.5");
     // Every v4-family label names its OWN version (the no-repair control
     // names v4.1 plus its qualifier). v4.2 to v4.4 once fell through to
     // "retrieval v1" on the public board; a new label must be added here
