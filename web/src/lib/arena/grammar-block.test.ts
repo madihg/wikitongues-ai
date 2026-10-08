@@ -214,9 +214,9 @@ describe("the v4.3 turn", () => {
     expect(buildUserTurnV43(prompt.text, retrieval, "", null)).toBe(v4);
   });
 
-  it("only rag-v4-3 and rag-v4-4 read the block; every other label ignores it", () => {
+  it("only rag-v4-3, rag-v4-4 and rag-v4-5 read the block; every other label ignores it", () => {
     const grammar = { grammarBlock: "GRAMMAR" };
-    for (const label of ["rag-v4-3", "rag-v4-4"] as const) {
+    for (const label of ["rag-v4-3", "rag-v4-4", "rag-v4-5"] as const) {
       const turn = buildV4FamilyTurn(label, prompt, retrieval, grammar);
       expect(turn.args.userMessage.startsWith("GRAMMAR\n\n")).toBe(true);
     }

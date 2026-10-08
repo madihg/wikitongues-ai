@@ -92,13 +92,15 @@ import { hasBudgetForReask } from "@/lib/arena/turn-budget";
  * rag-v4-1: v4.2 is v4.1 plus the named-entity rules, and the round is part
  * of what those rules need (check (d) is where "names survive" is enforced
  * rather than merely requested). Every other label keeps the no-op
- * passthrough, unit-tested below.
+ * passthrough, unit-tested below. rag-v4-3, rag-v4-4 and rag-v4-5 inherit
+ * v4.2's rules and the round with them.
  */
 export const REPAIR_ROUND_VERSION_LABELS = [
   "rag-v4-1",
   "rag-v4-2",
   "rag-v4-3",
   "rag-v4-4",
+  "rag-v4-5",
 ] as const;
 
 /** True when this label's serving path runs the repair round. */

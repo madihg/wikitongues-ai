@@ -8,6 +8,7 @@ import {
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { IGALA_SYSTEM_V4_2 } from "@/lib/generation-prompt-v4-2";
 import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
+import { IGALA_SYSTEM_V4_5 } from "@/lib/generation-prompt-v4-5";
 import {
   labelRunsRepairRound,
   type RepairCheckOptions,
@@ -46,6 +47,11 @@ import {
  *   rag-v4-4  -> IGALA_SYSTEM_V4_4  , everything v4.3 does, with the eleven
  *                lines the Sep 13-23 annotation round amended (see
  *                generation-prompt-v4-4.ts); the v4.3/v4.4 delta is the prompt.
+ *   rag-v4-5  -> IGALA_SYSTEM_V4_5  , everything v4.4 does, with the ten
+ *                lines the Ejeba and Wiernik write-up of 2026-09-25 and the
+ *                speakers'-gold read of v4.4's answers amended (see
+ *                generation-prompt-v4-5.ts); the v4.4/v4.5 delta is the
+ *                prompt. Built and examined, not pooled.
  *
  * The repair round is not decided here either. generateWithRepairRound keys
  * off the candidate's versionLabel and is a documented, unit-tested no-op
@@ -67,11 +73,12 @@ export const V4_FAMILY_VERSION_LABELS = [
   "rag-v4-2",
   "rag-v4-3",
   "rag-v4-4",
+  "rag-v4-5",
 ] as const;
 
 /** The labels whose user turn carries the grammar block. */
 export function servesGrammarBlock(label: V4FamilyVersionLabel): boolean {
-  return label === "rag-v4-3" || label === "rag-v4-4";
+  return label === "rag-v4-3" || label === "rag-v4-4" || label === "rag-v4-5";
 }
 
 export type V4FamilyVersionLabel = (typeof V4_FAMILY_VERSION_LABELS)[number];
@@ -86,6 +93,7 @@ export function isV4FamilyVersionLabel(
 
 /** The system prompt served for a v4-family label. */
 export function systemPromptForVersion(label: V4FamilyVersionLabel): string {
+  if (label === "rag-v4-5") return IGALA_SYSTEM_V4_5;
   if (label === "rag-v4-4") return IGALA_SYSTEM_V4_4;
   if (label === "rag-v4-2" || label === "rag-v4-3") return IGALA_SYSTEM_V4_2;
   return label === "rag-v4-1" || label === "rag-v4-1-norepair"
@@ -108,7 +116,12 @@ export function runsRepairRound(label: V4FamilyVersionLabel): boolean {
  * state, so switching it on for v4.1 would change a measured arm.
  */
 export function checksNames(label: V4FamilyVersionLabel): boolean {
-  return label === "rag-v4-2" || label === "rag-v4-3" || label === "rag-v4-4";
+  return (
+    label === "rag-v4-2" ||
+    label === "rag-v4-3" ||
+    label === "rag-v4-4" ||
+    label === "rag-v4-5"
+  );
 }
 
 /**
