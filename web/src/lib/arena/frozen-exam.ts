@@ -48,11 +48,14 @@ import {
  *   rag-v4-4  -> IGALA_SYSTEM_V4_4  , everything v4.3 does, with the eleven
  *                lines the Sep 13-23 annotation round amended (see
  *                generation-prompt-v4-4.ts); the v4.3/v4.4 delta is the prompt.
- *   rag-v4-5  -> igalaSystemV45()   , everything v4.4 does, with the ten
- *                lines generation-prompt-v4-5.ts names, and a grammar block
- *                that also reads the v4.5 rows (chunkType
- *                grammar_rule_v4_5, grammarChunkTypesFor), which no other
- *                label reads. Built and examined, not pooled.
+ *   rag-v4-5  -> igalaSystemV45()   , everything v4.4 does, with the
+ *                fourteen lines generation-prompt-v4-5.ts names; a grammar
+ *                block that also reads the v4.5 rows (grammar_rule_v4_5, and
+ *                grammar_rule_v4_5_tone only on a tone question;
+ *                grammarChunkTypesFor), which no other label reads; and a
+ *                dictionary block with its tone accents stripped unless the
+ *                question asks for tone (below). Built and examined, not
+ *                pooled.
  *
  * The repair round is not decided here either. generateWithRepairRound keys
  * off the candidate's versionLabel and is a documented, unit-tested no-op

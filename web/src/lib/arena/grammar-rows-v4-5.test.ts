@@ -77,20 +77,22 @@ describe("v4.5 grammar rows", () => {
     expect(2 * 1400).toBeLessThan(MAX_GRAMMAR_CHARS);
   });
 
-  it("linkers row: every job, lẹ optional, kaki for when, kakini after saying (not knowing), no toned kí", () => {
+  it("linkers row: every job, lẹ optional, kaki for when, kakini after saying and knowing, ki + subject after want, no toned kí", () => {
     for (const s of [
       "tọdu (because)",
       "chẹñwu (if)",
-      "ku also writes ki + u (I), and kẹ writes ki + ẹ (you)",
-      "speakers bless in one may-clause",
+      "Wherever ki stands, ku writes ki + u (I) and kẹ writes ki + ẹ (you)",
+      "most speakers bless in one may-clause",
       "ka ki or kaki is when, while",
-      "saying, telling or wanting the linker is kakini, ka ki ni or kaki, never dropped",
+      "saying, telling or knowing the linker is kakini, ka ki ni or kaki, never dropped",
+      "After 'want' it is ki fused with the next subject",
       "lẹ may close it",
       "A ki with none of these jobs is wrong",
     ]) {
       expect(linkers.content).toContain(s);
     }
-    expect(linkers.content).not.toContain("knowing");
+    // want takes ki + subject, never kakini.
+    expect(linkers.content).not.toContain("telling or wanting");
     expect(`${linkers.topic}\n${linkers.content}`).not.toContain("kí");
     expect(linkers.source).toContain("todu ku 202, todu ki 272, (i)chewñ ku 264, (i)chewñ ki 229");
     expect(linkers.source).not.toContain("704/753");

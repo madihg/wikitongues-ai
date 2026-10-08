@@ -2,13 +2,16 @@
  * Register the rag-v4-5 candidate - the single v4.5 arm, cloned from the
  * rag-v4-4 row.
  *
- * v4.5 is v4.4 with two changes: the system prompt is igalaSystemV45(), the
- * v4.4 prompt with ten lines amended from the Salem Ejeba and Lydia Wiernik
- * write-up of 2026-09-25 and the speakers' gold
- * (src/lib/generation-prompt-v4-5.ts names each), and the grammar block also
- * reads the v4.5 rows (chunkType grammar_rule_v4_5, which no other label
- * reads). Retrieval, the repair round and the name check are v4.4's,
- * unchanged. Decoding is copied from the v4.4 row (temperature 0, verified).
+ * v4.5 is v4.4 with three changes, all keyed on the label: the system prompt
+ * is igalaSystemV45(), the v4.4 prompt with fourteen lines amended from the
+ * Salem Ejeba and Lydia Wiernik write-up of 2026-09-25 and the speakers' gold
+ * (src/lib/generation-prompt-v4-5.ts names each); the grammar block also
+ * reads the v4.5 rows (grammar_rule_v4_5, and the tone row's
+ * grammar_rule_v4_5_tone only when the question asks for tone), which no
+ * other label reads; and the dictionary block loses its tone accents unless
+ * the question asks for tone (buildV4FamilyTurn). Retrieval, the repair
+ * round and the name check are v4.4's, unchanged. Decoding is copied from
+ * the v4.4 row (temperature 0, verified).
  *
  * DO NOT run before scripts/static-leak-check-v4-5.ts passes: the amended
  * lines carry Igala forms, and every one must clear Scope A.

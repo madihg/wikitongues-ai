@@ -24,23 +24,29 @@ import { IGALA_SYSTEM_V4_4 } from "./generation-prompt-v4-4";
  * sentence of the write-up appears. Gold counts are over the 1,446 gold
  * answers of the Oct 8 review export; corpus counts are ParallelPair rows.
  *
- *  COMP Every ki needs a job, listed once (W-3.2-1, W-3.2-3, W-3.2-13):
- *       relativizer after a noun (ku before ma/mẹ, ku = ki + u); may or
- *       must-not before a verb, one may-clause per blessing; ki or ku after
- *       tọdu and (i)chẹñwu (gold 21 and 30; corpus todu ku/ki 202/272,
- *       (i)chewñ ku/ki 264/229 bigrams), kẹ = ki + ẹ there (annotator_7;
- *       annotator_5 writes kẹ for ki + ẹ); ka ki or kaki = when, while
- *       before a clause of time ('we were farming when the rain started':
- *       annotators 4, 5, 7); kakini, ka ki ni or kaki after say, tell or
- *       want, never dropped. The first draft had "know" there on a misread
- *       token: kẹ mọ kaki is 'drink while', not 'know that'. The measured
+ *  COMP Every ki needs a job, listed once (W-3.2-1, W-3.2-3, W-3.2-13),
+ *       with its fusions stated once (ku = ki + u, kẹ = ki + ẹ): relativizer
+ *       after a noun (ku before ma/mẹ); may or must-not before a verb, a
+ *       blessing usually one may-clause (7 of 50 gold answers on blessing
+ *       prompts string more, annotators 4, 5, 8); ki or ku after tọdu and
+ *       (i)chẹñwu (gold 21 and 30; corpus todu ku/ki 202/272, (i)chewñ
+ *       ku/ki 264/229 bigrams); ka ki or kaki = when, while before a clause
+ *       of time ('we were farming when the rain started': annotators 4, 5,
+ *       7); kakini, ka ki ni or kaki after say, tell or know ('had we
+ *       known', ig_bank_gram_031: 8 gold answers, 6 annotators), never
+ *       dropped; after want, ki + the subject (after tẹnẹ: a ki-word 18
+ *       times from 5 annotators, ka ki ni 3 times on one prompt; served row
+ *       5deb2dc1 writes na tẹnẹ ku kà). (kẹ mọ kaki on ig_bank_auth_007 is
+ *       'drink while', not 'know that'; the know evidence is gram_031.) The measured
  *       excess (a standalone ki in 31% of v4.4 answers against 15.5% of
  *       speakers') is density, not jobless ki: no v4.4 sentence opens with
- *       ki, and the words before its standalone ki are listed jobs (ọjọ 27,
+ *       ki, and the words before its standalone ki are listed jobs ([God] 27,
  *       the blessing; ichẹñwu 22; ka 19; ẹnẹ 15; tọdu 11). Speakers bless in
- *       one clause (evidence-full, authenticity 5), hence the may-clause
- *       limit. The joining line now separates clauses in sequence (a new
- *       sentence, not oñ) from a clause inside another (keeps its linker),
+ *       one clause (evidence-full, authenticity 5), hence "usually one
+ *       may-clause". The joining line separates clauses in sequence (side
+ *       by side or two sentences, never oñ: on 'the king spoke and the
+ *       people listened' no speaker starts a new sentence) from a clause
+ *       inside another (keeps its linker),
  *       and lẹ MAY close a relative clause (31 gold relatives do; on two
  *       prompts with 14 gold answers none does). No toned kí: gold writes
  *       kakini for 'that', kí 22 times (19 by one annotator), never opening
@@ -59,24 +65,29 @@ import { IGALA_SYSTEM_V4_4 } from "./generation-prompt-v4-4";
  *       as something the model can check: the references are not all
  *       Central (170 gold answers are tagged ankpa, and example turns carry
  *       no dialect), so where they give two area forms for one word the
- *       model uses one, unless asked to compare, and says it follows the
- *       Central (Idah) usage of its references when asked. No Ibaji or
+ *       model uses one, unless asked to compare, and when asked says it
+ *       aims to follow Central (Idah) usage: an aim, since the references
+ *       carry no dialect labels; Idah is named because Halim's decision
+ *       names it. No Ibaji or
  *       Ogwugwu form is asserted (the ra ban stands).
  *  ELI  Elision is optional (contradiction 3: gold contracts in 32.4% of
  *       answers); "never add or strip a word-initial vowel" stays (grade A).
- *       'to/for' is ñwu or ñwi, ñwi before a vowel (63 of 67), written
- *       whole; ñw' is rare (5). The ban on plain n is withdrawn: gold writes
+ *       'to/for' is ñwu or ñwi, ñwi mostly before a vowel (63 of 67); 'to
+ *       you' is ñwu wẹ (5 gold) or ñwẹ (served row 5deb2dc1), never ñwi ẹ
+ *       (0 gold); ñw' is rare (5). The ban on plain n is withdrawn: gold writes
  *       nwu 45, nwi 12, nw' 2, and the write-up treats nw and ñw as one word
  *       spelled two ways. The efu clause is v4.4's (speakers write ef'
  *       before a vowel; the served v4.3 locative row writes ef'ọdọ).
  *  NEG  One nasal at the end of the clause, spelled as speakers spell it:
- *       free-standing ñ 48 (5 annotators), -n 51 (3), 'ñ 27 (5), fused 20
- *       (4). Never the Yoruba prohibitive má; preverbal ma (they; the
+ *       free-standing ñ 48 (5 annotators), -n 51 (3), 'ñ 27 (5), free n 26
+ *       (4), fused 20 (4). Never the Yoruba prohibitive má;
+ *       preverbal ma (they; the
  *       why-not frame) is left alone.
  *  INC  The incompletive stands before its verb, apart, fused or with an
- *       apostrophe: on 'the child is eating' 15 of 24 gold answers write it
- *       apart (annotators 3, 4, 5), and the export has 17 toned standalone
- *       á; fused alọ and ajẹñwu, apostrophe a'loti (all train prompts).
+ *       apostrophe: on 'the child eats food' (ig_gram_001) 15 of 24 gold
+ *       answers write it apart (annotators 3, 4, 5), on 'the child is
+ *       eating' (ig_bank_gram_028) 2 of 7, and the export has 17 toned
+ *       standalone á; fused alọ, apostrophe a'loti (both train prompts).
  *       v4.4's "the standalone word á" is replaced, and so is the first
  *       draft's "never a word on its own".
  *  POSS The -wñ ban names forms: never chẹwñ (v4.4's invention) or bẹwñ
@@ -97,7 +108,18 @@ import { IGALA_SYSTEM_V4_4 } from "./generation-prompt-v4-4";
  * NOT changed, on purpose: the presentative yì, hyphenated àma- and the
  * compound idioms, ìpọ́lú for Paul, the negator spelling ń, pronoun doubling
  * (inventory contradictions 4 to 9); the factive/non-factive kí/kì reading;
- * the register-weight ask. The static Scope-A check
+ * the register-weight ask.
+ *
+ * The blessing subject is written [God] on the COMP line and in the
+ * linkers row: spelled out, it is the whole gold answer of a frozen prompt
+ * (the Scope-A check caught it, as it did for v4.1's negation line).
+ *
+ * FOR v4.6: the NEVER list bans forms speakers write (abẹki 'or' in nine
+ * gold answers, ojoji, gbede, ati 'until'): verify each with speakers;
+ * and the elision line still frames dropping the FIRST vowel as the rule
+ * where gold also elides other ways.
+ *
+ * The static Scope-A check
  * (scripts/static-leak-check-v4-5.ts) runs before this prompt serves.
  *
  * Token ceiling 1,650 (v4.4 sat at 1,473 of 1,500), pinned in the test.
@@ -157,7 +179,7 @@ const EDITS: LineEdit[] = [
       swap(
         l,
         "8. Never assert",
-        "8. Keep to one form of each word in an answer: where your references give two area forms for one word, use one, unless asked to compare. If asked, say you follow the Central (Idah) usage of your references. Never assert",
+        "8. Keep one form of each word per answer: where your references give two area forms, use one unless asked to compare; if asked, say you aim to follow Central (Idah) usage. Never assert",
       ),
   },
   {
@@ -167,7 +189,7 @@ const EDITS: LineEdit[] = [
       let out = swap(
         l,
         "Negation: ONLY a clause-final nasal, written ñ; prohibition: subject + kì + verb ... ñ.",
-        "Negation: ONE nasal at the end of the clause (ñ, -n or 'ñ), never the Yoruba prohibitive má; prohibition: subject + ki + verb ... ñ.",
+        "Negation: ONE nasal at the end of the clause (ñ, n, -n or 'ñ), never the Yoruba prohibitive má; prohibition: subject + ki + verb ... ñ.",
       );
       out = swap(out, "Subject + kì + verb WITHOUT", "Subject + ki + verb WITHOUT");
       return out;
@@ -198,7 +220,7 @@ const EDITS: LineEdit[] = [
       out = swap(
         out,
         "'to/for' is ñwu before a consonant, ñw' before a vowel - never nwi or plain nw.",
-        "'to/for' is ñwu or ñwi (ñwi before a vowel), written whole; ñw' is rare.",
+        "'to/for' is ñwu or ñwi (ñwi mostly before a vowel); 'to you' is ñwu wẹ or ñwẹ; ñw' is rare.",
       );
       return out;
     },
@@ -218,7 +240,7 @@ const EDITS: LineEdit[] = [
       swap(
         l,
         "clauses are joined by a new sentence (oñ is Bible register the community rewrites); tọdu = because; ichẹñwu = if.",
-        "clauses in sequence are joined by a new sentence, not oñ (Bible register); a clause inside another keeps its linker (next line).",
+        "clauses in sequence stand side by side or as two sentences, never with oñ; a clause inside another keeps its linker (next line).",
       ),
   },
   {
@@ -228,7 +250,7 @@ const EDITS: LineEdit[] = [
       swap(
         l,
         "kẹ links verbs; kì/ki starts a new clause - never swap them.",
-        "Every ki needs a job: after a noun, who or which (ku before ma/mẹ; ku = ki + u); before a verb, may or must-not, one may-clause per blessing; after tọdu (because) or (i)chẹñwu (if), ki or ku (kẹ = ki + ẹ); before a clause of time, ka ki or kaki = when, while; after say, tell or want, kakini, ka ki ni or kaki, never dropped. A ki with no job is wrong: start a new sentence.",
+        "Every ki needs a job (ku before I, kẹ before you): after a noun, who or which (ku before ma/mẹ); before a verb, may or must-not (a blessing usually one clause: [God] ki + verb + object); after tọdu (because) or (i)chẹñwu (if), ki or ku; for time, ka ki or kaki = when, while; after say, tell or know, kakini, ka ki ni or kaki, never dropped; after want, ki + subject (na tẹnẹ ku kà; na tẹnẹ kẹ wa). Any other ki is wrong: start a new sentence.",
       ),
   },
   {
@@ -238,7 +260,7 @@ const EDITS: LineEdit[] = [
       swap(
         l,
         "The incompletive is the standalone word á;",
-        "The incompletive á stands right before its verb: apart (a jẹñwu), fused (alọ, ajẹñwu) or as a' (a'loti);",
+        "The incompletive á stands right before its verb: apart (a jẹñwu), fused (alọ) or as a' (a'loti);",
       ),
   },
   {
@@ -256,15 +278,13 @@ const EDITS: LineEdit[] = [
     find: "Write like the community, not scripture:",
     replaceLine: (l) => {
       let out = swap(l, "apostrophized elision", "optional elision");
-      out = swap(
-        out,
-        "negative nasal written ñ.",
-        "the negative nasal at the clause end.",
-      );
+      // The negative nasal is stated on the negation line; REGISTER drops
+      // its own spelling of it rather than restating it.
+      out = swap(out, ", negative nasal written ñ.", ".");
       out = swap(
         out,
         "never end a word in -wñ.",
-        "never chẹwñ or bẹwñ, but the possessive his/her is ñwu, -wn or wñ after the noun (ọlawn).",
+        "never chẹwñ or bẹwñ; the possessive his/her is ñwu, -wn or wñ after the noun (ọlawn).",
       );
       return out;
     },

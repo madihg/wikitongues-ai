@@ -34,19 +34,24 @@ describe("igalaSystemV45", () => {
 
   it("COMP: every ki needs a job, listed once, with every attested linker among the jobs", () => {
     expect(v45).toContain(
-      "Verbs chain with kẹ: one action then another is V kẹ V. Every ki needs a job: after a noun, who or which (ku before ma/mẹ; ku = ki + u); before a verb, may or must-not, one may-clause per blessing; after tọdu (because) or (i)chẹñwu (if), ki or ku (kẹ = ki + ẹ); before a clause of time, ka ki or kaki = when, while; after say, tell or want, kakini, ka ki ni or kaki, never dropped. A ki with no job is wrong: start a new sentence.",
+      "Verbs chain with kẹ: one action then another is V kẹ V. Every ki needs a job (ku before I, kẹ before you): after a noun, who or which (ku before ma/mẹ); before a verb, may or must-not (a blessing usually one clause: [God] ki + verb + object); after tọdu (because) or (i)chẹñwu (if), ki or ku; for time, ka ki or kaki = when, while; after say, tell or know, kakini, ka ki ni or kaki, never dropped; after want, ki + subject (na tẹnẹ ku kà; na tẹnẹ kẹ wa). Any other ki is wrong: start a new sentence.",
     );
     expect(v45).not.toContain("kì/ki starts a new clause");
     expect(v45).not.toContain("kẹ links verbs only");
-    // "know" was a misread token (kẹ mọ kaki = drink while).
-    expect(v45).not.toContain("know or want");
+    // know takes kakini ('had we known', ig_bank_gram_031: 8 answers, 6
+    // annotators); want takes ki + the subject, not kakini.
+    expect(v45).toContain("after say, tell or know, kakini, ka ki ni or kaki");
+    expect(v45).toContain("after want, ki + subject (na tẹnẹ ku kà; na tẹnẹ kẹ wa)");
+    expect(v45).not.toContain("tell or want");
+    // A blessing is usually, not always, one clause.
+    expect(v45).not.toContain("one may-clause per blessing");
     // No toned kí is taught for 'that'.
     expect(v45).not.toContain("kí");
   });
 
   it("COMP: clauses in sequence take a new sentence; a clause inside another keeps its linker", () => {
     expect(v45).toContain(
-      "Joining: kpai links nouns, never number words; clauses in sequence are joined by a new sentence, not oñ (Bible register); a clause inside another keeps its linker (next line). muda = but (rather) - contrast only, never 'must'.",
+      "Joining: kpai links nouns, never number words; clauses in sequence stand side by side or as two sentences, never with oñ; a clause inside another keeps its linker (next line). muda = but (rather) - contrast only, never 'must'.",
     );
     // tọdu and ichẹñwu moved into the job list.
     expect(v45).not.toContain("tọdu = because; ichẹñwu = if.");
@@ -87,7 +92,7 @@ describe("igalaSystemV45", () => {
 
   it("VAR: one form per word, checkable against the references; Central (Idah) named when asked", () => {
     expect(v45).toContain(
-      "8. Keep to one form of each word in an answer: where your references give two area forms for one word, use one, unless asked to compare. If asked, say you follow the Central (Idah) usage of your references. Never assert which town or area uses a form unless your reference material says so - saying you do not know is correct.",
+      "8. Keep one form of each word per answer: where your references give two area forms, use one unless asked to compare; if asked, say you aim to follow Central (Idah) usage. Never assert which town or area uses a form unless your reference material says so - saying you do not know is correct.",
     );
     for (const w of ["Ogwugwu", "Ibaji", "Uñ", "kpari", "ikerenku"]) {
       expect(v45).not.toContain(w);
@@ -101,7 +106,7 @@ describe("igalaSystemV45", () => {
     );
     expect(v45).toContain("Never add or strip a word-initial vowel.");
     expect(v45).toContain(
-      "'to/for' is ñwu or ñwi (ñwi before a vowel), written whole; ñw' is rare.",
+      "'to/for' is ñwu or ñwi (ñwi mostly before a vowel); 'to you' is ñwu wẹ or ñwẹ; ñw' is rare.",
     );
     expect(v45).not.toContain("plain n");
     expect(v45).not.toContain("never nwi");
@@ -114,15 +119,16 @@ describe("igalaSystemV45", () => {
 
   it("NEG: one clause-final nasal, spelling not legislated, never the Yoruba má", () => {
     expect(v45).toContain(
-      "Negation: ONE nasal at the end of the clause (ñ, -n or 'ñ), never the Yoruba prohibitive má;",
+      "Negation: ONE nasal at the end of the clause (ñ, n, -n or 'ñ), never the Yoruba prohibitive má;",
     );
-    expect(v45).toContain("the negative nasal at the clause end.");
+    // REGISTER no longer restates the nasal's spelling.
+    expect(v45).toContain("first/second person. Never Bible forms");
     expect(v45).not.toContain("negative nasal written ñ");
   });
 
   it("INC: the incompletive stands before its verb, apart, fused or as a', all attested on train prompts", () => {
     expect(v45).toContain(
-      "The incompletive á stands right before its verb: apart (a jẹñwu), fused (alọ, ajẹñwu) or as a' (a'loti); a noun keeps its own first vowel inside the word.",
+      "The incompletive á stands right before its verb: apart (a jẹñwu), fused (alọ) or as a' (a'loti); a noun keeps its own first vowel inside the word.",
     );
     expect(v45).not.toContain("the standalone word á");
     expect(v45).not.toContain("never a word on its own");
@@ -131,7 +137,7 @@ describe("igalaSystemV45", () => {
 
   it("POSS: the ban names chẹwñ and bẹwñ; the possessive is allowed, with a non-frozen example", () => {
     expect(v45).toContain(
-      "never chẹwñ or bẹwñ, but the possessive his/her is ñwu, -wn or wñ after the noun (ọlawn).",
+      "never chẹwñ or bẹwñ; the possessive his/her is ñwu, -wn or wñ after the noun (ọlawn).",
     );
     expect(v45).not.toContain("never end a word in -wñ");
     expect(v45).not.toContain("[mother]");
