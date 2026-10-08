@@ -123,6 +123,8 @@ describe("assignedPair", () => {
         ["gemini-3-1-pro-rag-v3", "gemini-3-1-pro"],
         ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-rag-v3"],
         ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-tonestrip"],
+        ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro"],
+        ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro-rag-v3"],
       ]);
     });
 
@@ -138,7 +140,9 @@ describe("assignedPair", () => {
       expect(hasAllowedPair([...pooled].reverse())).toBe(true);
       for (const annotatorId of ANNOTATOR_IDS) {
         for (const promptId of PROMPT_IDS) {
-          expect(assignedPair(annotatorId, promptId, 2, pooled)).toEqual([0, 1]);
+          expect(assignedPair(annotatorId, promptId, 2, pooled)).toEqual([
+            0, 1,
+          ]);
         }
       }
     });
@@ -196,7 +200,12 @@ describe("assignedPair", () => {
       ];
       for (let mask = 0; mask < 1 << universe.length; mask++) {
         const slugs = universe.filter((_, i) => mask & (1 << i));
-        const served = assignedPair("ann_1", "ig_orth_001", slugs.length, slugs);
+        const served = assignedPair(
+          "ann_1",
+          "ig_orth_001",
+          slugs.length,
+          slugs,
+        );
         expect(hasAllowedPair(slugs)).toBe(served !== null);
       }
       expect(hasAllowedPair([])).toBe(false);

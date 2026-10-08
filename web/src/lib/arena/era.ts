@@ -57,9 +57,9 @@ export const POOL_PIVOT_AT = "2026-08-20T19:38:08.385Z";
  *
  * The public "out of every 10 questions" chart splits the pool judgments into
  * rounds so a reader can see movement over time without a statistics
- * lecture. A round boundary is a date on which the QUESTIONS changed, because
- * that is the only honest reason to split: comparing rounds that differ only
- * by calendar would invite reading noise as progress.
+ * lecture. A round boundary is a date on which the QUESTIONS or the ARMS
+ * changed, because those are the only honest reasons to split: comparing
+ * rounds that differ only by calendar would invite reading noise as progress.
  *
  *   round-1  the annotation pivot (POOL_PIVOT_AT) until the day before the
  *            v4.2 prompt bank went live. Judged the original claude_authored_v1
@@ -67,11 +67,17 @@ export const POOL_PIVOT_AT = "2026-08-20T19:38:08.385Z";
  *   round-2  from 2026-09-13, the day prisma/seed-prompt-bank-v42.ts landed
  *            124 new questions aimed at the model's measured failures (names,
  *            directions, dates, numbers, encyclopedic register, formulas).
+ *   round-3  from 2026-10-08 12:00 UTC, when version 4.4 (prompt + grammar
+ *            block + repair round) joined the blind test beside the bare
+ *            model and v3 (scripts/enable-v44-pool.ts, run after this code
+ *            was live). Two pairs exist only from here; the bare-vs-v3 pair
+ *            continues across the boundary on the same questions.
  *
- * Verified against production on 2026-09-23: splitting by this date and
+ * Verified against production on 2026-09-23: splitting by the Sep 13 date and
  * splitting by prompt provenance give the same rounds to within three
  * judgments (three old-bank questions were judged after the boundary). Add a
- * round here when the questions change again; never move an existing one.
+ * round here when the questions or the arms change again; never move an
+ * existing one.
  */
 export interface PoolRoundDef {
   key: string;
@@ -83,6 +89,10 @@ export interface PoolRoundDef {
   to: string | null;
 }
 
+/** The instant from which v4.4 pairs could be drawn (the flag flip ran after
+ * this instant, never before it). */
+export const V44_POOL_FLIP_AT = "2026-10-08T12:00:00.000Z";
+
 export const POOL_ROUNDS: readonly PoolRoundDef[] = [
   {
     key: "round-1",
@@ -92,8 +102,14 @@ export const POOL_ROUNDS: readonly PoolRoundDef[] = [
   },
   {
     key: "round-2",
-    label: "new batch of questions, since Sep 13",
+    label: "new batch of questions, Sep 13 to Oct 8",
     from: "2026-09-13T00:00:00.000Z",
+    to: V44_POOL_FLIP_AT,
+  },
+  {
+    key: "round-3",
+    label: "version 4.4 joins the blind test, since Oct 8",
+    from: V44_POOL_FLIP_AT,
     to: null,
   },
 ];

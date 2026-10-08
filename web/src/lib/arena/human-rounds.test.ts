@@ -57,10 +57,14 @@ describe("buildHumanRounds", () => {
       row("2026-09-12T23:59:59Z", "tie"),
       row("2026-09-13T00:00:00Z", "both_inadequate"), // first instant of round 2
       row("2026-09-20T00:00:00Z", "a"),
+      row("2026-10-08T11:59:59Z", "a"), // last instant of round 2
+      row("2026-10-08T12:00:00Z", "b"), // first instant of round 3: v4.4 joins
+      row("2026-10-09T00:00:00Z", "tie"),
     ];
     const [pair] = buildHumanRounds(rows, POOL_ROUNDS);
     const r1 = pair.rounds.find((r) => r.key === "round-1")!;
     const r2 = pair.rounds.find((r) => r.key === "round-2")!;
+    const r3 = pair.rounds.find((r) => r.key === "round-3")!;
     expect(r1).toMatchObject({
       n: 2,
       bWins: 1,
@@ -69,13 +73,29 @@ describe("buildHumanRounds", () => {
       bothInadequate: 0,
     });
     expect(r2).toMatchObject({
-      n: 2,
-      aWins: 1,
+      n: 3,
+      aWins: 2,
       bothInadequate: 1,
       bWins: 0,
       ties: 0,
     });
-    expect(pair.all.n).toBe(r1.n + r2.n);
+    expect(r3).toMatchObject({
+      n: 2,
+      bWins: 1,
+      ties: 1,
+      aWins: 0,
+      bothInadequate: 0,
+    });
+    expect(pair.all.n).toBe(r1.n + r2.n + r3.n);
+    expect(POOL_ROUNDS.map((r) => r.key)).toEqual([
+      "round-1",
+      "round-2",
+      "round-3",
+    ]);
+    // The current round is the open-ended one, and the boundaries chain.
+    expect(POOL_ROUNDS[2].to).toBeNull();
+    expect(POOL_ROUNDS[1].to).toBe(POOL_ROUNDS[2].from);
+    expect(POOL_ROUNDS[0].to).toBe(POOL_ROUNDS[1].from);
   });
 
   it("scales counts to 10 with one decimal and never derives a win by subtraction", () => {

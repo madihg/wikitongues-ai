@@ -996,18 +996,18 @@ whitelist, v4.1 train generation, pool enable) in one pass.
      untouched (already openrouter), claude-opus-5-rag out of the pool.
 
 3. PAIRING WHITELIST (done, tested): `ALLOWED_PAIRINGS` in
-                                    src/lib/pairing.ts = [[gemini-3-1-pro-rag-v4-1, gemini-3-1-pro-rag-v3],
-                                    [gemini-3-1-pro-rag-v4-1, gemini-3-1-pro-tonestrip]]. `assignedPair` now
-                                    takes an optional `slugs` array (parallel to the pairable-outputs list)
-                                    and filters candidate index-pairs to ALLOWED_PAIRINGS when both the
-                                    whitelist is non-empty AND slugs are given - no slugs = old behavior
-                                    (every existing caller besides /api/annotations/next is unaffected).
-                                    Threaded `slug` through QueuePromptDetail.pairableOutputs
-                                    (queue-input.ts, from CandidateModel.slug) and into the assignedPair
-                                    call in src/app/api/annotations/next/route.ts. 5 new pairing.test.ts
-                                    cases (only-allowed-pairs drawn, both pairs actually get drawn, null
-                                    when no allowed pair exists among a prompt's outputs, old behavior
-                                    preserved with no slugs array, the constant's exact value pinned).
+                                       src/lib/pairing.ts = [[gemini-3-1-pro-rag-v4-1, gemini-3-1-pro-rag-v3],
+                                       [gemini-3-1-pro-rag-v4-1, gemini-3-1-pro-tonestrip]]. `assignedPair` now
+                                       takes an optional `slugs` array (parallel to the pairable-outputs list)
+                                       and filters candidate index-pairs to ALLOWED_PAIRINGS when both the
+                                       whitelist is non-empty AND slugs are given - no slugs = old behavior
+                                       (every existing caller besides /api/annotations/next is unaffected).
+                                       Threaded `slug` through QueuePromptDetail.pairableOutputs
+                                       (queue-input.ts, from CandidateModel.slug) and into the assignedPair
+                                       call in src/app/api/annotations/next/route.ts. 5 new pairing.test.ts
+                                       cases (only-allowed-pairs drawn, both pairs actually get drawn, null
+                                       when no allowed pair exists among a prompt's outputs, old behavior
+                                       preserved with no slugs array, the constant's exact value pinned).
 
 4. TRAIN OUTPUTS FOR v4.1 (RUNNING against production DB at handoff time):
    new scripts/train-fill-arm.ts generates gemini-3-1-pro-rag-v4-1 outputs
@@ -1091,17 +1091,17 @@ metric, not necessarily for the method, and it must not be misread.
 SCOREBOARD, canonical path (computeMethodMetrics, like-for-like LOO on the
 25 prompts with 2+ real speakers, ceiling 39.3):
 
-  arm                                   new    legacy  toneIns  rank
-  Gemini v4 (TONE-STRIPPED, a regex)    123.2  140.6   87.1     64.0
-  Gemini bare (TONE-STRIPPED, a regex)  111.9  124.4   80.0     58.9
-  Gemini v4.1                           103.1  120.7   87.0     57.3
-  Gemini v4.1 no-repair                  98.7  114.5   90.9     56.0
-  Gemini v3                              90.8   99.7   82.7     54.7
-  Gemini v4                              89.8  102.6   87.1     46.0
-  Claude v4.1                            85.3   93.5   71.6     49.3
-  Gemini bare                            83.4   94.6   80.0     40.0
-  Claude v1                              79.9   83.7   84.0     50.7
-  Claude v4.1 no-repair                  64.1   70.2   70.6     36.7
+arm new legacy toneIns rank
+Gemini v4 (TONE-STRIPPED, a regex) 123.2 140.6 87.1 64.0
+Gemini bare (TONE-STRIPPED, a regex) 111.9 124.4 80.0 58.9
+Gemini v4.1 103.1 120.7 87.0 57.3
+Gemini v4.1 no-repair 98.7 114.5 90.9 56.0
+Gemini v3 90.8 99.7 82.7 54.7
+Gemini v4 89.8 102.6 87.1 46.0
+Claude v4.1 85.3 93.5 71.6 49.3
+Gemini bare 83.4 94.6 80.0 40.0
+Claude v1 79.9 83.7 84.0 50.7
+Claude v4.1 no-repair 64.1 70.2 70.6 36.7
 
 WHAT THIS MEANS. A regex that deletes tone marks from BARE Gemini output
 (no model call, no retrieval, no prompt) scores 111.9, above every real
@@ -1167,6 +1167,7 @@ against production (main@231ff55, deployment dpl_32X2CEmoomsk8dZ9kESEP9dy3UhD):
    all 367 ~ $18. Halim's call.
 
 FIX (this branch, uncommitted at time of writing; see git log for the commit):
+
 - `ALLOWED_PAIRINGS` now lists the pooled pair first:
   ["gemini-3-1-pro-rag-v3", "gemini-3-1-pro"], then the two v4.1 pairs.
 - New pure `hasAllowedPair(slugs)` in pairing.ts; `QueuePrompt.pairable?`
@@ -1210,17 +1211,18 @@ Agnes Abah + Charity reviewing a live English-Wikipedia-to-Igala
 translation). The headline is easy to miss: **the grammar was judged good.**
 "It is written like good grammar." Every failure the reviewers named was
 about foreign material, not Igala:
-  - proper nouns respelled (Igala has no /s/, so the model moved s to ch:
-    Lagos, Egbuson, Bayelsa, Green Spring Montessori all altered);
-  - a fact DROPPED for want of a word ("he didn't tell us what he studied");
-  - one cardinal direction wrong (and the speakers disagreed with each other
-    about the right one, on the call, in real time);
-  - one year expression wrong ("instead of Igba, you get Ichekpa").
-Charity gave the rule directly: "Wikipedia has a rule whereby you don't
-translate a name of a person, a name of a place, or a name of organization
-... Lagos is still Lagos." Agnes confirmed institution names stay English
-even when multi-word: asked whether "Green Spring Montessori" stays English,
-"Yes, we use the English."
+
+- proper nouns respelled (Igala has no /s/, so the model moved s to ch:
+  Lagos, Egbuson, Bayelsa, Green Spring Montessori all altered);
+- a fact DROPPED for want of a word ("he didn't tell us what he studied");
+- one cardinal direction wrong (and the speakers disagreed with each other
+  about the right one, on the call, in real time);
+- one year expression wrong ("instead of Igba, you get Ichekpa").
+  Charity gave the rule directly: "Wikipedia has a rule whereby you don't
+  translate a name of a person, a name of a place, or a name of organization
+  ... Lagos is still Lagos." Agnes confirmed institution names stay English
+  even when multi-word: asked whether "Green Spring Montessori" stays English,
+  "Yes, we use the English."
 
 So the frontier has moved off grammar and onto named entities, lexical gaps,
 and a register (encyclopedic third-person prose) our corpus has never held.
@@ -1232,9 +1234,9 @@ round's character allowlist (E5) contains no s, correctly, for IGALA words.
 It was applied to the whole answer. Verified empirically against the live
 checker: on a correct translation preserving every name, it returns
 
-  banned-character: "these words use letters that do not exist in Igala
-  (Igala has no s, z, x, q, v ...): Egbuson, Bayelsa, Spring, Montessori,
-  Lagos, psychology"
+banned-character: "these words use letters that do not exist in Igala
+(Igala has no s, z, x, q, v ...): Egbuson, Bayelsa, Spring, Montessori,
+Lagos, psychology"
 
 and re-asks the model to rewrite them, keeping the second answer regardless.
 The model got it right and the lint talked it out of it, one turn later.
@@ -1245,6 +1247,7 @@ BOTH failures Agnes reported trace to this one checker.
 ### 3. WHAT SHIPPED
 
 **The fix, in two complementary halves** (neither sufficient alone):
+
 - `repair-round.ts`: `opts.sourceText` exempts any word the QUESTION already
   contained from the allowlist. A scope, not a weakening - check (a) exists
   to catch the model's own inventions, and a copied name is not one.
@@ -1258,17 +1261,17 @@ BOTH failures Agnes reported trace to this one checker.
   translation shape because a Q&A turn has no duty to repeat a name.
 - `generation-prompt-v4-2.ts` = v4.1 plus exactly three lines (the test
   DIFFS the two constants and pins that only three differ):
-    NE1 METHOD 9  - names are copied letter for letter, across every word,
-                    even letters Igala lacks. Procedural, so the sourcing
-                    contract does not apply; the one claim it leans on
-                    (Igala has no s) is already grade A/B via the allowlist.
-    NE2 METHOD 10 - never drop a fact for want of a word. v4.1 step 4 covered
-                    coinage; nothing covered SILENCE, and silence is what we
-                    observed.
-    NE3 ORTHOGRAPHY - the allowlist sentence is SCOPED to Igala words.
-                    Unscoped it said any other letter means "the word is
-                    wrong", which condemns Lagos: the prompt contradicted
-                    itself the moment a name contained an s.
+  NE1 METHOD 9 - names are copied letter for letter, across every word,
+  even letters Igala lacks. Procedural, so the sourcing
+  contract does not apply; the one claim it leans on
+  (Igala has no s) is already grade A/B via the allowlist.
+  NE2 METHOD 10 - never drop a fact for want of a word. v4.1 step 4 covered
+  coinage; nothing covered SILENCE, and silence is what we
+  observed.
+  NE3 ORTHOGRAPHY - the allowlist sentence is SCOPED to Igala words.
+  Unscoped it said any other letter means "the word is
+  wrong", which condemns Lagos: the prompt contradicted
+  itself the moment a name contained an s.
 - Budget: v4.1 sat at EXACTLY its 1,150-token ceiling. v4.2 is 1,287 under a
   ceiling raised to 1,300, deliberately and on the record, which is the one
   thing the v4.1 spec asked of anyone who needed the room.
@@ -1324,9 +1327,9 @@ prompts. No second script duplicating the serving branches.
 Output generation for the two pooled arms ran via
 `train-queue-fill.ts generate ... --provenance claude_authored_v42_2026_09_13`:
 
-  gemini-3-1-pro          created 118, failed 6, ~$3.10
-  gemini-3-1-pro-rag-v3   created 115, failed 9, ~$4.20
-  measured pool-arm train spend, all runs: $7.31 of the $15 cap
+gemini-3-1-pro created 118, failed 6, ~$3.10
+gemini-3-1-pro-rag-v3 created 115, failed 9, ~$4.20
+measured pool-arm train spend, all runs: $7.31 of the $15 cap
 
 **The 15 failures are all one cause: the Google API prepayment credits ran
 out mid-run** ("Your prepayment credits are depleted"), not a code fault.
@@ -1367,23 +1370,23 @@ OpenRouter) and nothing else off the card. It was missing, entirely, the
 largest cost of the project: the Claude Max subscription the work is done on.
 Recovered from the Anthropic receipt emails, one agent per receipt:
 
-  Jun 11  $200.00  Max 20x   #2035-7959-7424   Jun 11-Jul 11
-  Jul 11  $100.00  Max 5x    #2932-1423-5334   Jul 11-Aug 11
-  Jul 13  $106.47  Max 20x   #2229-8867-6624   mid-cycle upgrade, $200 list
-                                                less $93.53 proration
-  Aug 13  $200.00  Max 20x   #2732-2182-1355   Aug 13-Sep 13
-  Sep 13  $100.00  Max 5x    #2465-3930-1869   Sep 13-Oct 13
-  Aug 21   $45.00 x3         #2190-4041-6160, #2672-3129-7060, #2538-6506-0895
-                             "Prepaid extra usage, Individual plan"
-  TOTAL   $841.47
+Jun 11 $200.00 Max 20x #2035-7959-7424 Jun 11-Jul 11
+Jul 11 $100.00 Max 5x #2932-1423-5334 Jul 11-Aug 11
+Jul 13 $106.47 Max 20x #2229-8867-6624 mid-cycle upgrade, $200 list
+less $93.53 proration
+Aug 13 $200.00 Max 20x #2732-2182-1355 Aug 13-Sep 13
+Sep 13 $100.00 Max 5x #2465-3930-1869 Sep 13-Oct 13
+Aug 21 $45.00 x3 #2190-4041-6160, #2672-3129-7060, #2538-6506-0895
+"Prepaid extra usage, Individual plan"
+TOTAL $841.47
 
 THE SHAPE OF THE SPEND, now that it is visible:
 
-  cash off the card        $951.47
-    of which subscription  $841.47   (88%)
-    of which API credits   $110.00
-  measured model burn       $27.84   over 2,652 generations, all providers
-    of which Claude          $5.74
+cash off the card $951.47
+of which subscription $841.47 (88%)
+of which API credits $110.00
+measured model burn $27.84 over 2,652 generations, all providers
+of which Claude $5.74
 
 The tooling costs about thirty times the API. Every cost conversation this
 project has had was about the $27.84.
@@ -1451,6 +1454,7 @@ prompting guide.
 ### SHIPPED (all merged, all deployed)
 
 App PR #60 (squash, main, Vercel production):
+
 - `humanRounds` on /api/public/method-metrics: per pooled question batch
   (POOL_ROUNDS in era.ts), out of every ten questions: ours / plain / draw
   / neither. Live: batch 1 (Aug 20 to Sep 12) 0.9 / 3.3 / 1.0 / 4.8 of 246;
@@ -1479,6 +1483,7 @@ App PR #60 (squash, main, Vercel production):
 
 Site PR #2 + #3 (squash, main, Vercel production, verified live in the
 browser at wikitongues-ai-site.vercel.app/how-it-works#verdicts):
+
 - HumanVerdicts section "Out of every ten questions": dot rows per batch,
   label and caption stacked above the dots, legend, reading sentence, the
   why-not-per-version and why-not-not-corrected note. Copy states that the
@@ -1487,6 +1492,7 @@ browser at wikitongues-ai-site.vercel.app/how-it-works#verdicts):
   no-verdict rows.
 
 Database (idempotent scripts, both re-run to prove it):
+
 - prisma/seed-rag-v4-3-grammar.ts: 15 grammar_rule rows created and
   embedded (6 Ejeba served, 2 Ejeba notes, 6 community-verified from the
   Sep 13-23 mine, 1 open-questions note); the 3 Aug 13 abstract Ejeba rows
@@ -1504,12 +1510,12 @@ Database (idempotent scripts, both re-run to prove it):
   resume loop finished the job because the script skips existing outputs).
   RESULT (agreement score, 100 = speaker agreeing with speaker; then the
   tone-insensitive column, which tone marks cannot game; then speakerRank):
-    v4.4  105.3 (CI 81-129)  tone-ins 94.7  speakerRank 62.7  <- best real arm on every column
-    v4.1  103.1              tone-ins 87.0  speakerRank 57.3
-    v4.3  101.3              tone-ins 88.0  speakerRank 59.3
-    v4.2   96.4              tone-ins 89.8  speakerRank 59.3
-    v3     90.8 / bare 83.4 (tone-ins 82.7 / 80.0)
-    controls: v4 tone-stripped 123.2 (tone-ins 87.1), bare tone-stripped 111.9 (tone-ins 80.0)
+  v4.4 105.3 (CI 81-129) tone-ins 94.7 speakerRank 62.7 <- best real arm on every column
+  v4.1 103.1 tone-ins 87.0 speakerRank 57.3
+  v4.3 101.3 tone-ins 88.0 speakerRank 59.3
+  v4.2 96.4 tone-ins 89.8 speakerRank 59.3
+  v3 90.8 / bare 83.4 (tone-ins 82.7 / 80.0)
+  controls: v4 tone-stripped 123.2 (tone-ins 87.1), bare tone-stripped 111.9 (tone-ins 80.0)
   Reading: v4.2's name rules cost letter-overlap on this exam (96.4 vs
   v4.1's 103.1: few name prompts, and copied names score nothing against
   respelled gold); the grammar block recovers +5 (v4.3) and the twelve
@@ -1519,6 +1525,7 @@ Database (idempotent scripts, both re-run to prove it):
   the blind round is the test that counts, and none of v4.x has sat it.
 
 Documents:
+
 - Google Doc "Igala, judged by its speakers - white paper brief (Sep 2026)"
   in the Wikitongues Drive folder, Languages Unseen format, institutional
   register, references on page 2 from the NotebookLM notebook:
@@ -1564,3 +1571,198 @@ Documents:
 - Older pending: FFWD application page-1 answers; Claude subscription
   allocation; May 8 receipt; Culture in the Code PDF into the notebook.
 
+## Session State (2026-09-28, Opus 5.5 standing in for Fable 5.1; Fable review scheduled Wed Sep 30)
+
+Halim's four calls on the Sep 23 report, and what happened to each.
+
+### 1. "Pool v4.4" - yes
+
+Done in this order, each step checked:
+
+- v4.4 train answers: the Sep 23 fill (an --train mode in the exam script
+  that was never committed) had spent its budget on the old v1 batch in id
+  order (73 rows, 1 on the Sep 13 batch). Refilled through
+  train-queue-fill.ts, which now has a v4-family branch: before it,
+  servingModeFor() sent any rag-v4-x label to the rag-v1 or bare assembly,
+  so a routine `generate` after pooling would have written v4.4 answers
+  with the wrong prompt, silently. v4.4 now covers all 178 prompts in
+  annotators' queues (55 v1 + 123 Sep 13 batch). SPEND: $10.28 for 249 v4.4
+  train answers; about $2.90 of it sits on 71 prompts nobody can judge
+  (my two scoping mistakes: the id-ordered first run, and a v1 leg that ran
+  across all 254 prompts before I stopped it). Estimate given to Halim was
+  $3-5.
+- Two adversarial review workflows (4 lenses + a skeptic per finding, then
+  3 lenses + skeptics) found and I fixed:
+  a) THE QUOTED-SOURCE BUG (predates today; live in chat for v4.1+): the Sep
+  13 bank quotes the sentence to translate. The repair round's word
+  pattern kept the quote marks on the names ('Musa, Idah'), so the
+  copied-word exemption missed Musa, the name check demanded "Idah'",
+  and task framing counted as source ("Wikipedia", "Write"). Correct
+  answers were re-asked into respelled ones: the stored v4.4 answer to
+  gram_002 read "Jainab" for Zainab (the Sep 1 bug again), gram_011 ended
+  "Wikipedia Write.". Fix in repair-round.ts: stripEdgeQuotes/foldWord,
+  names read from the quoted sentence (quotedPassages/nameSourceText,
+  possessives ignored), quote-only tokens are punctuation, and check (a)
+  is skipped when the question asks for English prose (requestsEnglish).
+  Tests use the bank's own prompts.
+  Exact replay (scripts/replay-quoted-source-fix.ts, no model calls):
+  all 16 repaired FROZEN rows of v4.2/4.3/4.4 are unchanged, so the
+  published exam scores stand. v4.4 train: 9 rows were wrongly re-asked
+  and rewritten to their first pass (the answer the fixed round serves);
+  3 had partly false re-asks and were regenerated in place
+  (scripts/regenerate-train-outputs.ts). Backups of all 12 rows:
+  tasks/backups/. v4.1 train (not pooled): 3 CLEARED + 1 CHANGED left
+  untouched, listed for the Wednesday review.
+  b) Truncation guard: the repair round reports both passes' tokens summed,
+  so a truncated SECOND pass could be stored. The shared assembly
+  (src/lib/arena/v4-family-train.ts, used by the fill and the
+  regenerator) now records each pass and judges the served one
+  (unstorableReason). 28 older repaired v4.4 rows cannot be re-judged
+  (only sums stored); their endings look complete; listed for Wednesday.
+  c) The fill's $15 stop rule priced a v4 answer as one 4,096-token call;
+  now two passes of 8,192 input + full output.
+  d) approachLabel mapped rag-v4-2/3/4 to "retrieval v1" on the public
+  board since they were registered. Fixed, with a test that walks every
+  v4-family label.
+  e) The admin Speakers' Verdict headline counted only the top two arms'
+  wins; with three pool arms the third vanished. otherWins/otherArms now
+  reconcile to poolDecided (tested).
+  f) enable-v44-pool.ts pointed at the nonexistent --train flag; fixed.
+- Known and accepted (nit, documented): an annotator with two tabs open
+  across the flag flip can judge one prompt twice (the submit route dedupes
+  per pair, not per prompt); a pre-existing draft key is A/B-order
+  sensitive, so a reload loses a draft about half the time regardless.
+- Flag flip: [FILLED AFTER MERGE]
+
+### 2. Austine's ties - "what's their name, write an email"
+
+annotator_8 is Austine Amodu (amoduaustine04@gmail.com): 34 of 34
+judgments since Sep 13 are ties, with the correct answer written in the
+explanation box. Gmail DRAFT to Agnes (ajben12@gmail.com), subject
+"[annotation] Austine's draws", 76/90 words, they/them for Austine, not sent.
+
+### 3. Salem/Agnes questions - "ok"
+
+Salem is reached through Lydia, who on Sep 25 sent "Igala grammar writeup:
+Patching the holes in the model" (Salem + Lydia, 1,329 words, unanswered).
+Read in full. It answers one open question (foreign words keep their
+spelling, no s-to-ch) and raises a policy conflict for Halim: it asks for
+tone marks always and expanded forms (ki ọla, not k'ọla), where the model
+is told to write like the community (no tone marks, contractions); Lydia
+proposes furigana-style dual display and asks Halim if the model can do it.
+Also: complementiser ki (COMP) vs kì (REL); never mix dialects; gwùgwú/tẹ́
+vs jọ presentative with yì; record audio of gold answers; register
+strength mismatches. NOT ingested yet: scheduled for the Wednesday review.
+Gmail DRAFT reply in Lydia's thread (to Lydia, cc Daniel, Agnes), 4
+questions (na pronoun or particle; du vs di; opata = south?; yes-no final
+particle), acknowledges the write-up and defers the furigana answer to
+Halim. 73/90 words, not sent.
+
+### 4. iCloud - "let's fix this, recommendation?"
+
+Diagnosis confirmed: ~/Documents is iCloud-synced with Optimize Mac
+Storage on; 34 repos live there; iCloud wrote conflict copies INSIDE .git
+("index 2", "refs/.../main 2.lock"), which broke git fetch on Sep 23; and
+today a formatter or sync rewrote 8 tracked files in this worktree
+(prettier-style diffs, restored). Recommendation: move all code to ~/Code
+(not synced; GitHub is the backup). Script ready, dry-run clean:
+`zsh ~/move-repos-out-of-icloud.sh` (dry run) then `--apply` with no
+sessions open in those repos. It deletes node_modules first, downloads
+everything else from iCloud and refuses to move a repo while any file is
+still evicted, runs git worktree repair, removes iCloud conflict copies
+inside .git, and copies each repo's Claude memory to its new path key. Not
+run: it moves the directory this session works in.
+
+### PRs
+
+- App: [FILLED AFTER MERGE]
+- Site: madihg/wikitongues-web-ai branch verdicts-every-pair (every judged
+  pair gets a panel, version-vs-version head to head, computed margin
+  phrase, Sep 28 changelog, 42 tests). Merge after the flag flip.
+
+### NEXT (Wednesday, Fable 5.1): tasks/fable-review-2026-09-30.md
+
+## Session State (2026-10-08, Fable 5.1) - THE WRITE-UP, THE CHECKER REVIEW, AND THE NEXT BANK
+
+Halim's request: read Salem and Lydia's "Igala grammar writeup: Patching
+the holes in the model" (emailed Sep 25, attachment identical to the
+~/Downloads .docx, 1,322 words), explain it, plan it as a PRD, execute.
+Then, mid-session: the annotation queue is empty; build the next prompt
+bank (~100) aimed, with evidence, at where speakers still judge the
+model's Igala illegible, and at the write-up's rules.
+
+PRD: tasks/prd-salem-writeup-ingest-2026-10-08.md (12 stories; Halim took
+every recommended option: dual-layer reference form as a chat-only
+experiment, Central/Idah default dialect named when asked, audio later,
+pool v4.4 with a new round boundary, full gates, v4.5 built and examined
+but not pooled, fix every review blocker before merging).
+
+### Phase 0 (US-001 to US-005): the Sep 28 branch, reviewed and shipped
+
+The Oct 8 review (23 agents) of the Sep 28 quoted-source fix confirmed 11
+findings; all fixed in web/src/lib/arena/repair-round.ts, 87 tests in the
+three repair suites, 1259 tests overall, typecheck and lint clean:
+- requestsEnglish no longer switches check (a) off for the whole answer:
+  only plain-ASCII words are exempt, so shọpu / yuñivasítí / yunifásítì
+  (the three rewritten v4.4 rows) are caught again. Negated ("do not answer
+  in English") and quoted ("translate 'write your name in English'")
+  phrasings no longer count as a request for English.
+- Names are read from the WHOLE question again (nameSourceText deleted): a
+  translation quoting only a nickname lost Makeba and Johannesburg.
+- The first word of a quoted sentence is name-checked (Jainab, Fifian, Vivian
+  were invisible), with an English function-word stoplist so "The", "He",
+  "When" are not names. Possessive clitics stripped (Amina's -> Amina).
+  Elided names count as present (t'Ankpa, ef'Abuja, efẹw'Abuja).
+- quotedPassages pairs openers with closers of the same family and does not
+  close on a plural possessive or an elision apostrophe; two quotes in one
+  question stay two passages.
+- Scripts: backups open with flag "wx" (never overwrite); the regenerator
+  re-checks "judged" per row right before writing, SUMS token counts with
+  the stored ones, and reads the train budget from the shared
+  trainMaxTokensFor (src/lib/arena/v4-family-train.ts), which the fill now
+  imports too.
+- Replay of the reworked checker (read-only): v4.4 train 31 SAME, all
+  frozen rows SAME (exam scores stand); v4.1 train 3 CLEARED + 1 CHANGED
+  untouched as decided. The three v4.4 rows were regenerated through the
+  new checker (backup tasks/backups/v44-train-regenerated-2026-10-08.json):
+  idiom_002 clean; lex_005 and lex_027 repaired (university kept in English
+  instead of a respelling).
+- POOL_ROUNDS gained round-3 "version 4.4 joins the blind test, since
+  Oct 8" from V44_POOL_FLIP_AT = 2026-10-08T12:00:00Z (the flip ran after
+  that instant); round-2 now closes there. Doc comment: a boundary is a
+  date on which the questions OR the arms changed.
+- App changelog entry re-dated Oct 8 and names the checker rework; the site
+  copy must match it byte for byte (site test hashes the pairs).
+- New read-only export: web/scripts/export-annotation-review.ts (frozen gold
+  excluded by query; annotators pseudonymised) feeds the bank design.
+
+Flag flip: [FILLED AFTER MERGE]
+PRs: [FILLED AFTER MERGE]
+
+### Phase 1 (US-006): the write-up inventory
+
+tasks/salem-lydia-writeup-2026-09-25-inventory.md: 82 rules (status:
+missing 29, served 15, contradicts_served 12, framing 11, in_ragentry 8,
+product_ask 7; grades A 11, B 17, C 54). Ship list for v4.5: three prompt
+lines (complementiser restraint; tone on the meaning-bearing monosyllables
+kí/kì, jọ/jọ̀; the number-agreement guard), three grammar_rule rows, the
+rest notes. 15 contradictions ranked (complementiser over-use vs L25 is the
+only one with numbers: ki in 31% of v4.4 outputs vs 15.5% of gold), 17
+questions for Salem and Lydia.
+
+### The next prompt bank (Halim's mid-session priority)
+
+Data: export of 1,685 judgments (637 between the two pooled Gemini arms),
+213 train edits with mechanical token diffs, 1,446 train gold, 249 v4.4
+train answers with surface metrics against gold, per-prompt
+informativeness (decisive vs tie vs both_inadequate). Pool-arm tallies:
+v3 vs bare since Sep 13 = 121 wins, 87 losses, 132 ties, 49 both
+inadequate; tags: grammar 146/198, tone_marks 52/67, wrong_word 42/66.
+Retrieval LOSES to the bare model on orthography (14 to 17) and dialectal
+fidelity (5 to 12). Workflow wf_56bdcd2a-a6f (9 analysts, 1 designer, up to
+10 writers, 1 linter) running; outputs land in the scratchpad as
+bank-spec.json, bank-written-*.json, bank-final.json. Then:
+web/prisma/seed-prompt-bank-v45.ts on the v42 pattern (create-only,
+Scope-A gate with spiked negative control, Jaccard dedupe), fill train
+outputs for bare + v3 + v4.4, check-queue-servable, PR.
+Bank status: [FILLED WHEN SEEDED]

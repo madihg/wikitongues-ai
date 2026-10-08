@@ -144,6 +144,29 @@ const APOSTROPHES = new Set(["'", "’", "ʼ"]);
 /** One "word": letters/marks plus in-word apostrophes and hyphens. */
 const WORD_RE = /[\p{L}\p{M}'’ʼ-]+/gu;
 
+/** Straight and curly single quotes. The same characters serve as quote
+ * marks, possessive apostrophes and Igala elision marks, so a token only
+ * sheds them at its EDGES (2026-09-28). */
+const EDGE_QUOTE_RE = /^['’‘ʼ]+|['’‘ʼ]+$/gu;
+
+/**
+ * A word token without quote marks stuck to its edges: `'Musa` -> `Musa`,
+ * `Idah'` -> `Idah`, `w'ọla` unchanged. The v4.2 prompt bank puts source
+ * sentences in single quotes (Translate 'Musa lives in Idah' into Igala.),
+ * and before this every check read `'musa` and `idah'` as the words: the
+ * copied-word exemption missed Musa, the name check demanded `Idah'`, and a
+ * correct answer was re-asked into a respelled or padded one. "" for a token
+ * that was nothing but quote marks.
+ */
+export function stripEdgeQuotes(token: string): string {
+  return token.replace(EDGE_QUOTE_RE, "");
+}
+
+/** Fold a word for set membership: edge quotes off, lowercase, NFC. */
+function foldWord(token: string): string {
+  return stripEdgeQuotes(token).toLowerCase().normalize("NFC");
+}
+
 function isLetter(ch: string): boolean {
   return /\p{L}/u.test(ch);
 }
@@ -191,8 +214,17 @@ function wordViolatesAllowlist(word: string): boolean {
 export function sourceWordSet(sourceText: string | undefined): Set<string> {
   const set = new Set<string>();
   if (!sourceText) return set;
-  for (const w of sourceText.match(WORD_RE) ?? [])
-    set.add(w.toLowerCase().normalize("NFC"));
+  for (const w of sourceText.match(WORD_RE) ?? []) {
+    const key = foldWord(w);
+    if (!key) continue;
+    set.add(key);
+    // An Igala elision prefix fuses to the next word (t'Ankpa, ef'Abuja,
+    // efẹw'Abuja). The name behind it is present, so each segment after an
+    // in-word apostrophe is a word of its own too (2026-10-08 review).
+    if (/['’ʼ]/.test(key)) {
+      for (const seg of key.split(/['’ʼ]+/)) if (seg.length >= 3) set.add(seg);
+    }
+  }
   return set;
 }
 
@@ -207,10 +239,43 @@ export function findAllowlistViolations(
 ): string[] {
   const hits: string[] = [];
   for (const match of text.match(WORD_RE) ?? []) {
-    if (exempt.has(match.toLowerCase().normalize("NFC"))) continue;
+    if (exempt.has(foldWord(match))) continue;
     if (wordViolatesAllowlist(match) && !hits.includes(match)) hits.push(match);
   }
   return hits;
+}
+
+/**
+ * The question asks for some English in the answer ("explain in English",
+ * "note in English", "one line of English"). Check (a) is about Igala words,
+ * so on such a question it would flag the requested English and the re-ask,
+ * which restates "answer in Igala only", would strip it (2026-09-28: the
+ * idiom and loanword prompts of the v4.2 bank). Deliberately narrow: "leave
+ * it in English" asks about a name, not for English prose, and does not match.
+ */
+export function requestsEnglish(sourceText: string | undefined): boolean {
+  if (!sourceText) return false;
+  // A phrase inside a quoted passage is part of the sentence to translate,
+  // not an instruction ("Translate 'write your name in English' into Igala").
+  const text = stripQuotedPassages(sourceText);
+  const re =
+    /\b(?:explain|note|write|answer|reply|describe|add|say)(?:\s+[\w']+){0,3}\s+in English\b/gi;
+  for (const m of text.matchAll(re)) {
+    const before = text.slice(Math.max(0, (m.index ?? 0) - 40), m.index);
+    // "do not answer in English", "never reply in English", "without
+    // writing in English": the instruction forbids English.
+    if (/\b(?:not|never|don't|dont|without|no)\s+(?:[\w']+\s+){0,2}$/i.test(before))
+      continue;
+    return true;
+  }
+  return /\bline of English\b/i.test(text);
+}
+
+/** True for a word of plain Latin letters with no Igala mark (no ẹ, ọ, ñ,
+ * tone accent or other combining mark): the shape English prose has, and
+ * the shape an Igala respelling such as shọpu or yuñivasítí never has. */
+export function isPlainAscii(word: string): boolean {
+  return /^[A-Za-z'’ʼ-]+$/.test(word);
 }
 
 // ─── (d) name preservation (rag-v4-2) ───────────────────────────────────────
@@ -225,6 +290,9 @@ const NOT_A_NAME = new Set([
   "i",
   "igala",
   "english",
+  // Task framing, never a name to preserve: "an Igala Wikipedia article".
+  "wikipedia",
+  "wiktionary",
   "yoruba",
   "igbo",
   "hausa",
@@ -258,10 +326,36 @@ export function isTranslationRequest(sourceText: string | undefined): boolean {
 }
 
 /**
+ * English function words and imperatives that open a quoted sentence
+ * ("Translate 'The people of Ajaokuta said ...'"). Capitalized there, they are
+ * not names; before 2026-10-08 the quote mark stuck to them hid this by
+ * accident, and stripping it exposed "The" as a name to preserve.
+ */
+const FUNCTION_WORDS = new Set([
+  "the", "a", "an", "he", "she", "it", "they", "we", "you", "my", "our",
+  "your", "his", "her", "their", "its", "this", "that", "these", "those",
+  "there", "here", "when", "where", "what", "who", "whom", "which", "how",
+  "why", "in", "on", "at", "to", "for", "of", "with", "from", "by", "into",
+  "and", "but", "or", "if", "as", "so", "not", "no", "yes", "is", "are",
+  "was", "were", "be", "been", "being", "do", "does", "did", "have", "has",
+  "had", "will", "would", "can", "could", "should", "may", "might", "must",
+  "please", "write", "give", "say", "tell", "ask", "translate", "explain",
+  "name", "use", "some", "every", "all", "both", "each", "many", "one",
+  "two", "three", "first", "last", "next", "today", "tomorrow", "yesterday",
+  "now", "then", "also", "only", "just", "very", "more", "most", "after",
+  "before", "because", "while", "since", "until", "about", "over", "under",
+  "once", "upon", "yesterday's", "today's",
+]);
+
+/**
  * Proper nouns in a source text: capitalized words of 3+ letters that are not
- * sentence-initial and not in NOT_A_NAME. Sentence-initial words are skipped
- * because capitalization there carries no information - "Write the Igala..."
- * would otherwise make "Write" a name.
+ * sentence-initial, not in NOT_A_NAME and not English function words. A
+ * possessive clitic is not part of the name (Amina's -> Amina): Igala marks
+ * possession without it, so demanding "Amina's" re-asked every correct
+ * answer. Sentence-initial words are skipped because capitalization there
+ * carries no information - "Write the Igala..." would otherwise make "Write"
+ * a name; a word that opens a QUOTED sentence mid-question (Translate 'Musa
+ * lives ...') is not sentence-initial and is checked.
  */
 export function findSourceProperNouns(sourceText: string): string[] {
   const out: string[] = [];
@@ -269,34 +363,124 @@ export function findSourceProperNouns(sourceText: string): string[] {
   // a newline. Tracked by scanning the raw text rather than the word list.
   const re = /[\p{L}\p{M}'’ʼ-]+|[^\p{L}\p{M}\s]|\n/gu;
   let atStart = true;
-  for (const tok of sourceText.match(re) ?? []) {
-    if (/^[.!?:\n]$/.test(tok)) {
+  for (const raw of sourceText.match(re) ?? []) {
+    if (/^[.!?:\n]$/.test(raw)) {
       atStart = true;
       continue;
     }
-    if (!/^[\p{L}\p{M}'’ʼ-]+$/u.test(tok)) continue;
+    if (!/^[\p{L}\p{M}'’ʼ-]+$/u.test(raw)) continue;
+    // A token that was only quote marks is punctuation: it neither counts
+    // as a word nor takes the sentence-start slot from the word after it.
+    const tok = stripEdgeQuotes(raw);
+    if (!tok) continue;
     const wasStart = atStart;
     atStart = false;
     if (wasStart) continue;
-    if (tok.length < 3) continue;
-    if (tok[0] !== tok[0].toUpperCase() || tok[0] === tok[0].toLowerCase())
+    const name = tok.replace(/['’ʼ]s$/u, "");
+    if (name.length < 3) continue;
+    if (name[0] !== name[0].toUpperCase() || name[0] === name[0].toLowerCase())
       continue;
-    const key = tok.toLowerCase();
-    if (NOT_A_NAME.has(key)) continue;
-    if (!out.includes(tok)) out.push(tok);
+    const key = name.toLowerCase();
+    if (NOT_A_NAME.has(key) || FUNCTION_WORDS.has(key)) continue;
+    if (!out.includes(name)) out.push(name);
   }
+  return out;
+}
+
+/**
+ * English words that open the framing AFTER a quoted sentence ("'...' into
+ * Igala", "'...' means", "'...' as a market woman would say it"). A closing
+ * mark followed by one of them is the end of the passage; a closing mark
+ * followed by anything else may be a plural possessive or an elision inside
+ * it ("the farmers' union", "ch' ọma").
+ */
+const AFTER_QUOTE_WORDS = new Set([
+  "into", "in", "to", "as", "means", "mean", "for", "and", "or", "from",
+  "with", "so", "then", "but", "using", "without", "when", "if", "which",
+  "that", "where", "is", "was", "are", "would", "could", "should", "be",
+  "you", "please", "how", "what", "who", "the", "a", "an", "on", "at", "by",
+  "of", "this", "these", "here", "there", "said", "say", "says", "called",
+  "translate", "translated", "translation", "correctly", "right", "properly",
+  "back", "out", "naturally", "literally", "exactly", "idiomatically", "too",
+  "also", "again", "twice", "once", "first", "write", "give", "put", "keep",
+  "keeping", "render", "rendered", "sounds", "sound", "spoken", "written",
+]);
+
+/**
+ * The quoted passages of a question, in order. An opener is a quote mark
+ * that does not follow a letter. Its closer is a mark of the same family
+ * (' or ‘ closes with ' or ’; " or “ with " or ”) that does not stand
+ * inside a word, and that is followed by the end of the text, punctuation,
+ * another opener, or one of AFTER_QUOTE_WORDS; failing that, the LAST such
+ * mark. So `Translate 'Amina's father sells yams' into Igala` yields the
+ * whole sentence (the possessive is inside a word), `'the farmers' union'
+ * into Igala` is not cut at the plural possessive, two quotes in one
+ * question stay two passages, and `your community's songs` yields nothing.
+ * Used to find instructions that sit outside the sentence to translate;
+ * names are read from the whole question.
+ */
+export function quotedPassages(text: string): string[] {
+  const out: string[] = [];
+  const chars = [...text];
+  const isWordChar = (c: string | undefined) => !!c && /[\p{L}\p{M}\d]/u.test(c);
+  const isOpener = (c: string | undefined, prev: string | undefined) =>
+    (c === "'" || c === "‘" || c === '"' || c === "“") && !isWordChar(prev);
+  const closersFor = (c: string): Set<string> =>
+    c === "'" || c === "‘" ? new Set(["'", "’"]) : new Set(['"', "”"]);
+  const endsPassage = (j: number): boolean => {
+    let k = j + 1;
+    if (k >= chars.length) return true;
+    if (/[.,;:!?)\]]/.test(chars[k])) return true;
+    if (!/\s/.test(chars[k])) return isOpener(chars[k], chars[j]);
+    while (k < chars.length && /\s/.test(chars[k])) k++;
+    if (k >= chars.length) return true;
+    if (isOpener(chars[k], chars[k - 1])) return true;
+    const word = chars.slice(k).join("").match(/^[A-Za-z']+/)?.[0] ?? "";
+    return AFTER_QUOTE_WORDS.has(word.toLowerCase());
+  };
+  let i = 0;
+  while (i < chars.length) {
+    if (isOpener(chars[i], chars[i - 1])) {
+      const closers = closersFor(chars[i]);
+      let end = -1;
+      let last = -1;
+      for (let j = i + 1; j < chars.length && end < 0; j++) {
+        if (!closers.has(chars[j]) || isWordChar(chars[j + 1])) continue;
+        last = j;
+        if (endsPassage(j)) end = j;
+      }
+      if (end < 0) end = last;
+      if (end > i + 1) {
+        out.push(chars.slice(i + 1, end).join(""));
+        i = end + 1;
+        continue;
+      }
+    }
+    i++;
+  }
+  return out;
+}
+
+/** The question with its quoted passages blanked out. */
+function stripQuotedPassages(text: string): string {
+  let out = text;
+  for (const p of quotedPassages(text)) out = out.replace(p, " ");
   return out;
 }
 
 /**
  * Proper nouns the source supplied and the answer did not keep. Only
  * meaningful on a translation request: in a question-and-answer turn the
- * answer has no obligation to repeat a name the question mentioned.
+ * answer has no obligation to repeat a name the question mentioned. Names
+ * are read from the WHOLE question: a translation that quotes only a title
+ * or a nickname ("Miriam Makeba, known as 'Mama Africa', sang in
+ * Johannesburg") still has to keep Makeba and Johannesburg (2026-10-08
+ * review; the Sep 28 fix read the quoted span alone and lost them).
  */
 export function findDroppedNames(output: string, sourceText: string): string[] {
   const present = sourceWordSet(output);
   return findSourceProperNouns(sourceText).filter(
-    (n) => !present.has(n.toLowerCase().normalize("NFC")),
+    (n) => !present.has(foldWord(n)),
   );
 }
 
@@ -399,10 +583,15 @@ export function checkIgalaOutput(
   opts: RepairCheckOptions = {},
 ): RepairViolation[] {
   const violations: RepairViolation[] = [];
-  const badChars = findAllowlistViolations(
-    output,
-    sourceWordSet(opts.sourceText),
-  );
+  // On a question that asks for English prose, the English is exempt from
+  // check (a) word by word (plain Latin letters, no Igala mark), and the
+  // model's own respellings (shọpu, yuñivasítí) are still caught. Skipping
+  // the check wholesale let three such respellings into the queue
+  // (2026-10-08 review).
+  const allHits = findAllowlistViolations(output, sourceWordSet(opts.sourceText));
+  const badChars = requestsEnglish(opts.sourceText)
+    ? allHits.filter((w) => !isPlainAscii(w))
+    : allHits;
   if (badChars.length > 0) {
     violations.push({
       kind: "banned-character",

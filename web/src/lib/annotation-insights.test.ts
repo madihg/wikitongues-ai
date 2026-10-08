@@ -198,6 +198,44 @@ describe("poolHeadline", () => {
     expect(h.leaderCommunityTaught).toBe(true);
     expect(h.runnerUpName).toBe("Bare Gemini");
     expect(h.runnerUpWins).toBe(1);
+    // Two arms: nothing below the runner-up.
+    expect(h.otherWins).toBe(0);
+    expect(h.otherArms).toBe(0);
+  });
+
+  it("accounts for every pool arm's wins once a third arm joins", () => {
+    // Three pool arms (bare, v3, v4.4 since 2026-09-28): the two below the
+    // leader must both be counted, or the card's "rest of those matchups"
+    // sentence silently drops a system's wins.
+    const row = (
+      winner: string,
+      aName: string,
+      bName: string,
+    ): ComparisonRow => ({
+      winner,
+      failureTagsA: [],
+      failureTagsB: [],
+      createdAt: t(1),
+      aName,
+      bName,
+      aInPool: true,
+      bInPool: true,
+      aCommunityTaught: aName !== "Bare",
+      bCommunityTaught: bName !== "Bare",
+    });
+    const h = poolHeadline([
+      row("a", "v4.4", "Bare"),
+      row("a", "v4.4", "v3"),
+      row("b", "Bare", "v4.4"),
+      row("a", "v3", "Bare"),
+      row("b", "v3", "Bare"),
+      row("tie", "v3", "Bare"),
+    ]);
+    expect(h.leaderName).toBe("v4.4");
+    expect(h.leaderWins).toBe(3);
+    expect(h.runnerUpWins + h.otherWins).toBe(2);
+    expect(h.otherArms).toBe(1);
+    expect(h.leaderWins + h.runnerUpWins + h.otherWins).toBe(h.poolDecided);
   });
 
   it("degrades to no leader when nothing is decided", () => {

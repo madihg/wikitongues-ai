@@ -57,10 +57,17 @@ export function VerdictHeadlineCard({
       </p>
       <p className="mt-2 text-sm text-text-secondary">
         The rest of those matchups: {headline.runnerUpName ?? "the other side"}{" "}
-        won {headline.runnerUpWins}, {headline.poolTies} were judged equally
-        good, and in {headline.poolBothInadequate} the speaker rejected both
-        answers. Every matchup is blind: the speaker never knows which system
-        wrote which answer.
+        won {headline.runnerUpWins}
+        {headline.otherWins > 0 &&
+          `, the other ${
+            headline.otherArms === 1
+              ? "system"
+              : `${headline.otherArms} systems`
+          } won ${headline.otherWins}`}
+        , {headline.poolTies} were judged equally good, and in{" "}
+        {headline.poolBothInadequate} the speaker rejected both answers. Every
+        matchup is blind: the speaker never knows which system wrote which
+        answer.
       </p>
     </div>
   );

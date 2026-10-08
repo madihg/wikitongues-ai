@@ -10,6 +10,7 @@ import {
   toAgreementScore,
   type GoldRow,
 } from "./method-metrics";
+import { V4_FAMILY_VERSION_LABELS } from "./arena/frozen-exam";
 
 /**
  * The "How it works" page promises every number is computed live. These tests
@@ -485,6 +486,24 @@ describe("pure helpers", () => {
     expect(approachLabel("rag", "rag-v3")).toBe("retrieval v3");
     expect(approachLabel("rag", "rag-v4")).toBe("retrieval v4");
     expect(approachLabel("rag", "rag-v4-1")).toBe("retrieval v4.1");
+    expect(approachLabel("rag", "rag-v4-2")).toBe("retrieval v4.2");
+    expect(approachLabel("rag", "rag-v4-3")).toBe("retrieval v4.3");
+    expect(approachLabel("rag", "rag-v4-4")).toBe("retrieval v4.4");
+    // Every v4-family label names its OWN version (the no-repair control
+    // names v4.1 plus its qualifier). v4.2 to v4.4 once fell through to
+    // "retrieval v1" on the public board; a new label must be added here
+    // and to approachLabel together.
+    for (const label of V4_FAMILY_VERSION_LABELS) {
+      const version = label
+        .replace("-norepair", "")
+        .slice("rag-v".length)
+        .replace(/-/g, ".");
+      expect(approachLabel("rag", label)).toMatch(
+        new RegExp(
+          `^retrieval v${version.replace(/\./g, "\\.")}( \\(no repair\\))?$`,
+        ),
+      );
+    }
     expect(approachLabel("sft", null)).toBe("fine-tuned");
     expect(approachLabel("dpo", null)).toBe("fine-tuned");
     expect(approachLabel("continued_pretrain", null)).toBe("other");

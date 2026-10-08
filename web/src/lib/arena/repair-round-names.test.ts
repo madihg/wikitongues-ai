@@ -6,8 +6,12 @@ import {
   findSourceProperNouns,
   isTranslationRequest,
   labelRunsRepairRound,
+  isPlainAscii,
+  quotedPassages,
   REPAIR_ROUND_VERSION_LABELS,
+  requestsEnglish,
   sourceWordSet,
+  stripEdgeQuotes,
 } from "./repair-round";
 
 /**
@@ -202,5 +206,294 @@ describe("which labels run the round", () => {
     expect(labelRunsRepairRound("rag-v3")).toBe(false);
     expect(labelRunsRepairRound(null)).toBe(false);
     expect(labelRunsRepairRound(undefined)).toBe(false);
+  });
+});
+
+/**
+ * THE 2026-09-28 BUG: QUOTED SOURCES.
+ *
+ * The v4.2 prompt bank quotes the sentence to translate (Translate 'Musa
+ * lives in Idah' into Igala.). The word pattern kept apostrophes, so the
+ * quote marks stuck to the names: the exemption looked up "'musa" and missed
+ * Musa, and the name check demanded "Idah'", which no answer can contain. A
+ * correct answer was flagged, and the forced re-ask respelled names, pasted
+ * quote marks in, or appended the task framing ("Wikipedia Write."). The
+ * prompts below are the bank's own, verbatim.
+ *
+ * THE 2026-10-08 REVIEW of that fix found it had over-reached in two places
+ * (names read from the quoted span alone; the English exemption switching
+ * check (a) off for the whole answer) and under-reached in four (the first
+ * word of a quoted sentence, possessives, elided names, closers). Those are
+ * pinned below too.
+ */
+const GRAM_001 = "Translate 'Musa lives in Idah' into Igala.";
+const GRAM_004 =
+  "Translate 'Amina's father sells yams at Idah market' into Igala.";
+const GRAM_005 =
+  "Translate 'Vivian studied computer science at Kogi State University and now works in Abuja' into Igala.";
+const GRAM_011 =
+  "You are translating an English Wikipedia biography into Igala. One sentence reads: 'He finished secondary school in 2021 and started working the following year.' Write that sentence in Igala.";
+const LEX_017 =
+  "A child asks you where his sandals are. One is right beside you, the other is across the compound. In Igala, say 'this one is here' and 'that one is over there', in the two short sentences you would really say.";
+const AUTH_002 =
+  "A woman called Zara Adejoh has come from the Nigerian Television Authority to record your community's songs. Tell your neighbours in Igala who she is and why she has come.";
+
+describe("quoted sources (the v4.2 bank shape)", () => {
+  it("strips quote marks from word edges only, never from inside a word", () => {
+    expect(stripEdgeQuotes("'Musa")).toBe("Musa");
+    expect(stripEdgeQuotes("Idah'")).toBe("Idah");
+    expect(stripEdgeQuotes("\u2018Musa\u2019")).toBe("Musa");
+    expect(stripEdgeQuotes("w'ọla")).toBe("w'ọla");
+    expect(stripEdgeQuotes("'")).toBe("");
+    expect(sourceWordSet(GRAM_001).has("musa")).toBe(true);
+    expect(sourceWordSet(GRAM_001).has("idah")).toBe(true);
+    expect(sourceWordSet(GRAM_001).has("'musa")).toBe(false);
+  });
+
+  it("finds quoted passages and ignores possessive apostrophes", () => {
+    expect(quotedPassages(GRAM_001)).toEqual(["Musa lives in Idah"]);
+    expect(quotedPassages(GRAM_004)).toEqual([
+      "Amina's father sells yams at Idah market",
+    ]);
+    expect(quotedPassages(LEX_017)).toEqual([
+      "this one is here",
+      "that one is over there",
+    ]);
+    expect(quotedPassages(AUTH_002)).toEqual([]);
+    expect(quotedPassages("the farmers' cooperative")).toEqual([]);
+  });
+
+  it("pairs each opener with a closer of its own kind, past inner apostrophes", () => {
+    // A plural possessive and an Igala elision inside the passage are not
+    // closers (2026-10-08 review); before, the first ' not followed by a
+    // letter ended the passage at "farmers'".
+    expect(
+      quotedPassages("Translate 'the farmers' union meets on Monday' into Igala."),
+    ).toEqual(["the farmers' union meets on Monday"]);
+    expect(quotedPassages("What does 'ch' ọma' mean here?")).toEqual([
+      "ch' ọma",
+    ]);
+    // A double quote does not close a single one, and the reverse.
+    expect(quotedPassages("Say 'he said \"no\" twice' in Igala.")).toEqual([
+      'he said "no" twice',
+    ]);
+    expect(quotedPassages("Translate \u201cAmina's yams\u201d into Igala.")).toEqual([
+      "Amina's yams",
+    ]);
+    // Two quoted sentences with an instruction between them stay separate.
+    expect(
+      quotedPassages(
+        "Translate 'Musa lives in Idah' into Igala, then write 'Amina sells yams' in Igala too.",
+      ),
+    ).toEqual(["Musa lives in Idah", "Amina sells yams"]);
+  });
+
+  it("reads a translation's names from the whole question, framing included", () => {
+    // The Sep 28 fix read the quoted span alone, and a translation that
+    // quotes only a title or a nickname lost its names (2026-10-08 review).
+    const nickname =
+      "Translate into Igala: the singer Miriam Makeba, known as 'Mama Africa', sang in Johannesburg.";
+    expect(findSourceProperNouns(nickname)).toEqual([
+      "Miriam",
+      "Makeba",
+      "Mama",
+      "Africa",
+      "Johannesburg",
+    ]);
+    expect(
+      findDroppedNames("Miriam Makeba, 'Mama Africa', kọ ẹla ẹ Lagos.", nickname),
+    ).toEqual(["Johannesburg"]);
+    // Task-framing words are not names: Wikipedia, Igala, English.
+    expect(findSourceProperNouns(GRAM_011)).toEqual([]);
+    // Vivian opens the quote: before 2026-10-08 the quote mark hid her.
+    expect(findSourceProperNouns(GRAM_005)).toEqual([
+      "Vivian",
+      "Kogi",
+      "State",
+      "University",
+      "Abuja",
+    ]);
+  });
+
+  it("checks the first word of a quoted sentence unless it is an English function word", () => {
+    // "Jainab" opened the quote in gram_002 and was never checked, so the
+    // answer that wrote "Zainab" passed (2026-10-08 review).
+    expect(
+      findSourceProperNouns("Translate 'Jainab sells fish at Idah' into Igala."),
+    ).toEqual(["Jainab", "Idah"]);
+    expect(
+      findSourceProperNouns("Translate 'Fifian is a nurse in Ankpa' into Igala."),
+    ).toEqual(["Fifian", "Ankpa"]);
+    expect(
+      findDroppedNames(
+        "Zainab ta ẹja ẹ Idah.",
+        "Translate 'Jainab sells fish at Idah' into Igala.",
+      ),
+    ).toEqual(["Jainab"]);
+    // "The", "He", "When": capitalised by position, not names.
+    expect(
+      findSourceProperNouns(
+        "Translate 'The people of Ajaokuta said When the rain comes, He will go' into Igala.",
+      ),
+    ).toEqual(["Ajaokuta"]);
+  });
+
+  it("asks for the name, not its English possessive clitic", () => {
+    // Igala marks possession without 's; demanding "Amina's" verbatim re-asked
+    // every correct answer (2026-10-08 review).
+    expect(findSourceProperNouns(GRAM_004)).toEqual(["Amina", "Idah"]);
+    expect(findDroppedNames("Ata Amina a ta ẹchi ẹ Idah.", GRAM_004)).toEqual(
+      [],
+    );
+  });
+
+  it("counts a name behind an Igala elision prefix as present", () => {
+    // t'Ankpa, ef'Abuja, efẹw'Abuja are "to Ankpa", "in Abuja": the name is
+    // there, fused to the preposition (2026-10-08 review).
+    const q = "Translate 'Musa travelled from Ankpa to Abuja' into Igala.";
+    expect(findDroppedNames("Musa lo t'Ankpa ef'Abuja.", q)).toEqual([]);
+    expect(findDroppedNames("Musa lo t'Ankpa efẹw'Abuja.", q)).toEqual([]);
+    expect(findDroppedNames("Musa lo t'Ankpa ef'Abeokuta.", q)).toEqual([
+      "Abuja",
+    ]);
+    expect(sourceWordSet("lo t'Ankpa").has("ankpa")).toBe(true);
+    expect(sourceWordSet("lo t'Ankpa").has("t'ankpa")).toBe(true);
+  });
+
+  it("a lone quote mark never takes the sentence-start slot", () => {
+    // Before the fix, the closing ' after "year." took the slot, so the next
+    // word ("Write") was read as a name.
+    expect(
+      findSourceProperNouns("It ended in 2021.' Write it for Ada."),
+    ).toEqual(["Ada"]);
+  });
+
+  it("passes the correct answers the old checker flagged", () => {
+    const opts = (sourceText: string) => ({ sourceText, checkNames: true });
+    expect(checkIgalaOutput("Musa dodo efẹwọ Idah.", opts(GRAM_001))).toEqual(
+      [],
+    );
+    expect(
+      checkIgalaOutput(
+        "Vivian kọ computer science efu Kogi State University, i chukọlọ efẹwọ Abuja.",
+        opts(GRAM_005),
+      ),
+    ).toEqual([]);
+    expect(
+      checkIgalaOutput(
+        "I kọ ichekpulu efu ọdọ 2021, ọdọ ki wa lẹ i chanẹ chukọlọ.",
+        opts(GRAM_011),
+      ),
+    ).toEqual([]);
+  });
+
+  it("still catches what it is for: a dropped name and an invented s-word", () => {
+    const v = checkIgalaOutput("Musa dodo efẹwọ Ida.", {
+      sourceText: GRAM_001,
+      checkNames: true,
+    });
+    expect(v.map((x) => x.kind)).toEqual(["name-not-preserved"]);
+    expect(v[0].detail).toContain("Idah");
+    expect(
+      checkIgalaOutput("Musa sọ efẹwọ Idah.", { sourceText: GRAM_001 }).map(
+        (x) => x.kind,
+      ),
+    ).toEqual(["banned-character"]);
+  });
+});
+
+describe("questions that ask for English", () => {
+  const IDIOM_001 =
+    "Your brother's daughter has just passed the examination that takes her into secondary school, and the family has gathered at the house. Give in Igala what an older aunt would say to her, and explain in English the picture inside those words.";
+  const IDIOM_002 =
+    "A young man is opening his own shop in Ankpa tomorrow. Give in Igala the words an older relative would speak over him, and explain in English the image those words carry.";
+  const LEX_005 =
+    "You are adding a line to an Igala Wikipedia article about a woman who teaches psychology at a university. Write that line in Igala, saying what she teaches. Then add one line of English saying what you did with the name of the field and why.";
+  const LEX_027 =
+    "An Igala Wikipedia article says a man studied economics at university. Write that as one Igala sentence for the article, keeping the subject he studied in the sentence, then note in English how you handled the subject name.";
+  const ORTH_005 =
+    "You are writing an Igala article about a secondary school called Green Valley International School. Write the school's name as it should appear in the article, and say whether you would leave it in English or put any of it into Igala.";
+
+  it("recognises a request for English prose, and not a question about a name", () => {
+    expect(requestsEnglish(IDIOM_001)).toBe(true);
+    expect(requestsEnglish(LEX_005)).toBe(true);
+    expect(requestsEnglish(LEX_027)).toBe(true);
+    expect(
+      requestsEnglish("note in English how you handled the subject name"),
+    ).toBe(true);
+    expect(requestsEnglish(ORTH_005)).toBe(false);
+    expect(requestsEnglish(GRAM_001)).toBe(false);
+    expect(requestsEnglish(undefined)).toBe(false);
+  });
+
+  it("is not fooled by a negated or a quoted English phrase", () => {
+    // Both shapes made the Sep 28 checker switch check (a) off (2026-10-08
+    // review): the first forbids English, the second translates a phrase
+    // that happens to mention it.
+    expect(requestsEnglish("Do not answer in English. Say it in Igala.")).toBe(
+      false,
+    );
+    expect(requestsEnglish("Never reply in English here.")).toBe(false);
+    expect(
+      requestsEnglish("Translate 'write your name in English' into Igala."),
+    ).toBe(false);
+    expect(requestsEnglish("Answer in Igala, not in English.")).toBe(false);
+    // The Igala answer to those is held to the full allowlist.
+    expect(
+      checkIgalaOutput("Adsa ki wẹ.", {
+        sourceText: "Do not answer in English. Say it in Igala.",
+      }).map((x) => x.kind),
+    ).toEqual(["banned-character"]);
+    expect(
+      checkIgalaOutput("Adsa ki wẹ.", {
+        sourceText: "Translate 'write your name in English' into Igala.",
+      }).map((x) => x.kind),
+    ).toEqual(["banned-character"]);
+  });
+
+  it("does not flag the English the question asked for", () => {
+    const answer =
+      "Ọma mi, Ọjọ kì d'ẹnyọ ñwu wẹ. This blessing wishes her success like a river that keeps flowing.";
+    expect(
+      checkIgalaOutput(answer, { sourceText: IDIOM_001 }).map((x) => x.kind),
+    ).toEqual([]);
+  });
+
+  it("exempts English words only, never the model's own respellings", () => {
+    // The three rewritten v4.4 rows of 2026-09-28: the whole-answer exemption
+    // let shọpu, yuñivasítí and yunifásítì into the queue (2026-10-08 review).
+    expect(isPlainAscii("shop")).toBe(true);
+    expect(isPlainAscii("psychology")).toBe(true);
+    expect(isPlainAscii("shọpu")).toBe(false);
+    expect(isPlainAscii("yuñivasítí")).toBe(false);
+    const flagged = (answer: string, sourceText: string) =>
+      checkIgalaOutput(answer, { sourceText })
+        .filter((v) => v.kind === "banned-character")
+        .map((v) => v.detail);
+    expect(
+      flagged(
+        "Ọmámì onokẹlẹ, alu k'ẹ a lo t'Ankpa ọ̀na k'ẹ ch'ọna shọpu wẹ, Ọjọ kì d'ẹnyọ ñwu wẹ.\n\nThe picture inside these words compares his new business to a tree bearing sweet fruit.",
+        IDIOM_002,
+      ).join(" "),
+    ).toMatch(/shọpu/);
+    expect(
+      flagged(
+        "Onobulẹ lẹ á kọ ukọchẹ psychology efu yuñivasítí.\nI retained the English word \"psychology\" with its original spelling because there is no native Igala word for the field.",
+        LEX_005,
+      ).join(" "),
+    ).toMatch(/yuñivasítí/);
+    expect(
+      flagged(
+        "Ónokẹ́lẹ lẹ kọ economics efu yunifásítì.\n\nI kept the English word \"economics\" because there is no direct native Igala equivalent.",
+        LEX_027,
+      ).join(" "),
+    ).toMatch(/yunifásítì/);
+    // And the English sentences in those same answers are not flagged.
+    expect(
+      flagged(
+        "Onobulẹ lẹ á kọ ukọchẹ psychology efu ilekọ.\nI retained the English word \"psychology\" because there is no native Igala word for the field.",
+        LEX_005,
+      ),
+    ).toEqual([]);
   });
 });

@@ -120,6 +120,9 @@ export type Approach =
   | "retrieval v4"
   | "retrieval v4.1"
   | "retrieval v4.1 (no repair)"
+  | "retrieval v4.2"
+  | "retrieval v4.3"
+  | "retrieval v4.4"
   | "fine-tuned"
   | "control (tone removed)"
   | "other";
@@ -287,6 +290,13 @@ export function approachLabel(
     if (versionLabel === "rag-v4-1-norepair")
       return "retrieval v4.1 (no repair)";
     if (versionLabel === "rag-v4-1") return "retrieval v4.1";
+    // 2026-09-28: these three fell through to "retrieval v1" from the day
+    // they were registered, so the public board named the three newest
+    // versions after the oldest method. The test now walks every v4-family
+    // label, so the next version cannot slip through the same way.
+    if (versionLabel === "rag-v4-2") return "retrieval v4.2";
+    if (versionLabel === "rag-v4-3") return "retrieval v4.3";
+    if (versionLabel === "rag-v4-4") return "retrieval v4.4";
     if (versionLabel === "rag-v4") return "retrieval v4";
     if (versionLabel === "rag-v3") return "retrieval v3";
     return versionLabel === "rag-v2" ? "retrieval v2" : "retrieval v1";

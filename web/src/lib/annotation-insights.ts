@@ -53,6 +53,12 @@ export interface VerdictHeadline {
   leaderCommunityTaught: boolean;
   runnerUpName: string | null;
   runnerUpWins: number;
+  /** Decided wins of every pool arm below the runner-up, summed, and how
+   * many arms that is. Zero with a two-arm pool; since v4.4 joined the pool
+   * (2026-09-28) the third arm's wins would otherwise vanish from the
+   * sentence. leaderWins + runnerUpWins + otherWins === poolDecided. */
+  otherWins: number;
+  otherArms: number;
 }
 
 /** Win split for one unordered candidate pairing, winner-side first. */
@@ -182,6 +188,8 @@ export function poolHeadline(rows: ComparisonRow[]): VerdictHeadline {
     leaderCommunityTaught: leader ? (taught.get(leader[0]) ?? false) : false,
     runnerUpName: runnerUp ? runnerUp[0] : null,
     runnerUpWins: runnerUp ? runnerUp[1] : 0,
+    otherWins: ranked.slice(2).reduce((sum, [, w]) => sum + w, 0),
+    otherArms: ranked.slice(2).length,
   };
 }
 
