@@ -1782,7 +1782,13 @@ the drafted notes and that factual-bucket notes are SHOWN to annotators as
 we want them to produce; three named v4.4): all rewritten in English. 23
 more notes named speaker pseudonyms or the arm; neutralised, originals kept
 in each row's rationale (never stored). Train answers for bare, v3 and v4.4
-on the batch: [FILLED AFTER FILL].
+on the batch, Oct 8: bare 108/108 ($3.19), v3 95/108 ($3.56; 13 failed
+at the quota), v4.4 0/108 (quota). The queue ALREADY serves 95 of the 108 on
+bare-vs-v3 pairs (assignedPair draws only from arms with an answer):
+remaining per annotator went Agnes 18 -> 110, Sarah 87 -> 182, Austine 62
+-> 157, Blessing 81 -> 176, Charity 105 -> 195, Ibrahim 149 -> 244. A
+background job (task b5ft6ytcy) waits for the quota reset, then fills v4.4
+and v3's 13 and re-checks the queue.
 
 ### Phase 2 and 3 branches (built by worktree agents, under adversarial review)
 
@@ -1905,3 +1911,54 @@ RULE: before committing any document or source file that quotes Igala, run
 exit 1 on a hit). Fix hits by bracketing the English gloss ([water]), as the
 seeds do. All files in the v4.5 bank PR were schematized this way and pass;
 the bank's served fields (texts, notes) were unchanged by it.
+
+Reference form after the samples and verification: branch at d03aa5e
+(30d097a + d03aa5e on top of b102762): own 8,192-token budget for Google
+plus a refusal guard (empty, within 8 of the cap, or more than a quarter of
+the words missing), MIN_REFERENCE_BUDGET_MS 40,000 (measured), the report
+aligns words in order and counts lettersChanged and vowelsRestored, rule 2
+restores a vowel only where the full word is attested in the answer or is
+the authors' example and never splits an unapostrophed word, rule 4 keeps
+dotted vowels and ñ under the marks; createComposerLock() is pure and
+tested; an empty-text reference event ends the "rendering" phase; the exact
+call skips few-shot turns. 1,363 tests, leak check PASS. Samples re-run on
+the fixed prompt in progress (tasks/reference-form-samples-2026-10-08-after-fixes.md
+on that branch). Merge order: v4.5 first, then this branch rebased with the
+verifier's merged-tree test patch (scratchpad/merged-route-test-fix.patch).
+
+v4.5 after the pre-merge verification: branch at 0a0a5c9 (14 edits, 1,648
+tokens, 90 files / 1,309 tests, leak check PASS). Corrections from the
+whole-export counts: the incompletive may be apart, fused or a' (15 of 24
+answers write it apart on the child-is-eating prompt); to/for prefers ñwu/ñwi
+without banning plain n (gold nwu 45, nwi 12); ki enumeration gained the
+time linker kaki and kẹ = ki + ẹ, and "one may-clause per blessing" (the
+real excess is density, not jobless ki); "know" dropped from the say-linker
+verbs (kẹ mọ kaki means drink while); line 24 now separates sequence from
+embedding; ki untoned in the prompt frames; dictionary tone accents
+stripped for v4.5 only unless the question asks for tone; the tone row has
+its own chunkType read only for tone questions and is kept served (source
+discloses 133 of 139 kì from one annotator); gwugwu/jọ out of NUM; v1
+searchRag excludes both v4.5 chunkTypes; route-v45.test.ts pins mixed
+turns. Corpus bigrams for the header: todu ku 202, todu ki 272, ichewñ ku
+264, ichewñ ki 229. Final check workflow wf_d7e69abb-7c6 running.
+Reference-form samples on the fixed prompt ($0.85): 20/20 rendered, the
+chat guard hides 1 (a dropped stretch, source of 41 of the 43 "letters
+changed"), 2 real letter changes in the other 19, 5 vowels restored, 20
+contractions left standing, mean latency 26.5s (19 of 20 under 40s, one at
+52s). The sample files quote model Igala that hits the frozen set, so they
+are NOT committed (public repo); kept in the scratchpad for-salem folder
+for Halim to share privately. The branch will be squash-merged without the
+baseline sample file the builder committed.
+
+
+### GEMINI 3.1 PRO DAILY CAP: 250 requests per model per day (found 2026-10-08)
+
+The Google project behind GOOGLE_GENERATIVE_AI_API_KEY is capped at 250
+generate requests per day for gemini-3.1-pro (quotaId
+GenerateRequestsPerDayPerProjectPerModel; Flash is separate and was fine).
+Every pooled arm (bare, v3, v4.4) and every v4-family exam runs on it, and a
+v4-family answer can cost two requests (repair round). Oct 8 hit it exactly:
+40 reference-form samples + 108 bare + ~100 v3. Plan Gemini work per day:
+a 108-prompt batch for three arms is ~360 requests (two days), a frozen
+exam of one v4 arm is ~43-86. Failed 429s are not billed and do not consume
+quota. Raising the tier is a billing decision for Halim.
