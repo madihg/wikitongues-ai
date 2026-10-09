@@ -3,11 +3,15 @@ import {
   ARENA_ERA_LABELS,
   DEFAULT_ARENA_ERA,
   MIN_DECIDED_PER_CANDIDATE,
+  POOL_NOT_BEFORE,
   POOL_PIVOT_AT,
+  V45_POOL_FLIP_AT,
   buildEraSlice,
   decidedByCandidate,
   derivePivotAt,
   eraSplit,
+  poolMembershipDiff,
+  poolSlugsDue,
   selectEra,
   type ArenaComparisonRow,
 } from "./era";
@@ -401,5 +405,61 @@ describe("era vocabulary", () => {
     expect(DEFAULT_ARENA_ERA).toBe("since_pivot");
     expect(ARENA_ERA_LABELS.since_pivot).toBe("Since the annotation pivot");
     expect(ARENA_ERA_LABELS.all_time).toBe("All time");
+  });
+});
+
+describe("poolSlugsDue (the `pool` run's round-boundary guard)", () => {
+  const V44 = "gemini-3-1-pro-rag-v4-4";
+  const V45 = "gemini-3-1-pro-rag-v4-5";
+  const BARE = "gemini-3-1-pro";
+  const decided = ["gemini-3-1-pro-rag-v3", BARE, V44, V45];
+
+  it("v4.5 waits for the flip instant, read from the real map", () => {
+    expect(V45_POOL_FLIP_AT).toBe("2026-10-09T16:00:00.000Z");
+    expect(POOL_NOT_BEFORE[V45]).toBe(V45_POOL_FLIP_AT);
+  });
+
+  it("leaves v4.5 out at 15:59:59.999Z", () => {
+    const due = poolSlugsDue(
+      decided,
+      POOL_NOT_BEFORE,
+      Date.parse("2026-10-09T15:59:59.999Z"),
+    );
+    expect(due).toEqual(["gemini-3-1-pro-rag-v3", BARE, V44]);
+  });
+
+  it("includes v4.5 from 16:00:00.000Z, order kept", () => {
+    const due = poolSlugsDue(
+      decided,
+      POOL_NOT_BEFORE,
+      Date.parse("2026-10-09T16:00:00.000Z"),
+    );
+    expect(due).toEqual(decided);
+  });
+
+  it("a slug with no entry is always due", () => {
+    expect(poolSlugsDue([BARE], {}, 0)).toEqual([BARE]);
+  });
+});
+
+describe("poolMembershipDiff", () => {
+  it("is empty on both sides when the membership is exact, whatever the order", () => {
+    expect(poolMembershipDiff(["b", "a"], ["a", "b"])).toEqual({
+      missing: [],
+      extra: [],
+    });
+  });
+
+  it("names the missing and the extra arms, not only a count", () => {
+    // Same size on both sides: a count-only check would have passed.
+    expect(
+      poolMembershipDiff(
+        ["gemini-3-1-pro", "gemini-3-1-pro-rag-v4-4"],
+        ["gemini-3-1-pro", "claude-opus-5-rag"],
+      ),
+    ).toEqual({
+      missing: ["gemini-3-1-pro-rag-v4-4"],
+      extra: ["claude-opus-5-rag"],
+    });
   });
 });

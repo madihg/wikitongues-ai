@@ -72,6 +72,15 @@ export const POOL_PIVOT_AT = "2026-08-20T19:38:08.385Z";
  *            model and v3 (scripts/enable-v44-pool.ts, run after this code
  *            was live). Two pairs exist only from here; the bare-vs-v3 pair
  *            continues across the boundary on the same questions.
+ *   round-4  from 2026-10-09 16:00 UTC: the 108-question bank of
+ *            2026-10-08 is in every queue, and version 4.5 joins (against
+ *            v4.4 and the bare model, scripts/enable-v45-pool.ts, run after
+ *            this code was live). Round-3 holds 8 judgments from 2
+ *            annotators, v4.4 pairs on the older questions, the last at
+ *            2026-10-08 18:16 UTC, before the bank went live (~22:45 UTC).
+ *            No bank question had been judged by 2026-10-09 09:30 UTC
+ *            (checked then), so round-4 starts clean on the bank; a bank
+ *            judgment landing between that check and 16:00 is round-3's.
  *
  * Verified against production on 2026-09-23: splitting by the Sep 13 date and
  * splitting by prompt provenance give the same rounds to within three
@@ -93,6 +102,53 @@ export interface PoolRoundDef {
  * this instant, never before it). */
 export const V44_POOL_FLIP_AT = "2026-10-08T12:00:00.000Z";
 
+/** The instant from which v4.5 pairs could be drawn (the flag flip runs
+ * after this instant, never before it; enable-v45-pool.ts refuses earlier). */
+export const V45_POOL_FLIP_AT = "2026-10-09T16:00:00.000Z";
+
+/**
+ * Arms whose round boundary decides when they may be flagged into the pool.
+ * scripts/train-queue-fill.ts `pool` never flags one before its instant: its
+ * pairs would be judged inside the previous round. Its own enable script
+ * flips it at or after the boundary.
+ */
+export const POOL_NOT_BEFORE: Readonly<Record<string, string>> = {
+  "gemini-3-1-pro-rag-v4-5": V45_POOL_FLIP_AT,
+};
+
+/**
+ * The slugs that may be in the pool at `nowMs`: every slug with no entry in
+ * `notBefore`, plus those whose instant has arrived (inclusive). Order of
+ * `slugs` is kept. Pure, so the boundary is testable to the millisecond.
+ */
+export function poolSlugsDue(
+  slugs: readonly string[],
+  notBefore: Readonly<Record<string, string>>,
+  nowMs: number,
+): string[] {
+  return slugs.filter((slug) => {
+    const at = notBefore[slug];
+    return at === undefined || nowMs >= Date.parse(at);
+  });
+}
+
+/**
+ * The difference between the pool that should exist (`due`) and the one the
+ * database holds (`actual`, the unarchived inPairingPool slugs). Both lists
+ * sorted; empty on both sides means the membership is exactly right.
+ */
+export function poolMembershipDiff(
+  due: readonly string[],
+  actual: readonly string[],
+): { missing: string[]; extra: string[] } {
+  const want = new Set(due);
+  const have = new Set(actual);
+  return {
+    missing: [...want].filter((s) => !have.has(s)).sort(),
+    extra: [...have].filter((s) => !want.has(s)).sort(),
+  };
+}
+
 export const POOL_ROUNDS: readonly PoolRoundDef[] = [
   {
     key: "round-1",
@@ -108,8 +164,14 @@ export const POOL_ROUNDS: readonly PoolRoundDef[] = [
   },
   {
     key: "round-3",
-    label: "version 4.4 joins the blind test, since Oct 8",
+    label: "day version 4.4 joined, Oct 8 to Oct 9",
     from: V44_POOL_FLIP_AT,
+    to: V45_POOL_FLIP_AT,
+  },
+  {
+    key: "round-4",
+    label: "108 new questions, from Oct 9 (version 4.5 joins)",
+    from: V45_POOL_FLIP_AT,
     to: null,
   },
 ];

@@ -25,6 +25,12 @@ import {
   nfc,
   type ReasonMap,
 } from "@/lib/edit-segments";
+import {
+  coldDraftKey,
+  pairDraftKey,
+  planDraftRestore,
+  type ColdDraft,
+} from "@/lib/episode-draft";
 
 type Winner = "a" | "b" | "tie" | "both_inadequate";
 type Step = "prompt" | "pairwise" | "score";
@@ -119,7 +125,10 @@ const textDiffers = (a: string, b: string): boolean =>
  *  flaky connections (form-reset bug from the 2026-07-02 call). Older drafts
  *  may carry a `confidence` field from before the widget's removal - it is
  *  simply ignored on restore - and drafts from before the 2026-08-28 rework
- *  lack the rationale / nothingToCorrect fields, which restore as empty. */
+ *  lack the rationale / nothingToCorrect fields, which restore as empty.
+ *  Since 2026-10-09 the cold part (own answer, gloss, Igala question, lock)
+ *  is also saved under the prompt, and restored even when the pair changed
+ *  (src/lib/episode-draft.ts holds the rule). */
 interface EpisodeDraft {
   step: Step;
   coldAnswer: string;
@@ -151,13 +160,27 @@ interface EpisodeDraft {
 }
 
 function draftKeyFor(task: TaskData): string {
-  return `wt-episode-${task.outputA.id}:${task.outputB.id}`;
+  return pairDraftKey(task.outputA.id, task.outputB.id);
+}
+
+function coldKeyFor(task: TaskData): string {
+  return coldDraftKey(task.prompt.promptId);
 }
 
 function loadDraft(key: string): EpisodeDraft | null {
   try {
     const raw = sessionStorage.getItem(key);
     return raw ? (JSON.parse(raw) as EpisodeDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The stored cold part, unparsed beyond JSON (planDraftRestore sanitizes). */
+function loadColdRaw(key: string): unknown {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
@@ -374,6 +397,17 @@ export function AnnotationInterface() {
     setSalvageGloss(d.salvageGloss ?? "");
   }, []);
 
+  // The pair changed since the draft was saved: only the cold part comes
+  // back, on top of the fresh episode resetEpisode just set up.
+  const restoreColdDraft = useCallback((c: ColdDraft, resumeAt: Step) => {
+    setStep(resumeAt);
+    setColdAnswer(c.coldAnswer);
+    setEnglishGloss(c.englishGloss);
+    setInstructionIg(c.instructionIg);
+    setInstructionOpen(Boolean(c.instructionIg.trim()));
+    setColdLocked(c.coldLocked);
+  }, []);
+
   const fetchNext = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -400,9 +434,14 @@ export function AnnotationInterface() {
         setTask(data.task);
         setProgress(data.progress ?? null);
         setIsComplete(false);
-        // Resume an in-progress episode for this exact pair, if one exists.
-        const draft = loadDraft(draftKeyFor(data.task));
-        if (draft) restoreDraft(draft);
+        // Resume an in-progress episode: everything for this exact pair, or
+        // only the speaker's own answer when the pair changed.
+        const plan = planDraftRestore(
+          loadDraft(draftKeyFor(data.task)),
+          loadColdRaw(coldKeyFor(data.task)),
+        );
+        if (plan?.kind === "full") restoreDraft(plan.draft);
+        else if (plan?.kind === "cold") restoreColdDraft(plan.cold, plan.step);
       }
     } catch (e) {
       setError(
@@ -413,7 +452,7 @@ export function AnnotationInterface() {
     } finally {
       setLoading(false);
     }
-  }, [resetEpisode, restoreDraft]);
+  }, [resetEpisode, restoreDraft, restoreColdDraft]);
 
   useEffect(() => {
     fetchNext();
@@ -452,8 +491,15 @@ export function AnnotationInterface() {
       markupReasons,
       markupRationale,
     };
+    const cold: ColdDraft = {
+      coldAnswer,
+      englishGloss,
+      instructionIg,
+      coldLocked,
+    };
     try {
       sessionStorage.setItem(draftKeyFor(task), JSON.stringify(draft));
+      sessionStorage.setItem(coldKeyFor(task), JSON.stringify(cold));
     } catch {
       // storage full/unavailable - non-fatal
     }
@@ -492,6 +538,7 @@ export function AnnotationInterface() {
     if (!task) return;
     try {
       sessionStorage.removeItem(draftKeyFor(task));
+      sessionStorage.removeItem(coldKeyFor(task));
     } catch {
       // ignore
     }

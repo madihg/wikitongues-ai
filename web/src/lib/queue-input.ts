@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   ALLOWED_PAIRINGS,
@@ -30,6 +31,15 @@ import {
  *   - goldCount / isLongForm / isHoldout: the lane metadata computeQueueState
  *     orders the queue by (see src/lib/pairing.ts).
  */
+
+/**
+ * The serving order of a prompt's outputs: assignedPair's indices address the
+ * pool-filtered list in THIS order (id breaks a createdAt tie). Exported so a
+ * script that predicts what /next draws (scripts/enable-v45-pool.ts) queries
+ * the same order rather than a copy of it.
+ */
+export const QUEUE_OUTPUT_ORDER: Prisma.ModelOutputOrderByWithRelationInput[] =
+  [{ createdAt: "asc" }, { id: "asc" }];
 
 export interface QueuePromptDetail {
   id: string;
@@ -76,7 +86,7 @@ export async function loadQueueInputs(): Promise<QueueInputs> {
         // Deterministic order (id as a tiebreak on equal timestamps) so the
         // assigned-pair index picked by /next matches /summary exactly.
         modelOutputs: {
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          orderBy: QUEUE_OUTPUT_ORDER,
           select: {
             id: true,
             outputText: true,

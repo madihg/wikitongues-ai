@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ALLOWED_PAIRINGS,
+  abSwap,
   assignedPair,
   computeQueueState,
   hasAllowedPair,
@@ -125,6 +126,8 @@ describe("assignedPair", () => {
         ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-tonestrip"],
         ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro"],
         ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro-rag-v3"],
+        ["gemini-3-1-pro-rag-v4-5", "gemini-3-1-pro-rag-v4-4"],
+        ["gemini-3-1-pro-rag-v4-5", "gemini-3-1-pro"],
       ]);
     });
 
@@ -218,6 +221,51 @@ describe("assignedPair", () => {
       const a = assignedPair("ann_1", "ig_orth_001", 3);
       expect(a).not.toBeNull();
     });
+  });
+});
+
+describe("abSwap (A/B orientation in /next)", () => {
+  it("is deterministic per (annotator, prompt)", () => {
+    for (const annotatorId of ANNOTATOR_IDS) {
+      for (const promptId of PROMPT_IDS.slice(0, 50)) {
+        expect(abSwap(annotatorId, promptId)).toBe(abSwap(annotatorId, promptId));
+      }
+    }
+  });
+
+  it("is the low bit of fnv1a32(`${annotatorId}:${promptId}:ab`)", () => {
+    // Independent re-implementation of FNV-1a 32 with Math.imul.
+    const fnv = (str: string) => {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+      }
+      return h >>> 0;
+    };
+    for (const annotatorId of ANNOTATOR_IDS) {
+      for (const promptId of PROMPT_IDS.slice(0, 50)) {
+        expect(abSwap(annotatorId, promptId)).toBe(
+          (fnv(`${annotatorId}:${promptId}:ab`) & 1) === 1,
+        );
+      }
+    }
+  });
+
+  it("still balances position across prompts, for every annotator", () => {
+    for (const annotatorId of ANNOTATOR_IDS) {
+      const swapped = PROMPT_IDS.filter((p) => abSwap(annotatorId, p)).length;
+      // 300 fixed prompts: an exact re-computation, not a statistical gamble.
+      expect(swapped).toBeGreaterThan(PROMPT_IDS.length * 0.4);
+      expect(swapped).toBeLessThan(PROMPT_IDS.length * 0.6);
+    }
+  });
+
+  it("varies between annotators on the same prompt", () => {
+    const differs = PROMPT_IDS.some(
+      (p) => abSwap("ann_1", p) !== abSwap("ann_2", p),
+    );
+    expect(differs).toBe(true);
   });
 });
 

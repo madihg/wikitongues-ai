@@ -95,6 +95,16 @@ export const ALLOWED_PAIRINGS: readonly (readonly [string, string])[] = [
   // remain servable.
   ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro"],
   ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro-rag-v3"],
+  // 2026-10-09, Halim's call ("I want the community to start testing v4.5"):
+  // v4.5 enters against v4.4, which isolates exactly the fourteen amended
+  // lines and the version-scoped rows, and against the bare model, the fixed
+  // reference every arm is read against. Not against v3: a third v4.5 pair
+  // would thin every pair's judgments for a comparison the other two already
+  // bracket. Enabled by scripts/enable-v45-pool.ts after this deploys and
+  // after V45_POOL_FLIP_AT (src/lib/arena/era.ts); v4.5 pairs are drawn only
+  // on prompts where v4.5 has a train answer (the 2026-10-08 bank first).
+  ["gemini-3-1-pro-rag-v4-5", "gemini-3-1-pro-rag-v4-4"],
+  ["gemini-3-1-pro-rag-v4-5", "gemini-3-1-pro"],
 ];
 
 /** Whether the (unordered) slug pair is on the whitelist. */
@@ -189,6 +199,19 @@ export function assignedPair(
   if (pairs.length === 0) return null;
   const index = fnv1a32(`${annotatorId}:${promptId}`) % pairs.length;
   return pairs[index];
+}
+
+/**
+ * Whether /next shows the assigned pair's second output as A (swapped).
+ * Deterministic per (annotator, prompt), from its own hash input (the ":ab"
+ * suffix keeps it independent of the pair index), so position bias still
+ * averages out across prompts while a reload with an unchanged pair shows
+ * the same A and B. The episode draft is keyed on the A/B output ids
+ * (src/components/annotation-interface.tsx); a per-request coin flip moved
+ * that key on half of all reloads and the draft was not found.
+ */
+export function abSwap(annotatorId: string, promptId: string): boolean {
+  return (fnv1a32(`${annotatorId}:${promptId}:ab`) & 1) === 1;
 }
 
 /**
