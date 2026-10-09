@@ -1962,3 +1962,69 @@ v4-family answer can cost two requests (repair round). Oct 8 hit it exactly:
 a 108-prompt batch for three arms is ~360 requests (two days), a frozen
 exam of one v4 arm is ~43-86. Failed 429s are not billed and do not consume
 quota. Raising the tier is a billing decision for Halim.
+
+### v4.5 shipped (code), Oct 8 evening
+
+PR madihg/wikitongues-ai#64 squash-merged as 4319514, production deploy
+success. Then (only after the deploy, so the v1 search filter was live
+first; the annotators' factual-bucket reference panel uses that search):
+prisma/seed-rag-v4-5-grammar.ts created 9 rows (3 served, 6 notes; chunkTypes
+grammar_rule_v4_5 and grammar_rule_v4_5_tone), and scripts/register-rag-v4-5.ts
+created gemini-3-1-pro-rag-v4-5 (inPairingPool false). The rows have NO
+embeddings: OpenAI reports "no credits remaining". The grammar block ranks by
+keywords and v1 search excludes these rows, so serving is unaffected; v1
+vector search (annotator reference panel, rag-v1 arms) falls back to keyword
+search until credits are added. No pooled arm calls OpenAI.
+Pending: the frozen exam of v4.5 (needs the Gemini daily quota after the
+v4.4/v3 fills), then the changelog entry with the exam row, then the site
+copy. Reference form: being squashed onto main by its builder (no sample
+files: they hit the frozen set and the repo is public).
+
+## Session State (2026-10-09 ~00:30 UTC, Opus 5.5 after Fable's limit) - HANDOFF
+
+SHIPPED today (all squash-merged, deployed, verified):
+- #62 (717bd5b): v4.4 into the blind pool (flip 12:00:11 UTC Oct 8,
+  round-3 boundary), the reviewed repair-round checker, script hardening.
+- site #4 (afe0d3a): every judged pair gets a panel; copy says Oct 8.
+- #63 (89b296b): the v4.5 PROMPT BANK, 108 prompts seeded and LIVE in the
+  annotators' queues (95 servable now on bare-vs-v3; 13 wait for v3/v4.4
+  answers); scripts/leak-check-files.ts (the repo is PUBLIC).
+- #64 (4319514): v4.5 (14 lines, 9 version-scoped rows, dictionary untoned
+  unless asked); rows seeded (no embeddings, OpenAI credits out) and the arm
+  registered OUTSIDE the pool.
+- #65 (7c96dfb): the reference-form second pass on the chat page for v4.5
+  only, not stored, not scored.
+
+RUNNING (background, this machine):
+- task b5ft6ytcy: probes Gemini 3.1 Pro every 10 min until the daily quota
+  resets (250 requests/day/model; likely 07:00 UTC), then fills v4.4 (108)
+  and v3 (13 missing) on the new batch and re-checks the queue. Logs:
+  /tmp/fill2-*.txt, /tmp/queue-after-fill2.txt.
+- task bgf1k113y: when the fills finish, runs the v4.5 frozen exam
+  (--budget 4). Log: /tmp/exam-v45-*.txt.
+If the session ends before they finish, rerun by hand:
+  npx tsx --env-file=.env.local scripts/train-queue-fill.ts generate gemini-3-1-pro-rag-v4-4 --provenance claude_authored_v45_2026_10_08
+  npx tsx --env-file=.env.local scripts/train-queue-fill.ts generate gemini-3-1-pro-rag-v3 --provenance claude_authored_v45_2026_10_08
+  npx tsx --env-file=.env.local scripts/check-queue-servable.ts
+  npx tsx --env-file=.env.local scripts/exam-frozen-arm.ts gemini-3-1-pro-rag-v4-5 --budget 4
+
+NEXT:
+1. Exam result -> how-it-works CHANGELOG entry (Oct 9) with the v4.5 row,
+   site copy verbatim + hash re-pin (tests/how-it-works-page.test.ts), run
+   leak-check-files on both before committing.
+2. Halim: send the Lydia reply draft (Gmail r-399368307764219040, 86/90),
+   the Agnes draft about Austine's draws, the Andrew draft; decide whether to
+   share the 20 reference-form samples with Salem (kept OUT of the repo:
+   they quote model Igala that hits the frozen set; scratchpad for-salem).
+3. Halim: add OpenAI credits (embeddings for new rows; v1 vector search is on
+   its keyword fallback); consider a higher Gemini tier (250/day blocks a
+   three-arm fill plus an exam in one day).
+4. v4.6 candidates: NEVER list bans speaker forms (ojoji, abẹki, gbede, ati);
+   elision usually drops the SECOND vowel on some joins (kọ'mi, wa'ja);
+   negation spellings nọ / standalone n; reference-form floor (two of 20
+   renderings ran past 40s at the 8,192 budget).
+5. Decide on public-repo history: frozen single-word answers sit in older
+   Context.md sections and the #62 inventory on GitHub (low severity:
+   dictionary words). Not rewritten.
+6. iCloud: run ~/move-repos-out-of-icloud.sh (conflict copies inside .git
+   broke git fetch twice this session).
