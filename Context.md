@@ -2069,3 +2069,19 @@ scratchpad/site-clone (site) are clean clones with offline installs. The
 site's iCloud checkout was found mid-checkout (empty HumanVerdicts.tsx,
 local main at an old commit) and was restored to origin/main. The fix for
 good is ~/move-repos-out-of-icloud.sh.
+
+### Oct 9: the platform at app.wikitongues.org
+
+DNS for wikitongues.org is Squarespace (the old Google Domains nameservers,
+ns-cloud-e1..e4.googledomains.com); the wikitongues.org WEBSITE is WordPress
+on a separate PHP host (69.175.102.130), not Squarespace; mail is Google
+Workspace. app.wikitongues.org was added to the Vercel project wikitongues-ai
+with the Vercel CLI (the Vercel connector is read-only for that project), and
+Halim added the record A app 76.76.21.21 in Squarespace DNS. Live at 11:06 UTC:
+HTTPS 200, Let's Encrypt certificate (auto-renewed), next-auth's callback on
+https://app.wikitongues.org, public endpoints 200. The old addresses
+(web-three-rho-89.vercel.app, wikitongues-ai-web.vercel.app) keep serving the
+same app; annotators sign in once on the new one.
+Still to do: wikitongues.org/resources/ai -> https://app.wikitongues.org is a
+redirect on the WORDPRESS site (plugin or .htaccess, 302), not in Squarespace;
+it is a 404 today. The marketing site's domain (ai.wikitongues.org) is tabled.
