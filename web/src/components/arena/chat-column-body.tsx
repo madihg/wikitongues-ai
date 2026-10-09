@@ -1,5 +1,24 @@
 import { REASK_SKIPPED_NOTICE } from "@/lib/arena/turn-budget";
 import type { StreamingReply } from "@/lib/arena/chat-stream";
+import { summarizeReferenceReport } from "@/lib/arena/reference-form";
+
+/**
+ * What the second pass cost, as the small print says it: "second pass 4.2s,
+ * 350 tokens". Tokens are in plus out; either number may be missing (a
+ * provider that reports no usage), and then that half is left out rather
+ * than shown as zero. Null when there is nothing to say.
+ */
+export function secondPassCost(rf: {
+  latencyMs: number | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
+}): string | null {
+  const parts: string[] = [];
+  if (rf.latencyMs !== null) parts.push(`${(rf.latencyMs / 1000).toFixed(1)}s`);
+  if (rf.tokensIn !== null && rf.tokensOut !== null)
+    parts.push(`${rf.tokensIn + rf.tokensOut} tokens`);
+  return parts.length > 0 ? `second pass ${parts.join(", ")}` : null;
+}
 
 /**
  * What one chat column SAYS: the repair-round note, the answer, and - when
@@ -65,6 +84,38 @@ export function ChatColumnBody({ reply }: { reply: StreamingReply }) {
         <p className={`text-xs text-danger${reply.text ? " mt-2" : ""}`}>
           {reply.error}
         </p>
+      )}
+
+      {/* The reference form, when the second pass delivered one (rag-v4-5
+          only): the same answer with tone marks on every word and no
+          contraction, for Salem's reading. It is NOT the answer and is never
+          judged, and the label says so. It arrives after the column has
+          closed, so it sits beneath whatever the column already shows, in a
+          quieter style than the answer. The small print is the mechanical
+          report: how much came back toned, what the model left contracted,
+          what it dropped or added. */}
+      {reply.referenceForm && (
+        <div className="mt-3 border-t border-border pt-2">
+          <p className="mb-1 text-[11px] text-text-tertiary">
+            Reference form (second pass, not judged)
+          </p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-text-secondary">
+            {reply.referenceForm.text}
+          </p>
+          {(reply.referenceForm.report ||
+            secondPassCost(reply.referenceForm)) && (
+            <p className="mt-1 text-[11px] text-text-tertiary">
+              {[
+                reply.referenceForm.report
+                  ? summarizeReferenceReport(reply.referenceForm.report)
+                  : null,
+                secondPassCost(reply.referenceForm),
+              ]
+                .filter((part): part is string => part !== null)
+                .join(" · ")}
+            </p>
+          )}
+        </div>
       )}
     </>
   );

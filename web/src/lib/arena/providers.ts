@@ -72,6 +72,17 @@ export interface GenerateArgs {
    */
   goldExamples?: GoldExample[];
   systemPromptOverride?: string;
+  /**
+   * Send systemPromptOverride as the WHOLE system prompt: no
+   * IGALA_FORCING_INSTRUCTION in front, no exemplar instruction, no reference
+   * material after, and no few-shot turns ahead of the caller's messages.
+   * Opt-in and false by default, so every arm that exists
+   * assembles exactly what it assembled before. Set only by a call that is not
+   * answering an Igala question at all and whose instruction the forcing text
+   * would contradict: the reference-form pass (reference-form.ts), which must
+   * never guess a tone, where the forcing text says to try even when unsure.
+   */
+  systemPromptExact?: boolean;
 }
 
 export interface CandidateGeneration {
@@ -277,7 +288,10 @@ export function buildSystemPrompt(
   ragContext?: RagChunk[],
   override?: string,
   goldExampleCount = 0,
+  /** See GenerateArgs.systemPromptExact. Honoured only with an override. */
+  exact = false,
 ): string {
+  if (exact && override !== undefined) return override;
   const custom =
     override ??
     (candidate.useSystemPrompt && candidate.systemPrompt
@@ -341,12 +355,18 @@ export function assembleGenerationRequest(
     ragContext,
     args.systemPromptOverride,
     goldExamples.length,
+    args.systemPromptExact === true,
   );
 
   const messages: { role: "user" | "assistant"; content: string }[] = [];
   // Few-shot exemplars (empty today - see generation-prompt.ts) go first, as
-  // priming turns ahead of any real conversation history.
-  messages.push(...buildFewShotTurns(args.userMessage));
+  // priming turns ahead of any real conversation history. Never on an exact
+  // call: those are Igala question-and-answer demonstrations, and a call that
+  // is not answering an Igala question (the reference-form pass) must see
+  // only what its caller sent.
+  if (!args.systemPromptExact) {
+    messages.push(...buildFewShotTurns(args.userMessage));
+  }
   // Retrieved community gold next, modeled as real prior chat turns. Every
   // provider wired here (Anthropic, OpenAI, Google, OpenAI-compatible,
   // OpenRouter) takes

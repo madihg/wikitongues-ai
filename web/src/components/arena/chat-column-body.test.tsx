@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ChatColumnBody } from "./chat-column-body";
+import { ChatColumnBody, secondPassCost } from "./chat-column-body";
+import { referenceFormReport } from "@/lib/arena/reference-form";
 import {
   initStreamingReplies,
   type StreamingReply,
@@ -117,5 +118,100 @@ describe("the repair round's note", () => {
     const markup = render(column({ text: "Wọla ọdudu", done: true }));
     expect(markup).not.toContain("Rewrote");
     expect(markup).not.toContain("flagged");
+  });
+});
+
+/**
+ * THE REFERENCE FORM BENEATH THE ANSWER (rag-v4-5 only). The second pass's
+ * rendering is shown under its own label, quieter than the answer and never
+ * in the answer's style, with the mechanical report and what the pass cost as
+ * small print. A column with no rendering says nothing about one.
+ */
+describe("the reference form beneath the answer", () => {
+  const report = referenceFormReport("Ma k'ọla wa", "Mà k'ọ́lá wà");
+  const rendered = (over: Record<string, unknown> = {}) => ({
+    text: "Mà k'ọ́lá wà",
+    report,
+    latencyMs: 4200,
+    tokensIn: 300,
+    tokensOut: 50,
+    ...over,
+  });
+
+  it("shows the rendering under its own label, with the answer still in the answer style", () => {
+    const markup = render(
+      column({ text: "Ma k'ọla wa", done: true, referenceForm: rendered() }),
+    );
+    expect(markup).toContain("Reference form (second pass, not judged)");
+    expect(markup).toContain("Mà k&#x27;ọ́lá wà");
+    expect(markup).toMatch(
+      /class="[^"]*text-text-primary[^"]*"[^>]*>Ma k&#x27;ọla wa/,
+    );
+    // The rendering is quieter than the answer, never styled as the answer.
+    expect(markup).toMatch(
+      /class="[^"]*text-text-secondary[^"]*"[^>]*>Mà k&#x27;ọ́lá wà/,
+    );
+  });
+
+  it("prints the toned share, the apostrophes left and what the second pass cost", () => {
+    const markup = render(
+      column({ text: "Ma k'ọla wa", done: true, referenceForm: rendered() }),
+    );
+    expect(markup).toContain("100% of 3 words toned");
+    expect(markup).toContain("1 apostrophe left");
+    expect(markup).toContain("second pass 4.2s, 350 tokens");
+  });
+
+  it("shows the rendering with only the cost when the report did not arrive", () => {
+    const markup = render(
+      column({
+        text: "Ma k'ọla wa",
+        done: true,
+        referenceForm: rendered({ text: "Mà kí ọ́lá wà", report: null }),
+      }),
+    );
+    expect(markup).toContain("Mà kí ọ́lá wà");
+    expect(markup).not.toContain("words toned");
+    expect(markup).toContain("second pass 4.2s");
+  });
+
+  it("shows no small print at all when neither the report nor the cost arrived", () => {
+    const markup = render(
+      column({
+        text: "Ma k'ọla wa",
+        done: true,
+        referenceForm: rendered({
+          report: null,
+          latencyMs: null,
+          tokensIn: null,
+          tokensOut: null,
+        }),
+      }),
+    );
+    expect(markup).toContain("Reference form (second pass, not judged)");
+    expect(markup).not.toContain("second pass ");
+    expect(markup).not.toContain("words toned");
+  });
+
+  it("says nothing at all on a column with no reference form", () => {
+    const markup = render(column({ text: "Ma k'ọla wa", done: true }));
+    expect(markup).not.toContain("Reference form");
+  });
+});
+
+describe("secondPassCost", () => {
+  it("says seconds and tokens in plus out, leaving out what is missing, never inventing a zero", () => {
+    expect(
+      secondPassCost({ latencyMs: 4200, tokensIn: 300, tokensOut: 50 }),
+    ).toBe("second pass 4.2s, 350 tokens");
+    expect(
+      secondPassCost({ latencyMs: 4200, tokensIn: null, tokensOut: 50 }),
+    ).toBe("second pass 4.2s");
+    expect(
+      secondPassCost({ latencyMs: null, tokensIn: 300, tokensOut: 50 }),
+    ).toBe("second pass 350 tokens");
+    expect(
+      secondPassCost({ latencyMs: null, tokensIn: null, tokensOut: null }),
+    ).toBeNull();
   });
 });

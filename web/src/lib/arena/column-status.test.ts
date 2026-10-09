@@ -7,6 +7,7 @@ import {
   initColumnPhases,
   isColumnActive,
   setPendingPhases,
+  settleRendering,
   shouldShowElapsed,
   type ColumnPhase,
 } from "./column-status";
@@ -162,6 +163,7 @@ describe("column phase machine", () => {
       "writing",
       "checking",
       "revising",
+      "rendering",
       "done",
       "failed",
     ];
@@ -172,6 +174,87 @@ describe("column phase machine", () => {
       "done",
       "failed",
     ]);
+  });
+});
+
+/**
+ * THE REFERENCE-FORM PASS (rag-v4-5): the one phase that follows done. The
+ * answer is served; the line says the rendering beneath it is still coming,
+ * and it must end on done, never failed, whether the rendering lands or not.
+ */
+describe("the rendering phase", () => {
+  const reference: ChatStreamEvent = {
+    type: "reference",
+    slug: "a",
+    text: "x",
+    report: null,
+    latencyMs: null,
+    tokensIn: null,
+    tokensOut: null,
+  };
+  const doneA = () =>
+    applyStatusEvents(initColumnPhases(["a", "b"]), [
+      { type: "reply", reply: reply("a") },
+      { type: "stage", slug: "b", stage: "writing" },
+    ]);
+
+  it("moves a done column to rendering, reads as live, and labels it", () => {
+    const after = applyStatusEvents(doneA(), [
+      { type: "stage", slug: "a", stage: "rendering" },
+    ]);
+    expect(after.a).toBe("rendering");
+    expect(isColumnActive("rendering")).toBe(true);
+    expect(COLUMN_PHASE_LABELS.rendering).toBe("Rendering reference form");
+  });
+
+  it("returns to done when the reference form lands", () => {
+    const after = applyStatusEvents(doneA(), [
+      { type: "stage", slug: "a", stage: "rendering" },
+      reference,
+    ]);
+    expect(after.a).toBe("done");
+  });
+
+  it("never follows a failed column, and never interrupts a column still writing", () => {
+    const failed = applyStatusEvents(initColumnPhases(["a"]), [
+      { type: "reply", reply: reply("a", "provider down") },
+      { type: "stage", slug: "a", stage: "rendering" },
+    ]);
+    expect(failed.a).toBe("failed");
+    const writing = applyStatusEvents(doneA(), [
+      { type: "stage", slug: "b", stage: "rendering" },
+    ]);
+    expect(writing.b).toBe("writing");
+  });
+
+  it("goes back to done, not failed, when the stream ends without a rendering", () => {
+    const rendering = applyStatusEvents(doneA(), [
+      { type: "stage", slug: "a", stage: "rendering" },
+    ]);
+    // What the client does at the end of a stream.
+    const ended = setPendingPhases(settleRendering(rendering), "failed");
+    expect(ended).toEqual({ a: "done", b: "failed" });
+  });
+
+  it("returns to done on the empty-text 'no rendering' signal, while the other columns keep working", () => {
+    const after = applyStatusEvents(doneA(), [
+      { type: "stage", slug: "a", stage: "rendering" },
+      {
+        type: "reference",
+        slug: "a",
+        text: "",
+        report: null,
+        latencyMs: null,
+        tokensIn: null,
+        tokensOut: null,
+      },
+    ]);
+    expect(after).toEqual({ a: "done", b: "writing" });
+  });
+
+  it("returns the same object when no column is rendering", () => {
+    const phases = doneA();
+    expect(settleRendering(phases)).toBe(phases);
   });
 });
 

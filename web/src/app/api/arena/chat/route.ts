@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
-import { streamForCandidate, type RagChunk } from "@/lib/arena/providers";
+import {
+  generateForCandidate,
+  streamForCandidate,
+  type RagChunk,
+} from "@/lib/arena/providers";
 import {
   describeViolations,
   streamWithRepairRound,
@@ -13,6 +17,11 @@ import {
   servesGrammarBlock,
   type V4FamilyVersionLabel,
 } from "@/lib/arena/frozen-exam";
+import {
+  referenceFormRefusal,
+  renderReferenceForm,
+  rendersReferenceForm,
+} from "@/lib/arena/reference-form";
 import {
   buildGrammarBlock,
   buildGrammarBlocksByRowSet,
@@ -48,6 +57,7 @@ import { IGALA_SYSTEM_V2, buildUserTurnV2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
 import {
   deadlineAlarm,
+  hasBudgetForReference,
   turnDeadlineFrom,
   TURN_CUTOFF_NOTICE,
 } from "@/lib/arena/turn-budget";
@@ -78,6 +88,16 @@ import {
  * 2. consentTraining is honoured on the exemplar pool, because using a
  *    speaker's answer as an in-context demonstration is exactly the use that
  *    flag governs.
+ *
+ * THE REFERENCE FORM, HERE AND NOWHERE ELSE
+ * -----------------------------------------
+ * A rag-v4-5 column gets a second model pass once its answer has closed: the
+ * same text rendered with tone marks on every word and no contraction
+ * (reference-form.ts), the form Salem Ejeba and Lydia Wiernik asked to read
+ * beside the community form. Chat is the only path that runs it. The fill,
+ * the exam and the queue never see it, so no stored or judged answer changes
+ * and no benchmark number moves (FR-10 of the Oct 8 PRD). A failure of that
+ * pass costs the column its reference form and nothing else.
  */
 
 /**
@@ -506,6 +526,84 @@ export async function POST(req: Request) {
         send({ type: "reply", reply });
       };
 
+      // THE REFERENCE FORM, AFTER THE COLUMN HAS CLOSED (rag-v4-5 only).
+      //
+      // The second pass runs once the `reply` event is out, so the answer the
+      // reviewer judges is complete and on the wire before the rendering is
+      // even requested, and nothing the rendering does can reach it. It is
+      // delivered as its own additive `reference` event: an old client drops
+      // the line and sees exactly the column it saw before. A `rendering`
+      // stage goes out first, so the status line says what the still-open
+      // stream is for (the client has already released its composer: see
+      // allRepliesClosed). It races the same turn deadline as everything
+      // else; if the deadline wins, the stream closes on the column's answer
+      // with no cutoff notice, because the column already carries everything
+      // it was asked for. A provider failure is logged and the column simply
+      // has no reference form; so does an empty or refused rendering.
+      //
+      // Whatever the outcome, the column hears that the pass is over: a pass
+      // that delivers nothing sends the empty-text `reference` signal, so its
+      // status line leaves "rendering" now instead of when the slowest column
+      // closes the stream. (At the deadline the stream is closing anyway and
+      // the signal may not get out; the client settles rendering columns at
+      // stream end for exactly that case.)
+      const renderReference = async (column: Column, communityText: string) => {
+        send({
+          type: "stage",
+          slug: column.candidate.slug,
+          stage: "rendering",
+        });
+        const alarm = deadlineAlarm(deadlineAt);
+        let delivered = false;
+        try {
+          const rendered = await Promise.race([
+            renderReferenceForm(
+              column.candidate,
+              communityText,
+              generateForCandidate,
+            ),
+            alarm.reached,
+          ]);
+          if (rendered === "deadline") return;
+          // Empty, pinned at its cap, or missing a quarter of the answer: a
+          // partial rendering beside a full answer is worse than none.
+          const refusal = referenceFormRefusal(rendered);
+          if (refusal !== null) {
+            console.warn(
+              `chat: reference form not shown for ${column.candidate.slug}: ${refusal}`,
+            );
+            return;
+          }
+          send({
+            type: "reference",
+            slug: column.candidate.slug,
+            text: rendered.text,
+            report: rendered.report,
+            latencyMs: rendered.latencyMs,
+            tokensIn: rendered.tokensIn,
+            tokensOut: rendered.tokensOut,
+          });
+          delivered = true;
+        } catch (e) {
+          console.warn(
+            `chat: reference form skipped for ${column.candidate.slug}: ${(e as Error).message?.slice(0, 200)}`,
+          );
+        } finally {
+          alarm.cancel();
+          if (!delivered) {
+            send({
+              type: "reference",
+              slug: column.candidate.slug,
+              text: "",
+              report: null,
+              latencyMs: null,
+              tokensIn: null,
+              tokensOut: null,
+            });
+          }
+        }
+      };
+
       const runColumn = async (column: Column) => {
         const candidate = column.candidate;
         // Advisory progress for this column. A streaming column narrates
@@ -715,7 +813,25 @@ export async function POST(req: Request) {
             error: (e as Error).message.slice(0, 300),
           };
         }
+        // Read BEFORE settle: a column the deadline already closed (with its
+        // partial text and the cutoff notice) is settled by the time a slow
+        // provider returns here, settle() is then a no-op, and `reply` holds
+        // an answer the reviewer never received. Rendering that would pay for
+        // a second call to annotate text nobody saw.
+        const served = !column.settled;
         settle(column, reply);
+        // Only an answer this column actually served is rendered, only with
+        // enough of the turn left for the pass to land (a rendering that
+        // cannot arrive is still paid for), and never a failed or empty one.
+        if (
+          served &&
+          rendersReferenceForm(candidate.versionLabel) &&
+          reply.error === null &&
+          reply.text.trim().length > 0 &&
+          hasBudgetForReference(deadlineAt)
+        ) {
+          await renderReference(column, reply.text);
+        }
       };
 
       // THE DEADLINE, ENFORCED.

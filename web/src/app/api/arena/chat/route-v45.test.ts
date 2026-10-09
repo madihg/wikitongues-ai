@@ -28,7 +28,21 @@ const { mockPrisma, mockRequireResearcher, mockStreamForCandidate, mockBuildRetr
 
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/api-auth", () => ({ requireResearcher: mockRequireResearcher }));
-vi.mock("@/lib/arena/providers", () => ({ streamForCandidate: mockStreamForCandidate }));
+// generateForCandidate is the buffered call the reference-form second pass
+// makes after a rag-v4-5 column's reply (reference-form.ts). Mocked to echo
+// the served text, so these tests run a clean pass instead of a failing one;
+// what they pin is the grammar composition, which the pass never touches.
+vi.mock("@/lib/arena/providers", () => ({
+  streamForCandidate: mockStreamForCandidate,
+  generateForCandidate: async () => ({
+    text: "ugbo daa",
+    modelId: "gpt-x",
+    latencyMs: 1,
+    tokensIn: 1,
+    tokensOut: 1,
+    ragContextIds: [],
+  }),
+}));
 vi.mock("@/lib/arena/retrieval-v2", async (orig) => ({
   ...(await orig<typeof import("@/lib/arena/retrieval-v2")>()),
   buildRetrievalV2: mockBuildRetrievalV2,

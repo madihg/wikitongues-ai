@@ -18,7 +18,10 @@ import {
 import { ModelPicker, type ScoresState } from "./model-picker";
 import {
   ChatStreamParser,
+  allRepliesClosed,
   applyChatEvents,
+  closedSlugs,
+  createComposerLock,
   failPendingReplies,
   initStreamingReplies,
   type ChatStreamEvent,
@@ -27,7 +30,9 @@ import {
 import {
   applyStatusEvents,
   initColumnPhases,
+  isColumnActive,
   setPendingPhases,
+  settleRendering,
   type ColumnPhases,
 } from "@/lib/arena/column-status";
 import { ColumnStatusLine } from "./column-status-line";
@@ -154,17 +159,34 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
   // resolving; the effect below fires it the moment a model is known.
   const [queued, setQueued] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
+  // Which request owns `busy` (see createComposerLock in chat-stream.ts): the
+  // composer is released when the last reply of an exchange lands, while that
+  // exchange's stream may still be open for a reference form, so a second
+  // question can go out in that window and the first request's late
+  // `finally` must not unlock the composer under it. Lazy state, so one lock
+  // lives for the component's lifetime.
+  const [composerLock] = useState(createComposerLock);
+
+  // Any column still working, in any exchange: a rag-v4-5 column rendering
+  // its reference form keeps working after the composer is free again.
+  const anyColumnActive = useMemo(
+    () =>
+      exchanges.some((ex) => Object.values(ex.phases).some(isColumnActive)),
+    [exchanges],
+  );
 
   // The clock behind every column's elapsed counter. It only runs while a
-  // request is in flight, so an idle page does no work; the counters
-  // themselves appear per column and only past ELAPSED_VISIBLE_AFTER_MS.
+  // request is in flight or a column is still working, so an idle page does
+  // no work; the counters themselves appear per column and only past
+  // ELAPSED_VISIBLE_AFTER_MS.
+  const ticking = busy || anyColumnActive;
   const [nowMs, setNowMs] = useState(0);
   useEffect(() => {
-    if (!busy) return;
+    if (!ticking) return;
     setNowMs(Date.now());
     const id = setInterval(() => setNowMs(Date.now()), CLOCK_TICK_MS);
     return () => clearInterval(id);
-  }, [busy]);
+  }, [ticking]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -214,17 +236,23 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
     setDraft("");
     setBusy(true);
     setNowMs(startedAt);
+    const token = composerLock.acquire();
+    const release = () => {
+      if (composerLock.release(token)) setBusy(false);
+    };
 
     // Patch this exchange in place; every stream event funnels through here so
     // React re-renders as tokens - and as status transitions - arrive.
     const patch = (fn: (ex: Exchange) => Exchange) =>
       setExchanges((prev) => prev.map((ex, i) => (i === index ? fn(ex) : ex)));
 
+    // A column still rendering its reference form when the stream ends has a
+    // served answer: it goes back to done, never to failed.
     const fail = (message: string) =>
       patch((ex) => ({
         ...ex,
         replies: failPendingReplies(ex.replies, message),
-        phases: setPendingPhases(ex.phases, "failed"),
+        phases: setPendingPhases(settleRendering(ex.phases), "failed"),
       }));
 
     try {
@@ -272,6 +300,7 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         const parser = new ChatStreamParser();
+        let closed: Set<string> = new Set();
         const apply = (events: ChatStreamEvent[]) => {
           if (events.length === 0) return;
           patch((ex) => ({
@@ -279,6 +308,10 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
             replies: applyChatEvents(ex.replies, events),
             phases: applyStatusEvents(ex.phases, events),
           }));
+          // Every answer is in: the reviewer may ask again, even though a
+          // reference form may still be coming down this stream.
+          closed = closedSlugs(closed, events);
+          if (allRepliesClosed(selected, closed)) release();
         };
         for (;;) {
           const { done, value } = await reader.read();
@@ -296,13 +329,14 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
           const replies = (
             data.replies as Omit<
               StreamingReply,
-              "done" | "revisedFor" | "revisionApplied"
+              "done" | "revisedFor" | "revisionApplied" | "referenceForm"
             >[]
           ).map((r) => ({
             ...r,
             done: true,
             revisedFor: null,
             revisionApplied: true,
+            referenceForm: null,
           }));
           return {
             ...ex,
@@ -319,9 +353,18 @@ export function ModelChat({ candidates }: { candidates: ChatCandidate[] }) {
       // the failure.
       fail((e as Error).message);
     } finally {
-      setBusy(false);
+      release();
     }
-  }, [draft, busy, selected, exchanges, candidates, usedDefault, scoresState]);
+  }, [
+    draft,
+    busy,
+    selected,
+    exchanges,
+    candidates,
+    usedDefault,
+    scoresState,
+    composerLock,
+  ]);
 
   // A question asked before the live scores landed starts the moment the
   // default selection resolves. Guarded on `queued` so it fires exactly once.

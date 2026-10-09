@@ -36,7 +36,28 @@
  * `reply` event, which carries the repaired text and replaces the column
  * wholesale. Old clients see a flicker of doubled text; they never end up with
  * the wrong transcript.
+ *
+ * THE `reference` EVENT
+ * ---------------------
+ * A rag-v4-5 column gets a SECOND model pass after its answer has closed: the
+ * same text rendered with tone marks on every word and no contraction
+ * (reference-form.ts, for Salem's reading). It arrives as its own event
+ * AFTER the column's `reply`, so the answer the reviewer judges is complete
+ * and on the wire before the rendering is even requested, and the rendering
+ * can never alter it. Additive like `revision`: an old client drops the line
+ * and sees exactly the column it saw before; the `reply` contract is
+ * untouched and carries no reference field.
+ *
+ * Because the second pass runs after the reply, the stream stays open after
+ * every column has closed. The client therefore releases its composer when
+ * the last `reply` lands (allRepliesClosed), not when the stream ends, and
+ * the `rendering` stage tells the status line what the open stream is for.
  */
+
+import {
+  isReferenceFormReport,
+  type ReferenceFormReport,
+} from "./reference-form";
 
 /** One model's finished column - the same shape the buffered route returned. */
 export interface ChatReply {
@@ -64,8 +85,17 @@ export interface ChatReply {
  * this one builds it BEFORE the response head (so the durations can ride in the
  * Server-Timing header, see server-timing.ts), and the client derives the same
  * phase from "request sent, nothing back yet" - the identical window.
+ *
+ * `rendering` is the one stage sent AFTER a column's reply: a rag-v4-5 column
+ * whose reference-form second pass has just started. The answer is finished;
+ * the line says what is still coming beneath it.
  */
-export type ColumnStage = "retrieving" | "writing" | "checking" | "revising";
+export type ColumnStage =
+  | "retrieving"
+  | "writing"
+  | "checking"
+  | "revising"
+  | "rendering";
 
 export type ChatStreamEvent =
   /** A token (or token batch) from one model, append to its column. */
@@ -92,7 +122,27 @@ export type ChatStreamEvent =
    */
   | { type: "stage"; slug: string; stage: ColumnStage }
   /** One model finished (or failed - then reply.error is set). */
-  | { type: "reply"; reply: ChatReply };
+  | { type: "reply"; reply: ChatReply }
+  /**
+   * The column's answer rendered in the reference form by a second pass
+   * (rag-v4-5 only), with the mechanical report on the rendering and what the
+   * pass cost. Sent after the column's `reply`. An EMPTY `text` is the
+   * terminal signal of a pass that ended without a rendering (it failed,
+   * came back empty, was refused by the guard, or ran out of time): the
+   * column gets no reference form, and its rendering phase ends now rather
+   * than when the slowest column closes the stream. `report` and the three
+   * numbers are null then, and whenever a line arrived without readable ones.
+   */
+  | ({ type: "reference"; slug: string } & ReferenceFormDelivery);
+
+/** What a `reference` event carries for its column. */
+export interface ReferenceFormDelivery {
+  text: string;
+  report: ReferenceFormReport | null;
+  latencyMs: number | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
+}
 
 /** The stage values a wire line may legally carry. */
 const COLUMN_STAGES: readonly string[] = [
@@ -100,6 +150,7 @@ const COLUMN_STAGES: readonly string[] = [
   "writing",
   "checking",
   "revising",
+  "rendering",
 ];
 
 /** One event as a wire line, newline-terminated. */
@@ -153,6 +204,14 @@ export interface StreamingReply extends ChatReply {
    * needs no special reading.
    */
   revisionApplied: boolean;
+  /**
+   * The answer rendered in the reference form (tone on every word, no
+   * contraction) once a `reference` event has landed for this column; null
+   * until then, and forever on every column whose arm does not run the second
+   * pass. It is NOT the answer: it is shown beneath it, labelled, and nothing
+   * that judges or scores ever reads it.
+   */
+  referenceForm: ReferenceFormDelivery | null;
 }
 
 /** Fresh columns for one exchange, in the order the models were selected. */
@@ -172,6 +231,7 @@ export function initStreamingReplies(
     done: false,
     revisedFor: null,
     revisionApplied: true,
+    referenceForm: null,
   }));
 }
 
@@ -212,6 +272,21 @@ export function applyChatEvents(
         r.revisedFor = ev.reasons;
         r.revisionApplied = applied;
       }
+    } else if (ev.type === "reference") {
+      // Lands AFTER the closing reply by design (the second pass starts once
+      // the answer is served), so `done` is no bar here, unlike for a delta.
+      // An empty text is the "no rendering" terminal signal: nothing to show,
+      // so the column is left exactly as it is (column-status ends its
+      // rendering phase on the same event).
+      const r = bySlug.get(ev.slug);
+      if (r && ev.text.length > 0)
+        r.referenceForm = {
+          text: ev.text,
+          report: ev.report,
+          latencyMs: ev.latencyMs,
+          tokensIn: ev.tokensIn,
+          tokensOut: ev.tokensOut,
+        };
     } else if (ev.type === "reply") {
       const r = bySlug.get(ev.reply.slug);
       if (r)
@@ -220,6 +295,7 @@ export function applyChatEvents(
           done: true,
           revisedFor: r.revisedFor,
           revisionApplied: r.revisionApplied,
+          referenceForm: r.referenceForm,
         });
     }
     // Anything else - a `stage` marker, or an event type a newer server sends
@@ -253,6 +329,85 @@ export function failPendingReplies(
   );
 }
 
+/**
+ * Which request owns the chat composer.
+ *
+ * The composer is released when the last reply of an exchange lands, while
+ * that exchange's stream may still be open for a reference form. A second
+ * question can go out in that window, and the FIRST request's late release
+ * (its `finally`) must not unlock the composer under the second. So each
+ * request takes a token, and only the newest token's first release counts.
+ * Pure and framework-free, so the interleavings are unit-tested here and the
+ * component only maps `release() === true` to `setBusy(false)`.
+ */
+export interface ComposerLock {
+  /** Take the composer for a new request; returns that request's token. */
+  acquire(): number;
+  /**
+   * Give it back. True only for the current holder's first release: the
+   * caller should unlock the composer. False for an older request's late
+   * release and for a second release of the same token, both of which must
+   * leave the composer as it is.
+   */
+  release(token: number): boolean;
+  /** Whether some request holds the composer now. */
+  held(): boolean;
+}
+
+export function createComposerLock(): ComposerLock {
+  let current = 0;
+  let isHeld = false;
+  return {
+    acquire() {
+      current += 1;
+      isHeld = true;
+      return current;
+    },
+    release(token) {
+      if (token !== current || !isHeld) return false;
+      isHeld = false;
+      return true;
+    },
+    held() {
+      return isHeld;
+    },
+  };
+}
+
+/**
+ * The slugs whose closing `reply` has landed, after folding `events` into
+ * `prev`. Pure, so the client can keep it beside its own fold.
+ */
+export function closedSlugs(
+  prev: ReadonlySet<string>,
+  events: ChatStreamEvent[],
+): Set<string> {
+  const next = new Set(prev);
+  for (const ev of events) {
+    if (ev.type === "reply" && typeof ev.reply?.slug === "string")
+      next.add(ev.reply.slug);
+  }
+  return next;
+}
+
+/**
+ * True once every column of the exchange has its closing `reply`. This, not
+ * the end of the stream, is when the reviewer may ask again: a rag-v4-5
+ * column's reference-form pass keeps the stream open after its answer is
+ * finished, and holding the composer for a rendering nobody is judging would
+ * lock the page for no reason.
+ */
+export function allRepliesClosed(
+  slugs: readonly string[],
+  closed: ReadonlySet<string>,
+): boolean {
+  return slugs.length > 0 && slugs.every((s) => closed.has(s));
+}
+
+function finiteOrNull(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
 function parseLine(line: string): ChatStreamEvent[] {
   const trimmed = line.trim();
   if (!trimmed) return [];
@@ -282,6 +437,25 @@ function parseLine(line: string): ChatStreamEvent[] {
       COLUMN_STAGES.includes(parsed.stage)
     )
       return [parsed];
+    // A reference form with an unreadable report or cost is still a reference
+    // form: the text is what the reader wants, the numbers are the small
+    // print, and a number that is not a finite number is shown as none.
+    if (
+      parsed.type === "reference" &&
+      typeof parsed.slug === "string" &&
+      typeof parsed.text === "string"
+    )
+      return [
+        {
+          type: "reference",
+          slug: parsed.slug,
+          text: parsed.text,
+          report: isReferenceFormReport(parsed.report) ? parsed.report : null,
+          latencyMs: finiteOrNull(parsed.latencyMs),
+          tokensIn: finiteOrNull(parsed.tokensIn),
+          tokensOut: finiteOrNull(parsed.tokensOut),
+        },
+      ];
     // An unrecognised type is DROPPED, not thrown on: the protocol is additive,
     // and a client one deploy behind the server must degrade to "I saw fewer
     // events", never to a dead stream.
