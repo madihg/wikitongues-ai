@@ -114,6 +114,10 @@ const CHANGELOG = [
     date: "Oct 8, 2026",
     text: "Version 4.4 joined the blind test: from today speakers judge it against the plain model and against the v3 package, on the questions still in their queues, so the next round measures one version against the next directly. The human verdict above opens a third round at that moment, and now draws every pair the speakers have judged, computing its words (ahead, level, behind) from the counts. Three corrections: the scoreboard had labelled versions 4.2 to 4.4 as retrieval v1 since they were registered; the fill script would have written a pooled 4.x version's answers with the wrong prompt; and the repair round's checker, which re-asks the model when an answer breaks a writing rule, had been misreading quoted questions (a quote mark stuck to a name, and a request for English switched the letters check off for the whole answer). All three are fixed and tested, and every stored answer the old checker had wrongly re-asked was replayed through the new one.",
   },
+  {
+    date: "Oct 9, 2026",
+    text: "The speakers' queues had run dry, so 108 new questions went in, built from what the speakers have told us: every judgment, every word they corrected, their own answers, and Salem and Lydia's write-up on Igala grammar. Each question aims at one thing the model still gets wrong (the linker ki, set phrases such as good night, number agreement, money, loan words, one form of each word in an answer), with control questions where the rule must not fire. Version 4.5 sat the frozen exam: 122.7 against 105.3 for version 4.4, but 94.8 against 94.7 once tone marks are set aside, so the gain is that it now leaves tone marks off, as the speakers do; its words are no better than version 4.4's on this exam. It is not in the blind test. On the chat page, a version 4.5 answer can now show a second rendering under it, every word toned and written out in full, as Salem and Lydia asked; that rendering is not stored and not scored.",
+  },
 ];
 
 export default async function HowItWorksPage() {
