@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { ALLOWED_PAIRINGS, assignedPair } from "@/lib/pairing";
 import { V45_POOL_FLIP_AT } from "@/lib/arena/era";
+import { QUEUE_OUTPUT_ORDER } from "@/lib/queue-input";
+import {
+  pairKey,
+  servedSlugs,
+  tallyDraws,
+  whitelistProblemsFor,
+} from "@/lib/pool-enable";
 
 /**
  * Put the rag-v4-5 arm into the pairing pool, against v4.4 (the fourteen
@@ -17,28 +23,62 @@ import { V45_POOL_FLIP_AT } from "@/lib/arena/era";
  *   2. Train outputs exist: `train-queue-fill.ts generate
  *      gemini-3-1-pro-rag-v4-5 --provenance claude_authored_v45_2026_10_08`
  *      (then the Sep 13 batch as the Gemini daily quota allows).
- *   3. This script, at or after V45_POOL_FLIP_AT (it refuses earlier, so no
- *      v4.5 pair can be judged inside round-3): preconditions, a read-only
- *      dry run proving assignedPair draws both v4.5 pairs against real
- *      coverage, THEN the flag.
- *   4. scripts/check-queue-servable.ts.
+ *   3. This script with --check, any time: every precondition and the dry
+ *      run, read-only, no time guard, no flag.
+ *   4. This script, at or after V45_POOL_FLIP_AT (it refuses earlier, so no
+ *      v4.5 pair can be judged inside round-3): the same preconditions and
+ *      dry run, THEN the flag.
+ *   5. scripts/check-queue-servable.ts.
+ *
+ * THE DRY RUN MIRRORS /api/annotations/next: each train prompt's slug list
+ * is its outputs in QUEUE_OUTPUT_ORDER (the order src/lib/queue-input.ts
+ * serves), filtered to every arm pooled now plus v4.5; assignedPair is
+ * called with the public prompt code (Prompt.promptId), for every account
+ * that annotates. It prints the share of draws per pair.
  *
  * Copied from scripts/enable-v44-pool.ts. Idempotent.
  *
- * Run:  npx tsx --env-file=.env.local scripts/enable-v45-pool.ts
+ * Run:  npx tsx --env-file=.env.local scripts/enable-v45-pool.ts --check
+ *       npx tsx --env-file=.env.local scripts/enable-v45-pool.ts
  */
 
 const V45_SLUG = "gemini-3-1-pro-rag-v4-5";
 const V44_SLUG = "gemini-3-1-pro-rag-v4-4";
 const BARE_SLUG = "gemini-3-1-pro";
+/** Exactly these v4.5 pairs, no more, no fewer (sorted keys). */
+const EXPECTED_V45_PAIRS = [
+  pairKey(V44_SLUG, V45_SLUG),
+  pairKey(BARE_SLUG, V45_SLUG),
+];
+
+const CHECK = process.argv.includes("--check");
+
+function pct(n: number, total: number): string {
+  return total > 0 ? `${((100 * n) / total).toFixed(1)}%` : "-";
+}
+
+function printShares(
+  title: string,
+  { byPair, total }: { byPair: Map<string, number>; total: number },
+) {
+  console.log(`${title}: ${total} draw(s)`);
+  for (const [k, n] of [...byPair.entries()].sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${pct(n, total).padStart(6)}  ${String(n).padStart(5)}  ${k}`);
+  }
+}
 
 async function main() {
-  // ── precondition: never before the round boundary ───────────────────────
-  if (Date.now() < Date.parse(V45_POOL_FLIP_AT)) {
+  if (CHECK) {
+    console.log(
+      "--check: read-only. The time guard and the flag are skipped; every precondition and the dry run run.",
+    );
+  } else if (Date.now() < Date.parse(V45_POOL_FLIP_AT)) {
+    // ── precondition: never before the round boundary ─────────────────────
     throw new Error(
       `it is before V45_POOL_FLIP_AT (${V45_POOL_FLIP_AT}): a v4.5 pair judged now would land in round-3. No flags were changed.`,
     );
   }
+
   const [v45, v44, bare] = await Promise.all([
     prisma.candidateModel.findUnique({ where: { slug: V45_SLUG } }),
     prisma.candidateModel.findUnique({ where: { slug: V44_SLUG } }),
@@ -47,33 +87,29 @@ async function main() {
   if (!v45) throw new Error(`${V45_SLUG} not registered`);
   if (!v44) throw new Error(`${V44_SLUG} not registered`);
   if (!bare) throw new Error(`${BARE_SLUG} not registered`);
-  if (!v44.inPairingPool || !bare.inPairingPool) {
+  if (v45.archived) throw new Error(`${V45_SLUG} is archived`);
+  if (!v44.inPairingPool || v44.archived || !bare.inPairingPool || bare.archived) {
     throw new Error(
-      `${V44_SLUG} and ${BARE_SLUG} must already be pooled (the pairs v4.5 joins are against them)`,
+      `${V44_SLUG} and ${BARE_SLUG} must already be pooled and unarchived (the pairs v4.5 joins are against them)`,
     );
   }
 
-  // ── precondition: the whitelist names both v4.5 pairs ────────────────────
-  const relevantSlugs = [V45_SLUG, V44_SLUG, BARE_SLUG];
-  const expected = ALLOWED_PAIRINGS.filter(([a, b]) =>
-    a === V45_SLUG || b === V45_SLUG
-      ? relevantSlugs.includes(a) && relevantSlugs.includes(b)
-      : false,
-  ).map((p) => [...p].sort().join(" | "));
-  if (expected.length !== 2) {
+  // ── precondition: the whitelist names exactly the two v4.5 pairs ─────────
+  const problems = whitelistProblemsFor(V45_SLUG, EXPECTED_V45_PAIRS);
+  if (problems.length > 0) {
     throw new Error(
-      `ALLOWED_PAIRINGS names ${expected.length} v4.5 pairing(s), expected 2 ([v4-5, v4-4] and [v4-5, bare]) - deploy src/lib/pairing.ts first`,
+      `ALLOWED_PAIRINGS must name exactly ${EXPECTED_V45_PAIRS.join(" and ")} for v4.5: ${problems.join("; ")}. No flags were changed.`,
     );
   }
+  console.log(`whitelist: exactly ${EXPECTED_V45_PAIRS.join(", ")}`);
 
   // ── precondition: v4.5's train outputs must already exist ────────────────
-  const v45TrainCount = await prisma.modelOutput.count({
-    where: {
-      candidateModelId: v45.id,
-      isDemo: false,
-      prompt: { isHoldout: false },
-    },
-  });
+  const v45TrainWhere = {
+    candidateModelId: v45.id,
+    isDemo: false,
+    prompt: { isHoldout: false },
+  };
+  const v45TrainCount = await prisma.modelOutput.count({ where: v45TrainWhere });
   console.log(`${V45_SLUG} train outputs: ${v45TrainCount}`);
   if (v45TrainCount === 0) {
     throw new Error(
@@ -81,56 +117,81 @@ async function main() {
     );
   }
 
-  // ── dry run FIRST, flag flipped only if it passes ────────────────────────
-  const relevantRows = await prisma.candidateModel.findMany({
-    where: { slug: { in: relevantSlugs }, archived: false },
-    select: { id: true, slug: true },
+  // ── precondition: at most one non-demo v4.5 output per train prompt ──────
+  // A second one doubles v4.5 in that prompt's slug list, so assignedPair
+  // could draw it twice as often there, or pair it with itself if the
+  // whitelist ever allowed that.
+  const perPrompt = await prisma.modelOutput.groupBy({
+    by: ["promptId"],
+    where: v45TrainWhere,
+    _count: { _all: true },
   });
-  const outputs = await prisma.modelOutput.findMany({
-    where: {
-      candidateModelId: { in: relevantRows.map((r) => r.id) },
-      isDemo: false,
-      prompt: { isHoldout: false },
-    },
-    select: { promptId: true, candidateModel: { select: { slug: true } } },
-  });
-  const bySlugByPrompt = new Map<string, Set<string>>();
-  for (const o of outputs) {
-    const slug = o.candidateModel!.slug;
-    if (!bySlugByPrompt.has(slug)) bySlugByPrompt.set(slug, new Set());
-    bySlugByPrompt.get(slug)!.add(o.promptId);
+  const doubled = perPrompt.filter((g) => g._count._all > 1);
+  if (doubled.length > 0) {
+    const codes = await prisma.prompt.findMany({
+      where: { id: { in: doubled.slice(0, 10).map((g) => g.promptId) } },
+      select: { promptId: true },
+    });
+    throw new Error(
+      `${doubled.length} train prompt(s) hold more than one non-demo ${V45_SLUG} output (e.g. ${codes.map((c) => c.promptId).join(", ")}). Remove the extras first. No flags were changed.`,
+    );
   }
-  const v45Prompts = bySlugByPrompt.get(V45_SLUG) ?? new Set<string>();
-  const v44Prompts = bySlugByPrompt.get(V44_SLUG) ?? new Set<string>();
-  const barePrompts = bySlugByPrompt.get(BARE_SLUG) ?? new Set<string>();
-  const withV44 = [...v45Prompts].filter((p) => v44Prompts.has(p));
-  const withBare = [...v45Prompts].filter((p) => barePrompts.has(p));
   console.log(
-    `prompts eligible for [v4.5, v4.4]: ${withV44.length}; [v4.5, bare]: ${withBare.length} ` +
-      `(coverage: v4.5=${v45Prompts.size}, v4.4=${v44Prompts.size}, bare=${barePrompts.size} train prompts; read-only)`,
+    `one non-demo ${V45_SLUG} output per train prompt: OK (${perPrompt.length} prompt(s))`,
   );
 
-  const seenPairs = new Set<string>();
-  const sampleAnnotators = Array.from(
-    { length: 12 },
-    (_, i) => `dryrun-ann-${i}`,
-  );
-  const slugsFor = (promptId: string): string[] =>
-    relevantSlugs.filter((s) => bySlugByPrompt.get(s)?.has(promptId));
-  for (const promptId of new Set([...withV44, ...withBare])) {
-    const slugs = slugsFor(promptId);
-    if (slugs.length < 2) continue;
-    for (const annotatorId of sampleAnnotators) {
-      const pair = assignedPair(annotatorId, promptId, slugs.length, slugs);
-      if (!pair) continue;
-      const [i, j] = pair;
-      seenPairs.add([slugs[i], slugs[j]].sort().join(" | "));
-    }
-  }
+  // ── dry run FIRST, flag flipped only if it passes ────────────────────────
+  const pooledNow = await prisma.candidateModel.findMany({
+    where: { inPairingPool: true, archived: false },
+    select: { slug: true },
+    orderBy: { slug: "asc" },
+  });
+  const afterPool = new Set([...pooledNow.map((r) => r.slug), V45_SLUG]);
+  console.log(`pool now: ${pooledNow.map((r) => r.slug).join(", ")}`);
+  console.log(`pool after the flag: ${[...afterPool].sort().join(", ")}`);
+
+  const prompts = await prisma.prompt.findMany({
+    where: { isHoldout: false, modelOutputs: { some: {} } },
+    select: {
+      promptId: true,
+      modelOutputs: {
+        orderBy: QUEUE_OUTPUT_ORDER,
+        select: { candidateModel: { select: { slug: true } } },
+      },
+    },
+  });
+  const slugLists = prompts.map((p) => ({
+    code: p.promptId,
+    slugs: servedSlugs(
+      p.modelOutputs.map((o) => o.candidateModel?.slug ?? ""),
+      afterPool,
+    ),
+  }));
+  const withV45 = slugLists.filter((p) => p.slugs.includes(V45_SLUG));
+  // Every account /next serves in practice: the annotator role, plus anyone
+  // (a researcher, say) who has a non-demo judgment. Their real ids, since
+  // the draw hashes the annotator id.
+  const annotators = await prisma.user.findMany({
+    where: {
+      OR: [
+        { role: "ANNOTATOR" },
+        { pairwiseComparisons: { some: { isDemo: false } } },
+      ],
+    },
+    select: { id: true },
+  });
+  const annotatorIds = annotators.map((a) => a.id);
+  if (annotatorIds.length === 0) throw new Error("no annotating accounts found");
   console.log(
-    `dry run - pairings actually drawn: ${[...seenPairs].join("; ") || "(none)"}`,
+    `dry run over ${slugLists.length} train prompt(s) with outputs (${withV45.length} carry v4.5) x ${annotatorIds.length} annotating account(s); read-only`,
   );
-  const missing = expected.filter((e) => !seenPairs.has(e));
+
+  const all = tallyDraws(slugLists, annotatorIds);
+  const onV45 = tallyDraws(withV45, annotatorIds);
+  printShares("share of draws per pair, every train prompt", all);
+  printShares("share of draws per pair, prompts carrying v4.5", onV45);
+
+  const missing = EXPECTED_V45_PAIRS.filter((k) => !all.byPair.has(k));
   if (missing.length > 0) {
     throw new Error(
       `dry run did not draw every v4.5 pairing against real DB coverage: missing ${missing.join(", ")}. No flags were changed.`,
@@ -139,6 +200,13 @@ async function main() {
   console.log(
     `OK: the pairing code draws both v4.5 pairings against the DB (dry run, no rows written).`,
   );
+
+  if (CHECK) {
+    console.log(
+      `--check done: ${V45_SLUG} inPairingPool=${v45.inPairingPool}, nothing changed.`,
+    );
+    return;
+  }
 
   // ── flip the flag ────────────────────────────────────────────────────────
   if (v45.inPairingPool) {

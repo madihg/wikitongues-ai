@@ -93,7 +93,11 @@ import {
   roundUsd,
 } from "@/lib/arena/pricing";
 import { servingModeFor } from "@/lib/arena/frontier-targets";
-import { V45_POOL_FLIP_AT } from "@/lib/arena/era";
+import {
+  POOL_NOT_BEFORE,
+  poolMembershipDiff,
+  poolSlugsDue,
+} from "@/lib/arena/era";
 import type { RetrievalV4Result } from "@/lib/arena/retrieval-v4";
 import {
   isV4FamilyVersionLabel,
@@ -115,7 +119,12 @@ import {
 const DECIDED_POOL_SLUGS = [
   "gemini-3-1-pro-rag-v3", // strLF 39.2, table leader
   "gemini-3-1-pro", // 37.2 bare - the v3-vs-bare pair is the open question
-  "claude-opus-5-rag", // 32.9, Claude's best arm (v1! v3 hurts Claude)
+  // claude-opus-5-rag (32.9, Claude's best arm) was listed here until
+  // 2026-10-09. It left the pool around Sep 1 (inPairingPool false, not
+  // archived) and no whitelisted pair names it, so a `pool` run that still
+  // listed it re-flagged it, and src/lib/method-metrics.ts would then count
+  // its old comparisons as pool judgments. Removed so `pool` matches the
+  // live pool.
   // 2026-09-28: v4.4 joins the blind round (exam 105.3, tone-insensitive
   // 94.7, both best of the real arms). Listed here so a `pool` run never
   // clears the flag scripts/enable-v44-pool.ts sets; `generate` fills it
@@ -126,12 +135,9 @@ const DECIDED_POOL_SLUGS = [
   "gemini-3-1-pro-rag-v4-5",
 ];
 
-/** An arm whose round boundary is still ahead is never flagged by `pool`:
- * its pairs would be judged inside the previous round. Its own enable script
- * flips it at or after the boundary. */
-const POOL_NOT_BEFORE: Record<string, string> = {
-  "gemini-3-1-pro-rag-v4-5": V45_POOL_FLIP_AT,
-};
+// An arm whose round boundary is still ahead (POOL_NOT_BEFORE, src/lib/arena/
+// era.ts) is never flagged by `pool`: poolSlugsDue leaves it out until its
+// instant, and its own enable script flips it at or after the boundary.
 
 /** Hard budget cap in USD. The stop rule below makes exceeding it impossible. */
 const HARD_CAP_USD = 15;
@@ -203,17 +209,19 @@ function keyForProvider(provider: string): string | undefined {
 // ─── POOL ───────────────────────────────────────────────────────────────────
 
 async function pool() {
-  // Additive flag, set idempotently: decided slugs in, everything else out.
+  // Additive flag, set idempotently: the arms due now in, everything else
+  // out. An arm whose round has not started is out too (poolSlugsDue), so
+  // the pool after this run is exactly `due`.
+  const due = poolSlugsDue(DECIDED_POOL_SLUGS, POOL_NOT_BEFORE, Date.now());
+  for (const slug of DECIDED_POOL_SLUGS.filter((x) => !due.includes(x))) {
+    log(
+      `  not yet: ${slug} joins at ${POOL_NOT_BEFORE[slug]} (its enable script flips it)`,
+    );
+  }
   const cleared = await prisma.candidateModel.updateMany({
-    where: { slug: { notIn: DECIDED_POOL_SLUGS }, inPairingPool: true },
+    where: { slug: { notIn: due }, inPairingPool: true },
     data: { inPairingPool: false },
   });
-  const due = DECIDED_POOL_SLUGS.filter(
-    (slug) => !POOL_NOT_BEFORE[slug] || Date.now() >= Date.parse(POOL_NOT_BEFORE[slug]),
-  );
-  for (const slug of DECIDED_POOL_SLUGS.filter((x) => !due.includes(x))) {
-    log(`  not yet: ${slug} joins at ${POOL_NOT_BEFORE[slug]} (its enable script flips it)`);
-  }
   const set = await prisma.candidateModel.updateMany({
     where: { slug: { in: due }, archived: false },
     data: { inPairingPool: true },
@@ -223,13 +231,29 @@ async function pool() {
   );
   const rows = await prisma.candidateModel.findMany({
     where: { inPairingPool: true },
-    select: { slug: true, name: true },
+    select: { slug: true, name: true, archived: true },
+    orderBy: { slug: "asc" },
   });
-  for (const r of rows) log(`  in pool: ${r.slug.padEnd(26)} ${r.name}`);
-  if (rows.length < due.length) {
+  for (const r of rows)
     log(
-      `  !! expected ${due.length} pool arms - register the missing candidate(s) first`,
+      `  in pool: ${r.slug.padEnd(26)} ${r.name}${r.archived ? "  (archived: never served)" : ""}`,
     );
+  // The queue serves unarchived flagged arms (src/lib/queue-input.ts), so
+  // that is the membership compared with `due`, by name on both sides.
+  const { missing, extra } = poolMembershipDiff(
+    due,
+    rows.filter((r) => !r.archived).map((r) => r.slug),
+  );
+  if (missing.length === 0 && extra.length === 0) {
+    log(`  pool membership is exactly the ${due.length} due arm(s)`);
+  } else {
+    if (missing.length > 0)
+      log(
+        `  !! missing from the pool (register or unarchive first): ${missing.join(", ")}`,
+      );
+    if (extra.length > 0)
+      log(`  !! in the pool but not due: ${extra.join(", ")}`);
+    process.exitCode = 1;
   }
 }
 

@@ -11,6 +11,7 @@ import {
   axesForBucket,
 } from "@/lib/buckets";
 import {
+  abSwap,
   assignedPair,
   computeQueueState,
   goldFirstFor,
@@ -122,8 +123,10 @@ export async function GET(req: Request) {
     if (!pair) continue;
     const [i, j] = pair;
 
-    // Randomly assign A/B to avoid position bias.
-    const swap = Math.random() > 0.5;
+    // A/B orientation against position bias: varies across prompts, fixed
+    // for one (annotator, prompt), so a reload with the same pair keeps the
+    // same A and B and the episode draft keyed on them is found again.
+    const swap = abSwap(annotatorId, prompt.promptId);
     const outputA = swap ? outputs[j] : outputs[i];
     const outputB = swap ? outputs[i] : outputs[j];
 

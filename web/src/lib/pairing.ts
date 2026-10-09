@@ -202,6 +202,19 @@ export function assignedPair(
 }
 
 /**
+ * Whether /next shows the assigned pair's second output as A (swapped).
+ * Deterministic per (annotator, prompt), from its own hash input (the ":ab"
+ * suffix keeps it independent of the pair index), so position bias still
+ * averages out across prompts while a reload with an unchanged pair shows
+ * the same A and B. The episode draft is keyed on the A/B output ids
+ * (src/components/annotation-interface.tsx); a per-request coin flip moved
+ * that key on half of all reloads and the draft was not found.
+ */
+export function abSwap(annotatorId: string, promptId: string): boolean {
+  return (fnv1a32(`${annotatorId}:${promptId}:ab`) & 1) === 1;
+}
+
+/**
  * Filter a prompt's outputs down to the pairing-eligible ones. Pure and
  * shared: /next and /summary both feed computeQueueState through this, so
  * the two routes cannot drift on WHICH outputs count toward a pair.

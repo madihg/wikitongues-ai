@@ -60,8 +60,8 @@ describe("buildHumanRounds", () => {
       row("2026-10-08T11:59:59Z", "a"), // last instant of round 2
       row("2026-10-08T12:00:00Z", "b"), // first instant of round 3: v4.4 joins
       row("2026-10-09T00:00:00Z", "tie"),
-      row("2026-10-09T11:59:59Z", "both_inadequate"), // last instant of round 3
-      row("2026-10-09T12:00:00Z", "a"), // first instant of round 4: v4.5 joins
+      row("2026-10-09T15:59:59.999Z", "both_inadequate"), // last instant of round 3
+      row("2026-10-09T16:00:00.000Z", "a"), // first instant of round 4: the bank and v4.5
     ];
     const [pair] = buildHumanRounds(rows, POOL_ROUNDS);
     const r1 = pair.rounds.find((r) => r.key === "round-1")!;
@@ -101,6 +101,19 @@ describe("buildHumanRounds", () => {
     expect(POOL_ROUNDS[3].to).toBeNull();
     for (let i = 1; i < POOL_ROUNDS.length; i++) {
       expect(POOL_ROUNDS[i - 1].to).toBe(POOL_ROUNDS[i].from);
+    }
+    expect(POOL_ROUNDS[3].from).toBe("2026-10-09T16:00:00.000Z");
+  });
+
+  it("labels read as a noun phrase in the site's sentence and name no arm change for round 3", () => {
+    // The site writes "On the {label}, speakers ...". Round 3's label names
+    // the day v4.4 joined, not a panel change, and round 4 leads with the
+    // questions, the change every pair in it shares.
+    const label = (key: string) => POOL_ROUNDS.find((r) => r.key === key)!.label;
+    expect(label("round-3")).toBe("day version 4.4 joined, Oct 8 to Oct 9");
+    expect(label("round-4")).toBe("108 new questions, from Oct 9 (version 4.5 joins)");
+    for (const r of POOL_ROUNDS) {
+      expect(`On the ${r.label}, speakers`).not.toMatch(/On the (version|the) /);
     }
   });
 

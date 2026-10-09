@@ -244,7 +244,7 @@ export async function POST(req: Request) {
 
   const prompt = await prisma.prompt.findUnique({
     where: { id: outputA.promptId },
-    select: { bucket: true },
+    select: { bucket: true, promptId: true },
   });
   const bucket = outputA.bucket ?? prompt?.bucket ?? null;
 
@@ -255,21 +255,35 @@ export async function POST(req: Request) {
 
   const isDemo = typeof demoSessionId === "string" && demoSessionId.length > 0;
 
-  // Outside a demo, one comparison per (annotator, prompt, pair).
+  // Outside a demo, one comparison per (annotator, prompt), WHATEVER the
+  // pair. /next already treats any non-demo comparison on a prompt as done,
+  // but the pair it serves is re-derived per request: when the pool changes
+  // (an arm joins), two open tabs can hold the same prompt under two
+  // different pairs, and before 2026-10-09 this check let both in because it
+  // matched the identical pair only. Demo rows neither block nor are blocked.
+  //
+  // PairwiseComparison.promptId has no FK: this route stores what the client
+  // sends, which is the public prompt code (task.prompt.promptId, the key
+  // /next's done-set compares against). A row written with the Prompt.id
+  // cuid instead must block too, so every form is matched.
   if (!isDemo) {
+    const promptKeys = [
+      ...new Set(
+        [promptId, promptDbId, prompt?.promptId].filter(
+          (k): k is string => typeof k === "string" && k.length > 0,
+        ),
+      ),
+    ];
     const existing = await prisma.pairwiseComparison.findFirst({
-      where: {
-        annotatorId,
-        promptId,
-        OR: [
-          { modelOutputAId, modelOutputBId },
-          { modelOutputAId: modelOutputBId, modelOutputBId: modelOutputAId },
-        ],
-      },
+      where: { annotatorId, isDemo: false, promptId: { in: promptKeys } },
+      select: { id: true },
     });
     if (existing) {
       return NextResponse.json(
-        { error: "You have already submitted a comparison for this pair" },
+        {
+          error:
+            "You have already judged this question (in another tab, perhaps). Reload the page to get the next one.",
+        },
         { status: 409 },
       );
     }

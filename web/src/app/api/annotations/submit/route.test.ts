@@ -49,6 +49,16 @@ const OUTPUT_B = {
 const fullRubric = () =>
   RUBRIC_V2.map((a, i) => ({ axis: a.key, score: i === 0 ? 4 : null }));
 
+interface StoredComparison {
+  id: string;
+  annotatorId: string;
+  promptId: string;
+  modelOutputAId: string;
+  modelOutputBId: string;
+  isDemo: boolean;
+}
+const existingRows: StoredComparison[] = [];
+
 function basePayload(overrides: Record<string, unknown> = {}) {
   return {
     promptId: "ig_orth_001",
@@ -84,8 +94,25 @@ beforeEach(() => {
           ? OUTPUT_B
           : null,
   );
-  mockPrisma.prompt.findUnique.mockResolvedValue({ bucket: "orthography" });
-  mockPrisma.pairwiseComparison.findFirst.mockResolvedValue(null);
+  mockPrisma.prompt.findUnique.mockResolvedValue({
+    bucket: "orthography",
+    promptId: "ig_orth_001",
+  });
+  // An in-memory PairwiseComparison table the route's findFirst reads, with
+  // the where-clause semantics the route relies on (equality and `in`), so
+  // the tests below check behaviour, not the shape of one query.
+  existingRows.length = 0;
+  mockPrisma.pairwiseComparison.findFirst.mockImplementation(
+    async ({ where }: { where: Record<string, unknown> }) =>
+      existingRows.find((r) =>
+        Object.entries(where).every(([k, cond]) => {
+          const v = (r as unknown as Record<string, unknown>)[k];
+          if (cond && typeof cond === "object" && "in" in cond)
+            return (cond as { in: unknown[] }).in.includes(v);
+          return v === cond;
+        }),
+      ) ?? null,
+  );
   // Each create returns a row stub; $transaction resolves them in order.
   for (const model of [
     mockPrisma.pairwiseComparison,
@@ -277,5 +304,68 @@ describe("what did not change", () => {
     expect(res.status).toBe(200);
     const cmp = mockPrisma.pairwiseComparison.create.mock.calls[0][0].data;
     expect(cmp.confidence).toBe(4);
+  });
+});
+
+describe("one comparison per (annotator, prompt), whatever the pair", () => {
+  // The same prompt served under a DIFFERENT pair, e.g. a second tab opened
+  // after v4.5 joined the pool and the pair was re-derived.
+  const otherPair = {
+    annotatorId: "annot-1",
+    modelOutputAId: "out-c",
+    modelOutputBId: "out-d",
+  };
+
+  it("409s when the annotator already judged this prompt under another pair (public code stored)", async () => {
+    existingRows.push({ id: "c1", promptId: "ig_orth_001", isDemo: false, ...otherPair });
+    const res = await post(basePayload());
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/already judged this question/i);
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("409s when the earlier row holds the Prompt.id cuid instead of the code", async () => {
+    existingRows.push({ id: "c2", promptId: OUTPUT_A.promptId, isDemo: false, ...otherPair });
+    const res = await post(basePayload());
+    expect(res.status).toBe(409);
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("409s an identical pair too, in either orientation (unchanged guard)", async () => {
+    existingRows.push({
+      id: "c3",
+      annotatorId: "annot-1",
+      promptId: "ig_orth_001",
+      modelOutputAId: OUTPUT_B.id,
+      modelOutputBId: OUTPUT_A.id,
+      isDemo: false,
+    });
+    expect((await post(basePayload())).status).toBe(409);
+  });
+
+  it("a demo row on the same prompt does not block a real submission", async () => {
+    existingRows.push({ id: "c4", promptId: "ig_orth_001", isDemo: true, ...otherPair });
+    const res = await post(basePayload());
+    expect(res.status).toBe(200);
+    expect(mockPrisma.pairwiseComparison.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("a demo submission is never blocked, even by a real row", async () => {
+    existingRows.push({ id: "c5", promptId: "ig_orth_001", isDemo: false, ...otherPair });
+    const res = await post(basePayload({ demoSessionId: "demo-1" }));
+    expect(res.status).toBe(200);
+    const cmp = mockPrisma.pairwiseComparison.create.mock.calls[0][0].data;
+    expect(cmp.isDemo).toBe(true);
+  });
+
+  it("another annotator's row on the same prompt does not block", async () => {
+    existingRows.push({
+      id: "c6",
+      promptId: "ig_orth_001",
+      isDemo: false,
+      ...otherPair,
+      annotatorId: "annot-2",
+    });
+    expect((await post(basePayload())).status).toBe(200);
   });
 });
