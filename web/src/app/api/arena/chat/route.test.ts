@@ -34,6 +34,7 @@ const {
   mockPrisma,
   mockRequireResearcher,
   mockStreamForCandidate,
+  mockGenerateForCandidate,
   mockBuildRetrievalV2,
   mockBuildRetrievalV4,
   mockSearchRag,
@@ -41,9 +42,17 @@ const {
   mockPrisma: {
     candidateModel: { findMany: vi.fn() },
     coldAuthorAnswer: { findMany: vi.fn() },
+    // The grammar-block leg (grammar-block.ts) reads RagEntry rows, and on a
+    // holdout prompt with a ranked row, the prompt's gold for the leak guard.
+    // Only grammar-serving labels (rag-v4-3/4/5) reach either.
+    ragEntry: { findMany: vi.fn() },
+    prompt: { findUnique: vi.fn() },
   },
   mockRequireResearcher: vi.fn(),
   mockStreamForCandidate: vi.fn(),
+  // The buffered twin, used by exactly one thing in this route: the
+  // reference-form second pass on a rag-v4-5 column.
+  mockGenerateForCandidate: vi.fn(),
   mockBuildRetrievalV2: vi.fn(),
   mockBuildRetrievalV4: vi.fn(),
   mockSearchRag: vi.fn(),
@@ -53,8 +62,11 @@ vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/api-auth", () => ({ requireResearcher: mockRequireResearcher }));
 vi.mock("@/lib/arena/providers", () => ({
   streamForCandidate: mockStreamForCandidate,
+  generateForCandidate: mockGenerateForCandidate,
 }));
-vi.mock("@/lib/arena/retrieval-v2", () => ({
+// Partial: buildGrammarBlock uses the real contentWords from this module.
+vi.mock("@/lib/arena/retrieval-v2", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/arena/retrieval-v2")>()),
   buildRetrievalV2: mockBuildRetrievalV2,
 }));
 vi.mock("@/lib/arena/retrieval-v4", () => ({
@@ -72,10 +84,14 @@ vi.mock("@/lib/rag", () => ({ searchRag: mockSearchRag }));
  * `forceReask` is the one exception, used by a single test that needs a
  * REWRITE to be mid-flight when the deadline lands - impossible otherwise,
  * since permitting a re-ask requires more budget than a test can wait out.
+ * `forceReference` is the same exception for the reference-form pass: the
+ * tests that need a rendering to START under a short deadline set it, so the
+ * gate under test is the served check or the deadline race, not the budget.
  */
-const { turnBudgetMs, forceReask } = vi.hoisted(() => ({
+const { turnBudgetMs, forceReask, forceReference } = vi.hoisted(() => ({
   turnBudgetMs: { value: 92_000 },
   forceReask: { value: false },
+  forceReference: { value: false },
 }));
 vi.mock("@/lib/arena/turn-budget", async (importOriginal) => {
   const actual =
@@ -85,6 +101,8 @@ vi.mock("@/lib/arena/turn-budget", async (importOriginal) => {
     turnDeadlineFrom: (startedAtMs: number) => startedAtMs + turnBudgetMs.value,
     hasBudgetForReask: (deadlineMs?: number, now?: number) =>
       forceReask.value || actual.hasBudgetForReask(deadlineMs, now),
+    hasBudgetForReference: (deadlineMs: number, now?: number) =>
+      forceReference.value || actual.hasBudgetForReference(deadlineMs, now),
   };
 });
 
@@ -105,6 +123,29 @@ import { buildUserTurnV4, IGALA_SYSTEM_V4 } from "@/lib/generation-prompt-v4";
 import { IGALA_SYSTEM_V4_1 } from "@/lib/generation-prompt-v4-1";
 import { buildUserTurnV2, IGALA_SYSTEM_V2 } from "@/lib/generation-prompt-v2";
 import { IGALA_SYSTEM_V3 } from "@/lib/generation-prompt-v3";
+import {
+  REFERENCE_FORM_LABELS,
+  REFERENCE_FORM_SYSTEM,
+  rendersReferenceForm,
+} from "@/lib/arena/reference-form";
+import {
+  applyStatusEvents,
+  initColumnPhases,
+} from "@/lib/arena/column-status";
+import {
+  V4_FAMILY_VERSION_LABELS,
+  checksNames,
+  isV4FamilyVersionLabel,
+  runsRepairRound,
+  servesGrammarBlock,
+} from "@/lib/arena/frozen-exam";
+import { igalaSystemV45 } from "@/lib/generation-prompt-v4-5";
+import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
+import {
+  GRAMMAR_CHUNK_TYPE,
+  GRAMMAR_CHUNK_TYPE_V4_5,
+} from "@/lib/arena/grammar-block";
+import { REPAIR_VIOLATION_LABELS } from "@/lib/arena/repair-round";
 
 // ─── fixtures ───────────────────────────────────────────────────────────────
 
@@ -237,12 +278,15 @@ beforeEach(() => {
   genCount = 0;
   turnBudgetMs.value = 92_000;
   forceReask.value = false;
+  forceReference.value = false;
   mockRequireResearcher.mockResolvedValue({
     error: null,
     userId: "u1",
     role: "RESEARCHER",
   });
   mockPrisma.coldAuthorAnswer.findMany.mockResolvedValue([]);
+  mockPrisma.ragEntry.findMany.mockResolvedValue([]);
+  mockPrisma.prompt.findUnique.mockResolvedValue(null);
   mockBuildRetrievalV2.mockResolvedValue(V2);
   mockBuildRetrievalV4.mockResolvedValue(V4);
   mockSearchRag.mockResolvedValue([]);
@@ -645,6 +689,7 @@ describe("a client that has never heard of the new events", () => {
             done: true,
             revisedFor: null,
             revisionApplied: true,
+            referenceForm: null,
           });
       }
     }
@@ -1242,5 +1287,508 @@ describe('provider "derived" is never chattable', () => {
     const res = await POST(request(["live", "derived-arm"]));
     expect(res.status).toBe(400);
     expect(mockStreamForCandidate).not.toHaveBeenCalled();
+  });
+});
+
+// ─── the reference-form second pass (rag-v4-5) ──────────────────────────────
+
+/**
+ * The second pass at the wire level: it runs AFTER the column's reply is on
+ * the wire, it arrives as its own additive event, and nothing it does can
+ * reach the answer. rag-v4-5 is a v4-family label, so this column takes the
+ * v4.5 path (retrieval v4, the v4.5 prompt, the grammar block with no rows
+ * here, the repair round); the pass keys on the label alone, and the block
+ * after this one pins the whole composition.
+ */
+describe("the reference-form second pass on a rag-v4-5 column", () => {
+  const v45 = candidate({
+    slug: "v45",
+    name: "v4.5",
+    versionLabel: "rag-v4-5",
+    ragEnabled: false,
+    decodingParams: { temperature: 0.7, maxTokens: 4096 },
+  });
+
+  beforeEach(() => {
+    scriptGenerations([["Ma ", "k'ọla wa"]]);
+    mockGenerateForCandidate.mockResolvedValue({
+      text: " Mà kí ọ́lá wà \n",
+      modelId: "gpt-x",
+      latencyMs: 9,
+      tokensIn: 50,
+      tokensOut: 8,
+      ragContextIds: [],
+    });
+  });
+
+  it("sends the reply first, then the rendering stage, then the rendering as its own event, with the report and its cost", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    const { events } = await drain(await POST(request(["v45"])));
+
+    const kinds = events.map((e) => e.type);
+    const renderingAt = events.findIndex(
+      (e) => e.type === "stage" && e.stage === "rendering",
+    );
+    expect(renderingAt).toBeGreaterThan(kinds.indexOf("reply"));
+    expect(kinds.indexOf("reference")).toBeGreaterThan(renderingAt);
+    expect(kinds.at(-1)).toBe("reference");
+
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply).toMatchObject({
+      text: "Ma k'ọla wa",
+      error: null,
+    });
+    const reference = events.find((e) => e.type === "reference")!;
+    expect(reference).toMatchObject({
+      type: "reference",
+      slug: "v45",
+      text: "Mà kí ọ́lá wà",
+      report: {
+        communityWords: 3,
+        referenceWords: 4,
+        tonedShare: 1,
+        apostrophesLeft: 0,
+        dropped: [],
+        added: [],
+      },
+      latencyMs: 9,
+      tokensIn: 50,
+      tokensOut: 8,
+    });
+
+    // The pass was asked AFTER the answer finished streaming.
+    expect(timeline.indexOf("gen-end:1")).toBeLessThan(
+      firstWireIndex("reference"),
+    );
+
+    // Folded the way the client folds, the answer stands and the rendering
+    // sits beside it.
+    const folded = applyChatEvents(
+      initStreamingReplies([{ slug: "v45", name: "v4.5" }]),
+      events,
+    );
+    expect(folded[0].text).toBe("Ma k'ọla wa");
+    expect(folded[0].referenceForm?.text).toBe("Mà kí ọ́lá wà");
+  });
+
+  it("asks the SAME model, at temperature 0, with the rendering instruction and the served text", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    await drain(await POST(request(["v45"])));
+
+    expect(mockGenerateForCandidate).toHaveBeenCalledTimes(1);
+    const [sentCandidate, sentArgs] = mockGenerateForCandidate.mock.calls[0];
+    expect(sentCandidate).toMatchObject({
+      slug: "v45",
+      baseModelId: "gpt-x",
+      ragEnabled: false,
+      decodingParams: { temperature: 0, maxTokens: 4096 },
+    });
+    expect(sentArgs.systemPromptOverride).toBe(REFERENCE_FORM_SYSTEM);
+    // Verbatim, without the forcing instruction's "best attempt even if
+    // unsure", which would contradict "never guess a tone".
+    expect(sentArgs.systemPromptExact).toBe(true);
+    expect(sentArgs.userMessage.endsWith("\n\nMa k'ọla wa")).toBe(true);
+    expect(sentArgs.goldExamples).toBeUndefined();
+    expect(sentArgs.conversationHistory).toBeUndefined();
+  });
+
+  it("a failing second pass leaves the answer exactly as served, delivers no rendering, and ends the rendering phase at once", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    mockGenerateForCandidate.mockRejectedValue(new Error("quota exhausted"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { events } = await drain(await POST(request(["v45"])));
+      expect(events.some((e) => e.type === "reference" && e.text !== "")).toBe(
+        false,
+      );
+      const reply = events.find((e) => e.type === "reply")!;
+      expect(reply.type === "reply" && reply.reply).toMatchObject({
+        text: "Ma k'ọla wa",
+        error: null,
+      });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("reference form skipped for v45"),
+      );
+
+      // The terminal signal: an empty-text reference right after the
+      // rendering stage, so the column does not wait for the stream's end.
+      const renderingAt = events.findIndex(
+        (e) => e.type === "stage" && e.stage === "rendering",
+      );
+      const signalAt = events.findIndex(
+        (e) => e.type === "reference" && e.text === "",
+      );
+      expect(renderingAt).toBeGreaterThanOrEqual(0);
+      expect(signalAt).toBeGreaterThan(renderingAt);
+      expect(events[signalAt]).toEqual({
+        type: "reference",
+        slug: "v45",
+        text: "",
+        report: null,
+        latencyMs: null,
+        tokensIn: null,
+        tokensOut: null,
+      });
+
+      // Folded the way the client folds: no reference form, and the status
+      // line back on done without any end-of-stream settling.
+      const folded = applyChatEvents(
+        initStreamingReplies([{ slug: "v45", name: "v4.5" }]),
+        events,
+      );
+      expect(folded[0].referenceForm).toBeNull();
+      expect(
+        applyStatusEvents(initColumnPhases(["v45"]), events).v45,
+      ).toBe("done");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("is never asked for a column that failed or produced nothing", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    mockStreamForCandidate.mockRejectedValue(new Error("provider down"));
+    const { events } = await drain(await POST(request(["v45"])));
+    expect(mockGenerateForCandidate).not.toHaveBeenCalled();
+    expect(events.some((e) => e.type === "reference" && e.text !== "")).toBe(false);
+  });
+
+  it("no other arm runs the pass, and a v4.5 column's neighbour is untouched", async () => {
+    // A rag-v4 neighbour: a v4-family arm on the same wire, with neither the
+    // repair round nor the grammar block, so the only difference between the
+    // two columns here is the label the second pass keys on.
+    mockPrisma.candidateModel.findMany.mockResolvedValue([
+      v45,
+      candidate({ slug: "v4", name: "v4", versionLabel: "rag-v4" }),
+    ]);
+    scriptGenerations([
+      ["Ma ", "k'ọla wa"],
+      ["ukọlọ ", "daa"],
+    ]);
+    const { events } = await drain(await POST(request(["v45", "v4"])));
+
+    expect(mockGenerateForCandidate).toHaveBeenCalledTimes(1);
+    const references = events.filter((e) => e.type === "reference");
+    expect(references).toHaveLength(1);
+    expect(references[0].type === "reference" && references[0].slug).toBe(
+      "v45",
+    );
+    const v4Reply = events.find(
+      (e) => e.type === "reply" && e.reply.slug === "v4",
+    )!;
+    expect(v4Reply.type === "reply" && v4Reply.reply.text).toBe("ukọlọ daa");
+  });
+
+  it("an OLD client sees exactly the delta/reply subsequence it saw before", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    const { events } = await drain(await POST(request(["v45"])));
+    expect(
+      events
+        .filter((e) => e.type === "delta" || e.type === "reply")
+        .map((e) => e.type),
+    ).toEqual(["delta", "delta", "reply"]);
+  });
+
+  it("delivers no rendering, only the stage and the terminal signal, when the rendering comes back empty", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    mockGenerateForCandidate.mockResolvedValue({
+      text: "  \n",
+      modelId: "gpt-x",
+      latencyMs: 9,
+      tokensIn: 50,
+      tokensOut: 0,
+      ragContextIds: [],
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { events } = await drain(await POST(request(["v45"])));
+      expect(mockGenerateForCandidate).toHaveBeenCalledTimes(1);
+      expect(
+        events.some((e) => e.type === "reference" && e.text !== ""),
+      ).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("not shown for v45: empty rendering"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not show a rendering pinned at its output cap (truncated)", async () => {
+    // The candidate's budget is 4,096 (not google, so the reference pass
+    // keeps it); 4,092 out is within 8 of it, the sample-2 truncation.
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    mockGenerateForCandidate.mockResolvedValue({
+      text: "Mà kí ọ́lá wà",
+      modelId: "gpt-x",
+      latencyMs: 9,
+      tokensIn: 50,
+      tokensOut: 4092,
+      ragContextIds: [],
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { events } = await drain(await POST(request(["v45"])));
+      expect(events.some((e) => e.type === "reference" && e.text !== "")).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("truncated (tokensOut 4092 hit the 4096 cap)"),
+      );
+      const reply = events.find((e) => e.type === "reply")!;
+      expect(reply.type === "reply" && reply.reply.text).toBe("Ma k'ọla wa");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not show a rendering missing more than a quarter of the answer", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    mockGenerateForCandidate.mockResolvedValue({
+      text: "Mà",
+      modelId: "gpt-x",
+      latencyMs: 9,
+      tokensIn: 50,
+      tokensOut: 3,
+      ragContextIds: [],
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { events } = await drain(await POST(request(["v45"])));
+      expect(events.some((e) => e.type === "reference" && e.text !== "")).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("dropped 2 of 3 words"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not start the pass, nor announce it, without the budget for it to land", async () => {
+    // A 5s turn finishes its answer in milliseconds and then has ~5s left:
+    // well under MIN_REFERENCE_BUDGET_MS, so the real gate refuses.
+    turnBudgetMs.value = 5_000;
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    const { events } = await drain(await POST(request(["v45"])));
+    expect(mockGenerateForCandidate).not.toHaveBeenCalled();
+    expect(
+      events.some((e) => e.type === "stage" && e.stage === "rendering"),
+    ).toBe(false);
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.text).toBe("Ma k'ọla wa");
+  });
+
+  it("makes no second call for an answer that finished only after the deadline had closed its column", async () => {
+    // The budget gate is forced open so that only the served check can stop
+    // the pass: the column is cut at the deadline with its partial text, the
+    // provider returns afterwards with a complete answer nobody received.
+    turnBudgetMs.value = 40;
+    forceReference.value = true;
+    let finished = false;
+    mockStreamForCandidate.mockImplementation(
+      async (
+        _candidate: unknown,
+        _args: unknown,
+        onDelta: (d: string) => void,
+      ) => {
+        onDelta("Ma ");
+        await sleep(150);
+        onDelta("k'ọla wa");
+        finished = true;
+        return {
+          text: "Ma k'ọla wa",
+          modelId: "gpt-x",
+          latencyMs: 150,
+          tokensIn: 100,
+          tokensOut: 10,
+          ragContextIds: [],
+        };
+      },
+    );
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    const { events } = await drain(await POST(request(["v45"])));
+
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply.error).toBe(
+      TURN_CUTOFF_NOTICE,
+    );
+    // Let the abandoned provider call finish into nothing, then look.
+    while (!finished) await sleep(10);
+    await sleep(20);
+    expect(mockGenerateForCandidate).not.toHaveBeenCalled();
+    expect(events.some((e) => e.type === "reference" && e.text !== "")).toBe(false);
+  });
+
+  it("closes the stream at the deadline with the reply intact when the second pass stalls", async () => {
+    turnBudgetMs.value = 150;
+    forceReference.value = true;
+    mockGenerateForCandidate.mockImplementation(async () => {
+      await sleep(1_500);
+      return {
+        text: "Mà kí ọ́lá wà",
+        modelId: "gpt-x",
+        latencyMs: 1_500,
+        tokensIn: 50,
+        tokensOut: 8,
+        ragContextIds: [],
+      };
+    });
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    const started = Date.now();
+    const { events } = await drain(await POST(request(["v45"])));
+
+    // The stream ended at the deadline, not when the stalled pass returned.
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(mockGenerateForCandidate).toHaveBeenCalledTimes(1);
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply).toMatchObject({
+      text: "Ma k'ọla wa",
+      error: null,
+    });
+    expect(events.some((e) => e.type === "reference" && e.text !== "")).toBe(false);
+    // And no cutoff notice anywhere: the column already had its whole answer.
+    expect(
+      events.filter((e) => e.type === "reply").map((e) => e.type === "reply" && e.reply.error),
+    ).toEqual([null]);
+  });
+});
+
+// ─── rag-v4-5 in chat: the whole v4.5 arm, then the pass ─────────────────────
+
+/**
+ * With both branches merged, a rag-v4-5 chat column is the v4.5 arm end to
+ * end: the shared v4 retrieval build, the v4.5 system prompt, a grammar block
+ * read from its OWN row set (grammar_rule + grammar_rule_v4_5) while a v4.4
+ * neighbour keeps reading grammar_rule alone, the repair round with the name
+ * check, and only then the reference-form pass on the text actually served.
+ */
+describe("a rag-v4-5 chat column on the merged tree", () => {
+  const v45 = candidate({ slug: "v45", name: "v4.5", versionLabel: "rag-v4-5" });
+  const v44 = candidate({ slug: "v44", name: "v4.4", versionLabel: "rag-v4-4" });
+  const BASE_ROW = {
+    id: "g1",
+    topic: "Greeting an elder in the morning",
+    content: "Morning greetings to an elder take the respectful form.",
+    verificationStatus: "verified",
+  };
+  const V45_ROW = {
+    id: "g45",
+    topic: "Complementiser ki after a greeting to an elder",
+    content: "When greeting an elder in the morning, ki introduces the clause.",
+    verificationStatus: "verified",
+  };
+
+  beforeEach(() => {
+    mockPrisma.ragEntry.findMany.mockImplementation(
+      async ({ where }: { where: { chunkType: unknown } }) => {
+        if (where.chunkType === GRAMMAR_CHUNK_TYPE) return [BASE_ROW];
+        const set = (where.chunkType as { in?: string[] }).in ?? [];
+        if (
+          set.length === 2 &&
+          set.includes(GRAMMAR_CHUNK_TYPE) &&
+          set.includes(GRAMMAR_CHUNK_TYPE_V4_5)
+        )
+          return [BASE_ROW, V45_ROW];
+        return [];
+      },
+    );
+    mockGenerateForCandidate.mockResolvedValue({
+      text: "Mà kí ọ́lá wà",
+      modelId: "gpt-x",
+      latencyMs: 9,
+      tokensIn: 50,
+      tokensOut: 8,
+      ragContextIds: [],
+    });
+  });
+
+  it("every reference-form label is a v4-family label with the grammar block, the repair round and the name check, and no other family label renders", () => {
+    for (const l of REFERENCE_FORM_LABELS) {
+      expect(isV4FamilyVersionLabel(l)).toBe(true);
+      if (!isV4FamilyVersionLabel(l)) continue;
+      expect(servesGrammarBlock(l)).toBe(true);
+      expect(runsRepairRound(l)).toBe(true);
+      expect(checksNames(l)).toBe(true);
+    }
+    expect(
+      V4_FAMILY_VERSION_LABELS.filter((l) => rendersReferenceForm(l)),
+    ).toEqual(["rag-v4-5"]);
+    for (const l of [null, "rag-v2", "rag-v3", "rag-v4-4", "rag-v4-3"])
+      expect(rendersReferenceForm(l)).toBe(false);
+  });
+
+  it("gets retrieval v4, the v4.5 prompt and its own grammar rows; the v4.4 neighbour keeps its prompt and rows", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45, v44]);
+    scriptGenerations([
+      ["ma ", "da"],
+      ["ukọlọ ", "daa"],
+    ]);
+    const { events } = await drain(await POST(request(["v45", "v44"])));
+
+    expect(mockBuildRetrievalV4).toHaveBeenCalledTimes(1);
+    const rowSets = mockPrisma.ragEntry.findMany.mock.calls.map(
+      (c) => (c[0] as { where: { chunkType: unknown } }).where.chunkType,
+    );
+    expect(rowSets).toHaveLength(2);
+    expect(rowSets).toContainEqual(GRAMMAR_CHUNK_TYPE);
+    expect(rowSets).toContainEqual({
+      in: [GRAMMAR_CHUNK_TYPE, GRAMMAR_CHUNK_TYPE_V4_5],
+    });
+
+    const argsFor = (slug: string) =>
+      mockStreamForCandidate.mock.calls.find(
+        (c) => (c[0] as { slug: string }).slug === slug,
+      )![1] as { systemPromptOverride: string; userMessage: string };
+    const a45 = argsFor("v45");
+    const a44 = argsFor("v44");
+    expect(igalaSystemV45()).not.toBe(IGALA_SYSTEM_V4_4);
+    expect(a45.systemPromptOverride).toBe(igalaSystemV45());
+    expect(a44.systemPromptOverride).toBe(IGALA_SYSTEM_V4_4);
+    expect(a45.userMessage).toContain("DICTIONARY");
+    expect(a45.userMessage).toContain(V45_ROW.topic);
+    expect(a45.userMessage).toContain(BASE_ROW.topic);
+    expect(a44.userMessage).toContain(BASE_ROW.topic);
+    expect(a44.userMessage).not.toContain(V45_ROW.topic);
+
+    const replyFor = (slug: string) =>
+      events.find((e) => e.type === "reply" && e.reply.slug === slug)!;
+    const r45 = replyFor("v45");
+    const r44 = replyFor("v44");
+    // 3 non-gold v4 ids + the grammar ids each column was actually served.
+    expect(r45.type === "reply" && r45.reply.retrievedChunks).toBe(5);
+    expect(r44.type === "reply" && r44.reply.retrievedChunks).toBe(4);
+
+    const references = events.filter((e) => e.type === "reference");
+    expect(references).toHaveLength(1);
+    expect(references[0].type === "reference" && references[0].slug).toBe(
+      "v45",
+    );
+  });
+
+  it("runs the repair round with the name check, then renders the REPAIRED answer", async () => {
+    mockPrisma.candidateModel.findMany.mockResolvedValue([v45]);
+    scriptGenerations([
+      ["Ma ", "k'ọla wa"],
+      ["Musa ", "ma k'ọla wa"],
+    ]);
+    const { events } = await drain(
+      await POST(request(["v45"], "Translate 'Musa greets the elder' into Igala")),
+    );
+
+    expect(mockStreamForCandidate).toHaveBeenCalledTimes(2);
+    const revision = events.find((e) => e.type === "revision")!;
+    expect(revision.type === "revision" && revision.reasons).toEqual([
+      REPAIR_VIOLATION_LABELS["name-not-preserved"],
+    ]);
+    const reply = events.find((e) => e.type === "reply")!;
+    expect(reply.type === "reply" && reply.reply).toMatchObject({
+      text: "Musa ma k'ọla wa",
+      error: null,
+    });
+
+    expect(mockGenerateForCandidate).toHaveBeenCalledTimes(1);
+    const [, refArgs] = mockGenerateForCandidate.mock.calls[0];
+    expect(refArgs.systemPromptOverride).toBe(REFERENCE_FORM_SYSTEM);
+    expect(refArgs.userMessage.endsWith("\n\nMusa ma k'ọla wa")).toBe(true);
+    const kinds = events.map((e) => e.type);
+    expect(kinds.indexOf("reference")).toBeGreaterThan(kinds.indexOf("reply"));
   });
 });

@@ -28,6 +28,7 @@ const ALL_PHASES: ColumnPhase[] = [
   "writing",
   "checking",
   "revising",
+  "rendering",
   "done",
   "failed",
 ];

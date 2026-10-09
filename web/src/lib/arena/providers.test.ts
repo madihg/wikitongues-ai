@@ -1,11 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
+  assembleGenerationRequest,
   buildSystemPrompt,
   GOLD_EXAMPLE_INSTRUCTION,
   type CandidateLike,
   type RagChunk,
 } from "./providers";
 import { IGALA_FORCING_INSTRUCTION } from "@/lib/generation-prompt";
+import { IGALA_SYSTEM_V4_4 } from "@/lib/generation-prompt-v4-4";
+import {
+  REFERENCE_FORM_SYSTEM,
+  buildReferenceFormTurn,
+} from "./reference-form";
 
 const baseCandidate: CandidateLike = {
   provider: "openai",
@@ -105,6 +111,71 @@ describe("buildSystemPrompt", () => {
   it("omits the exemplar instruction for a plain baseline, so a baseline stays plain", () => {
     expect(buildSystemPrompt(baseCandidate, [], undefined, 6)).not.toContain(
       GOLD_EXAMPLE_INSTRUCTION,
+    );
+  });
+});
+
+/**
+ * systemPromptExact: the reference-form pass sends its instruction verbatim,
+ * because the forcing instruction ("best attempt even if unsure") contradicts
+ * "never guess a tone". The flag is opt-in, and every arm that exists must
+ * assemble exactly what it assembled before; the first test is that pin.
+ */
+describe("systemPromptExact", () => {
+  const v44: CandidateLike = {
+    provider: "google",
+    baseModelId: "gemini-3.1-pro-preview",
+    ragEnabled: true,
+  };
+  const args = {
+    userMessage: "question",
+    systemPromptOverride: IGALA_SYSTEM_V4_4,
+    goldExamples: [
+      { question: "q1", answer: "a1" },
+      { question: "q2", answer: "a2" },
+    ],
+  };
+
+  it("leaves an existing arm's assembled prompt exactly as it was", () => {
+    const before = assembleGenerationRequest(v44, args);
+    expect(before.system).toBe(
+      `${IGALA_FORCING_INSTRUCTION}\n\n${IGALA_SYSTEM_V4_4}\n\n${GOLD_EXAMPLE_INSTRUCTION}`,
+    );
+    expect(assembleGenerationRequest(v44, { ...args, systemPromptExact: false })).toEqual(
+      before,
+    );
+  });
+
+  it("sends the override alone when set: no forcing text, no exemplar instruction, no reference material", () => {
+    const ragContext: RagChunk[] = [
+      { id: "r1", content: "chunk", topic: "t", chunkType: "note" },
+    ];
+    const { system } = assembleGenerationRequest(v44, {
+      ...args,
+      ragContext,
+      systemPromptOverride: "RENDER ONLY",
+      systemPromptExact: true,
+    });
+    expect(system).toBe("RENDER ONLY");
+  });
+
+  it("assembles the reference turn to its instruction and exactly one user message", () => {
+    const { system, messages } = assembleGenerationRequest(
+      { ...v44, ragEnabled: false },
+      buildReferenceFormTurn("Ma k'ọla wa"),
+    );
+    expect(system).toBe(REFERENCE_FORM_SYSTEM);
+    expect(messages).toEqual([
+      {
+        role: "user",
+        content: buildReferenceFormTurn("Ma k'ọla wa").userMessage,
+      },
+    ]);
+  });
+
+  it("does nothing without an override to send", () => {
+    expect(buildSystemPrompt(baseCandidate, [], undefined, 0, true)).toBe(
+      buildSystemPrompt(baseCandidate),
     );
   });
 });

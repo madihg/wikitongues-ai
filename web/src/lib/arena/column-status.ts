@@ -26,6 +26,11 @@ import type { ChatStreamEvent } from "@/lib/arena/chat-stream";
  *               (driven by the wire's `revision` event, so the phase and the
  *               "rewrote its answer" note can never disagree).
  *   done/failed the closing `reply` event landed, with or without an error.
+ *   rendering   the ONE phase after done: a rag-v4-5 column's answer is
+ *               finished and its reference-form second pass is running
+ *               (the route's `rendering` stage). It returns to done when the
+ *               `reference` event lands or the stream ends without one, never
+ *               to failed: the answer the reviewer judges was already served.
  *
  * Everything here is pure and event-driven so the machine can be tested without
  * a browser, a provider, or a clock.
@@ -37,6 +42,7 @@ export type ColumnPhase =
   | "writing"
   | "checking"
   | "revising"
+  | "rendering"
   | "done"
   | "failed";
 
@@ -48,6 +54,7 @@ export const COLUMN_PHASE_LABELS: Record<ColumnPhase, string> = {
   writing: "Writing",
   checking: "Checking the answer",
   revising: "Revising",
+  rendering: "Rendering reference form",
   done: "Done",
   failed: "Failed",
 };
@@ -86,6 +93,20 @@ export function initColumnPhases(
   phase: ColumnPhase = "waiting",
 ): ColumnPhases {
   return Object.fromEntries(slugs.map((slug) => [slug, phase]));
+}
+
+/**
+ * The stream ended: a column still rendering its reference form will not get
+ * one, and goes back to done. Run before setPendingPhases(..., "failed") so a
+ * served answer is never marked failed for a rendering that did not arrive.
+ */
+export function settleRendering(phases: ColumnPhases): ColumnPhases {
+  if (!Object.values(phases).includes("rendering")) return phases;
+  const next: Record<string, ColumnPhase> = {};
+  for (const [slug, current] of Object.entries(phases)) {
+    next[slug] = current === "rendering" ? "done" : current;
+  }
+  return next;
 }
 
 /** Move every column that has not finished to `phase`; terminal ones stay put. */
@@ -134,7 +155,22 @@ export function applyStatusEvents(
     if (ev.type === "delta") {
       if (typeof ev.slug === "string") move(ev.slug, "writing");
     } else if (ev.type === "stage") {
-      if (typeof ev.slug === "string") move(ev.slug, ev.stage);
+      // `rendering` is the one stage that may follow done, and only done: the
+      // second pass starts after the column's reply, and a column whose reply
+      // failed never gets one. Every other stage obeys the sticky rule.
+      if (typeof ev.slug === "string" && ev.stage === "rendering") {
+        if (next[ev.slug] === "done") {
+          next[ev.slug] = "rendering";
+          changed = true;
+        }
+      } else if (typeof ev.slug === "string") move(ev.slug, ev.stage);
+    } else if (ev.type === "reference") {
+      // Any reference event ends the rendering phase, the empty-text "no
+      // rendering" signal included: the pass is over either way.
+      if (typeof ev.slug === "string" && next[ev.slug] === "rendering") {
+        next[ev.slug] = "done";
+        changed = true;
+      }
     } else if (ev.type === "revision") {
       // A revision the server had no budget to act on (`applied: false`) is a
       // notice, not a phase: nothing is being rewritten, the column is about

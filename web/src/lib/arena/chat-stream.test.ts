@@ -1,13 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
   ChatStreamParser,
+  allRepliesClosed,
   applyChatEvents,
+  closedSlugs,
+  createComposerLock,
   encodeChatEvent,
   failPendingReplies,
   initStreamingReplies,
   type ChatReply,
   type ChatStreamEvent,
 } from "./chat-stream";
+import { referenceFormReport } from "./reference-form";
 
 /**
  * The wire protocol between the streaming chat route and the reviewer's
@@ -586,5 +590,228 @@ describe("the applied flag on the wire", () => {
         { type: "revision", slug: "a", reasons: ["x"] },
       ]);
     }
+  });
+});
+
+/**
+ * THE REFERENCE EVENT: the second pass's rendering, delivered after the
+ * column has closed, with what the pass cost. The fold must accept it on a
+ * done column (the one place `done` is not a bar), the reply must not erase
+ * it whichever order the two arrive in, a line with junk numbers or a junk
+ * report keeps its text and loses only the junk, and a client that has never
+ * heard of it must see nothing change.
+ */
+describe("the reference event", () => {
+  const report = referenceFormReport("Ma k'ọla wa", "Mà kí ọ́lá wà");
+  const reference = (over: Record<string, unknown> = {}): ChatStreamEvent =>
+    ({
+      type: "reference",
+      slug: "a",
+      text: "Mà kí ọ́lá wà",
+      report,
+      latencyMs: 4200,
+      tokensIn: 300,
+      tokensOut: 50,
+      ...over,
+    }) as ChatStreamEvent;
+  const closed = (text: string): ChatStreamEvent => ({
+    type: "reply",
+    reply: reply("a", { name: "A", text }),
+  });
+
+  it("round-trips through encode and parse, cost and report included", () => {
+    const parser = new ChatStreamParser();
+    expect(parser.push(encodeChatEvent(reference()))).toEqual([reference()]);
+  });
+
+  it("keeps the text when the report or the numbers are unreadable", () => {
+    const parser = new ChatStreamParser();
+    const line = (over: Record<string, unknown>) =>
+      encodeChatEvent(reference(over));
+    expect(parser.push(line({ report: "junk" }))).toEqual([
+      reference({ report: null }),
+    ]);
+    // A report whose lists are not lists of strings is not a report.
+    expect(parser.push(line({ report: { ...report, dropped: [1] } }))).toEqual([
+      reference({ report: null }),
+    ]);
+    expect(
+      parser.push(line({ latencyMs: "slow", tokensIn: null, tokensOut: 7 })),
+    ).toEqual([reference({ latencyMs: null, tokensIn: null, tokensOut: 7 })]);
+  });
+
+  it("drops a line with no text", () => {
+    const parser = new ChatStreamParser();
+    expect(parser.push(encodeChatEvent(reference({ text: undefined })))).toEqual(
+      [],
+    );
+  });
+
+  it("lands on a column that has already closed, leaving the answer untouched", () => {
+    const after = applyChatEvents(
+      initStreamingReplies([{ slug: "a", name: "A" }]),
+      [
+        { type: "delta", slug: "a", text: "Ma k'ọla wa" },
+        closed("Ma k'ọla wa"),
+        reference(),
+      ],
+    );
+    expect(after[0].done).toBe(true);
+    expect(after[0].text).toBe("Ma k'ọla wa");
+    expect(after[0].referenceForm).toEqual({
+      text: "Mà kí ọ́lá wà",
+      report,
+      latencyMs: 4200,
+      tokensIn: 300,
+      tokensOut: 50,
+    });
+  });
+
+  it("survives a reply that arrives after it", () => {
+    const after = applyChatEvents(
+      initStreamingReplies([{ slug: "a", name: "A" }]),
+      [reference({ report: null }), closed("Ma k'ọla wa")],
+    );
+    expect(after[0].referenceForm?.text).toBe("Mà kí ọ́lá wà");
+    expect(after[0].referenceForm?.report).toBeNull();
+  });
+
+  it("ignores the empty-text 'no rendering' signal: the column gets no reference form", () => {
+    const after = applyChatEvents(
+      initStreamingReplies([{ slug: "a", name: "A" }]),
+      [
+        closed("Ma k'ọla wa"),
+        reference({
+          text: "",
+          report: null,
+          latencyMs: null,
+          tokensIn: null,
+          tokensOut: null,
+        }),
+      ],
+    );
+    expect(after[0].referenceForm).toBeNull();
+    expect(after[0].text).toBe("Ma k'ọla wa");
+    // And it survives the wire as itself, not dropped as a line with no text.
+    const parser = new ChatStreamParser();
+    expect(
+      parser.push(encodeChatEvent(reference({ text: "", report: null }))),
+    ).toHaveLength(1);
+  });
+
+  it("is null on a fresh column and on a column of another slug", () => {
+    const replies = initStreamingReplies([
+      { slug: "a", name: "A" },
+      { slug: "b", name: "B" },
+    ]);
+    expect(replies[0].referenceForm).toBeNull();
+    const after = applyChatEvents(replies, [reference()]);
+    expect(after[1].referenceForm).toBeNull();
+  });
+
+  it("parses the rendering stage the route sends before the second pass", () => {
+    const parser = new ChatStreamParser();
+    expect(
+      parser.push(
+        encodeChatEvent({ type: "stage", slug: "a", stage: "rendering" }),
+      ),
+    ).toEqual([{ type: "stage", slug: "a", stage: "rendering" }]);
+  });
+});
+
+/**
+ * WHEN THE REVIEWER MAY ASK AGAIN: once every column's reply has landed, not
+ * when the stream ends. A rag-v4-5 column keeps the stream open for its
+ * reference form, and the composer must not wait on a rendering nobody judges.
+ */
+/**
+ * WHO OWNS THE COMPOSER. The composer frees when an exchange's last reply
+ * lands, while its stream may still carry a reference form, so a second
+ * question can go out before the first request's `finally` runs. These are
+ * the interleavings send() goes through, each pinned.
+ */
+describe("createComposerLock", () => {
+  it("one request: acquired, released once, and a second release of the same token is a no-op", () => {
+    const lock = createComposerLock();
+    expect(lock.held()).toBe(false);
+    const a = lock.acquire();
+    expect(lock.held()).toBe(true);
+    // All replies landed: the composer frees.
+    expect(lock.release(a)).toBe(true);
+    expect(lock.held()).toBe(false);
+    // The same request's finally, later: nothing to do.
+    expect(lock.release(a)).toBe(false);
+    expect(lock.held()).toBe(false);
+  });
+
+  it("an older request's late release after a newer acquire is a no-op", () => {
+    const lock = createComposerLock();
+    const a = lock.acquire();
+    expect(lock.release(a)).toBe(true); // a's replies all landed
+    const b = lock.acquire(); // the reviewer asks again while a still streams
+    expect(lock.release(a)).toBe(false); // a's finally, as its reference form lands
+    expect(lock.held()).toBe(true); // b keeps the composer
+    expect(lock.release(b)).toBe(true);
+    expect(lock.held()).toBe(false);
+  });
+
+  it("every acquire is eventually released, whichever order the releases arrive in", () => {
+    const lock = createComposerLock();
+    const tokens: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      // Each request frees the composer early, then the next one starts.
+      const t = lock.acquire();
+      tokens.push(t);
+      expect(lock.release(t)).toBe(true);
+    }
+    // The late finallys, in any order: none of them locks or unlocks anything.
+    for (const t of [...tokens].reverse()) expect(lock.release(t)).toBe(false);
+    expect(lock.held()).toBe(false);
+    // Tokens are distinct, so an old one can never pass for a new one.
+    expect(new Set(tokens).size).toBe(tokens.length);
+  });
+
+  it("a request that never freed early is released by its own finally", () => {
+    // A stream that dies before every reply lands: only finally releases.
+    const lock = createComposerLock();
+    const a = lock.acquire();
+    expect(lock.release(a)).toBe(true);
+    expect(lock.held()).toBe(false);
+  });
+});
+
+describe("allRepliesClosed / closedSlugs", () => {
+  it("is false until the last column's reply, true from then on, whatever else follows", () => {
+    const slugs = ["a", "b"];
+    let seen = closedSlugs(new Set(), [
+      { type: "delta", slug: "a", text: "x" },
+      { type: "reply", reply: reply("a") },
+    ]);
+    expect(allRepliesClosed(slugs, seen)).toBe(false);
+    seen = closedSlugs(seen, [
+      { type: "stage", slug: "a", stage: "rendering" },
+      { type: "reply", reply: reply("b") },
+    ]);
+    expect(allRepliesClosed(slugs, seen)).toBe(true);
+    // A reference form still to come does not reopen anything.
+    seen = closedSlugs(seen, [
+      {
+        type: "reference",
+        slug: "a",
+        text: "x",
+        report: null,
+        latencyMs: null,
+        tokensIn: null,
+        tokensOut: null,
+      },
+    ]);
+    expect(allRepliesClosed(slugs, seen)).toBe(true);
+  });
+
+  it("does not mutate the set it was given, and an empty exchange is never closed", () => {
+    const prev = new Set<string>();
+    closedSlugs(prev, [{ type: "reply", reply: reply("a") }]);
+    expect(prev.size).toBe(0);
+    expect(allRepliesClosed([], new Set(["a"]))).toBe(false);
   });
 });

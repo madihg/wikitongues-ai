@@ -127,6 +127,36 @@ export function hasBudgetForReask(
   return remainingMs(deadlineMs, now) >= MIN_REASK_BUDGET_MS;
 }
 
+// ─── the reference-form decision ────────────────────────────────────────────
+
+/**
+ * How much budget the reference-form second pass (rag-v4-5 chat columns,
+ * reference-form.ts) needs before starting one is defensible.
+ *
+ * MEASURED: 20 renderings of stored v4.4 train answers through Gemini 3.1
+ * Pro (scripts/reference-form-samples.ts, Oct 8) took a mean of 24.6s and a
+ * max of 37.5s. The floor sits just above that max, so a pass that starts is
+ * expected to land. That run used a 4,096 output budget; the re-run at the
+ * 8,192 budget the pass now has (reference-form.ts) took a mean of 26.5s and
+ * a max of 52.3s, with 2 of 20 over 40s, so at this floor a pass started with
+ * just over 40s left can still miss the deadline. Raising it trades coverage
+ * after a long (repaired) answer for fewer paid renderings that never land:
+ * Halim's call.
+ *
+ * The asymmetry is the same as the re-ask's, only milder: a rendering started
+ * with too little time left is not delivered and is still paid for, while the
+ * answer it would sit beside is already served either way.
+ */
+export const MIN_REFERENCE_BUDGET_MS = 40_000;
+
+/** May the reference-form second pass be started right now? */
+export function hasBudgetForReference(
+  deadlineMs: number,
+  now: number = Date.now(),
+): boolean {
+  return remainingMs(deadlineMs, now) >= MIN_REFERENCE_BUDGET_MS;
+}
+
 // ─── what the reviewer is told ──────────────────────────────────────────────
 
 /**
