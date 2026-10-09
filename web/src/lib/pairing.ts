@@ -95,6 +95,16 @@ export const ALLOWED_PAIRINGS: readonly (readonly [string, string])[] = [
   // remain servable.
   ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro"],
   ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro-rag-v3"],
+  // 2026-10-09, Halim's call ("I want the community to start testing v4.5"):
+  // v4.5 enters against v4.4, which isolates exactly the fourteen amended
+  // lines and the version-scoped rows, and against the bare model, the fixed
+  // reference every arm is read against. Not against v3: a third v4.5 pair
+  // would thin every pair's judgments for a comparison the other two already
+  // bracket. Enabled by scripts/enable-v45-pool.ts after this deploys and
+  // after V45_POOL_FLIP_AT (src/lib/arena/era.ts); v4.5 pairs are drawn only
+  // on prompts where v4.5 has a train answer (the 2026-10-08 bank first).
+  ["gemini-3-1-pro-rag-v4-5", "gemini-3-1-pro-rag-v4-4"],
+  ["gemini-3-1-pro-rag-v4-5", "gemini-3-1-pro"],
 ];
 
 /** Whether the (unordered) slug pair is on the whitelist. */

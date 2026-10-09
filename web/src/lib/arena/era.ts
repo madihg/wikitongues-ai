@@ -72,6 +72,13 @@ export const POOL_PIVOT_AT = "2026-08-20T19:38:08.385Z";
  *            model and v3 (scripts/enable-v44-pool.ts, run after this code
  *            was live). Two pairs exist only from here; the bare-vs-v3 pair
  *            continues across the boundary on the same questions.
+ *   round-4  from 2026-10-09 12:00 UTC: version 4.5 joins (against v4.4 and
+ *            the bare model, scripts/enable-v45-pool.ts, run after this code
+ *            was live), and the 108-question bank of 2026-10-08 is in every
+ *            queue. Both changed together: the bank went live the night
+ *            before, and no judgment at all landed between the v4.4 flip and
+ *            this boundary (checked 2026-10-09), so round-3 holds whatever
+ *            arrives before noon and round-4 starts clean on both changes.
  *
  * Verified against production on 2026-09-23: splitting by the Sep 13 date and
  * splitting by prompt provenance give the same rounds to within three
@@ -93,6 +100,10 @@ export interface PoolRoundDef {
  * this instant, never before it). */
 export const V44_POOL_FLIP_AT = "2026-10-08T12:00:00.000Z";
 
+/** The instant from which v4.5 pairs could be drawn (the flag flip runs
+ * after this instant, never before it; enable-v45-pool.ts refuses earlier). */
+export const V45_POOL_FLIP_AT = "2026-10-09T12:00:00.000Z";
+
 export const POOL_ROUNDS: readonly PoolRoundDef[] = [
   {
     key: "round-1",
@@ -108,8 +119,14 @@ export const POOL_ROUNDS: readonly PoolRoundDef[] = [
   },
   {
     key: "round-3",
-    label: "version 4.4 joins the blind test, since Oct 8",
+    label: "version 4.4 joins the blind test, Oct 8 to Oct 9",
     from: V44_POOL_FLIP_AT,
+    to: V45_POOL_FLIP_AT,
+  },
+  {
+    key: "round-4",
+    label: "version 4.5 and 108 new questions, since Oct 9",
+    from: V45_POOL_FLIP_AT,
     to: null,
   },
 ];

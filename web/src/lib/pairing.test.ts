@@ -125,6 +125,8 @@ describe("assignedPair", () => {
         ["gemini-3-1-pro-rag-v4-1", "gemini-3-1-pro-tonestrip"],
         ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro"],
         ["gemini-3-1-pro-rag-v4-4", "gemini-3-1-pro-rag-v3"],
+        ["gemini-3-1-pro-rag-v4-5", "gemini-3-1-pro-rag-v4-4"],
+        ["gemini-3-1-pro-rag-v4-5", "gemini-3-1-pro"],
       ]);
     });
 

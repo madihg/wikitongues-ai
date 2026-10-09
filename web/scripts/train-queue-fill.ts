@@ -93,6 +93,7 @@ import {
   roundUsd,
 } from "@/lib/arena/pricing";
 import { servingModeFor } from "@/lib/arena/frontier-targets";
+import { V45_POOL_FLIP_AT } from "@/lib/arena/era";
 import type { RetrievalV4Result } from "@/lib/arena/retrieval-v4";
 import {
   isV4FamilyVersionLabel,
@@ -120,7 +121,17 @@ const DECIDED_POOL_SLUGS = [
   // clears the flag scripts/enable-v44-pool.ts sets; `generate` fills it
   // through the v4-family branch below.
   "gemini-3-1-pro-rag-v4-4",
+  // 2026-10-09: v4.5 joins (exam 122.7, tone-insensitive 94.8, the tone
+  // marks are the whole gain over v4.4). Set by scripts/enable-v45-pool.ts.
+  "gemini-3-1-pro-rag-v4-5",
 ];
+
+/** An arm whose round boundary is still ahead is never flagged by `pool`:
+ * its pairs would be judged inside the previous round. Its own enable script
+ * flips it at or after the boundary. */
+const POOL_NOT_BEFORE: Record<string, string> = {
+  "gemini-3-1-pro-rag-v4-5": V45_POOL_FLIP_AT,
+};
 
 /** Hard budget cap in USD. The stop rule below makes exceeding it impossible. */
 const HARD_CAP_USD = 15;
@@ -197,8 +208,14 @@ async function pool() {
     where: { slug: { notIn: DECIDED_POOL_SLUGS }, inPairingPool: true },
     data: { inPairingPool: false },
   });
+  const due = DECIDED_POOL_SLUGS.filter(
+    (slug) => !POOL_NOT_BEFORE[slug] || Date.now() >= Date.parse(POOL_NOT_BEFORE[slug]),
+  );
+  for (const slug of DECIDED_POOL_SLUGS.filter((x) => !due.includes(x))) {
+    log(`  not yet: ${slug} joins at ${POOL_NOT_BEFORE[slug]} (its enable script flips it)`);
+  }
   const set = await prisma.candidateModel.updateMany({
-    where: { slug: { in: DECIDED_POOL_SLUGS }, archived: false },
+    where: { slug: { in: due }, archived: false },
     data: { inPairingPool: true },
   });
   log(
@@ -209,9 +226,9 @@ async function pool() {
     select: { slug: true, name: true },
   });
   for (const r of rows) log(`  in pool: ${r.slug.padEnd(26)} ${r.name}`);
-  if (rows.length !== DECIDED_POOL_SLUGS.length) {
+  if (rows.length < due.length) {
     log(
-      `  !! expected ${DECIDED_POOL_SLUGS.length} pool arms - register the missing candidate(s) first`,
+      `  !! expected ${due.length} pool arms - register the missing candidate(s) first`,
     );
   }
 }
