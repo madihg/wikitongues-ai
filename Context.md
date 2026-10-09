@@ -2028,3 +2028,21 @@ NEXT:
    dictionary words). Not rewritten.
 6. iCloud: run ~/move-repos-out-of-icloud.sh (conflict copies inside .git
    broke git fetch twice this session).
+
+
+### Oct 9 morning: fills, the v4.5 exam, the changelog
+
+Gemini quota reset at 07:00 UTC (midnight Pacific). Fills on the new batch:
+v4.4 107/108 ($5.55, 1 failed), v3 13/13 ($0.45). All 108 prompts servable;
+remaining per annotator: Agnes 123, Sarah 195, Austine 170, Blessing 189,
+Charity 208, Ibrahim 257.
+v4.5 FROZEN EXAM (43/43, $0.94, repair round fired once, tone-saturation):
+agreement 122.7 [95.1, 149.7] vs v4.4 105.3 [81.1, 129.2]; tone-insensitive
+94.8 vs 94.7; speakerRank 64.0 vs 62.7; chrF clean 55.8 vs 45.4. READING: the
+whole gain is tone marks (v4.5 leaves them off, as the speakers do; the
+dictionary block is untoned for v4.5); on words and grammar v4.5 = v4.4 on
+this exam. The new bank, not the frozen exam, is where the ki and agreement
+lines can show; v4.5 is not pooled, so only a pooling decision (Halim) would
+let speakers judge it.
+Changelog entry Oct 9 written verbatim in the app and the site (13 entries,
+site hash re-pinned 2f833a3a...).
