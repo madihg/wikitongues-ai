@@ -2046,3 +2046,26 @@ lines can show; v4.5 is not pooled, so only a pooling decision (Halim) would
 let speakers judge it.
 Changelog entry Oct 9 written verbatim in the app and the site (13 entries,
 site hash re-pinned 2f833a3a...).
+
+### Oct 9: v4.5 joins the blind test (Halim: "I want the community to start testing v4.5")
+
+PR #68 (5bfcbe5, deployed): ALLOWED_PAIRINGS + [v4-5, v4-4] and [v4-5, bare];
+round-4 "108 new questions, from Oct 9 (version 4.5 joins)" from
+V45_POOL_FLIP_AT = 2026-10-09T16:00:00Z (round-3 holds 8 judgments from 2
+annotators, all on the older questions); scripts/enable-v45-pool.ts with a
+before-boundary refusal and --check; train-queue-fill `pool` behind
+poolSlugsDue, claude-opus-5-rag removed from DECIDED_POOL_SLUGS; the submit
+route refuses a second comparison per (annotator, prompt) whatever the pair;
+drafts survive a pair change (deterministic A/B orientation, cold answer kept
+per prompt). --check at 09:52 and 10:05 UTC: both v4.5 pairs drawn; on the 48
+prompts with a v4.5 answer the v4.5 pairs take ~40% of draws.
+Flip: [FILLED AFTER THE FLIP] (scheduled 16:00:10 UTC from the clean clone).
+v4.5 train answers: 48 of 108 on the new bank (Oct 9 quota); a job fills the
+rest and then the Sep 13 batch after the 07:00 UTC reset.
+OPERATIONS NOW RUN FROM A CLONE OUTSIDE iCLOUD: both worktrees' node_modules
+are partly evicted and corrupt (Prisma client package.json, zod, a PostCSS
+plugin loaded as empty objects). scratchpad/ops-clone (app) and
+scratchpad/site-clone (site) are clean clones with offline installs. The
+site's iCloud checkout was found mid-checkout (empty HumanVerdicts.tsx,
+local main at an old commit) and was restored to origin/main. The fix for
+good is ~/move-repos-out-of-icloud.sh.
