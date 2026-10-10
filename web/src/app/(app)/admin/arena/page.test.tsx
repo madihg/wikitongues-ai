@@ -16,8 +16,8 @@ import { renderToStaticMarkup } from "react-dom/server";
  *    can be proved: render twice against two different fixture databases and
  *    require every quoted figure to move with the data.
  *
- * Prisma is mocked with the same recorder-fake shape as method-metrics.test.ts
- * and how-it-works/page.test.tsx, so the page renders end to end (the
+ * Prisma is mocked with the same recorder-fake shape as method-metrics.test.ts,
+ * so the page renders end to end (the
  * benchmark SVG included) without a database. `vi.hoisted` holds the fixture
  * so a test can swap the world and re-render.
  */

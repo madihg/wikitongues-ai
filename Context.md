@@ -2046,3 +2046,71 @@ lines can show; v4.5 is not pooled, so only a pooling decision (Halim) would
 let speakers judge it.
 Changelog entry Oct 9 written verbatim in the app and the site (13 entries,
 site hash re-pinned 2f833a3a...).
+
+### Oct 9: v4.5 joins the blind test (Halim: "I want the community to start testing v4.5")
+
+PR #68 (5bfcbe5, deployed): ALLOWED_PAIRINGS + [v4-5, v4-4] and [v4-5, bare];
+round-4 "108 new questions, from Oct 9 (version 4.5 joins)" from
+V45_POOL_FLIP_AT = 2026-10-09T16:00:00Z (round-3 holds 8 judgments from 2
+annotators, all on the older questions); scripts/enable-v45-pool.ts with a
+before-boundary refusal and --check; train-queue-fill `pool` behind
+poolSlugsDue, claude-opus-5-rag removed from DECIDED_POOL_SLUGS; the submit
+route refuses a second comparison per (annotator, prompt) whatever the pair;
+drafts survive a pair change (deterministic A/B orientation, cold answer kept
+per prompt). --check at 09:52 and 10:05 UTC: both v4.5 pairs drawn; on the 48
+prompts with a v4.5 answer the v4.5 pairs take ~40% of draws.
+Flip: 2026-10-10T07:21Z, NOT Oct 9 16:00. The scheduled job died when the
+session (and the machine's /private/tmp) restarted before 16:00, though it
+reported exit 0; found the next morning by enable-v45-pool.ts --check
+(inPairingPool false, 48 answers intact). Run by hand from a fresh clean
+clone: pool = bare, v3, v4.4, v4.5; check-queue-servable OK (342 pairable,
+0 unpairable; remaining: Agnes 123, Sarah 194, Austine 170, Blessing 189,
+Charity 208, Ibrahim 257). Round-4 opened at 16:00 Oct 9 as defined; v4.5's
+pairs exist in it from Oct 10. LESSON: a background shell job does not survive
+a session restart and /private/tmp is wiped with it; long waits now run as
+detached nohup jobs (scratchpad/fill-v45.sh, log beside it), and anything
+that must happen at a time gets verified afterwards, not assumed.
+v4.5 train answers: 48 of 108 on the new bank (Oct 9 quota); a job fills the
+rest and then the Sep 13 batch after the 07:00 UTC reset.
+OPERATIONS NOW RUN FROM A CLONE OUTSIDE iCLOUD: both worktrees' node_modules
+are partly evicted and corrupt (Prisma client package.json, zod, a PostCSS
+plugin loaded as empty objects). scratchpad/ops-clone (app) and
+scratchpad/site-clone (site) are clean clones with offline installs. The
+site's iCloud checkout was found mid-checkout (empty HumanVerdicts.tsx,
+local main at an old commit) and was restored to origin/main. The fix for
+good is ~/move-repos-out-of-icloud.sh.
+
+### Oct 9: the platform at app.wikitongues.org
+
+DNS for wikitongues.org is Squarespace (the old Google Domains nameservers,
+ns-cloud-e1..e4.googledomains.com); the wikitongues.org WEBSITE is WordPress
+on a separate PHP host (69.175.102.130), not Squarespace; mail is Google
+Workspace. app.wikitongues.org was added to the Vercel project wikitongues-ai
+with the Vercel CLI (the Vercel connector is read-only for that project), and
+Halim added the record A app 76.76.21.21 in Squarespace DNS. Live at 11:06 UTC:
+HTTPS 200, Let's Encrypt certificate (auto-renewed), next-auth's callback on
+https://app.wikitongues.org, public endpoints 200. The old addresses
+(web-three-rho-89.vercel.app, wikitongues-ai-web.vercel.app) keep serving the
+same app; annotators sign in once on the new one.
+Still to do: wikitongues.org/resources/ai -> https://app.wikitongues.org is a
+redirect on the WORDPRESS site (plugin or .htaccess, 302), not in Squarespace;
+it is a 404 today. The marketing site's domain (ai.wikitongues.org) is tabled.
+
+
+### Oct 10: one "How it works", and the changelog's home
+
+Halim: the platform's brown /how-it-works "shouldn't be there anymore"
+(app.wikitongues.org made it easy to land on). It had been kept beside the
+marketing site's green page since Aug 13, in step by hand. Now
+web/src/app/how-it-works/page.tsx and /admin/how-it-works are redirects to
+PUBLIC_HOW_IT_WORKS_URL (src/lib/personas.ts; update that constant when the
+marketing site gets its own domain), the admin "How this score works" link
+goes there too, and the page's test is replaced by a redirect test. The
+CHANGELOG constant is gone from the app: the record lives ONLY on the site
+(wikitongues-web-ai content/en/howItWorks.ts, hash-pinned in its test). Add
+changelog entries there from now on; nothing is copied between repos.
+Not carried over: the brown page's appendix that printed the served system
+prompt and the assembly order verbatim (still in the code:
+generation-prompt-*.ts, retrieval-v2/v4). Components that only that page
+used are now dead code, left for a separate cleanup.
+v4.5 fill restarted Oct 10 07:22 UTC as a detached job (scratchpad/fill-v45.sh).
