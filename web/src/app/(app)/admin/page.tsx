@@ -10,6 +10,7 @@ import { AnnotatorActivity } from "@/components/admin/annotator-activity";
 import { TimeSpent } from "@/components/admin/time-spent";
 import { ExportPanel } from "@/components/admin/export-panel";
 import { HelpButton } from "@/components/help-button";
+import { PUBLIC_HOW_IT_WORKS_URL } from "@/lib/personas";
 import { InfoTip } from "@/components/info-tip";
 
 /** The benchmark card is computed from the database per request - the house
@@ -78,12 +79,12 @@ export default async function AdminDashboard() {
                 questions. Computed live per request; never capped at 100.
               </InfoTip>
             </h2>
-            <Link
-              href="/how-it-works"
+            <a
+              href={PUBLIC_HOW_IT_WORKS_URL}
               className="text-sm font-medium text-accent-text"
             >
               How this score works →
-            </Link>
+            </a>
           </div>
           <p className="mb-3 mt-1 text-sm text-text-tertiary">
             The frozen-exam benchmark, drawn the way language models are usually

@@ -2059,7 +2059,17 @@ route refuses a second comparison per (annotator, prompt) whatever the pair;
 drafts survive a pair change (deterministic A/B orientation, cold answer kept
 per prompt). --check at 09:52 and 10:05 UTC: both v4.5 pairs drawn; on the 48
 prompts with a v4.5 answer the v4.5 pairs take ~40% of draws.
-Flip: [FILLED AFTER THE FLIP] (scheduled 16:00:10 UTC from the clean clone).
+Flip: 2026-10-10T07:21Z, NOT Oct 9 16:00. The scheduled job died when the
+session (and the machine's /private/tmp) restarted before 16:00, though it
+reported exit 0; found the next morning by enable-v45-pool.ts --check
+(inPairingPool false, 48 answers intact). Run by hand from a fresh clean
+clone: pool = bare, v3, v4.4, v4.5; check-queue-servable OK (342 pairable,
+0 unpairable; remaining: Agnes 123, Sarah 194, Austine 170, Blessing 189,
+Charity 208, Ibrahim 257). Round-4 opened at 16:00 Oct 9 as defined; v4.5's
+pairs exist in it from Oct 10. LESSON: a background shell job does not survive
+a session restart and /private/tmp is wiped with it; long waits now run as
+detached nohup jobs (scratchpad/fill-v45.sh, log beside it), and anything
+that must happen at a time gets verified afterwards, not assumed.
 v4.5 train answers: 48 of 108 on the new bank (Oct 9 quota); a job fills the
 rest and then the Sep 13 batch after the 07:00 UTC reset.
 OPERATIONS NOW RUN FROM A CLONE OUTSIDE iCLOUD: both worktrees' node_modules
@@ -2085,3 +2095,22 @@ same app; annotators sign in once on the new one.
 Still to do: wikitongues.org/resources/ai -> https://app.wikitongues.org is a
 redirect on the WORDPRESS site (plugin or .htaccess, 302), not in Squarespace;
 it is a 404 today. The marketing site's domain (ai.wikitongues.org) is tabled.
+
+
+### Oct 10: one "How it works", and the changelog's home
+
+Halim: the platform's brown /how-it-works "shouldn't be there anymore"
+(app.wikitongues.org made it easy to land on). It had been kept beside the
+marketing site's green page since Aug 13, in step by hand. Now
+web/src/app/how-it-works/page.tsx and /admin/how-it-works are redirects to
+PUBLIC_HOW_IT_WORKS_URL (src/lib/personas.ts; update that constant when the
+marketing site gets its own domain), the admin "How this score works" link
+goes there too, and the page's test is replaced by a redirect test. The
+CHANGELOG constant is gone from the app: the record lives ONLY on the site
+(wikitongues-web-ai content/en/howItWorks.ts, hash-pinned in its test). Add
+changelog entries there from now on; nothing is copied between repos.
+Not carried over: the brown page's appendix that printed the served system
+prompt and the assembly order verbatim (still in the code:
+generation-prompt-*.ts, retrieval-v2/v4). Components that only that page
+used are now dead code, left for a separate cleanup.
+v4.5 fill restarted Oct 10 07:22 UTC as a detached job (scratchpad/fill-v45.sh).

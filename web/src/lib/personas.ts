@@ -36,9 +36,9 @@ export function isResearcher(
  * The public "How it works" page lives on the marketing site, not in the app.
  * It is the canonical plain-language explainer (same live numbers, fetched
  * from /api/public/method-metrics), so the nav sends people there rather than
- * maintaining a second telling. The in-app /admin/how-it-works route still
- * exists for its parity-hold appendix; it is simply no longer the front door.
- * One constant so nav, in-page CTAs and tests cannot drift apart.
+ * maintaining a second telling. Since 2026-10-10 the in-app routes
+ * (/how-it-works and /admin/how-it-works) are redirects to it and nothing else.
+ * One constant so nav, in-page CTAs, the redirects and tests cannot drift apart.
  */
 export const PUBLIC_HOW_IT_WORKS_URL =
   "https://wikitongues-ai-site.vercel.app/how-it-works/";
