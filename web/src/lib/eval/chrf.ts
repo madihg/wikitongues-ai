@@ -74,41 +74,122 @@ export const CHRFPP_DEFAULTS: Required<ChrfOptions> = {
   beta: 2,
 };
 
-/** Counts of every n-gram of exactly length `n` in `units`. */
-function ngramCounts(units: string[], n: number): Map<string, number> {
+/** Every n-gram of exactly length `n` in `units`, counted, with the total. */
+interface NgramOrder {
+  counts: Map<string, number>;
+  /** Number of n-grams of this order (repeats included). 0 when the text is
+   * shorter than the order. */
+  total: number;
+}
+
+function ngramOrder(units: string[], n: number): NgramOrder {
   const counts = new Map<string, number>();
-  if (units.length < n) return counts;
+  if (units.length < n) return { counts, total: 0 };
+  let total = 0;
   for (let i = 0; i + n <= units.length; i++) {
     // U+0000 can never appear in normalised text, so it is a safe joiner.
     const key = units.slice(i, i + n).join("\u0000");
     counts.set(key, (counts.get(key) ?? 0) + 1);
+    total++;
   }
-  return counts;
+  return { counts, total };
 }
 
-interface OrderStat {
-  hyp: number;
-  ref: number;
-  match: number;
+/**
+ * One side of a chrF comparison with its n-grams already counted.
+ *
+ * Counting n-grams is nearly all of chrF's cost and depends on ONE string,
+ * not on the pair, so a caller that scores the same text against many others
+ * (a model answer against every reference, a reference against every model)
+ * can count each text once and reuse it. chrfSingle is defined as
+ * chrfFromProfiles over two fresh profiles, so there is one implementation of
+ * the metric and a score from reused profiles is the same number bit for bit.
+ */
+export interface ChrfProfile {
+  /** The orders the n-grams were counted at; both sides of a score must
+   * have been counted at the same orders. */
+  charOrder: number;
+  wordOrder: number;
+  /** No characters at all once whitespace is removed. */
+  empty: boolean;
+  /** Character orders 1..charOrder, then word orders 1..wordOrder. */
+  orders: NgramOrder[];
 }
 
-function orderStat(
-  hypUnits: string[],
-  refUnits: string[],
-  n: number,
-): OrderStat {
-  const hyp = ngramCounts(hypUnits, n);
-  const ref = ngramCounts(refUnits, n);
-  let total = 0;
-  let refTotal = 0;
+/** Count one text's n-grams for chrF. Role-free: the same profile serves as
+ * a hypothesis or as a reference. `beta` plays no part here. */
+export function chrfProfile(
+  text: string,
+  options: ChrfOptions = {},
+): ChrfProfile {
+  const { charOrder, wordOrder } = { ...CHRF_DEFAULTS, ...options };
+  const chars = charSequence(text);
+  const orders: NgramOrder[] = [];
+  for (let n = 1; n <= charOrder; n++) orders.push(ngramOrder(chars, n));
+  if (wordOrder > 0) {
+    const words = tokenize(text);
+    for (let n = 1; n <= wordOrder; n++) orders.push(ngramOrder(words, n));
+  }
+  return { charOrder, wordOrder, empty: chars.length === 0, orders };
+}
+
+/** Clipped matches between two n-gram count maps: for every n-gram both
+ * sides have, the smaller of the two counts. Symmetric, so the smaller map is
+ * the one walked. */
+function clippedMatches(
+  a: Map<string, number>,
+  b: Map<string, number>,
+): number {
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
   let match = 0;
-  for (const c of hyp.values()) total += c;
-  for (const c of ref.values()) refTotal += c;
-  for (const [key, c] of hyp) {
-    const r = ref.get(key);
-    if (r !== undefined) match += Math.min(c, r);
+  for (const [key, c] of small) {
+    const o = large.get(key);
+    if (o !== undefined) match += Math.min(c, o);
   }
-  return { hyp: total, ref: refTotal, match };
+  return match;
+}
+
+/**
+ * chrF from two counted profiles. Returns [0, 1]. Only `beta` is read from
+ * `options`; the n-gram orders are the profiles' own, and two profiles
+ * counted at different orders throw rather than score.
+ */
+export function chrfFromProfiles(
+  hypothesis: ChrfProfile,
+  reference: ChrfProfile,
+  options: ChrfOptions = {},
+): number {
+  if (
+    hypothesis.charOrder !== reference.charOrder ||
+    hypothesis.wordOrder !== reference.wordOrder
+  ) {
+    throw new Error(
+      "chrfFromProfiles: profiles were counted at different n-gram orders",
+    );
+  }
+  if (hypothesis.empty && reference.empty) return 1;
+  if (hypothesis.empty || reference.empty) return 0;
+
+  const { beta } = { ...CHRF_DEFAULTS, ...options };
+  const factor = beta * beta;
+  let sum = 0;
+  let effectiveOrders = 0;
+  for (let i = 0; i < hypothesis.orders.length; i++) {
+    const hyp = hypothesis.orders[i];
+    const ref = reference.orders[i];
+    // An order where either side has no n-grams at all carries no information
+    // (e.g. char 6-grams of a 3-character word); sacrebleu skips it rather than
+    // scoring it 0, so short strings are not unfairly punished.
+    if (hyp.total === 0 || ref.total === 0) continue;
+    effectiveOrders++;
+    const match = clippedMatches(hyp.counts, ref.counts);
+    const precision = match / hyp.total;
+    const recall = match / ref.total;
+    const denom = factor * precision + recall;
+    sum += denom > 0 ? ((1 + factor) * precision * recall) / denom : 0;
+  }
+  if (effectiveOrders === 0) return 0;
+  return sum / effectiveOrders;
 }
 
 /**
@@ -122,40 +203,11 @@ export function chrfSingle(
   reference: string,
   options: ChrfOptions = {},
 ): number {
-  const { charOrder, wordOrder, beta } = { ...CHRF_DEFAULTS, ...options };
-
-  const hypChars = charSequence(hypothesis);
-  const refChars = charSequence(reference);
-  if (hypChars.length === 0 && refChars.length === 0) return 1;
-  if (hypChars.length === 0 || refChars.length === 0) return 0;
-
-  const hypWords = tokenize(hypothesis);
-  const refWords = tokenize(reference);
-
-  const stats: OrderStat[] = [];
-  for (let n = 1; n <= charOrder; n++) {
-    stats.push(orderStat(hypChars, refChars, n));
-  }
-  for (let n = 1; n <= wordOrder; n++) {
-    stats.push(orderStat(hypWords, refWords, n));
-  }
-
-  const factor = beta * beta;
-  let sum = 0;
-  let effectiveOrders = 0;
-  for (const s of stats) {
-    // An order where either side has no n-grams at all carries no information
-    // (e.g. char 6-grams of a 3-character word); sacrebleu skips it rather than
-    // scoring it 0, so short strings are not unfairly punished.
-    if (s.hyp === 0 || s.ref === 0) continue;
-    effectiveOrders++;
-    const precision = s.match / s.hyp;
-    const recall = s.match / s.ref;
-    const denom = factor * precision + recall;
-    sum += denom > 0 ? ((1 + factor) * precision * recall) / denom : 0;
-  }
-  if (effectiveOrders === 0) return 0;
-  return sum / effectiveOrders;
+  return chrfFromProfiles(
+    chrfProfile(hypothesis, options),
+    chrfProfile(reference, options),
+    options,
+  );
 }
 
 export interface ChrfMultiResult {
@@ -180,12 +232,16 @@ export function chrfMulti(
   references: string[],
   options: ChrfOptions = {},
 ): ChrfMultiResult {
-  if (references.length === 0) {
+  return aggregateReferences(
+    references.map((r) => chrfSingle(hypothesis, r, options)),
+  );
+}
+
+/** The multi-reference rule over already-computed per-reference scores. */
+function aggregateReferences(perReference: number[]): ChrfMultiResult {
+  if (perReference.length === 0) {
     return { best: 0, mean: 0, bestIndex: -1, perReference: [] };
   }
-  const perReference = references.map((r) =>
-    chrfSingle(hypothesis, r, options),
-  );
   let best = -1;
   let bestIndex = -1;
   let sum = 0;
@@ -201,6 +257,62 @@ export function chrfMulti(
     mean: sum / perReference.length,
     bestIndex,
     perReference,
+  };
+}
+
+/**
+ * chrfSingle and chrfMulti with a memory, for one batch of scoring.
+ *
+ * A scoreboard scores the same few hundred strings against each other tens
+ * of thousands of times (every model answer against every reference, under
+ * several leave-one-out constructions). A scorer counts each distinct
+ * string's n-grams once and scores each distinct (hypothesis, reference)
+ * pair once; everything after that is a lookup. The values are the ones
+ * chrfSingle and chrfMulti return, bit for bit, because all three run
+ * chrfFromProfiles over chrfProfile.
+ *
+ * The memory lives in the scorer, not in this module: create one per batch
+ * and let it go, so nothing accumulates across requests.
+ */
+export interface ChrfScorer {
+  /** Same value as chrfSingle(hypothesis, reference, options). */
+  single(hypothesis: string, reference: string): number;
+  /** Same result as chrfMulti(hypothesis, references, options). */
+  multi(hypothesis: string, references: string[]): ChrfMultiResult;
+}
+
+export function createChrfScorer(options: ChrfOptions = {}): ChrfScorer {
+  const profiles = new Map<string, ChrfProfile>();
+  const profileOf = (text: string): ChrfProfile => {
+    let profile = profiles.get(text);
+    if (profile === undefined) {
+      profile = chrfProfile(text, options);
+      profiles.set(text, profile);
+    }
+    return profile;
+  };
+  const scores = new Map<string, Map<string, number>>();
+  const single = (hypothesis: string, reference: string): number => {
+    let byReference = scores.get(hypothesis);
+    if (byReference === undefined) {
+      byReference = new Map();
+      scores.set(hypothesis, byReference);
+    }
+    let score = byReference.get(reference);
+    if (score === undefined) {
+      score = chrfFromProfiles(
+        profileOf(hypothesis),
+        profileOf(reference),
+        options,
+      );
+      byReference.set(reference, score);
+    }
+    return score;
+  };
+  return {
+    single,
+    multi: (hypothesis, references) =>
+      aggregateReferences(references.map((r) => single(hypothesis, r))),
   };
 }
 

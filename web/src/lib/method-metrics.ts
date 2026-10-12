@@ -4,7 +4,7 @@ import {
   type HumanRoundCounts,
   type HumanRoundRow,
 } from "@/lib/arena/human-rounds";
-import { chrfMulti } from "@/lib/eval/chrf";
+import { createChrfScorer, type ChrfScorer } from "@/lib/eval/chrf";
 import { stripAnswer } from "@/lib/eval/answer-strip";
 import { stripToneMarks } from "@/lib/eval/tone";
 import { bootstrapMean } from "@/lib/eval/stats";
@@ -31,10 +31,42 @@ import { correctionReason } from "@/lib/arena/retrieval-v4";
  * scripts/leak-audit.ts (chrfMulti, stripAnswer, buildProtectedSet,
  * filterAssembled, leakFreePrompts), so a number on the page and a number in
  * the audit CLI can never come from two implementations of "stripped chrF on
- * the leak-free subset".
+ * the leak-free subset". chrF is reached through one ChrfScorer per
+ * computation (createChrfScorer in src/lib/eval/chrf.ts): the same
+ * chrfMulti, with each string's n-grams counted once instead of once per
+ * comparison. See the COST note below before adding a score.
  *
  * Prisma is injected so the whole thing is unit-testable with a recorder
  * fake - the same pattern as collectEvalBundle (src/lib/eval/collect.test.ts).
+ *
+ * COST (measured 2026-10-10: 43 frozen prompts, 34 arms, 1,431 outputs) -
+ * READ BEFORE ADDING A SCORE
+ * -----------------------------------------------------------------------
+ * "Cheap enough to run per request" had stopped being true. Uncached, the
+ * public endpoint took 10.5 s on the deployed function (3.4 s of CPU on a
+ * laptop over the same rows), and nearly all of it was the same work done
+ * again:
+ *   - chrF counted a string's n-grams afresh for every comparison the string
+ *     took part in. The leave-one-out columns score each answer against each
+ *     reference once per held-out speaker, so 44,470 comparisons were
+ *     counting the same 1,465 strings (6,564 distinct pairs) over and over.
+ *     One ChrfScorer per computation counts each string once and scores each
+ *     pair once.
+ *   - the leak scan showed the guard every served piece once per OUTPUT:
+ *     15,989 pieces, of which 1,288 were distinct for their prompt.
+ * With the repeats gone the same rows take about 0.5 s of CPU on a request
+ * that arrives cold, which an uncached request always does (0.16 s when run
+ * back to back), and return the same bytes: method-metrics.parity.test.ts
+ * pins the output against a payload recorded from the code as it stood
+ * before. Of that 0.5 s, 0.3 s is the leak guard compiling one pattern per
+ * protected string and tier; the guard was deliberately left as it is. The
+ * bootstrap (2,000 resamples, two intervals per arm) measured 40 ms and was
+ * left alone. The rest of an uncached request is the reads: three rounds of
+ * them, each a few round trips to the pooler.
+ * So: a new column goes through the `chrf` scorer inside
+ * computeMethodMetrics, never through a bare chrfMulti, and
+ * scripts/bench-method-metrics.ts re-measures all of this against the live
+ * database when the arm count or the bank grows.
  *
  * LIKE-FOR-LIKE SCORING (tasks/project-audit-2026-09-01.md, finding 2 /
  * option (c)) - READ BEFORE CHANGING agreementScore
@@ -357,10 +389,13 @@ function groupBySlug(rows: GoldRow[]): Map<string, string[]> {
  * IS a speaker's own score) and speaker-rank (the same draws, kept per-index
  * rather than averaged, so the model can be compared against each one).
  */
-function perGoldLeaveOneOut(golds: string[]): number[] {
+function perGoldLeaveOneOut(
+  golds: string[],
+  chrf: ChrfScorer = createChrfScorer(),
+): number[] {
   return golds.map((g, i) => {
     const rest = golds.filter((_, j) => j !== i);
-    return chrfMulti(g, rest).best * 100;
+    return chrf.multi(g, rest).best * 100;
   });
 }
 
@@ -370,14 +405,17 @@ function perGoldLeaveOneOut(golds: string[]): number[] {
  * hold out each gold in turn and score it against the rest with the
  * best-of-references rule; average the draws per prompt; average prompts.
  */
-export function looCeilingChrf(goldsByPrompt: Map<string, string[]>): {
+export function looCeilingChrf(
+  goldsByPrompt: Map<string, string[]>,
+  chrf: ChrfScorer = createChrfScorer(),
+): {
   mean: number | null;
   nPrompts: number;
 } {
   const perPrompt: number[] = [];
   for (const golds of goldsByPrompt.values()) {
     if (golds.length < 2) continue;
-    perPrompt.push(avg(perGoldLeaveOneOut(golds)));
+    perPrompt.push(avg(perGoldLeaveOneOut(golds, chrf)));
   }
   return {
     mean: perPrompt.length > 0 ? avg(perPrompt) : null,
@@ -396,10 +434,11 @@ export function looCeilingChrf(goldsByPrompt: Map<string, string[]>): {
 export function leaveOneOutMeanChrf(
   hypothesis: string,
   golds: string[],
+  chrf: ChrfScorer = createChrfScorer(),
 ): number {
   const draws = golds.map((_, i) => {
     const rest = golds.filter((_, j) => j !== i);
-    return chrfMulti(hypothesis, rest).best * 100;
+    return chrf.multi(hypothesis, rest).best * 100;
   });
   return avg(draws);
 }
@@ -734,10 +773,20 @@ export async function computeMethodMetrics(
     goldRows.map((g) => ({ promptId: g.promptSlug, answerText: g.answerText })),
   );
 
+  // Each served piece is shown to the guard ONCE PER PROMPT, not once per
+  // output that was served it. The arms answering one prompt are served
+  // largely the same rows, a piece's verdict depends only on the prompt and
+  // the piece's text, and `where` (id family + id) resolves to exactly one
+  // text - so a repeat can only repeat a verdict already recorded. Only the
+  // SET of leaked prompts is read from `hits` below, and that set is the
+  // same; the guard itself is untouched. See the COST note in the module doc.
+  const checkedBySlug = new Map<string, Set<string>>();
   const hits: LeakHit[] = [];
   for (const o of outputs) {
     const slug = slugOf.get(o.promptId);
     if (!slug) continue;
+    const checked = checkedBySlug.get(slug) ?? new Set<string>();
+    checkedBySlug.set(slug, checked);
     const s = splitServedIds(o.ragContextIds);
     const pieces = [
       ...s.ragEntryIds.map((id) => ({
@@ -760,7 +809,11 @@ export async function computeMethodMetrics(
         where: `edit:${id}`,
         text: editById.get(id) ?? "",
       })),
-    ].filter((p) => p.text);
+    ].filter((p) => {
+      if (!p.text || checked.has(p.where)) return false;
+      checked.add(p.where);
+      return true;
+    });
     const { report } = filterAssembled(slug, pieces, protectedSet);
     if (!report.pass) hits.push(...report.hits);
   }
@@ -770,16 +823,22 @@ export async function computeMethodMetrics(
   );
   const cleanSet = new Set(clean);
 
+  // ONE chrF scorer for everything below (see the COST note in the module
+  // doc): the ceilings, the per-speaker draws and every candidate column
+  // score the same strings against each other, so each string's n-grams are
+  // counted once and each (answer, reference) pair is scored once.
+  const chrf = createChrfScorer();
+
   // ── the two ceilings ──────────────────────────────────────────────────────
   // Computed BEFORE the scoreboard because the honest leak-free ceiling is
   // the denominator of every Community Agreement Score below.
   const ceilingFor = (rows: GoldRow[]): CeilingResult => {
     const bySlug = groupBySlug(rows);
-    const all = looCeilingChrf(bySlug);
+    const all = looCeilingChrf(bySlug, chrf);
     const cleanOnly = new Map(
       [...bySlug.entries()].filter(([slug]) => cleanSet.has(slug)),
     );
-    const cleanRes = looCeilingChrf(cleanOnly);
+    const cleanRes = looCeilingChrf(cleanOnly, chrf);
     return {
       chrfAll: all.mean,
       chrfClean: cleanRes.mean,
@@ -809,7 +868,7 @@ export async function computeMethodMetrics(
   // SAME speaker scores regardless of which candidate is being ranked.
   const speakerLooByPrompt = new Map<string, number[]>();
   for (const [slug, golds2] of likeForLikeGoldByPrompt) {
-    speakerLooByPrompt.set(slug, perGoldLeaveOneOut(golds2));
+    speakerLooByPrompt.set(slug, perGoldLeaveOneOut(golds2, chrf));
   }
 
   // ── tone-insensitive ceiling (finding 5), same prompt set, tone-stripped
@@ -823,6 +882,7 @@ export async function computeMethodMetrics(
   );
   const agreementCeilingChrfToneInsensitive = looCeilingChrf(
     likeForLikeGoldByPromptTone,
+    chrf,
   ).mean;
 
   // ── sourcefree-sensitivity prompt set + ceiling (finding 7): same
@@ -839,6 +899,7 @@ export async function computeMethodMetrics(
   const nSourcefreePrompts = sourcefreeGoldByPrompt.size;
   const agreementCeilingChrfSourcefree = looCeilingChrf(
     sourcefreeGoldByPrompt,
+    chrf,
   ).mean;
 
   // ── per-candidate stripped chrF, both ways, plus the hypothesis text kept
@@ -878,7 +939,7 @@ export async function computeMethodMetrics(
       continue;
     }
     const stripped = stripAnswer(o.outputText).stripped;
-    const str = chrfMulti(stripped, refs).best * 100;
+    const str = chrf.multi(stripped, refs).best * 100;
     entry.scores.push({ slug, str });
     entry.hypBySlug.set(slug, stripped);
     byCandidate.set(cm.name, entry);
@@ -903,7 +964,7 @@ export async function computeMethodMetrics(
       for (const [slug, golds2] of likeForLikeGoldByPrompt) {
         const hyp = c.hypBySlug.get(slug);
         if (hyp === undefined) continue;
-        perPromptM.push({ slug, m: leaveOneOutMeanChrf(hyp, golds2) });
+        perPromptM.push({ slug, m: leaveOneOutMeanChrf(hyp, golds2, chrf) });
       }
       const nLikeForLike = perPromptM.length;
       const meanM = avgOrNull(perPromptM.map((p) => p.m));
@@ -928,7 +989,9 @@ export async function computeMethodMetrics(
       for (const [slug, golds2] of likeForLikeGoldByPromptTone) {
         const hyp = c.hypBySlug.get(slug);
         if (hyp === undefined) continue;
-        perPromptMTone.push(leaveOneOutMeanChrf(stripToneMarks(hyp), golds2));
+        perPromptMTone.push(
+          leaveOneOutMeanChrf(stripToneMarks(hyp), golds2, chrf),
+        );
       }
       const strippedChrfCleanToneInsensitive = avgOrNull(perPromptMTone);
       const agreementScoreToneInsensitive = toAgreementScore(
@@ -941,7 +1004,7 @@ export async function computeMethodMetrics(
       for (const [slug, golds2] of sourcefreeGoldByPrompt) {
         const hyp = c.hypBySlug.get(slug);
         if (hyp === undefined) continue;
-        perPromptMSourcefree.push(leaveOneOutMeanChrf(hyp, golds2));
+        perPromptMSourcefree.push(leaveOneOutMeanChrf(hyp, golds2, chrf));
       }
       const agreementScoreSourcefree = toAgreementScore(
         avgOrNull(perPromptMSourcefree),
