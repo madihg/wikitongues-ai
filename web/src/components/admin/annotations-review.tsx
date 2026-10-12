@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { BUCKETS } from "@/lib/buckets";
 import { MAX_QUERY_LENGTH, MIN_QUERY_LENGTH } from "@/lib/annotations-query";
+import { annotatePromptHref } from "@/lib/annotate-url";
 
 /**
  * Researcher annotation-review surface. Lists every annotation event (pairwise,
@@ -584,6 +585,69 @@ function DetailDrawer({
   );
 }
 
+/**
+ * The drawer's PROMPT block, the same for every event type. Its own
+ * (exported) component so a render test can hold the "Annotate this prompt"
+ * link in place without mounting the drawer and its fetch.
+ *
+ * The link opens the question in the real annotation episode, for the
+ * researcher reading this judgment to go through it themselves: the same
+ * blind pair the queue would deal them, not this annotator's. A new tab, so
+ * the review list keeps its filters, its page and the open drawer. Whether
+ * the result is counted is decided over there (the Demo switch on that page).
+ */
+export function PromptSection({ prompt }: { prompt: PromptLite }) {
+  return (
+    <section>
+      <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+        Prompt
+      </p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-text-muted">
+            {prompt.promptId}
+          </span>
+          {prompt.bucket && (
+            <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs text-accent-text">
+              {prompt.bucket}
+            </span>
+          )}
+        </div>
+        {/* A plain anchor, as the sidebar's out-links are: it leaves this
+            page for a new tab, so there is nothing for next/link to do. */}
+        <a
+          href={annotatePromptHref(prompt.promptId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border-strong px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-sunken"
+        >
+          Annotate this prompt
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            className="shrink-0"
+          >
+            <path
+              d="M7 17L17 7M17 7H8M17 7v9"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="sr-only">(opens in a new tab)</span>
+        </a>
+      </div>
+      {prompt.text && (
+        <p className="mt-2 text-sm text-text-primary">{prompt.text}</p>
+      )}
+    </section>
+  );
+}
+
 function DetailBody({
   detail,
   onSaved,
@@ -603,28 +667,7 @@ function DetailBody({
         <p className="text-xs text-text-tertiary">{detail.annotator.email}</p>
       </section>
 
-      {detail.prompt && (
-        <section>
-          <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-            Prompt
-          </p>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="font-mono text-xs text-text-muted">
-              {detail.prompt.promptId}
-            </span>
-            {detail.prompt.bucket && (
-              <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs text-accent-text">
-                {detail.prompt.bucket}
-              </span>
-            )}
-          </div>
-          {detail.prompt.text && (
-            <p className="mt-2 text-sm text-text-primary">
-              {detail.prompt.text}
-            </p>
-          )}
-        </section>
-      )}
+      {detail.prompt && <PromptSection prompt={detail.prompt} />}
 
       {detail.type === "pairwise" && <PairwiseBody detail={detail} />}
       {detail.type === "cold" && <ColdBody detail={detail} onSaved={onSaved} />}
