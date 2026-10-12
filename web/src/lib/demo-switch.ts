@@ -86,6 +86,22 @@ export function rememberSession(store: KeyValueStore, id: string): void {
 }
 
 /**
+ * Whether a skip or a flag is sent to the server. Both are stored against the
+ * person's real queue (the question is never dealt to them again) and neither
+ * route knows about demo, so in demo the page does not send them at all: the
+ * banner's promise that nothing is saved has to hold for every button on the
+ * page, not only for Submit.
+ */
+export function skipAndFlagAreSent(demoOn: boolean): boolean {
+  return !demoOn;
+}
+
+export const DEMO_SKIP_NOT_SAVED =
+  "Demo: nothing was saved. The question stays in your queue.";
+export const DEMO_FLAG_NOT_SAVED =
+  "Demo: nothing was saved. The question was not flagged.";
+
+/**
  * Whether the page should put itself in demo on load. Only for a researcher,
  * only when they left the switch on, and never over the URL: a `demo`
  * parameter that is already there has decided the matter. A researcher who

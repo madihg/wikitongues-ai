@@ -205,12 +205,55 @@ describe("the Demo switch, wired (source)", () => {
 
   it("asks before switching only when the episode has input, and asks in the page", () => {
     const request = fnBody("function requestDemo(next: boolean) {");
-    expect(request).toContain("episodeHasUnsavedInput({");
+    expect(request).toContain("const unsaved = episodeHasInput();");
+    expect(fnBody("function episodeHasInput(): boolean {")).toContain(
+      "episodeHasUnsavedInput({",
+    );
     expect(request).toContain("if (unsaved) setDemoConfirm(next);");
     expect(request).toContain("else void applyDemo(next);");
     // In the page: the episode has no modal, and this does not add one.
     expect(src).not.toContain("window.confirm");
     expect(src).not.toContain("confirm(");
+  });
+
+  it("in demo, a skip and a flag are not sent at all: the guard sits before the request", () => {
+    for (const sig of [
+      "async function skipPrompt() {",
+      "async function submitFlag() {",
+    ]) {
+      const body = fnBody(sig);
+      const guard = body.indexOf("if (!skipAndFlagAreSent(!!demoSessionId)) {");
+      const post = body.indexOf("await fetch(");
+      expect(guard, sig).toBeGreaterThan(-1);
+      expect(post, sig).toBeGreaterThan(guard);
+      expect(body.slice(guard, post), sig).toContain("return;");
+    }
+  });
+
+  it("Back to my queue asks first when there is work on the page, in the page", () => {
+    const back = fnBody("function backToQueue() {");
+    expect(back).toContain("if (episodeHasInput()) setLeaveConfirm(true);");
+    expect(back).toContain("else leaveForQueue();");
+    expect(src).toContain("{pinnedPromptId && leaveConfirm && (");
+    expect(src).toContain("Leave this question");
+  });
+
+  it("a typed flag reason counts as work on the page", () => {
+    expect(fnBody("function episodeHasInput(): boolean {")).toContain(
+      "flagReason.trim().length > 0",
+    );
+  });
+
+  it("turning demo off with work on the page says it will count if submitted", () => {
+    expect(src).toContain("and it will count if you submit it.");
+  });
+
+  it("hands focus back to the switch after a flip", () => {
+    expect(src).toContain("ref={demoSwitchRef}");
+    expect(fnBody("async function applyDemo(next: boolean) {")).toContain(
+      "refocusDemoSwitch.current = true;",
+    );
+    expect(src).toContain("demoSwitchRef.current?.focus();");
   });
 
   it("turning on confirms a session first, then moves URL, state and preference together", () => {

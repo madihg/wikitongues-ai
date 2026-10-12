@@ -2173,3 +2173,79 @@ exactly as it is.
 ENV FILE: /Users/halim/Documents/wikitongues/web/.env.local is the February
 Neon file (no DIRECT_URL, wrong database). The current Supabase one is in the
 Oct 8 worktrees (.claude/worktrees/agent-*/web/.env.local).
+
+## Session State (2026-10-12, Opus 5.5) - ANNOTATE THIS PROMPT FROM REVIEW + THE DEMO SWITCH (PR #72)
+
+Halim's ask (Oct 12, from a screenshot of the /admin/annotations detail
+drawer): "on this modal i want an option to open the prompt itself in an
+annotate panel for a new annotation as a researcher and i want an option to
+turn on or off demo at the top of the annotate page".
+
+WHAT SHIPPED
+
+1. Review drawer (web/src/components/admin/annotations-review.tsx): a quiet
+   "Annotate this prompt" link in the PROMPT section, every event type, opens
+   /annotator/annotate?prompt=<public promptId> in a new tab.
+2. /api/annotations/next?prompt=<code> (web/src/app/api/annotations/next/route.ts):
+   researchers only. Anyone else carrying the parameter gets 403 before
+   anything is loaded. The answer always carries
+   pinned: { promptId, status }, status one of served, already_judged,
+   skipped, not_in_queue. An unknown code, a frozen exam question and a
+   prompt with no drawable pair all get not_in_queue, on purpose: a frozen
+   question is never served and nothing is said about it. The pair, the A/B
+   orientation, goldFirst, lane and reference come from buildTask(), the one
+   function the queue loop uses too, so a prompt opened from review is the
+   same blind episode the queue would have dealt. With no parameter the route
+   answers exactly as before (the builder proved it with a parity test against
+   the original route and a mutation run, both temporary, not committed).
+3. Annotate page (web/src/components/annotation-interface.tsx): an "Opened
+   from review: <code>" line with "Back to my queue"; notices for the three
+   not-served statuses, with "Try it in demo" where that helps; after a
+   submit, skip or flag the pin is dropped from the URL and the queue resumes.
+4. Demo switch, researchers only, top right of the annotate page
+   (role="switch"). Off: "Your answers count." On: "Saved as demo, never
+   counted." Turning on reuses the demo session remembered in localStorage
+   (wt-demo-session) if the server still lists it, else creates "Researcher
+   demo, YYYY-MM-DD". The choice sticks per browser (wt-demo-on); a demo
+   parameter already in the URL wins; the default is off. The sticky choice
+   is read only for a RESEARCHER session, so an annotator on a shared browser
+   is never put in demo by it.
+5. Pure, tested modules: web/src/lib/annotate-url.ts (URL and notice rules),
+   web/src/lib/demo-switch.ts (everything the switch decides).
+
+FOUND IN REVIEW AND FIXED IN THE SAME PR
+
+- In demo, "Skip" and "Flag" still wrote real PromptFlag rows, which removes
+  the question from that person's counted queue for good. This predates the
+  switch (any ?demo= link did it) but the switch makes demo the common path.
+  Now the page does not send either request in demo and says "Demo: nothing
+  was saved." (skipAndFlagAreSent in demo-switch.ts). The two routes are
+  unchanged.
+- "Back to my queue" with typed work on the page now asks first, in the page.
+  The draft lives in the tab's sessionStorage, and the drawer link opens a
+  fresh tab, so a deep-queue question could strand what was typed.
+- A typed flag reason counts as work on the page for both confirms.
+- Focus returns to the switch after a flip (the reload rebuilds it).
+- Turning demo OFF with work on the page says the draft "will count if you
+  submit it". Drafts are keyed by prompt and pair, not by mode, so a demo
+  walkthrough's entries can reappear in the counted episode. Kept on purpose
+  (work done in demo by mistake is not lost); the confirm now says so.
+
+OPEN, Halim's call
+
+- Should researcher accounts default to demo? Today the default is off.
+- web/src/components/annotation-interface.tsx carries a worked example that
+  quotes the gold answer of frozen item ig_bank_orth_013 (already on main
+  before this PR; the leak check flags it). Raised as its own task, not
+  touched here.
+
+LESSON (cost a rebuild's worth of risk on Oct 12): workflow and agent clones
+under /private/tmp, the session scratchpad included, are wiped when the
+session restarts. The finished build was lost before it was pushed and was
+recovered by replaying the builder's recorded Write, Edit and patch commands
+from its transcript onto a fresh clone. Rule from now on: clones live in
+~/wt-clones/ (outside iCloud, survives restarts), and a builder pushes its
+branch as soon as its gates pass.
+
+GATES on the merged code: pnpm typecheck 0, pnpm lint 0, vitest 101 files,
+1,593 tests.

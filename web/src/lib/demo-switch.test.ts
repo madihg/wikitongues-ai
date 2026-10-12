@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  DEMO_FLAG_NOT_SAVED,
+  DEMO_SKIP_NOT_SAVED,
   DEMO_PREFERENCE_KEY,
   DEMO_SESSION_KEY,
   DEMO_SESSIONS_PATH,
@@ -14,6 +16,7 @@ import {
   readRememberedSession,
   rememberSession,
   shouldAutoApplyDemo,
+  skipAndFlagAreSent,
   writeDemoPreference,
   type EpisodeInput,
   type Fetcher,
@@ -362,5 +365,19 @@ describe("episodeHasUnsavedInput (when the switch asks first)", () => {
     expect(episodeHasUnsavedInput({ ...blank, explanation: "B is wrong." })).toBe(
       true,
     );
+  });
+});
+
+describe("skipAndFlagAreSent", () => {
+  it("counted mode sends a skip or a flag, demo never does", () => {
+    expect(skipAndFlagAreSent(false)).toBe(true);
+    expect(skipAndFlagAreSent(true)).toBe(false);
+  });
+
+  it("the page says plainly that nothing was saved", () => {
+    for (const message of [DEMO_SKIP_NOT_SAVED, DEMO_FLAG_NOT_SAVED]) {
+      expect(message).toMatch(/^Demo: nothing was saved\. /);
+    }
+    expect(DEMO_SKIP_NOT_SAVED).not.toBe(DEMO_FLAG_NOT_SAVED);
   });
 });

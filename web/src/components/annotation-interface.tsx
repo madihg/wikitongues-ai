@@ -42,12 +42,15 @@ import {
   type PinnedNoticeKind,
 } from "@/lib/annotate-url";
 import {
+  DEMO_FLAG_NOT_SAVED,
+  DEMO_SKIP_NOT_SAVED,
   browserStore,
   canUseDemoSwitch,
   ensureDemoSession,
   episodeHasUnsavedInput,
   readDemoPreference,
   shouldAutoApplyDemo,
+  skipAndFlagAreSent,
   writeDemoPreference,
 } from "@/lib/demo-switch";
 
@@ -247,6 +250,11 @@ export function AnnotationInterface() {
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const [demoConfirm, setDemoConfirm] = useState<boolean | null>(null);
+  // "Back to my queue" pressed with work on the page: asked first, in the page.
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
+  // The switch is rebuilt by the reload a flip causes; focus is handed back.
+  const demoSwitchRef = useRef<HTMLButtonElement>(null);
+  const refocusDemoSwitch = useRef(false);
   const demoSessionRequest = useRef<Promise<string> | null>(null);
 
   const [step, setStep] = useState<Step>("prompt");
@@ -467,6 +475,7 @@ export function AnnotationInterface() {
     // A "go ahead?" left open under the Demo switch was about the episode
     // that is now being replaced.
     setDemoConfirm(null);
+    setLeaveConfirm(false);
     try {
       // Both parameters are read from the page URL at the moment of the
       // fetch, so the demo switch and "Back to my queue" only have to change
@@ -690,14 +699,6 @@ export function AnnotationInterface() {
   const releasePin = useCallback(() => {
     if (pinnedPromptId) replaceAnnotateSearch({ prompt: null });
   }, [pinnedPromptId]);
-
-  // "Back to my queue": the same, by choice. Nothing is asked first, because
-  // nothing is lost: the episode draft is saved as it is typed and comes back
-  // if this question does.
-  function backToQueue() {
-    replaceAnnotateSearch({ prompt: null });
-    void fetchNext();
-  }
 
   // Keyboard winner selection on the pairwise step.
   useEffect(() => {
@@ -1022,6 +1023,12 @@ export function AnnotationInterface() {
 
   async function submitFlag() {
     if (!task || flagReason.trim().length < 3) return;
+    if (!skipAndFlagAreSent(!!demoSessionId)) {
+      // Demo stores nothing, a flag included (see skipAndFlagAreSent).
+      showToast(DEMO_FLAG_NOT_SAVED, "success");
+      setFlagOpen(false);
+      return;
+    }
     try {
       const res = await fetch("/api/annotations/flag", {
         method: "POST",
@@ -1046,6 +1053,11 @@ export function AnnotationInterface() {
   // in-parallel endpoint: POST /api/annotations/skip { promptId } -> 200.
   async function skipPrompt() {
     if (!task || skipping || submitting) return;
+    if (!skipAndFlagAreSent(!!demoSessionId)) {
+      // Demo stores nothing, a skip included (see skipAndFlagAreSent).
+      showToast(DEMO_SKIP_NOT_SAVED, "success");
+      return;
+    }
     setSkipping(true);
     try {
       const res = await fetch("/api/annotations/skip", {
@@ -1077,6 +1089,7 @@ export function AnnotationInterface() {
   // `demoSessionId` is what both the switch shows and the submit sends, so
   // what is on screen and what gets stored cannot disagree.
   async function applyDemo(next: boolean) {
+    refocusDemoSwitch.current = true;
     setDemoConfirm(null);
     setDemoError(null);
     setDemoBusy(true);
@@ -1112,7 +1125,16 @@ export function AnnotationInterface() {
   function requestDemo(next: boolean) {
     if (loading || demoBusy) return;
     setDemoError(null);
-    const unsaved =
+    const unsaved = episodeHasInput();
+    if (unsaved) setDemoConfirm(next);
+    else void applyDemo(next);
+  }
+
+  // Whether the question on screen carries work that leaving it would take
+  // off the page. Asked by the Demo switch and by "Back to my queue". A typed
+  // flag reason counts: it is not in the draft, so a reload drops it.
+  function episodeHasInput(): boolean {
+    return (
       !!task &&
       episodeHasUnsavedInput({
         coldLocked,
@@ -1126,12 +1148,34 @@ export function AnnotationInterface() {
           winnerEdited ||
           tieEdited ||
           markupMade ||
-          salvage.trim().length > 0,
+          salvage.trim().length > 0 ||
+          flagReason.trim().length > 0,
         explanation,
-      });
-    if (unsaved) setDemoConfirm(next);
-    else void applyDemo(next);
+      })
+    );
   }
+
+  // "Back to my queue". With work on the page the person is asked first: the
+  // draft lives in this tab only, and a question opened from review comes
+  // back only if the queue deals it, so leaving can strand what was typed.
+  function leaveForQueue() {
+    setLeaveConfirm(false);
+    replaceAnnotateSearch({ prompt: null });
+    void fetchNext();
+  }
+  function backToQueue() {
+    if (episodeHasInput()) setLeaveConfirm(true);
+    else leaveForQueue();
+  }
+
+  // A flip reloads the question, and the reload rebuilds the switch (it is
+  // disabled, then drawn under a different root). Focus goes back to it, so a
+  // keyboard or screen-reader user stays on the control and hears its state.
+  useEffect(() => {
+    if (loading || demoBusy || !refocusDemoSwitch.current) return;
+    refocusDemoSwitch.current = false;
+    demoSwitchRef.current?.focus();
+  }, [loading, demoBusy]);
 
   // Rendered above every state of the page (loading, the notices, the task),
   // so the switch does not come and go. Null for everyone but a researcher,
@@ -1145,6 +1189,7 @@ export function AnnotationInterface() {
         <button
           type="button"
           role="switch"
+          ref={demoSwitchRef}
           aria-checked={demoOn}
           aria-describedby="demo-switch-help"
           disabled={loading || demoBusy || submitting || skipping}
@@ -1169,8 +1214,9 @@ export function AnnotationInterface() {
       {demoConfirm !== null && (
         <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-text-secondary">
           <span role="status">
-            Switching reloads the question. What you have entered is kept as a
-            draft in this tab.
+            {demoConfirm
+              ? "Switching reloads the question. What you have entered is kept as a draft in this tab."
+              : "Switching reloads the question. What you entered in demo is kept as a draft in this tab, and it will count if you submit it."}
           </span>
           <button
             type="button"
@@ -1597,6 +1643,28 @@ export function AnnotationInterface() {
             className="inline-flex min-h-10 cursor-pointer items-center text-xs text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline"
           >
             Back to my queue
+          </button>
+        </div>
+      )}
+      {pinnedPromptId && leaveConfirm && (
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-text-secondary">
+          <span role="status">
+            Leaving takes this question off the page. What you have entered is
+            kept as a draft in this tab only.
+          </span>
+          <button
+            type="button"
+            onClick={leaveForQueue}
+            className="inline-flex min-h-[44px] cursor-pointer items-center rounded-md border border-border-strong bg-surface px-3 text-xs font-medium text-text-secondary hover:bg-surface-sunken"
+          >
+            Leave this question
+          </button>
+          <button
+            type="button"
+            onClick={() => setLeaveConfirm(false)}
+            className="inline-flex min-h-[44px] cursor-pointer items-center text-xs text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline"
+          >
+            Keep working
           </button>
         </div>
       )}
