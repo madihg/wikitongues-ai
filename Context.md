@@ -2114,3 +2114,62 @@ prompt and the assembly order verbatim (still in the code:
 generation-prompt-*.ts, retrieval-v2/v4). Components that only that page
 used are now dead code, left for a separate cleanup.
 v4.5 fill restarted Oct 10 07:22 UTC as a detached job (scratchpad/fill-v45.sh).
+
+### Oct 10-12: the uncached method-metrics computation (branch perf/method-metrics-uncached, PR open, NOT merged)
+
+Problem (Halim, Oct 10): GET /api/public/method-metrics takes 10.5 s when
+nothing is cached, so the marketing site's tiles say "loading" for the first
+visitor after every deploy. Target: under 2 s, no number moved.
+
+PROFILE (43 frozen prompts, 34 arms, 1,431 outputs; laptop, cold process):
+3.4 s of CPU, of which chrF n-gram counting 2.85 s and the leak scan 0.45 s.
+The bootstrap is 40 ms. chrF was counting the same 1,465 strings 44,470 times
+(the leave-one-out columns score each answer against each reference once per
+held-out speaker); the leak scan showed the guard 15,989 served pieces of
+which 1,288 are distinct for their prompt. The reads are 20 Prisma calls in
+three rounds; in pgbouncer mode each call is BEGIN, DEALLOCATE ALL, the
+statement, COMMIT, so they dominate from a laptop in another continent
+(11 to 13 s wall locally, before and after) and not on the function, which
+runs in iad1 one region from the pooler (us-east-2).
+
+FIX (CPU only, no query touched, leak-guard.ts untouched):
+- src/lib/eval/chrf.ts: chrfSingle is now chrfFromProfiles(chrfProfile(h),
+  chrfProfile(r)); createChrfScorer() counts each string once and scores each
+  pair once. One implementation of the metric, as before.
+- src/lib/method-metrics.ts: one scorer per computation, passed to the
+  ceilings and every candidate column; each served piece goes to
+  filterAssembled once per prompt instead of once per output.
+RESULT on the same rows: 3.4 s -> 0.5 s cold (what an uncached request gets),
+3.1 s -> 0.16 s back to back.
+
+PROOF that no number moved:
+- src/lib/method-metrics.parity.test.ts + method-metrics.parity.recorded.json:
+  a generated world (20 prompts, 10 arms, a leak through every id family),
+  payload recorded from e2f02ab (the commit before), compared after
+  JSON.stringify, full unrounded metrics and public payload. Four deliberate
+  breakages each fail it.
+- src/lib/eval/chrf-scorer.test.ts: chrfSingle before the split kept as an
+  oracle; 2,025 ordered pairs x 4 option sets, Object.is.
+- Real data, not committed (it holds answers): the 20 live reads recorded
+  once and replayed through e2f02ab and the branch, Oct 10 and again Oct 12:
+  identical bytes both days (Oct 12: full 29,328 bytes, public 24,047).
+- method-metrics.test.ts and public-method-metrics.test.ts untouched, green.
+  Do not edit those two files or chrf.test.ts in a PR: they already carry
+  frozen single-word answers, so leak-check-files fails on them as "changed".
+  New tests go in new files with generated text (z, q, x, v words).
+
+MEASURING: scripts/bench-method-metrics.ts (read-only, prints timings, counts
+and a hash). A query string does NOT bust the endpoint's cache (?cb=1 then
+?cb=2 gave MISS then HIT on Oct 10), so the honest uncached number is the
+first hit after a deploy.
+
+OPEN, Halim's call: 0.3 s of the remaining 0.5 s is the leak guard compiling
+one regex per protected string and tier on every cold request. One line in
+containsWholeWord (return false when the folded text does not contain the
+folded answer at all, before building the regex) takes cold CPU to 0.2 s with
+identical output on the live rows. Not done: the brief said to keep the guard
+exactly as it is.
+
+ENV FILE: /Users/halim/Documents/wikitongues/web/.env.local is the February
+Neon file (no DIRECT_URL, wrong database). The current Supabase one is in the
+Oct 8 worktrees (.claude/worktrees/agent-*/web/.env.local).

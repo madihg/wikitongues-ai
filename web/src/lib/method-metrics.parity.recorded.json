@@ -1,0 +1,1075 @@
+{
+  "recordedFrom": "e2f02ab",
+  "note": "Output of computeMethodMetrics and toPublicMethodMetrics over the generated world in method-metrics.parity.test.ts, recorded from the commit named in recordedFrom. Numbers and made-up arm names only.",
+  "full": {
+    "computedAt": "2026-10-10T09:00:00.000Z",
+    "corpus": {
+      "goldAnswers": 75,
+      "pairwiseComparisons": 40,
+      "pairwiseBothInadequate": 9,
+      "poolComparisons": 23,
+      "poolBothInadequate": 4,
+      "poolDecided": 15,
+      "parallelPairs": 77,
+      "lexEntries": 55,
+      "annotators": 7
+    },
+    "benchmark": {
+      "frozenPrompts": 20,
+      "promptsWithGold": 19,
+      "leakedPrompts": 8,
+      "leakFreePrompts": 12
+    },
+    "ceilings": {
+      "asShipped": {
+        "chrfAll": 59.044525662500035,
+        "chrfClean": 63.10181140316115,
+        "nPromptsAll": 17,
+        "nPromptsClean": 10
+      },
+      "onePerAnnotator": {
+        "chrfAll": 51.01878003265621,
+        "chrfClean": 51.49018173523052,
+        "nPromptsAll": 17,
+        "nPromptsClean": 10
+      }
+    },
+    "agreementCeilingChrf": 51.49018173523052,
+    "likeForLikePrompts": 10,
+    "agreementCeilingChrfToneInsensitive": 78.66817612812683,
+    "nSourcefreePrompts": 6,
+    "agreementCeilingChrfSourcefree": 49.56804542861817,
+    "candidates": [
+      {
+        "name": "fx retrieval two",
+        "approach": "retrieval v2",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 100,
+        "strippedChrfClean": 100,
+        "agreementScore": 160.02078813401766,
+        "agreementCiLow": 126.85874424180138,
+        "agreementCiHigh": 185.19767086912537,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 194.21178296517485,
+        "speakerRank": 96.66666666666666,
+        "speakerRankCiLow": 90,
+        "speakerRankCiHigh": 100,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 123.05804878835016,
+        "strippedChrfCleanToneInsensitive": 96.80752256065554,
+        "agreementScoreSourcefree": 129.72695900760428
+      },
+      {
+        "name": "fx retrieval three",
+        "approach": "retrieval v3",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 100,
+        "strippedChrfClean": 100,
+        "agreementScore": 153.72109256915405,
+        "agreementCiLow": 146.67411159727212,
+        "agreementCiHigh": 161.09399344458498,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 194.21178296517485,
+        "speakerRank": 69,
+        "speakerRankCiLow": 48.33333333333333,
+        "speakerRankCiHigh": 88.00000000000001,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 121.13539135178333,
+        "strippedChrfCleanToneInsensitive": 95.29500302211662,
+        "agreementScoreSourcefree": 88.12875897739525
+      },
+      {
+        "name": "fx sparse",
+        "approach": "retrieval v4.4",
+        "n": 8,
+        "nClean": 5,
+        "nLikeForLike": 5,
+        "emptyOutputs": 5,
+        "strippedChrfAll": 100,
+        "strippedChrfClean": 100,
+        "agreementScore": 187.09741021433447,
+        "agreementCiLow": 176.27716179880906,
+        "agreementCiHigh": 193.0705922450005,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 194.21178296517485,
+        "speakerRank": 100,
+        "speakerRankCiLow": 100,
+        "speakerRankCiHigh": 100,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 126.2502243133925,
+        "strippedChrfCleanToneInsensitive": 99.31874882501481,
+        "agreementScoreSourcefree": 135.22925840527546
+      },
+      {
+        "name": "fx tuned",
+        "approach": "fine-tuned",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 99.98304207881002,
+        "strippedChrfClean": 99.97070904521729,
+        "agreementScore": 153.66780676696223,
+        "agreementCiLow": 146.6427958727043,
+        "agreementCiHigh": 161.03026349156818,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 194.1548964796438,
+        "speakerRank": 69,
+        "speakerRankCiLow": 48.33333333333333,
+        "speakerRankCiHigh": 88.00000000000001,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 121.09452737038224,
+        "strippedChrfCleanToneInsensitive": 95.26285607325505,
+        "agreementScoreSourcefree": 88.07897871180657
+      },
+      {
+        "name": "fx control",
+        "approach": "control (tone removed)",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 89.5419552897821,
+        "strippedChrfClean": 81.9361045914418,
+        "agreementScore": 126.38656802077872,
+        "agreementCiLow": 109.71830730787062,
+        "agreementCiHigh": 142.03442469808354,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 159.12956961924962,
+        "speakerRank": 66.49999999999999,
+        "speakerRankCiLow": 44.82916666666667,
+        "speakerRankCiHigh": 86.66666666666669,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 123.05804878835016,
+        "strippedChrfCleanToneInsensitive": 96.80752256065554,
+        "agreementScoreSourcefree": 73.27226544874357
+      },
+      {
+        "name": "fx retrieval four five",
+        "approach": "retrieval v4.5",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 80.01653389182026,
+        "strippedChrfClean": 81.07150153023144,
+        "agreementScore": 120.8339952447411,
+        "agreementCiLow": 91.67703598413432,
+        "agreementCiHigh": 147.32811852394303,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 157.4504085985015,
+        "speakerRank": 70.66666666666667,
+        "speakerRankCiLow": 51.33333333333334,
+        "speakerRankCiHigh": 89,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 98.74843370653298,
+        "strippedChrfCleanToneInsensitive": 77.68359175202193,
+        "agreementScoreSourcefree": 109.03247066152417
+      },
+      {
+        "name": "fx retrieval one",
+        "approach": "retrieval v1",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 35.45617841222688,
+        "strippedChrfClean": 39.18822913436702,
+        "agreementScore": 76.90011577599313,
+        "agreementCiLow": 37.93929420054008,
+        "agreementCiHigh": 119.10162390805421,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 76.10815851433229,
+        "speakerRank": 39.83333333333333,
+        "speakerRankCiLow": 20,
+        "speakerRankCiHigh": 61.504166666666634,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 59.903842229448266,
+        "strippedChrfCleanToneInsensitive": 47.12526011257758,
+        "agreementScoreSourcefree": 89.08621974596157
+      },
+      {
+        "name": "fx retrieval four one",
+        "approach": "retrieval v4.1",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 33.57787970805709,
+        "strippedChrfClean": 28.263220047189005,
+        "agreementScore": 46.55746890197079,
+        "agreementCiLow": 35.274107709595505,
+        "agreementCiHigh": 59.52159408789325,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 54.8905035770165,
+        "speakerRank": 31.666666666666664,
+        "speakerRankCiLow": 13.333333333333334,
+        "speakerRankCiHigh": 51.66666666666667,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 123.05804878835016,
+        "strippedChrfCleanToneInsensitive": 96.80752256065554,
+        "agreementScoreSourcefree": 49.627285385477954
+      },
+      {
+        "name": "fx plain",
+        "approach": "untouched",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 12.05073377931028,
+        "strippedChrfClean": 14.280919346990025,
+        "agreementScore": 27.259010178193243,
+        "agreementCiLow": 18.902862749767152,
+        "agreementCiHigh": 36.443551923619324,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 27.735228087607933,
+        "speakerRank": 15.833333333333332,
+        "speakerRankCiLow": 0,
+        "speakerRankCiHigh": 36.666666666666664,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 24.877095585396518,
+        "strippedChrfCleanToneInsensitive": 19.5703573706822,
+        "agreementScoreSourcefree": 25.93550563085542
+      }
+    ],
+    "humanRounds": [
+      {
+        "a": {
+          "name": "fx plain",
+          "approach": "untouched"
+        },
+        "b": {
+          "name": "fx retrieval three",
+          "approach": "retrieval v3"
+        },
+        "rounds": [
+          {
+            "key": "round-1",
+            "label": "first batch of questions, Aug 20 to Sep 12",
+            "from": "2026-08-20T19:38:08.385Z",
+            "to": "2026-09-13T00:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 5,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-2",
+            "label": "new batch of questions, Sep 13 to Oct 8",
+            "from": "2026-09-13T00:00:00.000Z",
+            "to": "2026-10-08T12:00:00.000Z",
+            "n": 2,
+            "aWins": 0,
+            "bWins": 2,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 0,
+              "b": 10,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-3",
+            "label": "day version 4.4 joined, Oct 8 to Oct 9",
+            "from": "2026-10-08T12:00:00.000Z",
+            "to": "2026-10-09T16:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 0,
+            "ties": 0,
+            "bothInadequate": 1,
+            "perTen": {
+              "a": 5,
+              "b": 0,
+              "tie": 0,
+              "neither": 5
+            }
+          },
+          {
+            "key": "round-4",
+            "label": "108 new questions, from Oct 9 (version 4.5 joins)",
+            "from": "2026-10-09T16:00:00.000Z",
+            "to": null,
+            "n": 2,
+            "aWins": 1,
+            "bWins": 0,
+            "ties": 1,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 0,
+              "tie": 5,
+              "neither": 0
+            }
+          }
+        ],
+        "all": {
+          "key": "all",
+          "label": "All rounds",
+          "from": "2026-08-20T19:38:08.385Z",
+          "to": null,
+          "n": 8,
+          "aWins": 3,
+          "bWins": 3,
+          "ties": 1,
+          "bothInadequate": 1,
+          "perTen": {
+            "a": 3.8,
+            "b": 3.8,
+            "tie": 1.3,
+            "neither": 1.3
+          }
+        }
+      },
+      {
+        "a": {
+          "name": "fx retrieval four five",
+          "approach": "retrieval v4.5"
+        },
+        "b": {
+          "name": "fx retrieval three",
+          "approach": "retrieval v3"
+        },
+        "rounds": [
+          {
+            "key": "round-1",
+            "label": "first batch of questions, Aug 20 to Sep 12",
+            "from": "2026-08-20T19:38:08.385Z",
+            "to": "2026-09-13T00:00:00.000Z",
+            "n": 2,
+            "aWins": 0,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 1,
+            "perTen": {
+              "a": 0,
+              "b": 5,
+              "tie": 0,
+              "neither": 5
+            }
+          },
+          {
+            "key": "round-2",
+            "label": "new batch of questions, Sep 13 to Oct 8",
+            "from": "2026-09-13T00:00:00.000Z",
+            "to": "2026-10-08T12:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 5,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-3",
+            "label": "day version 4.4 joined, Oct 8 to Oct 9",
+            "from": "2026-10-08T12:00:00.000Z",
+            "to": "2026-10-09T16:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 0,
+            "ties": 1,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 0,
+              "tie": 5,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-4",
+            "label": "108 new questions, from Oct 9 (version 4.5 joins)",
+            "from": "2026-10-09T16:00:00.000Z",
+            "to": null,
+            "n": 2,
+            "aWins": 1,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 5,
+              "tie": 0,
+              "neither": 0
+            }
+          }
+        ],
+        "all": {
+          "key": "all",
+          "label": "All rounds",
+          "from": "2026-08-20T19:38:08.385Z",
+          "to": null,
+          "n": 8,
+          "aWins": 3,
+          "bWins": 3,
+          "ties": 1,
+          "bothInadequate": 1,
+          "perTen": {
+            "a": 3.8,
+            "b": 3.8,
+            "tie": 1.3,
+            "neither": 1.3
+          }
+        }
+      },
+      {
+        "a": {
+          "name": "fx retrieval four five",
+          "approach": "retrieval v4.5"
+        },
+        "b": {
+          "name": "fx sparse",
+          "approach": "retrieval v4.4"
+        },
+        "rounds": [
+          {
+            "key": "round-1",
+            "label": "first batch of questions, Aug 20 to Sep 12",
+            "from": "2026-08-20T19:38:08.385Z",
+            "to": "2026-09-13T00:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 5,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-2",
+            "label": "new batch of questions, Sep 13 to Oct 8",
+            "from": "2026-09-13T00:00:00.000Z",
+            "to": "2026-10-08T12:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 0,
+            "ties": 1,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 0,
+              "tie": 5,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-3",
+            "label": "day version 4.4 joined, Oct 8 to Oct 9",
+            "from": "2026-10-08T12:00:00.000Z",
+            "to": "2026-10-09T16:00:00.000Z",
+            "n": 2,
+            "aWins": 2,
+            "bWins": 0,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 10,
+              "b": 0,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-4",
+            "label": "108 new questions, from Oct 9 (version 4.5 joins)",
+            "from": "2026-10-09T16:00:00.000Z",
+            "to": null,
+            "n": 1,
+            "aWins": 0,
+            "bWins": 0,
+            "ties": 0,
+            "bothInadequate": 1,
+            "perTen": {
+              "a": 0,
+              "b": 0,
+              "tie": 0,
+              "neither": 10
+            }
+          }
+        ],
+        "all": {
+          "key": "all",
+          "label": "All rounds",
+          "from": "2026-08-20T19:38:08.385Z",
+          "to": null,
+          "n": 7,
+          "aWins": 4,
+          "bWins": 1,
+          "ties": 1,
+          "bothInadequate": 1,
+          "perTen": {
+            "a": 5.7,
+            "b": 1.4,
+            "tie": 1.4,
+            "neither": 1.4
+          }
+        }
+      }
+    ]
+  },
+  "public": {
+    "computedAt": "2026-10-10T09:00:00.000Z",
+    "scoring": {
+      "construction": "like-for-like-loo",
+      "version": 2
+    },
+    "corpus": {
+      "goldAnswers": 75,
+      "pairwiseComparisons": 40,
+      "pairwiseBothInadequate": 9,
+      "parallelPairs": 77,
+      "lexEntries": 55,
+      "annotators": 7
+    },
+    "benchmark": {
+      "frozenPrompts": 20,
+      "promptsWithGold": 19,
+      "leakedPrompts": 8,
+      "leakFreePrompts": 12
+    },
+    "ceilings": {
+      "asShipped": {
+        "chrfAll": 59,
+        "chrfClean": 63.1,
+        "nPromptsAll": 17,
+        "nPromptsClean": 10
+      },
+      "onePerAnnotator": {
+        "chrfAll": 51,
+        "chrfClean": 51.5,
+        "nPromptsAll": 17,
+        "nPromptsClean": 10
+      }
+    },
+    "agreementCeilingChrf": 51.5,
+    "likeForLikePrompts": 10,
+    "agreementCeilingChrfToneInsensitive": 78.7,
+    "nSourcefreePrompts": 6,
+    "agreementCeilingChrfSourcefree": 49.6,
+    "poolPreference": {
+      "poolComparisons": 23,
+      "poolBothInadequate": 4,
+      "poolDecided": 15,
+      "poolBothInadequateRate": 0.1739
+    },
+    "candidates": [
+      {
+        "name": "fx retrieval two",
+        "approach": "retrieval v2",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 100,
+        "strippedChrfClean": 100,
+        "agreementScore": 160,
+        "agreementCiLow": 126.9,
+        "agreementCiHigh": 185.2,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 194.2,
+        "speakerRank": 96.7,
+        "speakerRankCiLow": 90,
+        "speakerRankCiHigh": 100,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 123.1,
+        "strippedChrfCleanToneInsensitive": 96.8,
+        "agreementScoreSourcefree": 129.7
+      },
+      {
+        "name": "fx retrieval three",
+        "approach": "retrieval v3",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 100,
+        "strippedChrfClean": 100,
+        "agreementScore": 153.7,
+        "agreementCiLow": 146.7,
+        "agreementCiHigh": 161.1,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 194.2,
+        "speakerRank": 69,
+        "speakerRankCiLow": 48.3,
+        "speakerRankCiHigh": 88,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 121.1,
+        "strippedChrfCleanToneInsensitive": 95.3,
+        "agreementScoreSourcefree": 88.1
+      },
+      {
+        "name": "fx sparse",
+        "approach": "retrieval v4.4",
+        "n": 8,
+        "nClean": 5,
+        "nLikeForLike": 5,
+        "emptyOutputs": 5,
+        "strippedChrfAll": 100,
+        "strippedChrfClean": 100,
+        "agreementScore": 187.1,
+        "agreementCiLow": 176.3,
+        "agreementCiHigh": 193.1,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 194.2,
+        "speakerRank": 100,
+        "speakerRankCiLow": 100,
+        "speakerRankCiHigh": 100,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 126.3,
+        "strippedChrfCleanToneInsensitive": 99.3,
+        "agreementScoreSourcefree": 135.2
+      },
+      {
+        "name": "fx tuned",
+        "approach": "fine-tuned",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 100,
+        "strippedChrfClean": 100,
+        "agreementScore": 153.7,
+        "agreementCiLow": 146.6,
+        "agreementCiHigh": 161,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 194.2,
+        "speakerRank": 69,
+        "speakerRankCiLow": 48.3,
+        "speakerRankCiHigh": 88,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 121.1,
+        "strippedChrfCleanToneInsensitive": 95.3,
+        "agreementScoreSourcefree": 88.1
+      },
+      {
+        "name": "fx control",
+        "approach": "control (tone removed)",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 89.5,
+        "strippedChrfClean": 81.9,
+        "agreementScore": 126.4,
+        "agreementCiLow": 109.7,
+        "agreementCiHigh": 142,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 159.1,
+        "speakerRank": 66.5,
+        "speakerRankCiLow": 44.8,
+        "speakerRankCiHigh": 86.7,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 123.1,
+        "strippedChrfCleanToneInsensitive": 96.8,
+        "agreementScoreSourcefree": 73.3
+      },
+      {
+        "name": "fx retrieval four five",
+        "approach": "retrieval v4.5",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 80,
+        "strippedChrfClean": 81.1,
+        "agreementScore": 120.8,
+        "agreementCiLow": 91.7,
+        "agreementCiHigh": 147.3,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 157.5,
+        "speakerRank": 70.7,
+        "speakerRankCiLow": 51.3,
+        "speakerRankCiHigh": 89,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 98.7,
+        "strippedChrfCleanToneInsensitive": 77.7,
+        "agreementScoreSourcefree": 109
+      },
+      {
+        "name": "fx retrieval one",
+        "approach": "retrieval v1",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 35.5,
+        "strippedChrfClean": 39.2,
+        "agreementScore": 76.9,
+        "agreementCiLow": 37.9,
+        "agreementCiHigh": 119.1,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 76.1,
+        "speakerRank": 39.8,
+        "speakerRankCiLow": 20,
+        "speakerRankCiHigh": 61.5,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 59.9,
+        "strippedChrfCleanToneInsensitive": 47.1,
+        "agreementScoreSourcefree": 89.1
+      },
+      {
+        "name": "fx retrieval four one",
+        "approach": "retrieval v4.1",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 33.6,
+        "strippedChrfClean": 28.3,
+        "agreementScore": 46.6,
+        "agreementCiLow": 35.3,
+        "agreementCiHigh": 59.5,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 54.9,
+        "speakerRank": 31.7,
+        "speakerRankCiLow": 13.3,
+        "speakerRankCiHigh": 51.7,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 123.1,
+        "strippedChrfCleanToneInsensitive": 96.8,
+        "agreementScoreSourcefree": 49.6
+      },
+      {
+        "name": "fx plain",
+        "approach": "untouched",
+        "n": 19,
+        "nClean": 11,
+        "nLikeForLike": 10,
+        "emptyOutputs": 0,
+        "strippedChrfAll": 12.1,
+        "strippedChrfClean": 14.3,
+        "agreementScore": 27.3,
+        "agreementCiLow": 18.9,
+        "agreementCiHigh": 36.4,
+        "agreementUnderpowered": false,
+        "agreementScoreLegacy": 27.7,
+        "speakerRank": 15.8,
+        "speakerRankCiLow": 0,
+        "speakerRankCiHigh": 36.7,
+        "speakerRankUnderpowered": false,
+        "agreementScoreToneInsensitive": 24.9,
+        "strippedChrfCleanToneInsensitive": 19.6,
+        "agreementScoreSourcefree": 25.9
+      }
+    ],
+    "humanRounds": [
+      {
+        "a": {
+          "name": "fx plain",
+          "approach": "untouched"
+        },
+        "b": {
+          "name": "fx retrieval three",
+          "approach": "retrieval v3"
+        },
+        "rounds": [
+          {
+            "key": "round-1",
+            "label": "first batch of questions, Aug 20 to Sep 12",
+            "from": "2026-08-20T19:38:08.385Z",
+            "to": "2026-09-13T00:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 5,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-2",
+            "label": "new batch of questions, Sep 13 to Oct 8",
+            "from": "2026-09-13T00:00:00.000Z",
+            "to": "2026-10-08T12:00:00.000Z",
+            "n": 2,
+            "aWins": 0,
+            "bWins": 2,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 0,
+              "b": 10,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-3",
+            "label": "day version 4.4 joined, Oct 8 to Oct 9",
+            "from": "2026-10-08T12:00:00.000Z",
+            "to": "2026-10-09T16:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 0,
+            "ties": 0,
+            "bothInadequate": 1,
+            "perTen": {
+              "a": 5,
+              "b": 0,
+              "tie": 0,
+              "neither": 5
+            }
+          },
+          {
+            "key": "round-4",
+            "label": "108 new questions, from Oct 9 (version 4.5 joins)",
+            "from": "2026-10-09T16:00:00.000Z",
+            "to": null,
+            "n": 2,
+            "aWins": 1,
+            "bWins": 0,
+            "ties": 1,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 0,
+              "tie": 5,
+              "neither": 0
+            }
+          }
+        ],
+        "all": {
+          "key": "all",
+          "label": "All rounds",
+          "from": "2026-08-20T19:38:08.385Z",
+          "to": null,
+          "n": 8,
+          "aWins": 3,
+          "bWins": 3,
+          "ties": 1,
+          "bothInadequate": 1,
+          "perTen": {
+            "a": 3.8,
+            "b": 3.8,
+            "tie": 1.3,
+            "neither": 1.3
+          }
+        }
+      },
+      {
+        "a": {
+          "name": "fx retrieval four five",
+          "approach": "retrieval v4.5"
+        },
+        "b": {
+          "name": "fx retrieval three",
+          "approach": "retrieval v3"
+        },
+        "rounds": [
+          {
+            "key": "round-1",
+            "label": "first batch of questions, Aug 20 to Sep 12",
+            "from": "2026-08-20T19:38:08.385Z",
+            "to": "2026-09-13T00:00:00.000Z",
+            "n": 2,
+            "aWins": 0,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 1,
+            "perTen": {
+              "a": 0,
+              "b": 5,
+              "tie": 0,
+              "neither": 5
+            }
+          },
+          {
+            "key": "round-2",
+            "label": "new batch of questions, Sep 13 to Oct 8",
+            "from": "2026-09-13T00:00:00.000Z",
+            "to": "2026-10-08T12:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 5,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-3",
+            "label": "day version 4.4 joined, Oct 8 to Oct 9",
+            "from": "2026-10-08T12:00:00.000Z",
+            "to": "2026-10-09T16:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 0,
+            "ties": 1,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 0,
+              "tie": 5,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-4",
+            "label": "108 new questions, from Oct 9 (version 4.5 joins)",
+            "from": "2026-10-09T16:00:00.000Z",
+            "to": null,
+            "n": 2,
+            "aWins": 1,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 5,
+              "tie": 0,
+              "neither": 0
+            }
+          }
+        ],
+        "all": {
+          "key": "all",
+          "label": "All rounds",
+          "from": "2026-08-20T19:38:08.385Z",
+          "to": null,
+          "n": 8,
+          "aWins": 3,
+          "bWins": 3,
+          "ties": 1,
+          "bothInadequate": 1,
+          "perTen": {
+            "a": 3.8,
+            "b": 3.8,
+            "tie": 1.3,
+            "neither": 1.3
+          }
+        }
+      },
+      {
+        "a": {
+          "name": "fx retrieval four five",
+          "approach": "retrieval v4.5"
+        },
+        "b": {
+          "name": "fx sparse",
+          "approach": "retrieval v4.4"
+        },
+        "rounds": [
+          {
+            "key": "round-1",
+            "label": "first batch of questions, Aug 20 to Sep 12",
+            "from": "2026-08-20T19:38:08.385Z",
+            "to": "2026-09-13T00:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 1,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 5,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-2",
+            "label": "new batch of questions, Sep 13 to Oct 8",
+            "from": "2026-09-13T00:00:00.000Z",
+            "to": "2026-10-08T12:00:00.000Z",
+            "n": 2,
+            "aWins": 1,
+            "bWins": 0,
+            "ties": 1,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 5,
+              "b": 0,
+              "tie": 5,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-3",
+            "label": "day version 4.4 joined, Oct 8 to Oct 9",
+            "from": "2026-10-08T12:00:00.000Z",
+            "to": "2026-10-09T16:00:00.000Z",
+            "n": 2,
+            "aWins": 2,
+            "bWins": 0,
+            "ties": 0,
+            "bothInadequate": 0,
+            "perTen": {
+              "a": 10,
+              "b": 0,
+              "tie": 0,
+              "neither": 0
+            }
+          },
+          {
+            "key": "round-4",
+            "label": "108 new questions, from Oct 9 (version 4.5 joins)",
+            "from": "2026-10-09T16:00:00.000Z",
+            "to": null,
+            "n": 1,
+            "aWins": 0,
+            "bWins": 0,
+            "ties": 0,
+            "bothInadequate": 1,
+            "perTen": {
+              "a": 0,
+              "b": 0,
+              "tie": 0,
+              "neither": 10
+            }
+          }
+        ],
+        "all": {
+          "key": "all",
+          "label": "All rounds",
+          "from": "2026-08-20T19:38:08.385Z",
+          "to": null,
+          "n": 7,
+          "aWins": 4,
+          "bWins": 1,
+          "ties": 1,
+          "bothInadequate": 1,
+          "perTen": {
+            "a": 5.7,
+            "b": 1.4,
+            "tie": 1.4,
+            "neither": 1.4
+          }
+        }
+      }
+    ]
+  }
+}
