@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import type { EvalBucket } from "@prisma/client";
 import {
   bucketLabel,
@@ -31,6 +32,27 @@ import {
   planDraftRestore,
   type ColdDraft,
 } from "@/lib/episode-draft";
+import {
+  annotateSearchWith,
+  nextTaskUrl,
+  parsePinned,
+  pinnedNoticeFor,
+  readAnnotateParams,
+  type AnnotateParams,
+  type PinnedNoticeKind,
+} from "@/lib/annotate-url";
+import {
+  DEMO_FLAG_NOT_SAVED,
+  DEMO_SKIP_NOT_SAVED,
+  browserStore,
+  canUseDemoSwitch,
+  ensureDemoSession,
+  episodeHasUnsavedInput,
+  readDemoPreference,
+  shouldAutoApplyDemo,
+  skipAndFlagAreSent,
+  writeDemoPreference,
+} from "@/lib/demo-switch";
 
 type Winner = "a" | "b" | "tie" | "both_inadequate";
 type Step = "prompt" | "pairwise" | "score";
@@ -186,7 +208,25 @@ function loadColdRaw(key: string): unknown {
   }
 }
 
+/** Change `demo` and/or `prompt` on the page URL in place: no navigation and
+ *  no reload, so the episode's state and its drafts stay where they are. The
+ *  null state is deliberate: Next's router then carries its own history state
+ *  over and takes note of the new URL. */
+function replaceAnnotateSearch(changes: Partial<AnnotateParams>) {
+  const { pathname, search, hash } = window.location;
+  window.history.replaceState(
+    null,
+    "",
+    `${pathname}${annotateSearchWith(search, changes)}${hash}`,
+  );
+}
+
 export function AnnotationInterface() {
+  // The role decides one thing here: whether the Demo switch is offered. The
+  // server decides everything else again for itself.
+  const { data: session } = useSession();
+  const researcher = canUseDemoSwitch(session?.user?.role);
+
   const [task, setTask] = useState<TaskData | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [isComplete, setIsComplete] = useState(false);
@@ -195,6 +235,27 @@ export function AnnotationInterface() {
   const [submitting, setSubmitting] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [demoSessionId, setDemoSessionId] = useState<string | null>(null);
+
+  // A question opened from the review drawer (?prompt=<code>): the code while
+  // that question is the one on screen, or the reason it is not.
+  const [pinnedPromptId, setPinnedPromptId] = useState<string | null>(null);
+  const [pinnedNotice, setPinnedNotice] = useState<{
+    promptId: string;
+    kind: PinnedNoticeKind;
+  } | null>(null);
+
+  // The Demo switch (researchers only). `demoConfirm` holds the position the
+  // switch was asked to take while the question "you have work on screen, go
+  // ahead?" is open; null when nothing is being asked.
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const [demoConfirm, setDemoConfirm] = useState<boolean | null>(null);
+  // "Back to my queue" pressed with work on the page: asked first, in the page.
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
+  // The switch is rebuilt by the reload a flip causes; focus is handed back.
+  const demoSwitchRef = useRef<HTMLButtonElement>(null);
+  const refocusDemoSwitch = useRef(false);
+  const demoSessionRequest = useRef<Promise<string> | null>(null);
 
   const [step, setStep] = useState<Step>("prompt");
 
@@ -411,29 +472,56 @@ export function AnnotationInterface() {
   const fetchNext = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // A "go ahead?" left open under the Demo switch was about the episode
+    // that is now being replaced.
+    setDemoConfirm(null);
+    setLeaveConfirm(false);
     try {
-      const demo = new URLSearchParams(window.location.search).get("demo");
-      const url = demo
-        ? `/api/annotations/next?demo=${encodeURIComponent(demo)}`
-        : "/api/annotations/next";
-      const res = await fetch(url);
+      // Both parameters are read from the page URL at the moment of the
+      // fetch, so the demo switch and "Back to my queue" only have to change
+      // the URL and call this again.
+      const params = readAnnotateParams(window.location.search);
+      const res = await fetch(nextTaskUrl(params));
       const data = (await safeJson(res)) as {
         error?: string;
         complete?: boolean;
         progress?: Progress;
         task?: TaskData;
+        pinned?: unknown;
       };
+      // A pin this account may not use. Said calmly, with the way back to
+      // the queue, rather than as a failure whose Retry can only fail again.
+      if (res.status === 403 && params.prompt) {
+        resetEpisode();
+        setTask(null);
+        setIsComplete(false);
+        setPinnedPromptId(null);
+        setPinnedNotice({ promptId: params.prompt, kind: "forbidden" });
+        return;
+      }
       if (!res.ok)
         throw new Error(data.error || "Failed to load the next task.");
       resetEpisode();
-      if (data.complete || !data.task) {
+      const pinned = parsePinned(data.pinned);
+      if (pinned && pinned.status !== "served") {
+        // The pinned question was not served: one notice says why.
+        setTask(null);
+        setIsComplete(false);
+        setPinnedPromptId(null);
+        setPinnedNotice({ promptId: pinned.promptId, kind: pinned.status });
+        setProgress(data.progress ?? null);
+      } else if (data.complete || !data.task) {
         setIsComplete(true);
         setTask(null);
+        setPinnedPromptId(null);
+        setPinnedNotice(null);
         if (data.progress) setProgress(data.progress);
       } else {
         setTask(data.task);
         setProgress(data.progress ?? null);
         setIsComplete(false);
+        setPinnedPromptId(pinned ? pinned.promptId : null);
+        setPinnedNotice(null);
         // Resume an in-progress episode: everything for this exact pair, or
         // only the speaker's own answer when the pair changed.
         const plan = planDraftRestore(
@@ -454,9 +542,70 @@ export function AnnotationInterface() {
     }
   }, [resetEpisode, restoreDraft, restoreColdDraft]);
 
+  // The demo session the switch works under (src/lib/demo-switch.ts holds
+  // the rule: reuse the remembered one if the server still lists it, else
+  // create one). One request at a time: a second caller while the first is
+  // in flight shares its answer, so two sessions are never created for one
+  // act (React runs the load effect twice in development, and a person can
+  // press twice).
+  const startDemoSession = useCallback(() => {
+    if (!demoSessionRequest.current) {
+      demoSessionRequest.current = ensureDemoSession({
+        store: browserStore(),
+        // Called through an arrow: window.fetch detached from window throws.
+        fetcher: (input, init) => fetch(input, init),
+        today: new Date(),
+      }).finally(() => {
+        demoSessionRequest.current = null;
+      });
+    }
+    return demoSessionRequest.current;
+  }, []);
+
+  // First load. For anyone but a researcher this is the plain fetch it has
+  // always been. For a researcher the Demo choice is settled BEFORE the first
+  // task is requested, so a question opened from the review drawer arrives
+  // already in demo instead of loading counted and then switching:
+  //   - a `demo` link in the URL wins, and is remembered as "works in demo";
+  //   - otherwise, if they left the switch on, demo is applied as if they
+  //     had just turned it on;
+  //   - otherwise (never touched it, or turned it off) counted mode.
   useEffect(() => {
-    fetchNext();
-  }, [fetchNext]);
+    let cancelled = false;
+    (async () => {
+      const urlDemo = readAnnotateParams(window.location.search).demo;
+      const store = browserStore();
+      if (researcher && urlDemo) {
+        writeDemoPreference(store, true);
+      } else if (
+        shouldAutoApplyDemo({
+          researcher,
+          urlDemo,
+          preferenceOn: readDemoPreference(store),
+        })
+      ) {
+        try {
+          const id = await startDemoSession();
+          if (cancelled) return;
+          replaceAnnotateSearch({ demo: id });
+          setDemoSessionId(id);
+        } catch {
+          if (cancelled) return;
+          // Someone who works in demo must not be handed a counted question
+          // without being told: stop here and let them choose.
+          setLoading(false);
+          setError(
+            "Demo could not be turned on. Retry loads your counted queue; the Demo switch tries demo again.",
+          );
+          return;
+        }
+      }
+      if (!cancelled) fetchNext();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchNext, researcher, startDemoSession]);
 
   // Autosave the episode draft so navigation or a dropped connection never
   // loses in-progress work.
@@ -543,6 +692,13 @@ export function AnnotationInterface() {
       // ignore
     }
   }, [task]);
+
+  // The pinned question is finished with (submitted, skipped or flagged):
+  // take the pin off the URL so the fetch that follows is the queue again.
+  // Without this the page would ask for the same question a second time.
+  const releasePin = useCallback(() => {
+    if (pinnedPromptId) replaceAnnotateSearch({ prompt: null });
+  }, [pinnedPromptId]);
 
   // Keyboard winner selection on the pairwise step.
   useEffect(() => {
@@ -853,6 +1009,7 @@ export function AnnotationInterface() {
         );
       }
       clearDraft();
+      releasePin();
       await fetchNext();
     } catch (err) {
       showToast(
@@ -866,6 +1023,12 @@ export function AnnotationInterface() {
 
   async function submitFlag() {
     if (!task || flagReason.trim().length < 3) return;
+    if (!skipAndFlagAreSent(!!demoSessionId)) {
+      // Demo stores nothing, a flag included (see skipAndFlagAreSent).
+      showToast(DEMO_FLAG_NOT_SAVED, "success");
+      setFlagOpen(false);
+      return;
+    }
     try {
       const res = await fetch("/api/annotations/flag", {
         method: "POST",
@@ -879,6 +1042,7 @@ export function AnnotationInterface() {
         throw new Error((await safeJson(res)).error || "Flag failed");
       showToast("Prompt flagged. Loading the next one.", "success");
       clearDraft();
+      releasePin();
       await fetchNext();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Flag failed", "error");
@@ -889,6 +1053,11 @@ export function AnnotationInterface() {
   // in-parallel endpoint: POST /api/annotations/skip { promptId } -> 200.
   async function skipPrompt() {
     if (!task || skipping || submitting) return;
+    if (!skipAndFlagAreSent(!!demoSessionId)) {
+      // Demo stores nothing, a skip included (see skipAndFlagAreSent).
+      showToast(DEMO_SKIP_NOT_SAVED, "success");
+      return;
+    }
     setSkipping(true);
     try {
       const res = await fetch("/api/annotations/skip", {
@@ -900,6 +1069,7 @@ export function AnnotationInterface() {
       if (!res.ok) throw new Error(data.error || "Could not skip this prompt.");
       showToast("Skipped - loading the next prompt.", "success");
       clearDraft();
+      releasePin();
       await fetchNext();
     } catch (e) {
       showToast(
@@ -911,42 +1081,249 @@ export function AnnotationInterface() {
     }
   }
 
+  // ── The Demo switch (researchers only) ────────────────────────────────────
+  const demoOn = !!demoSessionId;
+
+  // Put the page in demo, or take it out, then load the question again. The
+  // URL, `demoSessionId` and the stored preference move together, and
+  // `demoSessionId` is what both the switch shows and the submit sends, so
+  // what is on screen and what gets stored cannot disagree.
+  async function applyDemo(next: boolean) {
+    refocusDemoSwitch.current = true;
+    setDemoConfirm(null);
+    setDemoError(null);
+    setDemoBusy(true);
+    // The episode leaves the screen for the whole switch, not only for the
+    // fetch at its end: a Submit pressed while the demo session was still
+    // being confirmed would be stored under the mode being left.
+    setLoading(true);
+    try {
+      if (next) {
+        const id = await startDemoSession();
+        writeDemoPreference(browserStore(), true);
+        replaceAnnotateSearch({ demo: id });
+        setDemoSessionId(id);
+      } else {
+        writeDemoPreference(browserStore(), false);
+        replaceAnnotateSearch({ demo: null });
+        setDemoSessionId(null);
+      }
+      await fetchNext();
+    } catch {
+      // Only turning ON can fail (the session could not be confirmed or
+      // created). Nothing was changed: the page is still counted, and says so.
+      setLoading(false);
+      setDemoError("Demo could not be turned on. Your answers still count.");
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
+  // The switch was pressed. Flipping it reloads the question, so with work
+  // on screen the person is asked first (in the page, not in a modal: the
+  // episode has none); with none it just switches.
+  function requestDemo(next: boolean) {
+    if (loading || demoBusy) return;
+    setDemoError(null);
+    const unsaved = episodeHasInput();
+    if (unsaved) setDemoConfirm(next);
+    else void applyDemo(next);
+  }
+
+  // Whether the question on screen carries work that leaving it would take
+  // off the page. Asked by the Demo switch and by "Back to my queue". A typed
+  // flag reason counts: it is not in the draft, so a reload drops it.
+  function episodeHasInput(): boolean {
+    return (
+      !!task &&
+      episodeHasUnsavedInput({
+        coldLocked,
+        coldAnswer,
+        englishGloss,
+        instructionIg,
+        winner,
+        failureTagsA,
+        failureTagsB,
+        edited:
+          winnerEdited ||
+          tieEdited ||
+          markupMade ||
+          salvage.trim().length > 0 ||
+          flagReason.trim().length > 0,
+        explanation,
+      })
+    );
+  }
+
+  // "Back to my queue". With work on the page the person is asked first: the
+  // draft lives in this tab only, and a question opened from review comes
+  // back only if the queue deals it, so leaving can strand what was typed.
+  function leaveForQueue() {
+    setLeaveConfirm(false);
+    replaceAnnotateSearch({ prompt: null });
+    void fetchNext();
+  }
+  function backToQueue() {
+    if (episodeHasInput()) setLeaveConfirm(true);
+    else leaveForQueue();
+  }
+
+  // A flip reloads the question, and the reload rebuilds the switch (it is
+  // disabled, then drawn under a different root). Focus goes back to it, so a
+  // keyboard or screen-reader user stays on the control and hears its state.
+  useEffect(() => {
+    if (loading || demoBusy || !refocusDemoSwitch.current) return;
+    refocusDemoSwitch.current = false;
+    demoSwitchRef.current?.focus();
+  }, [loading, demoBusy]);
+
+  // Rendered above every state of the page (loading, the notices, the task),
+  // so the switch does not come and go. Null for everyone but a researcher,
+  // which leaves each of those states exactly the markup it was.
+  const demoSwitch = researcher ? (
+    <div className="mb-4">
+      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+        <span id="demo-switch-help" className="text-xs text-text-tertiary">
+          {demoOn ? "Saved as demo, never counted." : "Your answers count."}
+        </span>
+        <button
+          type="button"
+          role="switch"
+          ref={demoSwitchRef}
+          aria-checked={demoOn}
+          aria-describedby="demo-switch-help"
+          disabled={loading || demoBusy || submitting || skipping}
+          onClick={() => requestDemo(!demoOn)}
+          className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md text-sm font-medium text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Demo
+          <span
+            aria-hidden="true"
+            className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${
+              demoOn ? "bg-warning" : "bg-border-strong"
+            }`}
+          >
+            <span
+              className={`absolute left-0.5 top-0.5 size-4 rounded-full bg-surface shadow-sm transition-transform ${
+                demoOn ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </span>
+        </button>
+      </div>
+      {demoConfirm !== null && (
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-text-secondary">
+          <span role="status">
+            {demoConfirm
+              ? "Switching reloads the question. What you have entered is kept as a draft in this tab."
+              : "Switching reloads the question. What you entered in demo is kept as a draft in this tab, and it will count if you submit it."}
+          </span>
+          <button
+            type="button"
+            onClick={() => void applyDemo(demoConfirm)}
+            className="inline-flex min-h-[44px] cursor-pointer items-center rounded-md border border-border-strong bg-surface px-3 text-xs font-medium text-text-secondary hover:bg-surface-sunken"
+          >
+            {demoConfirm ? "Turn demo on" : "Turn demo off"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDemoConfirm(null)}
+            className="inline-flex min-h-[44px] cursor-pointer items-center text-xs text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline"
+          >
+            Keep working
+          </button>
+        </div>
+      )}
+      {demoError && (
+        <p role="alert" className="text-right text-xs text-danger">
+          {demoError}
+        </p>
+      )}
+    </div>
+  ) : null;
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-sm text-text-tertiary">
-          Loading next annotation task...
+      <>
+        {demoSwitch}
+        <div className="flex items-center justify-center py-20">
+          <div className="text-sm text-text-tertiary">
+            Loading next annotation task...
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-sm text-danger">{error}</p>
-        <button
-          onClick={fetchNext}
-          className="mt-4 cursor-pointer rounded-md bg-accent px-4 py-2 text-sm text-accent-contrast hover:bg-accent-hover"
-        >
-          Retry
-        </button>
-      </div>
+      <>
+        {demoSwitch}
+        <div className="flex flex-col items-center justify-center py-20">
+          <p className="text-sm text-danger">{error}</p>
+          <button
+            onClick={fetchNext}
+            className="mt-4 cursor-pointer rounded-md bg-accent px-4 py-2 text-sm text-accent-contrast hover:bg-accent-hover"
+          >
+            Retry
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  // A question opened from review that was not served: the reason in plain
+  // words and the ways on, in place of the episode.
+  if (pinnedNotice) {
+    const notice = pinnedNoticeFor(pinnedNotice.kind);
+    return (
+      <>
+        {demoSwitch}
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="max-w-md rounded-lg border border-border bg-surface p-8 text-center shadow-sm">
+            <p className="font-mono text-xs text-text-muted">
+              {pinnedNotice.promptId}
+            </p>
+            <p className="mt-2 text-sm text-text-secondary">{notice.message}</p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              {notice.offerDemo && researcher && (
+                <button
+                  type="button"
+                  onClick={() => void applyDemo(true)}
+                  className="min-h-[44px] cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+                >
+                  Try it in demo
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={backToQueue}
+                className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
+              >
+                Back to my queue
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
     );
   }
 
   if (isComplete) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="rounded-lg border border-success/30 bg-success-subtle p-8 text-center">
-          <h2 className="text-lg text-success">All caught up</h2>
-          <p className="mt-2 text-sm text-text-secondary">
-            {progress
-              ? `You have completed all ${progress.total} comparisons.`
-              : "There are no annotation tasks available right now."}
-          </p>
+      <>
+        {demoSwitch}
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="rounded-lg border border-success/30 bg-success-subtle p-8 text-center">
+            <h2 className="text-lg text-success">All caught up</h2>
+            <p className="mt-2 text-sm text-text-secondary">
+              {progress
+                ? `You have completed all ${progress.total} comparisons.`
+                : "There are no annotation tasks available right now."}
+            </p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -1214,6 +1591,8 @@ export function AnnotationInterface() {
         </div>
       )}
 
+      {demoSwitch}
+
       {demoSessionId && (
         <div className="mb-4 flex items-center gap-2 rounded-md border border-warning/40 bg-warning-subtle px-4 py-2 text-sm text-warning">
           <span className="font-semibold">Demo mode</span>
@@ -1245,6 +1624,48 @@ export function AnnotationInterface() {
               }}
             />
           </div>
+        </div>
+      )}
+
+      {/* A question opened from the review drawer: one quiet line saying so,
+          and the way back. Never shown on a question the queue dealt. */}
+      {pinnedPromptId && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 text-xs text-text-tertiary">
+          <span>
+            Opened from review:{" "}
+            <span className="font-mono text-text-secondary">
+              {pinnedPromptId}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={backToQueue}
+            className="inline-flex min-h-10 cursor-pointer items-center text-xs text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline"
+          >
+            Back to my queue
+          </button>
+        </div>
+      )}
+      {pinnedPromptId && leaveConfirm && (
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-text-secondary">
+          <span role="status">
+            Leaving takes this question off the page. What you have entered is
+            kept as a draft in this tab only.
+          </span>
+          <button
+            type="button"
+            onClick={leaveForQueue}
+            className="inline-flex min-h-[44px] cursor-pointer items-center rounded-md border border-border-strong bg-surface px-3 text-xs font-medium text-text-secondary hover:bg-surface-sunken"
+          >
+            Leave this question
+          </button>
+          <button
+            type="button"
+            onClick={() => setLeaveConfirm(false)}
+            className="inline-flex min-h-[44px] cursor-pointer items-center text-xs text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline"
+          >
+            Keep working
+          </button>
         </div>
       )}
 
