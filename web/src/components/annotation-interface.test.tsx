@@ -97,6 +97,41 @@ describe("the no-tab flow", () => {
 });
 
 /**
+ * The worked example beside "Why?" (2026-10-13). This repository is public
+ * and the example is shown to every annotator, so it must never carry a real
+ * Igala answer: the one it had was a frozen-benchmark gold answer, whole. It
+ * is schematic now - the slot where the Igala word goes is an English
+ * description in square brackets. The proof against the real protected set is
+ * scripts/leak-check-files.ts on the component; this holds the shape so a
+ * real word cannot be typed back in unnoticed.
+ */
+describe("the worked example beside 'Why?' is schematic", () => {
+  /** The example sentence as the annotator reads it. */
+  function whyExample(): string {
+    const at = pairwiseSlice().indexOf("Example:</span>");
+    expect(at).toBeGreaterThan(-1);
+    const m = pairwiseSlice()
+      .slice(at)
+      .match(/<span className="italic">([\s\S]*?)<\/span>/);
+    expect(m).not.toBeNull();
+    return m![1].replace(/&apos;/g, "'").replace(/\s+/g, " ").trim();
+  }
+
+  it("says what kind of sentence to write, with a bracketed stand-in for the Igala word", () => {
+    expect(whyExample()).toBe(
+      "In Igala, the word for 'morning' is [the right Igala word].",
+    );
+  });
+
+  it("quotes nothing but the English gloss: no Igala word is given away", () => {
+    const quoted = [...whyExample().matchAll(/'([^']+)'/g)].map((q) => q[1]);
+    expect(quoted).toEqual(["morning"]);
+    // Whatever stands where the Igala word goes is in square brackets.
+    expect(whyExample()).toMatch(/ is \[[^\]]+\]\.$/);
+  });
+});
+
+/**
  * The Demo switch and the question opened from review (2026-10-12).
  *
  * Annotators are mid-queue while this ships, so the first property is that
