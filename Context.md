@@ -2249,3 +2249,39 @@ branch as soon as its gates pass.
 
 GATES on the merged code: pnpm typecheck 0, pnpm lint 0, vitest 101 files,
 1,593 tests.
+
+### Oct 13: the annotator's worked example no longer quotes frozen gold
+
+CLOSES the open item above (the worked example in
+web/src/components/annotation-interface.tsx quoting frozen item
+ig_bank_orth_013).
+
+- The example beside "Why? Explain in English" on the pairwise step is
+  schematic now: "In Igala, the word for 'morning' is [the right Igala word]."
+  The slot where the Igala word goes is an English description in square
+  brackets. No other Igala word was substituted, because none could be
+  verified against the protected set by eye. Nothing else on the page changed.
+- A test in annotation-interface.test.tsx pins the sentence and its shape
+  (the only quoted token is the English gloss; the word slot is bracketed), so
+  a real word cannot be typed back in unnoticed. No existing test pinned the
+  old copy.
+- Leak check on the component: 1 full hit before, 0 after. The word stays in
+  the public git history (not rewritten, by instruction); it is only no longer
+  shipped.
+
+OPEN, Halim's call
+
+- scripts/leak-check-files.ts over the rest of web/src (git ls-files, ts, tsx,
+  md, json) still FAILS on 57 files at this commit, most of them tests, some
+  of them shipped source: components/arena/answer-variants.tsx (4, an example
+  shown in the arena UI), lib/answer-variants.ts (4), lib/eval/langid.ts (13),
+  lib/corrections-onboarding.ts (2), lib/generation-prompt-v2.ts (2),
+  generation-prompt-v4.ts (2), generation-prompt-v4-1.ts (1),
+  lib/arena/repair-round.ts (2), retrieval-v2.ts (2), lexicon-parse.ts (4),
+  dialects.ts (1), annotations-query.ts (1), edit-segments.ts (1),
+  eval/answer-strip.ts (1). Many frozen golds are single everyday words, so a
+  fixture that uses one hits. Not touched here (scope was this one example).
+  Needs a decision: scrub fixtures and comments to non-protected words, or
+  teach the checker a reviewed allow-list for code.
+
+GATES: pnpm typecheck 0, pnpm lint 0, vitest 101 files, 1,595 tests.

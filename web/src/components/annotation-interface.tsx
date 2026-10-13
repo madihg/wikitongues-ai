@@ -2115,7 +2115,8 @@ export function AnnotationInterface() {
             <div className="mt-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
               <span className="font-medium text-text-primary">Example:</span>{" "}
               <span className="italic">
-                In Igala, the word for &apos;morning&apos; is &apos;odudu&apos;.
+                In Igala, the word for &apos;morning&apos; is [the right Igala
+                word].
               </span>
             </div>
             <textarea
