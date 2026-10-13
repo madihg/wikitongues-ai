@@ -2285,3 +2285,112 @@ OPEN, Halim's call
   teach the checker a reviewed allow-list for code.
 
 GATES: pnpm typecheck 0, pnpm lint 0, vitest 101 files, 1,595 tests.
+
+## Session State (2026-10-13, Opus 5.5) - ROUND-4 ANALYSIS, LYDIA'S "GOING FORWARDS" DOC, SALEM'S ACCOUNT
+
+Halim's asks (Oct 13): analyze the latest annotation results and model
+performance; are people using the editing surface; set up a researcher
+account for Salem Ejeba and draft the email to him and Lydia Wiernik; analyze
+the doc Lydia emailed that day ("[Igala] Going forwards: new prompts").
+
+HOW IT WAS DONE. A read-only, train-side snapshot (no frozen question, answer
+or gold) was exported to ~/wt-clones/analysis-2026-10-13/data (local, outside
+the repo, never committed: it holds annotator names and model Igala). Two
+workflows ran over it: five analysts on results, three on Lydia's doc, each
+followed by an independent checker that recomputed every claim. Verified
+results: work/wf1-results.json and work/wf2-results.json in that folder.
+Annotator-level findings are kept there, not here (this repo is public).
+
+MODEL RESULTS (round-4 = from Oct 9 16:00 UTC; 74 judgments, 4 annotators,
+38 prompts; all numbers confirmed by the checker)
+- v4.4 over the plain model is established: 22 to 1 decided in round-4 (35
+  judgments, 3 ties, 9 both inadequate), 24 to 1 over rounds 3 and 4. By
+  prompt: 14 to 1. It survives dropping any one annotator.
+- v4.5 over the plain model: 8 to 1 decided (10 judgments, 1 tie). Provisional:
+  one annotator supplies half the wins.
+- v4.5 against v4.4: 7 judgments, 1 decided (for v4.4), 4 ties, 2 both
+  inadequate. Not distinguishable, and it may never be on this design: the two
+  arms write the same answer on 11% of shared prompts and near-identical text
+  on most (median similarity 0.84 with tone marks removed); a 60/40 split
+  needs 199 decided judgments and the queue can supply about 120 to 194 more
+  in total for that pair.
+- v4.4 against v3: 11 to 6 over rounds 3 and 4, not distinguishable.
+- Automatic scores agree on the big step only. Train-side chrF: v4.4 and v4.5
+  beat the plain model by 4 to 7 points with intervals clear of zero; v4.5
+  minus v4.4 is +0.5 [-0.2, +1.4]. On the frozen exam all four arms' intervals
+  overlap. Per item, chrF sides with the judge 63.5% of the time as written and
+  49.4% with tone removed.
+- What changed for speakers: the "not real Igala" tags (another language,
+  invented word) are on 13 of 45 rejected plain-model answers and 0 of 30 for
+  the retrieval arms. What they still correct in v4.4 and v4.5 is ordinary
+  grammar and vocabulary, plus greeting formulas that are composed instead of
+  recalled. Twelve candidate rules for a v4.6 prompt are in wf1-results.json
+  (dimension "what-speakers-fault"); three are places where the v4.5 prompt
+  bans a form speakers write.
+
+THE NEW BANK IS BARELY REACHED. 42 of the 74 judgments are on the 108 new
+questions, on 25 of them, in 3 of 18 families (comp, regis, formu). The other
+15 families, tone and verb agreement included, have none. Cause: queue order
+(web/src/lib/pairing.ts:313-334, and web/src/lib/queue-input.ts:74-76 sets no
+order). Unanswered questions are served in stored order, and once one speaker
+writes an answer for a question it drops behind older prompts for everyone
+else. Fixing the order is the highest-value change for learning anything about
+the rules the bank was written for.
+
+THE INSTRUMENT (what the screen captures, read from the code and measured)
+- Corrections are used: 32 of 74 round-4 judgments (43%), same as round-2
+  (173 of 389). Each has span-level edits, a reason chip and a required
+  sentence. All 32 are on the picked or tied answer; none on a rejected one.
+  One annotator has never made a correction.
+- Rubric axis scores are stored for the winner only (annotation-interface.tsx
+  around 893-901; submit route 209-232), on about 3 of 8 axes, and 92% of
+  judgments carry one identical number on every axis. Scores cannot rank arms.
+- The verdict explanation is required only on "both inadequate": 57 of 74 are
+  empty and none of the 17 written ones names a concrete fault.
+- "Nothing to correct" is a client gate that is never stored.
+- One chip covers tone marks AND spelling ("Tone marks or spelling wrong"), so
+  tag counts cannot answer the tone question.
+
+TONE MARKS ARE A POLICY CONFLICT, not only an annotator split. The Sep 25
+write-up says marks are obligatory; the v4.5 prompt says they stay off unless
+asked; the rubric anchors score "no tone marks" as 0; the Corrections lane's
+first-run example strips every mark. Speakers differ as writers (one marks
+tone on 81% of own answers, the other five on 9%) and one corrector removes
+marks as a habit. Two code facts matter: (1) stored corrections are served
+back to every v4-family request as mistakes not to repeat
+(web/src/lib/arena/retrieval-v4.ts:352-400), so mark-stripping corrections
+teach the model to strip marks; (2) the v4.5 tone gate is a substring test on
+the word "tone" (web/src/lib/arena/tone-request.ts:8-10): it fires on a
+question that asks for NO tone marks and misses questions that say
+"diacritics". DECISION NEEDED from Halim with Salem and Lydia before any tone
+rule, example or anchor is changed (orthography policy is Halim's call).
+
+LYDIA'S DOC, checked against the bank and the screen
+- Already covered by the 108: complementisers (10 questions, all judged), verb
+  agreement (7, none judged), tone (8, none judged). Partly: emotion and
+  register, transfer, contraction. Nothing: multiple antecedents, a narrative.
+- Drafted, NOT seeded, NOT vetted by a speaker: 29 prompts and four designs
+  for eliciting regressive assimilation, with the checker's objections, in
+  ~/wt-clones/analysis-2026-10-13/lydia-doc-drafts.md. Known problems to fix
+  first: 17 drafts ask for an English commentary line that would enter
+  training gold; four repeat older prompts; two assert single-source forms.
+- Her collection asks, with cost: rubric on both answers on the question's own
+  axes adds 10 to 17% per judgment (all 8 axes on both: 36 to 59%); all axes
+  with N/A adds 9 to 14%; correction categories aligned to the rubric axes is
+  config plus about a day; audio is 2 to 3 days plus a storage choice. No
+  migration is needed for any but audio.
+
+PENDING, Halim
+- Salem's account is NOT created yet. Command (prints the password in the
+  terminal only): from web/, npx tsx --env-file=.env.local
+  prisma/create-annotators.ts --role researcher "<email>:Salem Ejeba". Lydia
+  has no account either.
+- Gmail draft, unsent, reply in Lydia's "notes!" thread to Lydia and Salem
+  (draft id r5342141266021640389), 85 body words, one slot to fill (the
+  password).
+- Salem was not a recipient of Halim's Oct 12 reply on the write-up thread, so
+  he has not seen the furigana answer.
+- Small public-site mismatches found: 1,767 comparisons in /api/public/stats
+  against 1,747 in method-metrics; 43 held-out questions shown against 44 in
+  the database; the round-4 chart shows per-ten rates for v4.5 against v4.4
+  computed from 7 judgments.
