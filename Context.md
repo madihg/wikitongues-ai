@@ -2115,7 +2115,7 @@ generation-prompt-*.ts, retrieval-v2/v4). Components that only that page
 used are now dead code, left for a separate cleanup.
 v4.5 fill restarted Oct 10 07:22 UTC as a detached job (scratchpad/fill-v45.sh).
 
-### Oct 10-12: the uncached method-metrics computation (branch perf/method-metrics-uncached, PR open, NOT merged)
+### Oct 10-12: the uncached method-metrics computation (PR #70, squash-merged Oct 12 as 6b7f3f2, deployed)
 
 Problem (Halim, Oct 10): GET /api/public/method-metrics takes 10.5 s when
 nothing is cached, so the marketing site's tiles say "loading" for the first
@@ -2162,6 +2162,31 @@ MEASURING: scripts/bench-method-metrics.ts (read-only, prints timings, counts
 and a hash). A query string does NOT bust the endpoint's cache (?cb=1 then
 ?cb=2 gave MISS then HIT on Oct 10), so the honest uncached number is the
 first hit after a deploy.
+
+PRODUCTION, Oct 12 08:38 to 08:41 UTC, timed with curl from Cape Town (a
+cached hit took 0.8 to 0.9 s that morning, so subtract about that):
+- old code (e2f02ab deployment), uncached: 10.48 s.
+- new deployment, first hit, cold function: 4.07 s.
+- new deployment, second hostname a few seconds later, warm function,
+  recomputed (its own computedAt): 3.12 s.
+The two new payloads are identical apart from computedAt (24,063 bytes).
+So roughly 9.5 s of function time became roughly 2.2 s warm, 3.2 s cold.
+THE 2 s TARGET IS NOT MET YET in production. Not measured apart, estimated
+from the old ratio (3.4 s on the laptop was about 9.5 s there): the 0.5 s of
+laptop CPU is about 1.4 s on the function, and the reads are most of the rest.
+
+THE SLOW PATH IS NOT ONLY AFTER A DEPLOY. The 10.48 s miss above came from a
+deployment 49 hours old. The route sends s-maxage=300 with
+stale-while-revalidate=600, so a visitor who arrives more than 15 minutes
+after the previous one (in their region) waits for the whole computation. On
+a quiet site that is most first visits.
+
+NEXT, in order of return:
+1. The guard line below (an estimated 0.8 s of the 2.2 s on the function).
+2. A longer stale-while-revalidate (a day): the first visitor after a quiet
+   stretch gets the last computed numbers at once while the refresh runs
+   behind them. A policy choice: those numbers can be up to a day old.
+3. The reads (three rounds, 20 calls); method-metrics.test.ts pins the set.
 
 OPEN, Halim's call: 0.3 s of the remaining 0.5 s is the leak guard compiling
 one regex per protected string and tier on every cold request. One line in
