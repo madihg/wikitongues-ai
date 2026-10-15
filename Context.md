@@ -2285,3 +2285,66 @@ OPEN, Halim's call
   teach the checker a reviewed allow-list for code.
 
 GATES: pnpm typecheck 0, pnpm lint 0, vitest 101 files, 1,595 tests.
+
+### Oct 15: shipped UI copy no longer quotes frozen gold; the rest triaged
+
+PARTLY CLOSES the Oct 13 open item (scripts/leak-check-files.ts over the
+tracked ts, tsx, md and json files of web/src failed on 57 files).
+
+TRIAGE of the 14 shipped (non-test) files that hit:
+
+- User-facing UI copy, FIXED here:
+  - components/arena/answer-variants.tsx (4 hits): the explanation above
+    "Differences between our own answers" (heading tip and the "same word,
+    written differently" paragraph) quoted gold words as its examples. Every
+    example is a bracketed English description now ("[a word with a
+    capital]", "[every word written apart]" and so on), as the annotator's
+    worked example has been since Oct 13.
+  - lib/corrections-onboarding.ts (2 hits): the Corrections lane's worked
+    example and practice round. Both shared one word that is a whole frozen
+    gold. That word is WORD_SLOT, "[the word for God]", on both sides of the
+    worked example, so the diff still shows one change (the first word, whose
+    real form stays: the checker clears it) and the one pre-filled reason card
+    still lines up. The practice round keeps its real word to fix. Credits
+    unchanged.
+- Model-served text: NONE hit. The hits in generation-prompt-v2.ts, v4.ts and
+  v4-1.ts are all in the header design-note comments, not in the served
+  constants. The served-prompt gates (static-leak-check-v3, v4, v4-1, v4-2,
+  v4-4, v4-5) all PASS with live negative controls, so no prompt was touched
+  and no model behaviour changed.
+- Comments only (10 files, 18 hits): lib/answer-variants.ts,
+  annotations-query.ts, dialects.ts, edit-segments.ts, eval/answer-strip.ts,
+  arena/repair-round.ts, arena/retrieval-v2.ts, and the three
+  generation-prompt headers above.
+- Functional data that drives behaviour (2 files): lib/eval/langid.ts (12 of
+  its 13 hits are the Yoruba, Igbo and Pidgin seed lexicons, other languages'
+  words that collide with Igala golds only after diacritic folding; the 13th
+  is a comment) and lib/lexicon-parse.ts (one entry of CHIKHAPO_BAD_LINES, a
+  filter that drops a wrong source gloss; its other 3 hits are comments).
+  Editing either changes behaviour (langid scores, what the lexicon admits).
+
+Tests (2 new files, both read the shipped copy):
+- components/arena/answer-variants.test.tsx renders the component with the
+  tip opened and pins the bracketed examples, no quotes, and no letter outside
+  plain A-Z in that explanation. Fails on the old copy (checked).
+- lib/corrections-onboarding.test.ts pins WORD_SLOT, both example strings,
+  and that the worked example still diffs to exactly one segment.
+
+Leak check on the 4 changed files: 0 hits each. Full sweep of web/src after:
+55 files FAIL (was 57): 12 shipped files with 34 hits (comments and the two
+functional-data spots above), 43 test files with 419 hits across 22 frozen
+items. The words stay in the public git history (not rewritten, by
+instruction); the UI just no longer ships them.
+
+GATES: pnpm typecheck 0, pnpm lint 0, vitest 103 files, 1,601 tests.
+
+OPEN, Halim's call: how to clear the remaining 55 (asked Oct 15).
+- Recommended: scrub test fixtures and comments to invented tokens (same
+  diacritics, so folding and diff tests still exercise the same code paths)
+  or to real corpus words the checker clears where a test needs real Igala
+  (langid, tone, chrF), re-running the checker on every changed file; plus a
+  small reviewed allow-list in the checker ONLY for the two functional-data
+  spots (langid seed lexicons, the one chikhapo filter entry), keyed by file
+  and exact token so it cannot mask a new leak elsewhere.
+- Alternative: an allow-list for all code. Cheaper, but leaves whole gold
+  answers in public test files (answer-variants.test.ts alone carries 43).
