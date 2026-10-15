@@ -117,9 +117,10 @@ export function AnswerVariants() {
           Every prompt here was answered by two or more annotators, and the
           answers came back different. Two answers count as the same word when
           they match after tone marks, dotted vowels, capitals, spacing and
-          elision apostrophes are set aside - so &quot;Ọdudu&quot;,
-          &quot;Òdúdú&quot; and &quot;ódùdù&quot; are one word written three
-          ways, while &quot;Mama ọlañẹ&quot; is a different answer.
+          elision apostrophes are set aside - so [a word with a capital],
+          [the same word, tone-marked] and [the same word, marked differently]
+          are one word written three ways, while [another word for the same
+          thing] is a different answer.
         </InfoTip>
       </h2>
       <div className="mb-4 max-w-3xl space-y-2 text-sm text-text-secondary">
@@ -131,10 +132,10 @@ export function AnswerVariants() {
           <span className="font-medium text-text-primary">
             The same word, written differently.
           </span>{" "}
-          Everyone agrees the word is odudu, but it is written Ọdudu, Òdúdú,
-          ódùdù. Or the same sentence is spaced and elided differently:
-          &quot;Ọma lẹ a jẹ ñwu&quot; against &quot;Ọma lẹ aj&apos;ẹñwu&quot;.
-          That is a writing-convention decision, and a session can settle it in
+          Everyone agrees on the word, but it is written [with a capital],
+          [tone-marked], [marked differently]. Or the same sentence is spaced
+          and elided differently: [every word written apart] against [the same
+          sentence, two words joined by an apostrophe]. That is a writing-convention decision, and a session can settle it in
           one sitting. It is worth settling: a spelling choice repeats in every
           sentence containing that word, so an unsettled convention compounds
           through the whole training set and teaches the model that both forms
