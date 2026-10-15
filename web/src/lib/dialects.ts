@@ -4,7 +4,8 @@
  *
  * Why: no dialect is recorded anywhere today, yet annotators clearly need the
  * distinction - one typed it into a free-text box by hand
- * ("General: Ọl'odudu / Ibaji: W'ọlodudu"). Without it, divergent spellings of
+ * ("General: [one spelling] / Ibaji: [another]"; the real words are a frozen
+ * gold answer, so they are not quoted). Without it, divergent spellings of
  * the same word look like errors rather than varieties.
  *
  * PROVISIONAL LIST - NOT AN AUTHORITATIVE TAXONOMY.

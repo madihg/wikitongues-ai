@@ -8,27 +8,27 @@ import {
 
 describe("stripAnswer", () => {
   it("removes the common English framings", () => {
-    expect(stripAnswer("In Igala, Ọma").stripped).toBe("Ọma");
-    expect(stripAnswer("The Igala word for child is Ọma").stripped).toBe("Ọma");
-    expect(stripAnswer("Igala: Ọma").stripped).toBe("Ọma");
-    expect(stripAnswer("Answer: Ọma").stripped).toBe("Ọma");
-    expect(stripAnswer("Here is the Igala translation: Ọma").stripped).toBe(
-      "Ọma",
+    expect(stripAnswer("In Igala, Ọwa").stripped).toBe("Ọwa");
+    expect(stripAnswer("The Igala word for child is Ọwa").stripped).toBe("Ọwa");
+    expect(stripAnswer("Igala: Ọwa").stripped).toBe("Ọwa");
+    expect(stripAnswer("Answer: Ọwa").stripped).toBe("Ọwa");
+    expect(stripAnswer("Here is the Igala translation: Ọwa").stripped).toBe(
+      "Ọwa",
     );
   });
 
   it("removes a trailing English gloss but keeps the Igala", () => {
-    expect(stripAnswer("Ọma (child)").stripped).toBe("Ọma");
-    expect(stripAnswer("Ọma [child]").stripped).toBe("Ọma");
-    expect(stripAnswer("Ọma - this means child").stripped).toBe("Ọma");
+    expect(stripAnswer("Ọwa (child)").stripped).toBe("Ọwa");
+    expect(stripAnswer("Ọwa [child]").stripped).toBe("Ọwa");
+    expect(stripAnswer("Ọwa - this means child").stripped).toBe("Ọwa");
   });
 
   it("removes surrounding quotes", () => {
-    expect(stripAnswer('"Ọma"').stripped).toBe("Ọma");
+    expect(stripAnswer('"Ọwa"').stripped).toBe("Ọwa");
   });
 
   it("leaves a bare Igala answer completely untouched", () => {
-    const bare = "Wọla ọdudu";
+    const bare = "Fọta ọkuku";
     const r = stripAnswer(bare);
     expect(r.stripped).toBe(bare);
     expect(r.changed).toBe(false);
@@ -38,7 +38,7 @@ describe("stripAnswer", () => {
   it("never eats Igala text that merely contains a colon-like structure", () => {
     // The leading-clause rule is ASCII-only precisely so it cannot consume
     // Igala, which uses ẹ ọ ñ and tone marks.
-    const igala = "Ọma ẹñwu: ọma kẹlẹ";
+    const igala = "Ọwa ẹñwu: ọwa kẹlẹ";
     expect(stripAnswer(igala).stripped).toBe(igala);
   });
 
@@ -51,25 +51,25 @@ describe("stripAnswer", () => {
 
   it("handles a realistic verbose model answer", () => {
     const verbose =
-      "The Igala word for water is Ómi (pronounced OH-mee, and note that this differs from Yoruba)";
+      "The Igala word for water is Ówi (pronounced OH-mee, and note that this differs from Yoruba)";
     const out = stripAnswer(verbose).stripped;
-    expect(out).toBe("Ómi");
+    expect(out).toBe("Ówi");
   });
 
   it("is idempotent", () => {
-    const once = stripAnswer("In Igala, Ọma (child)").stripped;
+    const once = stripAnswer("In Igala, Ọwa (child)").stripped;
     expect(stripAnswer(once).stripped).toBe(once);
   });
 });
 
 describe("verbosityRatio", () => {
   it("is 1 when the hypothesis matches the shortest reference in length", () => {
-    expect(verbosityRatio("Ọma", ["Ọma"])).toBe(1);
+    expect(verbosityRatio("Ọwa", ["Ọwa"])).toBe(1);
   });
 
   it("scores against the SHORTEST reference", () => {
     // A model matching the most concise valid answer has met the contract.
-    expect(verbosityRatio("Ọma", ["Ọma kẹlẹ nwu", "Ọma"])).toBe(1);
+    expect(verbosityRatio("Ọwa", ["Ọwa kẹlẹ nwu", "Ọwa"])).toBe(1);
   });
 
   it("reports how many times too long an answer is", () => {
@@ -97,8 +97,8 @@ describe("verbosityStats", () => {
 
   it("does not flag a terse arm", () => {
     const rows = Array.from({ length: 10 }, () => ({
-      hypothesis: "Ọma",
-      references: ["Ọma"],
+      hypothesis: "Ọwa",
+      references: ["Ọwa"],
     }));
     const s = verbosityStats(rows);
     expect(s.median).toBe(1);
@@ -107,14 +107,14 @@ describe("verbosityStats", () => {
 
   it("reports the share of outputs carrying English packaging", () => {
     const s = verbosityStats([
-      { hypothesis: "In Igala, Ọma", references: ["Ọma"] },
-      { hypothesis: "Ọma", references: ["Ọma"] },
+      { hypothesis: "In Igala, Ọwa", references: ["Ọwa"] },
+      { hypothesis: "Ọwa", references: ["Ọwa"] },
     ]);
     expect(s.strippedShare).toBe(0.5);
   });
 
   it("counts words the way the length budgets are stated", () => {
-    expect(wordCount("  Wọla   ọdudu ")).toBe(2);
+    expect(wordCount("  Fọta   ọkuku ")).toBe(2);
     expect(wordCount("")).toBe(0);
   });
 });

@@ -57,7 +57,7 @@ describe("stripTemplateResidue", () => {
   });
 
   it("leaves clean Igala entries completely alone", () => {
-    const clean = "ọ́ma /ɔ́.mā/ — child\náta /áta/ — father\nọ́yà /ɔ́.jà/ — wife";
+    const clean = "ọ́wa /ɔ́.wā/ — child\náda /áda/ — father\nọ́yà /ɔ́.jà/ — wife";
     expect(stripTemplateResidue(clean)).toBe(clean);
   });
 });

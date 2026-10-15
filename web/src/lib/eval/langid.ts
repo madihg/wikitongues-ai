@@ -461,7 +461,7 @@ export function identifyLanguage(
   }
 
   // Orthographic signatures: bounded, additive, and reported. Lowercased so
-  // "Ụñyi" is treated the same as "ụñyi" - one real gold answer is capitalised.
+  // a capital Ụ is treated the same as ụ - one real gold answer is capitalised.
   const signatureChars: Partial<Record<LanguageCode, string[]>> = {};
   const nfcLower = normalized.normalize("NFC").toLowerCase();
   for (const [lang, sig] of Object.entries(ORTHOGRAPHIC_SIGNATURES)) {

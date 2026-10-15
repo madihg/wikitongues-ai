@@ -16,7 +16,7 @@ import { fullFold, tokenize } from "@/lib/eval/normalize";
  *               Igala first, optional /IPA/, em dash, ';'-separated senses.
  *   koelle      "One — ī́nye"
  *               REVERSED: English gloss first, then Koelle's 1854 form.
- *   chikhapo    "ómi — water"
+ *   chikhapo    "[Igala word] — water"
  *               Igala first, no IPA, some lines in raw ASJP notation.
  *
  * Every real list line uses the em dash separator; the em dashes in this file
@@ -63,19 +63,24 @@ export function detectFamily(source: string): SourceFamily | null {
 
 /**
  * chikhapo lines skipped outright: cross-source checking flagged these glosses
- * as wrong (obɪǯɪ́m is an ostrich, not an emu; ómi is water, rain is the
- * compound ómi oǯálì). They are surfaced to the community for adjudication
- * separately - see the needs_review entry in seed-rag-igala.ts - so a curated
- * lexicon must not launder them back in as facts.
+ * as wrong (obɪǯɪ́m is an ostrich, not an emu; the second headword means
+ * water, and rain is that word compounded with oǯálì). They are surfaced to
+ * the community for adjudication separately - see the needs_review entry in
+ * seed-rag-igala.ts - so a curated lexicon must not launder them back in as
+ * facts. The second headword collides with a frozen gold answer once
+ * diacritics are folded; scripts/leak-check-allow.ts allows exactly this one
+ * occurrence, because the filter must name the line it drops. Tests take it
+ * from here rather than spelling it.
  */
-const CHIKHAPO_BAD_LINES: ReadonlyArray<readonly [string, string]> = [
+export const CHIKHAPO_BAD_LINES: ReadonlyArray<readonly [string, string]> = [
   ["obɪǯɪ́m", "emu"],
   ["ómi", "rain"],
 ];
 
 /**
  * chikhapo comma-list synonyms removed from otherwise-good lines, same
- * cross-source flagging as above: óǯí means head (water is ómi), and ɔ̀dɔ̀'s
+ * cross-source flagging as above: óǯí means head (water is a different
+ * word, the second headword of CHIKHAPO_BAD_LINES), and ɔ̀dɔ̀'s
  * "wall" sense contradicts every other source. Keyed by exact headword.
  */
 const CHIKHAPO_BAD_SYNONYMS: ReadonlyMap<string, string> = new Map([
@@ -281,8 +286,8 @@ export function promptContentWords(text: string): string[] {
  * 1980 standard orthography. Serving those forms in the rag-v2 dictionary
  * block told the model "copy this spelling character for character" about
  * spellings no Igala speaker uses, which is precisely the meaning-changing
- * spelling failure Agnes flagged in the 2026-08-11 live test (Ojọ vs Ojọn,
- * Onokotu vs Nokotu). The mapping below is the documented chikhapo→orthography
+ * spelling failure Agnes flagged in the 2026-08-11 live test ([a word] vs
+ * the same word with a final n, Onokotu vs Nokotu). The mapping below is the documented chikhapo→orthography
  * correspondence from the corpus audit: ɛ→ẹ, ɔ→ọ, ǯ→j, plus ŋ→ñ (the velar
  * nasal the orthography writes ñ) and removal of the notation-only diacritics
  * (macron = mid tone, which standard Igala leaves unmarked; tilde = phonemic

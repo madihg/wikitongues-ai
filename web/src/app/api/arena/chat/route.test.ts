@@ -308,7 +308,7 @@ describe("rag-v4-1 reaches the wire before the repair round runs", () => {
     // rejects) so the repair round definitely runs a second generation.
     scriptGenerations([
       ["so", "oro"],
-      ["ojo ", "daa"],
+      ["opo ", "daa"],
     ]);
 
     const res = await POST(request(["v41"]));
@@ -335,7 +335,7 @@ describe("rag-v4-1 reaches the wire before the repair round runs", () => {
     mockPrisma.candidateModel.findMany.mockResolvedValue([v41]);
     scriptGenerations([
       ["so", "oro"],
-      ["ojo ", "daa"],
+      ["opo ", "daa"],
     ]);
 
     const res = await POST(request(["v41"]));
@@ -358,7 +358,7 @@ describe("rag-v4-1 reaches the wire before the repair round runs", () => {
     });
 
     const reply = events.find((e) => e.type === "reply")!;
-    expect(reply.type === "reply" && reply.reply.text).toBe("ojo daa");
+    expect(reply.type === "reply" && reply.reply.text).toBe("opo daa");
     // Serve what you measure: the served answer cost BOTH calls.
     expect(reply.type === "reply" && reply.reply.latencyMs).toBe(7 + 14);
     expect(reply.type === "reply" && reply.reply.tokensIn).toBe(100 + 200);
@@ -370,7 +370,7 @@ describe("rag-v4-1 reaches the wire before the repair round runs", () => {
       initStreamingReplies([{ slug: "v41", name: "v4.1" }]),
       events,
     );
-    expect(folded[0].text).toBe("ojo daa");
+    expect(folded[0].text).toBe("opo daa");
     expect(folded[0].revisedFor).toEqual([
       "letters that are not in the Igala alphabet",
     ]);
@@ -378,7 +378,7 @@ describe("rag-v4-1 reaches the wire before the repair round runs", () => {
 
   it("runs ONE generation and emits no revision when the first answer is clean", async () => {
     mockPrisma.candidateModel.findMany.mockResolvedValue([v41]);
-    scriptGenerations([["ojo ", "daa"]]);
+    scriptGenerations([["opo ", "daa"]]);
 
     const res = await POST(request(["v41"]));
     const { events } = await drain(res);
@@ -386,7 +386,7 @@ describe("rag-v4-1 reaches the wire before the repair round runs", () => {
     expect(genCount).toBe(1);
     expect(events.some((e) => e.type === "revision")).toBe(false);
     const reply = events.find((e) => e.type === "reply")!;
-    expect(reply.type === "reply" && reply.reply.text).toBe("ojo daa");
+    expect(reply.type === "reply" && reply.reply.text).toBe("opo daa");
     expect(reply.type === "reply" && reply.reply.latencyMs).toBe(7);
   });
 
@@ -394,7 +394,7 @@ describe("rag-v4-1 reaches the wire before the repair round runs", () => {
     mockPrisma.candidateModel.findMany.mockResolvedValue([v41]);
     scriptGenerations([
       ["so", "oro"],
-      ["ojo ", "daa"],
+      ["opo ", "daa"],
     ]);
     await drain(await POST(request(["v41"])));
 
@@ -424,7 +424,7 @@ describe("rag-v4-1 reaches the wire before the repair round runs", () => {
     mockPrisma.candidateModel.findMany.mockResolvedValue([v41]);
     scriptGenerations([
       ["so", "oro"],
-      ["ojo ", "daa"],
+      ["opo ", "daa"],
     ]);
     const { events } = await drain(await POST(request(["v41"])));
 
@@ -580,7 +580,7 @@ describe("the other arms serve exactly what they served before", () => {
             ? ["neigh", "bour"]
             : n <= 2
               ? ["so", "oro"]
-              : ["ojo ", "daa"];
+              : ["opo ", "daa"];
         for (const t of tokens) {
           await sleep();
           onDelta(t);
@@ -607,7 +607,7 @@ describe("the other arms serve exactly what they served before", () => {
       ]),
       events,
     );
-    expect(folded.map((r) => r.text)).toEqual(["neighbour", "ojo daa"]);
+    expect(folded.map((r) => r.text)).toEqual(["neighbour", "opo daa"]);
     expect(folded[0].revisedFor).toBeNull();
     // Every stage marker is addressed to a column that exists.
     for (const ev of events) {
@@ -702,7 +702,7 @@ describe("a client that has never heard of the new events", () => {
     ]);
     scriptGenerations([
       ["so", "oro"],
-      ["ojo ", "daa"],
+      ["opo ", "daa"],
     ]);
     const { lines } = await drain(await POST(request(["v41"])));
 
@@ -711,9 +711,9 @@ describe("a client that has never heard of the new events", () => {
     const beforeReply = lines.filter(
       (l) => (JSON.parse(l) as ChatStreamEvent).type !== "reply",
     );
-    expect(headEraFold(beforeReply)[0].text).toBe("sooroojo daa");
+    expect(headEraFold(beforeReply)[0].text).toBe("sooroopo daa");
     // The closing reply corrects it. No old client ends on a wrong transcript.
-    expect(headEraFold(lines)[0].text).toBe("ojo daa");
+    expect(headEraFold(lines)[0].text).toBe("opo daa");
     expect(headEraFold(lines)[0].done).toBe(true);
   });
 });
@@ -721,7 +721,7 @@ describe("a client that has never heard of the new events", () => {
 // ─── (f) the Server-Timing header cannot carry content ──────────────────────
 
 describe("Server-Timing", () => {
-  const LEAKY_QUESTION = "Translate the secret phrase ọ̀jọ́ àgbá for me";
+  const LEAKY_QUESTION = "Translate the secret phrase ọ̀pọ́ àgbá for me";
 
   it("names only allowlisted stages, with durations and no desc", async () => {
     mockPrisma.candidateModel.findMany.mockResolvedValue([
@@ -731,7 +731,7 @@ describe("Server-Timing", () => {
         versionLabel: "rag-v4-1",
       }),
     ]);
-    scriptGenerations([["ojo ", "daa"]]);
+    scriptGenerations([["opo ", "daa"]]);
 
     const res = await POST(request(["gpt-4o-igala-rag-v4-1"], LEAKY_QUESTION));
     const header = res.headers.get("Server-Timing")!;
@@ -755,7 +755,7 @@ describe("Server-Timing", () => {
         versionLabel: "rag-v4-1",
       }),
     ]);
-    scriptGenerations([["ojo ", "daa"]]);
+    scriptGenerations([["opo ", "daa"]]);
 
     const res = await POST(request(["gpt-4o-igala-rag-v4-1"], LEAKY_QUESTION));
     const header = res.headers.get("Server-Timing")!;
@@ -764,10 +764,10 @@ describe("Server-Timing", () => {
     for (const secret of [
       "secret",
       "phrase",
-      "ọ̀jọ́",
+      "ọ̀pọ́",
       "àgbá",
       "Translate",
-      "ojo",
+      "opo",
       "daa",
       "gpt-4o",
       "igala",
@@ -835,7 +835,7 @@ describe("a turn that runs past its deadline", () => {
 
   it("keeps the partial text and explains the cutoff, instead of an empty card", async () => {
     mockPrisma.candidateModel.findMany.mockResolvedValue([v4]);
-    stallAfterPrefix("Wọla ọdudu, this much arrived");
+    stallAfterPrefix("Fọta ọkuku, this much arrived");
     turnBudgetMs.value = 30;
 
     const startedAt = Date.now();
@@ -848,7 +848,7 @@ describe("a turn that runs past its deadline", () => {
 
     const reply = events.find((e) => e.type === "reply")!;
     expect(reply.type === "reply" && reply.reply.text).toBe(
-      "Wọla ọdudu, this much arrived",
+      "Fọta ọkuku, this much arrived",
     );
     expect(reply.type === "reply" && reply.reply.error).toBe(
       TURN_CUTOFF_NOTICE,
@@ -984,10 +984,10 @@ describe("a turn that runs past its deadline", () => {
             ragContextIds: [],
           };
         }
-        onDelta("ojo ");
+        onDelta("opo ");
         await sleep(4000);
         return {
-          text: "ojo daa",
+          text: "opo daa",
           modelId: "gpt-x",
           latencyMs: 4000,
           tokensIn: 1,
@@ -1001,7 +1001,7 @@ describe("a turn that runs past its deadline", () => {
     const { events } = await drain(await POST(request(["v41"])));
     expect(genCount).toBe(2);
     const reply = events.find((e) => e.type === "reply")!;
-    expect(reply.type === "reply" && reply.reply.text).toBe("ojo ");
+    expect(reply.type === "reply" && reply.reply.text).toBe("opo ");
     expect(reply.type === "reply" && reply.reply.error).toBe(
       TURN_CUTOFF_NOTICE,
     );
@@ -1010,7 +1010,7 @@ describe("a turn that runs past its deadline", () => {
       initStreamingReplies([{ slug: "v41", name: "v4.1" }]),
       events,
     );
-    expect(folded[0].text).toBe("ojo ");
+    expect(folded[0].text).toBe("opo ");
   });
 
   it("does nothing at all to a turn that finishes inside its budget", async () => {
@@ -1039,7 +1039,7 @@ describe("a v4.1 column whose turn has no time left to rewrite", () => {
     // A dirty first answer that WOULD be rewritten with budget to spare.
     scriptGenerations([
       ["so", "oro"],
-      ["ojo ", "daa"],
+      ["opo ", "daa"],
     ]);
     // Enough budget for the first attempt to land, nowhere near enough for a
     // second generation - the real gate decides, on the real threshold.
@@ -1081,7 +1081,7 @@ describe("a v4.1 column whose turn has no time left to rewrite", () => {
     mockPrisma.candidateModel.findMany.mockResolvedValue([v41]);
     scriptGenerations([
       ["so", "oro"],
-      ["ojo ", "daa"],
+      ["opo ", "daa"],
     ]);
     const { events } = await drain(await POST(request(["v41"])));
 
@@ -1089,7 +1089,7 @@ describe("a v4.1 column whose turn has no time left to rewrite", () => {
     const revision = events.find((e) => e.type === "revision")!;
     expect(revision.type === "revision" && revision.applied).toBeUndefined();
     const reply = events.find((e) => e.type === "reply")!;
-    expect(reply.type === "reply" && reply.reply.text).toBe("ojo daa");
+    expect(reply.type === "reply" && reply.reply.text).toBe("opo daa");
   });
 });
 
@@ -1121,7 +1121,7 @@ describe("a column never closes as a bare error with nothing in it", () => {
         _args: unknown,
         onDelta: (d: string) => void,
       ): Promise<never> => {
-        onDelta("Wọla ọdudu, this much arrived");
+        onDelta("Fọta ọkuku, this much arrived");
         await sleep();
         // The shape the incident wore: a terse upstream code, no body.
         throw new Error("HTTP 504");
@@ -1131,7 +1131,7 @@ describe("a column never closes as a bare error with nothing in it", () => {
     const { events } = await drain(await POST(request(["v4"])));
     const reply = events.find((e) => e.type === "reply")!;
     expect(reply.type === "reply" && reply.reply.text).toBe(
-      "Wọla ọdudu, this much arrived",
+      "Fọta ọkuku, this much arrived",
     );
     expect(reply.type === "reply" && reply.reply.error).toBe("HTTP 504");
 
@@ -1141,7 +1141,7 @@ describe("a column never closes as a bare error with nothing in it", () => {
       initStreamingReplies([{ slug: "v4", name: "v4" }]),
       events,
     );
-    expect(folded[0].text).toBe("Wọla ọdudu, this much arrived");
+    expect(folded[0].text).toBe("Fọta ọkuku, this much arrived");
     expect(folded[0].error).toBe("HTTP 504");
   });
 

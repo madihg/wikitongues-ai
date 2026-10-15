@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
+import { relative, resolve, sep } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { buildProtectedSet, checkStatic } from "../src/lib/eval/leak-guard";
 import { fullFold } from "../src/lib/eval/normalize";
+import { applyLeakAllowList, neutraliseEscapes } from "../src/lib/eval/leak-allow";
+import { LEAK_ALLOW } from "./leak-check-allow";
 
 /**
  * SCOPE-A CHECK FOR FILES WE PUBLISH. madihg/wikitongues-ai is a PUBLIC
@@ -15,7 +18,16 @@ import { fullFold } from "../src/lib/eval/normalize";
  *
  * Run before committing any document that quotes Igala:
  *   npx tsx --env-file=.env.local scripts/leak-check-files.ts <file> [file ...]
- * Exit code 1 on any hit or a dead control.
+ * Exit code 1 on any hit, a dead control, or an allow-list entry whose count
+ * no longer matches its file.
+ *
+ * Since 2026-10-15 each file is read with backslash escapes neutralised (a
+ * newline escape used to glue the next word onto an "n" and hide it), and
+ * the reviewed allow-list in scripts/leak-check-allow.ts masks the few words
+ * that must stay as written (see src/lib/eval/leak-allow.ts). The whole of
+ * web/src passes:
+ *   git ls-files 'src/**' | grep -E '\.(ts|tsx|md|mdx|json)$' | tr '\n' '\0' \
+ *     | xargs -0 npx tsx --env-file=.env.local scripts/leak-check-files.ts
  */
 async function main() {
   const files = process.argv.slice(2);
@@ -37,10 +49,21 @@ async function main() {
     );
     const spike = checkStatic([{ where: "control", text: `x ${golds[0].answerText} y` }], protectedSet);
     if (spike.pass) throw new Error("NEGATIVE CONTROL DEAD: a spiked frozen gold was not flagged");
-    console.log(`protected strings: ${protectedSet.length} (negative control live)`);
+    console.log(
+      `protected strings: ${protectedSet.length} (negative control live); allow-list: ${LEAK_ALLOW.length} entries`,
+    );
+    const webRoot = resolve(__dirname, "..");
     let failed = false;
     for (const f of files) {
-      const paras = readFileSync(f, "utf8")
+      const rel = relative(webRoot, resolve(f)).split(sep).join("/");
+      const allowed = applyLeakAllowList(
+        rel,
+        neutraliseEscapes(readFileSync(f, "utf8")),
+        LEAK_ALLOW,
+      );
+      for (const p of allowed.problems) console.log(`FAIL ${p}`);
+      if (allowed.problems.length > 0) failed = true;
+      const paras = allowed.text
         .split(/\n\s*\n/)
         .map((text, i) => ({ where: `${f}#para${i}`, text }));
       const report = checkStatic(paras, protectedSet);
@@ -50,7 +73,7 @@ async function main() {
       // the file (nothing the file does not already contain). Tokens split on
       // anything that is not a letter, mark or digit, as the guard does.
       if (!report.pass) {
-        const src = readFileSync(f, "utf8");
+        const src = allowed.text;
         const toks = [...src.matchAll(/[\p{L}\p{M}\p{N}]+/gu)].map((m) => ({
           s: m.index!,
           e: m.index! + m[0].length,

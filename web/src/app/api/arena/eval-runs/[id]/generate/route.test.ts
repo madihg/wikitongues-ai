@@ -126,7 +126,7 @@ beforeEach(() => {
   mockBuildRetrievalV4.mockResolvedValue(V4);
   mockBuildRetrievalV2.mockResolvedValue(V4);
   mockSearchRag.mockResolvedValue([]);
-  scriptGenerations(["ojo daa"]);
+  scriptGenerations(["opo daa"]);
 });
 
 describe("the eval-generation route is still buffered", () => {
@@ -157,7 +157,7 @@ describe("the eval-generation route is still buffered", () => {
     setRun("rag-v4");
     // A first answer that WOULD be dirty on the v4.1 arm - proof the round is
     // keyed on the label and not on the text.
-    scriptGenerations(["sooro", "ojo daa"]);
+    scriptGenerations(["sooro", "opo daa"]);
     await call();
 
     expect(mockGenerateForCandidate).toHaveBeenCalledTimes(1);
@@ -177,7 +177,7 @@ describe("the eval-generation route is still buffered", () => {
 
   it("still re-asks once and STORES the repaired answer on rag-v4-1", async () => {
     setRun("rag-v4-1");
-    scriptGenerations(["sooro", "ojo daa"]);
+    scriptGenerations(["sooro", "opo daa"]);
     await call();
 
     expect(mockGenerateForCandidate).toHaveBeenCalledTimes(2);
@@ -192,7 +192,7 @@ describe("the eval-generation route is still buffered", () => {
     expect(second.userMessage).toContain("sooro");
 
     expect(storedOutput()).toMatchObject({
-      outputText: "ojo daa",
+      outputText: "opo daa",
       // Serve what you measure: the stored row is billed for BOTH calls.
       latencyMs: 7 + 14,
       tokenCountIn: 100 + 200,
@@ -206,27 +206,27 @@ describe("the eval-generation route is still buffered", () => {
       { ...PROMPT, text: "Which tone marks does this word carry?" },
     ]);
     // Fully tone-saturated, and therefore a violation UNLESS the question asked.
-    scriptGenerations(["Àgbá Ọ́jọ́"]);
+    scriptGenerations(["Àgbá Ọ́pọ́"]);
     await call();
 
     expect(mockGenerateForCandidate).toHaveBeenCalledTimes(1);
-    expect(storedOutput()).toMatchObject({ outputText: "Àgbá Ọ́jọ́" });
+    expect(storedOutput()).toMatchObject({ outputText: "Àgbá Ọ́pọ́" });
   });
 
   it("re-asks when the same saturated answer was NOT asked for", async () => {
     setRun("rag-v4-1");
-    scriptGenerations(["Àgbá Ọ́jọ́", "Agba Ojo"]);
+    scriptGenerations(["Àgbá Ọ́pọ́", "Agba Opo"]);
     await call();
 
     expect(mockGenerateForCandidate).toHaveBeenCalledTimes(2);
-    expect(storedOutput()).toMatchObject({ outputText: "Agba Ojo" });
+    expect(storedOutput()).toMatchObject({ outputText: "Agba Opo" });
   });
 });
 
 describe("repair round provenance is persisted (finding 5/10)", () => {
   it("stores repaired=true and the discarded first pass when the round re-asked", async () => {
     setRun("rag-v4-1");
-    scriptGenerations(["sooro", "ojo daa"]);
+    scriptGenerations(["sooro", "opo daa"]);
     await call();
 
     expect(storedOutput()).toMatchObject({
@@ -238,7 +238,7 @@ describe("repair round provenance is persisted (finding 5/10)", () => {
 
   it("stores repaired=false and no first-pass text on a clean rag-v4-1 answer", async () => {
     setRun("rag-v4-1");
-    scriptGenerations(["ojo daa"]);
+    scriptGenerations(["opo daa"]);
     await call();
 
     expect(storedOutput()).toMatchObject({

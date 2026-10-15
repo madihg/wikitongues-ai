@@ -49,13 +49,13 @@ function recorderPrisma(calls: RecordedCall[]) {
       },
     ]),
     coldAuthorAnswer: record("coldAuthorAnswer", [
-      { promptId: "db1", answerText: "Omi", englishGloss: "water" },
-      { promptId: "db1", answerText: "Ómi", englishGloss: "water" },
+      { promptId: "db1", answerText: "Owi", englishGloss: "water" },
+      { promptId: "db1", answerText: "Ówi", englishGloss: "water" },
     ]),
     modelOutput: record("modelOutput", [
       {
         promptId: "db1",
-        outputText: "Omi",
+        outputText: "Owi",
         candidateModel: { id: "c1", name: "Test candidate", archived: false },
       },
     ]),
@@ -217,7 +217,7 @@ describe("collectEvalBundle - end to end on injected data", () => {
     expect(bundle.corpus.holdoutPrompts).toBe(1);
     expect(bundle.report.nPromptsWithGold).toBe(1);
     expect(bundle.report.candidates).toHaveLength(1);
-    // "Omi" exactly matches one of the two gold answers.
+    // "Owi" exactly matches one of the two gold answers.
     const chrf = bundle.report.candidates[0].overall.find(
       (c) => c.metric === "chrf",
     )!;

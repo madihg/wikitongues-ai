@@ -24,7 +24,7 @@ import { buildProtectedSet, checkStatic } from "@/lib/eval/leak-guard";
 describe("IGALA_SYSTEM_V4_1 - static text is leak-free (Scope A)", () => {
   it("contains no frozen gold answer from a representative protected set", () => {
     const protectedSet = buildProtectedSet(
-      ["Ómi", "ẹ́kọ̀", "Ọ́ma", "Áta mi", "Ọ̀gbẹ́nẹ́ chojẹ", "àdagbá"].map(
+      ["Ówi", "ẹ́kọ̀", "Ọ́wa", "Áda mi", "Ọ̀gbẹ́nẹ́ chojẹ", "àdagbá"].map(
         (answerText, i) => ({ promptId: `ig_bank_${i}`, answerText }),
       ),
     );
@@ -40,13 +40,30 @@ describe("IGALA_SYSTEM_V4_1 - static text is leak-free (Scope A)", () => {
     expect(report.hits).toEqual([]);
   });
 
+  it("would catch a protected word spiked into the prompt (control)", () => {
+    // The sample words above are invented (2026-10-15): the real frozen
+    // answers are never spelled in this public repository. This control proves
+    // the check is awake; the real set is checked by the static-leak-check
+    // script against the database.
+    const protectedSet = buildProtectedSet([
+      { promptId: "ig_bank_0", answerText: "Ówi" },
+    ]);
+    const report = checkStatic(
+      [{ where: "IGALA_SYSTEM_V4_1+spike", text: `${IGALA_SYSTEM_V4_1} owi` }],
+      protectedSet,
+    );
+    expect(report.pass).toBe(false);
+  });
+
   it("ships NONE of the spec's named leak-risk strings", () => {
     // Section 3.4: all five are train-attested but must clear the frozen-set
     // scan before any of them may ship in static text. The v4.1 prompt cites
     // the frames schematically instead, so none may appear.
     for (const risky of [
       "lia kẹ jẹñwu",
-      "Ọjọ ki d'ẹnyọ ñwu wẹ",
+      // Its subject is a frozen gold, so only the rest of the frame is
+      // spelled; a prompt carrying the whole phrase would carry this too.
+      "ki d'ẹnyọ ñwu wẹ",
       "Wọla'ulẹ",
       "Ch'ugba t'ugba",
       "Abu wele",
@@ -174,7 +191,8 @@ describe("IGALA_SYSTEM_V4_1 - the eight enshrinable rules", () => {
     expect(grammar).toMatch(
       /Subject \+ kì \+ verb WITHOUT the nasal is a wish or blessing - the 'may God \.\.\.' frame/,
     );
-    expect(grammar).not.toMatch(/Ọjọ kì \.\.\./);
+    // No spelled subject of any kind directly before the frame.
+    expect(grammar).not.toMatch(/[\p{L}\p{M}]+ kì \.\.\./u);
   });
 
   it("E3: dative allomorphy on the elision line", () => {
@@ -235,7 +253,7 @@ describe("IGALA_SYSTEM_V4_1 - the eight enshrinable rules", () => {
       expect(neverWrite, w).toContain(w);
     }
     // DON'T side only: the attested replacements are train/frozen gold and
-    // must never appear (là, ọkọ, ọya, ñwi - Scope A, same rule as v2's list).
+    // must never appear (là, ọya, ñwi and one frozen gold - Scope A, same rule as v2's list).
     for (const replacement of ["là", "ọya", "ñwi"]) {
       expect(neverWrite, replacement).not.toContain(replacement);
     }

@@ -11,7 +11,7 @@ describe("coldAnswersToSftRows", () => {
   const base: ColdAnswerInput = {
     promptId: "p1",
     promptText: "Write the Igala word for 'water'.",
-    answerText: "ọ̀mì",
+    answerText: "ọ̀wì",
     bucket: "orthography",
     promptBucket: "orthography",
     isHoldout: false,
@@ -24,7 +24,7 @@ describe("coldAnswersToSftRows", () => {
   it("maps answerText to the completion (pure Igala target)", () => {
     const out = coldAnswersToSftRows([base]);
     expect(out).toHaveLength(1);
-    expect(out[0].correctedText).toBe("ọ̀mì");
+    expect(out[0].correctedText).toBe("ọ̀wì");
     expect(out[0].promptText).toBe(base.promptText);
     expect(out[0].isHoldout).toBe(false);
   });
@@ -47,9 +47,9 @@ describe("coldAnswersToSftRows", () => {
 
   it("NEVER carries English-gloss/metadata into the target", () => {
     // The input type has no gloss field; the completion must be exactly answerText.
-    const withGlossLike = { ...base, answerText: "ọ̀mì" };
+    const withGlossLike = { ...base, answerText: "ọ̀wì" };
     const out = coldAnswersToSftRows([withGlossLike]);
-    expect(out[0].correctedText).toBe("ọ̀mì");
+    expect(out[0].correctedText).toBe("ọ̀wì");
     expect(out[0].correctedText).not.toMatch(/water|means|english/i);
   });
 
@@ -128,7 +128,7 @@ describe("editsToSftRows", () => {
     // passing the raw enriched row.
     const enriched = {
       ...base,
-      correctedText: "Agba ọjọ",
+      correctedText: "Agba ọpọ",
       provenance: "salvage_both_inadequate",
       segments: {
         v: 1,
@@ -136,8 +136,8 @@ describe("editsToSftRows", () => {
           {
             start: 0,
             end: 10,
-            original: "Àgbá Ọ́jọ́",
-            replacement: "Agba ọjọ",
+            original: "Àgbá Ọ́pọ́",
+            replacement: "Agba ọpọ",
             reason: "the team writes it without the marks",
             reasonTags: ["tone_marks", "unsure"],
           },
@@ -147,7 +147,7 @@ describe("editsToSftRows", () => {
     const out = editsToSftRows([enriched]);
     expect(out).toHaveLength(1);
     expect(out[0].provenance).toBe("edit"); // never the finer DB value
-    expect(out[0].correctedText).toBe("Agba ọjọ");
+    expect(out[0].correctedText).toBe("Agba ọpọ");
     // Nothing segment- or reason-shaped survives into the source row.
     expect(JSON.stringify(out[0])).not.toMatch(
       /reasonTags|replacement|without the marks/,

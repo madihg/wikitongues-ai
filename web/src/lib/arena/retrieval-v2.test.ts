@@ -122,9 +122,9 @@ describe("renderDictionaryLine - the DiPMT-compact render", () => {
   it("renders a single sense as a bare statement", () => {
     expect(
       renderDictionaryLine("water", [
-        { id: "l1", headword: "Ómi", gloss: "water", confidence: 1 },
+        { id: "l1", headword: "Ówi", gloss: "water", confidence: 1 },
       ]),
-    ).toBe('"water" is Ómi.');
+    ).toBe('"water" is Ówi.');
   });
 
   it("renders alternatives, warning when a sense means something else", () => {
@@ -133,10 +133,10 @@ describe("renderDictionaryLine - the DiPMT-compact render", () => {
     // exactly the near-form substitution Agnes flagged.
     expect(
       renderDictionaryLine("husband", [
-        { id: "l1", headword: "ọ́kọ", gloss: "husband", confidence: 1 },
+        { id: "l1", headword: "ọ́rọ", gloss: "husband", confidence: 1 },
         { id: "l2", headword: "ọ́ya", gloss: "wife", confidence: 0.9 },
       ]),
-    ).toBe('"husband" is ọ́kọ, or ọ́ya (wife - do not confuse).');
+    ).toBe('"husband" is ọ́rọ, or ọ́ya (wife - do not confuse).');
   });
 });
 
@@ -155,7 +155,7 @@ describe("buildRetrievalV2 - dictionary lookup", () => {
         },
         {
           id: "b",
-          headword: "ókō",
+          headword: "órō",
           gloss: "money",
           glossFolded: "money",
           confidence: 1,
@@ -181,10 +181,10 @@ describe("buildRetrievalV2 - dictionary lookup", () => {
       ...TRAIN_PROMPT,
       text: "What is the Igala word for money?",
     });
-    // The fixture's ókō carries a Koelle-style macron (mid tone). Standard
+    // The fixture's órō carries a Koelle-style macron (mid tone). Standard
     // orthography leaves mid unmarked, so the render transliterates it away:
-    // the model sees óko, the stored row keeps the source notation.
-    expect(r.dictionaryBlock).toContain('"money" is óko, or ẹ́gwà, or úkwù.');
+    // the model sees óro, the stored row keeps the source notation.
+    expect(r.dictionaryBlock).toContain('"money" is óro, or ẹ́gwà, or úkwù.');
     // The 4th sense never reaches the block or the audit trail.
     expect(r.dictionaryBlock).not.toContain("ìhìám");
     expect(r.contextIds).toEqual(
@@ -246,17 +246,17 @@ describe("buildRetrievalV2 - the leak guard on holdout prompts", () => {
       lex: [
         {
           id: "lw",
-          headword: "Ómi",
+          headword: "Ówi",
           gloss: "water",
           glossFolded: "water",
           confidence: 1,
         },
       ],
       pairs: [
-        { id: "p-leak", igala: "Ómi chẹ́ ùñmà.", english: "Water is good." },
+        { id: "p-leak", igala: "Ówi chẹ́ ùñmà.", english: "Water is good." },
         { id: "p-clean", igala: "Ẹ́là chẹ́ ùñmà.", english: "Food is good." },
       ],
-      promptRow: { id: "cuid-holdout-1", ownGold: ["Ómi"] },
+      promptRow: { id: "cuid-holdout-1", ownGold: ["Ówi"] },
     });
     const r = await buildRetrievalV2(prisma, HOLDOUT);
 
@@ -268,8 +268,8 @@ describe("buildRetrievalV2 - the leak guard on holdout prompts", () => {
       "pp:p-leak",
     ]);
 
-    expect(r.dictionaryBlock).not.toContain("Ómi");
-    expect(r.parallelBlock).not.toContain("Ómi");
+    expect(r.dictionaryBlock).not.toContain("Ówi");
+    expect(r.parallelBlock).not.toContain("Ówi");
     expect(r.parallelBlock).toContain("Ẹ́là");
     expect(r.contextIds).toEqual(["pp:p-clean"]);
   });
@@ -278,8 +278,8 @@ describe("buildRetrievalV2 - the leak guard on holdout prompts", () => {
     const prisma = fakePrisma({
       // Same word, different tone practice: the guard must still fire,
       // because a tone-stripped answer key is still the answer key.
-      pairs: [{ id: "p1", igala: "omi kí ni?", english: "What is water?" }],
-      promptRow: { id: "cuid-holdout-1", ownGold: ["Ómi"] },
+      pairs: [{ id: "p1", igala: "owi kí ni?", english: "What is water?" }],
+      promptRow: { id: "cuid-holdout-1", ownGold: ["Ówi"] },
     });
     const r = await buildRetrievalV2(prisma, HOLDOUT);
     expect(r.leakReport.hitCount).toBe(1);
@@ -288,10 +288,10 @@ describe("buildRetrievalV2 - the leak guard on holdout prompts", () => {
 
   it("does not run the guard on train prompts, so nothing is over-dropped", async () => {
     const prisma = fakePrisma({
-      pairs: [{ id: "p1", igala: "Ómi chẹ́ ùñmà.", english: "Water is good." }],
+      pairs: [{ id: "p1", igala: "Ówi chẹ́ ùñmà.", english: "Water is good." }],
       // Even with own gold present, a non-holdout prompt serves everything:
       // scope B protects the benchmark, not ordinary generation.
-      promptRow: { id: "cuid-train-1", ownGold: ["Ómi"] },
+      promptRow: { id: "cuid-train-1", ownGold: ["Ówi"] },
     });
     const r = await buildRetrievalV2(prisma, {
       ...TRAIN_PROMPT,
@@ -327,7 +327,7 @@ describe("buildRetrievalV2 - gold exemplars", () => {
           "ig_bank_orth_001",
           "Give the Igala word for water.",
           true,
-          "Ómi",
+          "Ówi",
         ),
         // Another frozen prompt's gold - rule 2, must never appear either.
         gold(
@@ -336,7 +336,7 @@ describe("buildRetrievalV2 - gold exemplars", () => {
           "ig_bank_orth_002",
           "Give the Igala word for child.",
           true,
-          "Ọ́ma",
+          "Ọ́wa",
         ),
         // Train gold - the legitimate exemplar pool.
         gold(
@@ -345,7 +345,7 @@ describe("buildRetrievalV2 - gold exemplars", () => {
           "ig_train_010",
           "Give the Igala word for sun.",
           false,
-          "Ójọ́",
+          "Ópọ́",
         ),
         gold(
           "g-t2",
@@ -356,7 +356,7 @@ describe("buildRetrievalV2 - gold exemplars", () => {
           "Óchù",
         ),
       ],
-      promptRow: { id: "cuid-h1", ownGold: ["Ómi"] },
+      promptRow: { id: "cuid-h1", ownGold: ["Ówi"] },
     });
     const r = await buildRetrievalV2(prisma, {
       promptId: "ig_bank_orth_001",
@@ -366,8 +366,8 @@ describe("buildRetrievalV2 - gold exemplars", () => {
     });
 
     const answers = r.exampleTurns.map((t) => t.answer);
-    expect(answers).not.toContain("Ómi");
-    expect(answers).not.toContain("Ọ́ma");
+    expect(answers).not.toContain("Ówi");
+    expect(answers).not.toContain("Ọ́wa");
     expect(answers.length).toBe(2);
     expect(r.contextIds).toEqual(
       expect.arrayContaining(["gold:g-t1", "gold:g-t2"]),
@@ -382,7 +382,7 @@ describe("IGALA_SYSTEM_V2 - static text is leak-free (Scope A)", () => {
     // answers with a phrase, tone-marked as gold actually is; checkStatic
     // folds both tiers itself.
     const protectedSet = buildProtectedSet(
-      ["Ómi", "ẹ́kọ̀", "Ọ́ma", "Áta mi", "Ọ̀gbẹ́nẹ́ chojẹ", "àdagbá"].map(
+      ["Ówi", "ẹ́kọ̀", "Ọ́wa", "Áda mi", "Ọ̀gbẹ́nẹ́ chojẹ", "àdagbá"].map(
         (answerText, i) => ({ promptId: `ig_bank_${i}`, answerText }),
       ),
     );
@@ -452,13 +452,13 @@ describe("dictionary serves orthography, never phonemic notation", () => {
 
   it("leaves real orthography untouched, including tone marks and dot-below", () => {
     const line = renderDictionaryLine("water", [
-      { id: "1", headword: "Ómi", gloss: "water", confidence: 1 },
+      { id: "1", headword: "Ówi", gloss: "water", confidence: 1 },
     ]);
-    expect(line).toBe('"water" is Ómi.');
+    expect(line).toBe('"water" is Ówi.');
     const toned = renderDictionaryLine("child", [
-      { id: "1", headword: "ọ́ma", gloss: "child", confidence: 1 },
+      { id: "1", headword: "ọ́wa", gloss: "child", confidence: 1 },
     ]);
-    expect(toned).toContain("ọ́ma");
+    expect(toned).toContain("ọ́wa");
   });
 });
 
@@ -482,7 +482,7 @@ describe("wantsStructureExamples - the adaptive-assembly gate", () => {
     expect(
       wantsStructureExamples(
         "grammar_tone",
-        "Translate 'The woman cooks food' into Igala",
+        "Translate 'The woman sells cloth' into Igala",
       ),
     ).toBe(true);
     expect(

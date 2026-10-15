@@ -139,7 +139,7 @@ describe("v4.5 grammar rows", () => {
   it("does not spell the gold words the gate bracketed before (child, pot)", () => {
     for (const e of V4_5_GRAMMAR_ENTRIES) {
       const folded = fullFold(`${e.topic}\n${e.content}`);
-      expect(containsWholeWord(folded, "oma")).toBe(false);
+      expect(containsWholeWord(folded, "owa")).toBe(false);
       expect(containsWholeWord(folded, "ucha")).toBe(false);
     }
   });

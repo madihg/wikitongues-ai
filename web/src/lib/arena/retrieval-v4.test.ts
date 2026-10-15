@@ -290,7 +290,7 @@ describe("buildRetrievalV4 - corrections retrieval", () => {
       id: "e-close",
       promptId: "cuid-t1",
       originalText: "pseudo-igala",
-      correctedText: "Ẹnyọ ọma",
+      correctedText: "Ẹnyọ ọwa",
       rationale: null,
       segments: {
         v: 1,
@@ -348,7 +348,7 @@ describe("buildRetrievalV4 - corrections retrieval", () => {
     const prisma = fakePrisma({ edits, editPrompts, promptRow: null });
     const r = await buildRetrievalV4(prisma, TRAIN_PROMPT);
     expect(r.correctionsBlock).toContain("A model wrote: pseudo-igala");
-    expect(r.correctionsBlock).toContain("A speaker corrected it to: Ẹnyọ ọma");
+    expect(r.correctionsBlock).toContain("A speaker corrected it to: Ẹnyọ ọwa");
     expect(r.correctionsBlock).toContain("Reason: invented words");
     // e-frozen: its PROMPT is holdout - an edit there states frozen gold.
     expect(r.correctionsBlock).not.toContain("frozen-corr");
@@ -377,7 +377,7 @@ describe("buildRetrievalV4 - corrections retrieval", () => {
           promptId: "cuid-t1",
           originalText: "wrong blessing",
           // The corrected side IS this frozen prompt's gold answer.
-          correctedText: "Ẹnyọ ọma",
+          correctedText: "Ẹnyọ ọwa",
           rationale: null,
           segments: null,
         },
@@ -398,7 +398,7 @@ describe("buildRetrievalV4 - corrections retrieval", () => {
           isHoldout: false,
         },
       ],
-      promptRow: { id: "cuid-holdout-9", ownGold: ["Ẹnyọ ọma"] },
+      promptRow: { id: "cuid-holdout-9", ownGold: ["Ẹnyọ ọwa"] },
     });
     const r = await buildRetrievalV4(prisma, {
       promptId: "ig_bank_auth_099",
@@ -408,7 +408,7 @@ describe("buildRetrievalV4 - corrections retrieval", () => {
     });
     expect(r.leakReport.pass).toBe(false);
     expect(r.leakReport.hits.map((h) => h.where)).toContain("edit:e-leak");
-    expect(r.correctionsBlock).not.toContain("Ẹnyọ ọma");
+    expect(r.correctionsBlock).not.toContain("Ẹnyọ ọwa");
     expect(r.correctionsBlock).toContain("Ẹla chẹ ùñmà");
     expect(r.contextIds).toEqual(["edit:e-clean"]);
   });

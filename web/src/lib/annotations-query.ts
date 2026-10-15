@@ -111,9 +111,9 @@ export function excerpt(text: string, n = 80): string {
 }
 
 /**
- * Diacritic-fold Igala/Latin text for search, e.g. "Ọdudu" / "ódùdù" /
- * "ọdúdù" all fold to "odudu" so a researcher typing plain "odudu" finds
- * them all.
+ * Diacritic-fold Igala/Latin text for search, e.g. "Ọkuku" / "ókùkù" /
+ * "ọkúkù" all fold to "okuku" so a researcher typing plain "okuku" finds
+ * them all (an invented word: the real example was a frozen gold answer).
  *
  * NFD-decomposes the string (splitting every precomposed accented letter
  * into a plain base letter + one or more combining marks), strips every

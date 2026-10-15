@@ -17,13 +17,13 @@ import { buildProtectedSet, checkStatic } from "./eval/leak-guard";
  */
 
 // ─── fake prisma (same fixture world as method-metrics.test.ts) ─────────────
-// P1: golds "Omi" (annA, repeated) + "Ọmi" (annB); leaked via exemplar G-LEAK.
-// P2: gold "Oji" (annB); clean.
+// P1: golds "Owi" (annA, repeated) + "Ọwi" (annB); leaked via exemplar G-LEAK.
+// P2: gold "Opi" (annB); clean.
 
 const GOLD_FIXTURES = [
-  { promptId: "ig_bank_orth_001", answerText: "Omi" },
-  { promptId: "ig_bank_orth_001", answerText: "Ọmi" },
-  { promptId: "ig_bank_lex_003", answerText: "Oji" },
+  { promptId: "ig_bank_orth_001", answerText: "Owi" },
+  { promptId: "ig_bank_orth_001", answerText: "Ọwi" },
+  { promptId: "ig_bank_lex_003", answerText: "Opi" },
 ];
 
 function fakePrisma(): PrismaClient {
@@ -44,28 +44,28 @@ function fakePrisma(): PrismaClient {
           return [
             {
               promptId: "P1",
-              answerText: "Omi",
+              answerText: "Owi",
               annotatorId: "annA",
               createdAt: t(1),
               provenance: "speaker_authored_sourcefree",
             },
             {
               promptId: "P1",
-              answerText: "Omi",
+              answerText: "Owi",
               annotatorId: "annA",
               createdAt: t(2),
               provenance: "speaker_authored_sourcefree",
             },
             {
               promptId: "P1",
-              answerText: "Ọmi",
+              answerText: "Ọwi",
               annotatorId: "annB",
               createdAt: t(3),
               provenance: "speaker_authored_sourcefree",
             },
             {
               promptId: "P2",
-              answerText: "Oji",
+              answerText: "Opi",
               annotatorId: "annB",
               createdAt: t(4),
               provenance: "speaker_authored_sourcefree",
@@ -75,7 +75,7 @@ function fakePrisma(): PrismaClient {
         if (args.distinct) {
           return [{ annotatorId: "annA" }, { annotatorId: "annB" }];
         }
-        return [{ id: "G-LEAK", answerText: "Omi" }];
+        return [{ id: "G-LEAK", answerText: "Owi" }];
       },
       count: async () => 4,
     },
@@ -102,19 +102,19 @@ function fakePrisma(): PrismaClient {
           },
           {
             promptId: "P2",
-            outputText: "úchu",
+            outputText: "újnu",
             ragContextIds: [],
             candidateModel: plain,
           },
           {
             promptId: "P1",
-            outputText: "Omi",
+            outputText: "Owi",
             ragContextIds: ["gold:G-LEAK"],
             candidateModel: ragV2,
           },
           {
             promptId: "P2",
-            outputText: "Oji",
+            outputText: "Opi",
             ragContextIds: ["lex:L1"],
             candidateModel: ragV2,
           },
@@ -173,7 +173,7 @@ describe("public method-metrics payload - leak guard", () => {
     const tampered = {
       ...payload,
       candidates: [
-        { ...payload.candidates[0], name: "model trained on Omi data" },
+        { ...payload.candidates[0], name: "model trained on Owi data" },
       ],
     };
     const report = checkStatic(

@@ -7,6 +7,7 @@ import {
   inferPos,
   promptContentWords,
   FAMILY_CONFIDENCE,
+  CHIKHAPO_BAD_LINES,
 } from "./lexicon-parse";
 
 /**
@@ -65,13 +66,13 @@ describe("wiktionary parsing", () => {
 
   it("handles lines without IPA and multi-word headwords", () => {
     const entries = parseVocabularyContent(
-      ["òkóò — pig", "wọ́la òdùdu /wɔ́.lā ò.dù.dū/ — good morning!"].join("\n"),
+      ["òkóò — pig", "fọ́ta òkùku /fɔ́.tā ò.kù.kū/ — good morning!"].join("\n"),
       "Igala lexicon — Greetings and address",
       "wiktionary",
     );
     expect(entries).toEqual([
       { headword: "òkóò", gloss: "pig", pos: null },
-      { headword: "wọ́la òdùdu", gloss: "good morning", pos: null },
+      { headword: "fọ́ta òkùku", gloss: "good morning", pos: null },
     ]);
   });
 
@@ -129,7 +130,7 @@ describe("koelle parsing", () => {
 
   it("keeps clarifying parentheticals in the gloss", () => {
     const entries = parseVocabularyContent(
-      "Father (My Father, Thy Father) — áta",
+      "Father (My Father, Thy Father) — áda",
       "Igala 1854 wordlist — kinship and people",
       "koelle",
     );
@@ -180,16 +181,22 @@ describe("chikhapo parsing", () => {
   });
 
   it("skips the flagged bad lines but keeps the correct rain compound", () => {
+    // The flagged headword is read from the filter itself: spelled here it
+    // would collide with a frozen gold answer (see CHIKHAPO_BAD_LINES).
+    const [water] = CHIKHAPO_BAD_LINES.find(([, gloss]) => gloss === "rain")!;
     const entries = parseVocabularyContent(
-      ["obɪǯɪ́m — emu", "ómi — rain", "ómi oǯálì — rain", "ómi — water"].join(
-        "\n",
-      ),
+      [
+        "obɪǯɪ́m — emu",
+        `${water} — rain`,
+        `${water} oǯálì — rain`,
+        `${water} — water`,
+      ].join("\n"),
       "Igala-English lexicon (chikhapo) — sky, weather and time",
       "chikhapo",
     );
     expect(entries).toEqual([
-      { headword: "ómi oǯálì", gloss: "rain", pos: null },
-      { headword: "ómi", gloss: "water", pos: null },
+      { headword: `${water} oǯálì`, gloss: "rain", pos: null },
+      { headword: water, gloss: "water", pos: null },
     ]);
   });
 
@@ -259,9 +266,9 @@ describe("promptContentWords", () => {
   it("keeps quoted lexical targets, drops scaffolding and function words", () => {
     expect(
       promptContentWords(
-        "Translate 'The woman cooks food' into Igala, keeping correct word order.",
+        "Translate 'The woman sells cloth' into Igala, keeping correct word order.",
       ),
-    ).toEqual(["woman", "cooks", "food"]);
+    ).toEqual(["woman", "sells", "cloth"]);
   });
 
   it("keeps numerals as content ('one to five' must be lookupable)", () => {

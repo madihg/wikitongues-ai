@@ -15,8 +15,8 @@ describe("csvEscape", () => {
   });
 
   it("leaves ordinary Igala text untouched, diacritics and all", () => {
-    expect(csvEscape("Wọla ọdudu")).toBe("Wọla ọdudu");
-    expect(csvEscape("ẹ́kọ̀ ñw'ọjọ")).toBe("ẹ́kọ̀ ñw'ọjọ");
+    expect(csvEscape("Fọta ọkuku")).toBe("Fọta ọkuku");
+    expect(csvEscape("ẹ́kọ̀ ñw'ọpọ")).toBe("ẹ́kọ̀ ñw'ọpọ");
   });
 
   it("neutralises spreadsheet formula injection", () => {
@@ -54,26 +54,26 @@ describe("buildCsv", () => {
 
   it("emits a header derived from the same spec as the rows", () => {
     const csv = buildCsv(columns, [
-      { answer: "Ọma", gloss: "child", dialect: "Ankpa", consent: true },
+      { answer: "Ọwa", gloss: "child", dialect: "Ankpa", consent: true },
     ]);
     const [header, first] = csv.trim().split("\n");
     expect(header).toBe(
       "igala_answer,english_translation,dialect,consent_training",
     );
-    expect(first).toBe("Ọma,child,Ankpa,true");
+    expect(first).toBe("Ọwa,child,Ankpa,true");
   });
 
   it("keeps column count identical when optional fields are absent", () => {
     // The commonest real case: gloss and dialect were added partway through
     // collection, so most rows have neither. Ragged rows break every parser.
     const csv = buildCsv(columns, [
-      { answer: "Ọma", gloss: "child", dialect: "Ankpa", consent: true },
-      { answer: "Ọkọ", gloss: null, dialect: null, consent: false },
+      { answer: "Ọwa", gloss: "child", dialect: "Ankpa", consent: true },
+      { answer: "Ọrọ", gloss: null, dialect: null, consent: false },
     ]);
     const lines = csv.trim().split("\n");
     const counts = lines.map((l) => l.split(",").length);
     expect(new Set(counts).size).toBe(1);
-    expect(lines[2]).toBe("Ọkọ,,,false");
+    expect(lines[2]).toBe("Ọrọ,,,false");
   });
 
   it("ends with a newline so the last record is not dropped", () => {

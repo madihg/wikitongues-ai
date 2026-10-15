@@ -40,7 +40,7 @@ describe("the bug: the allowlist flagged names the community says to keep", () =
     // This is the SHIPPED behaviour before the fix, kept as a test so the
     // regression is visible rather than remembered.
     const answer =
-      "Egbuson chi ọma Bayelsa, i la Green Spring Montessori ki de Lagos.";
+      "Egbuson chi ọwa Bayelsa, i la Green Spring Montessori ki de Lagos.";
     expect(findAllowlistViolations(answer)).toEqual(
       expect.arrayContaining([
         "Egbuson",
@@ -54,7 +54,7 @@ describe("the bug: the allowlist flagged names the community says to keep", () =
 
   it("exempts those same words once the question they came from is supplied", () => {
     const answer =
-      "Egbuson chi ọma Bayelsa, i la Green Spring Montessori ki de Lagos.";
+      "Egbuson chi ọwa Bayelsa, i la Green Spring Montessori ki de Lagos.";
     expect(findAllowlistViolations(answer, sourceWordSet(SOURCE))).toEqual([]);
     expect(checkIgalaOutput(answer, { sourceText: SOURCE })).toEqual([]);
   });
@@ -150,7 +150,7 @@ describe("check (d): names must survive a translation", () => {
     expect(isTranslationRequest(undefined)).toBe(false);
     // A question-and-answer turn has no obligation to repeat a name.
     expect(
-      checkIgalaOutput("Wọla ọdudu.", {
+      checkIgalaOutput("Fọta ọkuku.", {
         sourceText: "How do people in Idah greet each other?",
         checkNames: true,
       }),
@@ -158,7 +158,7 @@ describe("check (d): names must survive a translation", () => {
   });
 
   it("names exactly the proper nouns that went missing", () => {
-    const mangled = "Timini Egbuchon chi ọma Bayelcha ki de Lachukwu.";
+    const mangled = "Timini Egbuchon chi ọwa Bayelcha ki de Lachukwu.";
     const dropped = findDroppedNames(mangled, SOURCE);
     expect(dropped).toEqual(
       expect.arrayContaining(["Egbuson", "Bayelsa", "Lagos", "Montessori"]),
@@ -175,7 +175,7 @@ describe("check (d): names must survive a translation", () => {
 
   it("passes an answer that kept every name", () => {
     const good =
-      "Timini Egbuson chi ọma Bayelsa ki de Nigeria. I la Green Spring Montessori ki de Lagos, i kọ psychology.";
+      "Timini Egbuson chi ọwa Bayelsa ki de Nigeria. I la Green Spring Montessori ki de Lagos, i kọ psychology.";
     expect(findDroppedNames(good, SOURCE)).toEqual([]);
     expect(
       checkIgalaOutput(good, { sourceText: SOURCE, checkNames: true }),
@@ -183,7 +183,7 @@ describe("check (d): names must survive a translation", () => {
   });
 
   it("stays off unless the caller asks for it, so v4.1 is unchanged", () => {
-    const mangled = "Timini Egbuchon chi ọma Bayelcha ki de Lachukwu.";
+    const mangled = "Timini Egbuchon chi ọwa Bayelcha ki de Lachukwu.";
     // v4.1 supplies sourceText (for the exemption) but never checkNames.
     expect(checkIgalaOutput(mangled, { sourceText: SOURCE })).toEqual([]);
   });
@@ -272,8 +272,8 @@ describe("quoted sources (the v4.2 bank shape)", () => {
     expect(
       quotedPassages("Translate 'the farmers' union meets on Monday' into Igala."),
     ).toEqual(["the farmers' union meets on Monday"]);
-    expect(quotedPassages("What does 'ch' ọma' mean here?")).toEqual([
-      "ch' ọma",
+    expect(quotedPassages("What does 'ch' ọwa' mean here?")).toEqual([
+      "ch' ọwa",
     ]);
     // A double quote does not close a single one, and the reverse.
     expect(quotedPassages("Say 'he said \"no\" twice' in Igala.")).toEqual([
@@ -344,7 +344,7 @@ describe("quoted sources (the v4.2 bank shape)", () => {
     // Igala marks possession without 's; demanding "Amina's" verbatim re-asked
     // every correct answer (2026-10-08 review).
     expect(findSourceProperNouns(GRAM_004)).toEqual(["Amina", "Idah"]);
-    expect(findDroppedNames("Ata Amina a ta ẹchi ẹ Idah.", GRAM_004)).toEqual(
+    expect(findDroppedNames("Ada Amina a ta ẹchi ẹ Idah.", GRAM_004)).toEqual(
       [],
     );
   });
@@ -455,7 +455,7 @@ describe("questions that ask for English", () => {
 
   it("does not flag the English the question asked for", () => {
     const answer =
-      "Ọma mi, Ọjọ kì d'ẹnyọ ñwu wẹ. This blessing wishes her success like a river that keeps flowing.";
+      "Ọwa mi, Ọpọ kì d'ẹnyọ ñwu wẹ. This blessing wishes her success like a river that keeps flowing.";
     expect(
       checkIgalaOutput(answer, { sourceText: IDIOM_001 }).map((x) => x.kind),
     ).toEqual([]);
@@ -474,7 +474,7 @@ describe("questions that ask for English", () => {
         .map((v) => v.detail);
     expect(
       flagged(
-        "Ọmámì onokẹlẹ, alu k'ẹ a lo t'Ankpa ọ̀na k'ẹ ch'ọna shọpu wẹ, Ọjọ kì d'ẹnyọ ñwu wẹ.\n\nThe picture inside these words compares his new business to a tree bearing sweet fruit.",
+        "Ọmámì onokẹlẹ, alu k'ẹ a lo t'Ankpa ọ̀ya k'ẹ ch'ọya shọpu wẹ, Ọpọ kì d'ẹnyọ ñwu wẹ.\n\nThe picture inside these words compares his new business to a tree bearing sweet fruit.",
         IDIOM_002,
       ).join(" "),
     ).toMatch(/shọpu/);

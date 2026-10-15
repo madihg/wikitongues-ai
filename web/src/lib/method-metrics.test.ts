@@ -34,8 +34,8 @@ interface RecordedCall {
 
 /**
  * Fixture world:
- *   Frozen prompts: P1 (gold "Omi" x2 by ann A - a repeat - plus "Ọmi" by B),
- *                   P2 (gold "Oji" by B).
+ *   Frozen prompts: P1 (gold "Owi" x2 by ann A - a repeat - plus "Ọwi" by B),
+ *                   P2 (gold "Opi" by B).
  *   Outputs:
  *     "Plain GPT" (baseline): wrong on both prompts, no context.
  *     "GPT + RAG v2" (rag, versionLabel rag-v2): exact on both; on P1 it was
@@ -69,28 +69,28 @@ function fakePrisma(
           return [
             {
               promptId: "P1",
-              answerText: "Omi",
+              answerText: "Owi",
               annotatorId: "annA",
               createdAt: t(1),
               provenance: "speaker_authored_sourcefree",
             },
             {
               promptId: "P1",
-              answerText: "Omi",
+              answerText: "Owi",
               annotatorId: "annA",
               createdAt: t(2),
               provenance: "speaker_authored_sourcefree",
             },
             {
               promptId: "P1",
-              answerText: "Ọmi",
+              answerText: "Ọwi",
               annotatorId: "annB",
               createdAt: t(3),
               provenance: "speaker_authored_sourcefree",
             },
             {
               promptId: "P2",
-              answerText: "Oji",
+              answerText: "Opi",
               annotatorId: "annB",
               createdAt: t(4),
               provenance: "speaker_authored_sourcefree",
@@ -103,7 +103,7 @@ function fakePrisma(
         }
         // Exemplar resolution by id, for leak detection.
         rec("exemplarById", args);
-        return [{ id: "G-LEAK", answerText: "Omi" }];
+        return [{ id: "G-LEAK", answerText: "Owi" }];
       },
       count: async (args: RecordedCall["args"]) => {
         rec("gold.count", args);
@@ -140,13 +140,13 @@ function fakePrisma(
           },
           {
             promptId: "P2",
-            outputText: "úchu",
+            outputText: "újnu",
             ragContextIds: [],
             candidateModel: plain,
           },
           {
             promptId: "P1",
-            outputText: "Omi",
+            outputText: "Owi",
             // With leakP1 off, P1 is served only an innocuous dictionary
             // line, so BOTH prompts land in the leak-free subset.
             ragContextIds: leakP1 ? ["gold:G-LEAK"] : ["lex:L1"],
@@ -154,13 +154,13 @@ function fakePrisma(
           },
           {
             promptId: "P2",
-            outputText: "Oji",
+            outputText: "Opi",
             ragContextIds: ["lex:L1"],
             candidateModel: ragV2,
           },
           {
             promptId: "P2",
-            outputText: "Oji",
+            outputText: "Opi",
             ragContextIds: [],
             candidateModel: archived,
           },
@@ -346,7 +346,7 @@ describe("computeMethodMetrics - corpus and benchmark shape", () => {
 
   it("derives the leak-free subset from the served context, mechanically", async () => {
     const { metrics } = await run();
-    // P1 was served its own gold ("Omi" via exemplar G-LEAK); P2 was served
+    // P1 was served its own gold ("Owi" via exemplar G-LEAK); P2 was served
     // only an unrelated dictionary line.
     expect(metrics.benchmark).toEqual({
       frozenPrompts: 2,
@@ -397,9 +397,9 @@ describe("computeMethodMetrics - the two ceilings", () => {
     expect(shipped.nPromptsAll).toBe(1);
     expect(honest.nPromptsAll).toBe(1);
 
-    // As shipped, annA's exact repeat of "Omi" scores 100 against itself in
+    // As shipped, annA's exact repeat of "Owi" scores 100 against itself in
     // two of three leave-one-out draws; with one answer per annotator the
-    // only comparison left is Omi vs Ọmi. The inflation must be visible.
+    // only comparison left is Owi vs Ọwi. The inflation must be visible.
     expect(shipped.chrfAll).not.toBeNull();
     expect(honest.chrfAll).not.toBeNull();
     expect(honest.chrfAll!).toBeLessThan(shipped.chrfAll!);
@@ -440,7 +440,7 @@ describe("computeMethodMetrics - legacy Community Agreement Score (deprecated)",
     );
 
     // No leaks -> both prompts are clean; the dedup ceiling on the clean
-    // subset is P1's Omi-vs-Ọmi leave-one-out chrF, strictly below 100.
+    // subset is P1's Owi-vs-Ọwi leave-one-out chrF, strictly below 100.
     expect(metrics.benchmark.leakFreePrompts).toBe(2);
     const ceiling = metrics.agreementCeilingChrf;
     expect(ceiling).not.toBeNull();
@@ -549,10 +549,10 @@ describe("pure helpers", () => {
   });
 
   it("looCeilingChrf skips prompts with fewer than two golds", () => {
-    const single = looCeilingChrf(new Map([["p", ["Omi"]]]));
+    const single = looCeilingChrf(new Map([["p", ["Owi"]]]));
     expect(single).toEqual({ mean: null, nPrompts: 0 });
 
-    const identical = looCeilingChrf(new Map([["p", ["Omi", "Omi"]]]));
+    const identical = looCeilingChrf(new Map([["p", ["Owi", "Owi"]]]));
     expect(identical.nPrompts).toBe(1);
     expect(identical.mean).toBeCloseTo(100, 6);
   });
@@ -562,14 +562,14 @@ describe("pure helpers", () => {
     // order that has any n-grams at all - see chrf.ts's module doc. With two
     // IDENTICAL references, holding either one out still leaves an exact
     // match, so every draw is exactly 100 and the mean is exactly 100.
-    expect(leaveOneOutMeanChrf("Omi", ["Omi", "Omi"])).toBeCloseTo(100, 9);
+    expect(leaveOneOutMeanChrf("Owi", ["Owi", "Owi"])).toBeCloseTo(100, 9);
   });
 
   it("leaveOneOutMeanChrf: zero character overlap with every reference -> 0", () => {
-    // "kkk" shares no character with "Omi" or "xyz" at any order, so
+    // "kkk" shares no character with "Owi" or "xyz" at any order, so
     // precision and recall are both 0 at every effective order - chrF is
     // exactly 0, on both draws, mean exactly 0.
-    expect(leaveOneOutMeanChrf("kkk", ["Omi", "xyz"])).toBeCloseTo(0, 9);
+    expect(leaveOneOutMeanChrf("kkk", ["Owi", "xyz"])).toBeCloseTo(0, 9);
   });
 
   it("splitServedIds separates the five served-id families, including edit: (finding 18)", () => {
@@ -713,23 +713,23 @@ function buildWorld(opts: {
 const t0 = new Date(2026, 1, 1);
 
 describe("computeMethodMetrics - like-for-like agreementScore and speakerRank (findings 1, 2)", () => {
-  // Prompt "P", 3 DISTINCT real speakers: two agree exactly ("Omi"), one
-  // disagrees entirely ("xyz" - no character overlap with "Omi" at all, so
+  // Prompt "P", 3 DISTINCT real speakers: two agree exactly ("Owi"), one
+  // disagrees entirely ("xyz" - no character overlap with "Owi" at all, so
   // chrF between them is exactly 0; chrF of a string against itself is
   // exactly 100 - see chrf.ts's module doc). That gives an exactly
   // hand-computable ceiling and per-candidate score with no partial-match
   // arithmetic:
   //
-  //   speaker LOO draws  = [chrf(Omi,[Omi,xyz]), chrf(Omi,[Omi,xyz]), chrf(xyz,[Omi,Omi])]
+  //   speaker LOO draws  = [chrf(Owi,[Owi,xyz]), chrf(Owi,[Owi,xyz]), chrf(xyz,[Owi,Owi])]
   //                      = [100, 100, 0]  ->  ceiling = 200/3 = 66.667
   //
-  //   Model A hyp="xyz": draws [chrf(xyz,[Omi,xyz]), chrf(xyz,[Omi,xyz]), chrf(xyz,[Omi,Omi])]
+  //   Model A hyp="xyz": draws [chrf(xyz,[Owi,xyz]), chrf(xyz,[Owi,xyz]), chrf(xyz,[Owi,Owi])]
   //                    = [100, 100, 0] -> M = 66.667 -> agreementScore = 66.667/66.667*100 = 100
   //                    speakerRank: M(66.667) >= [100,100,0]? only the third -> share 1/3 = 33.33
-  //   Model B hyp="kkk" (shares no character with Omi OR xyz): every draw = 0
+  //   Model B hyp="kkk" (shares no character with Owi OR xyz): every draw = 0
   //                    -> M = 0 -> agreementScore = 0
   //                    speakerRank: 0 >= [100,100,0]? only the third (tie) -> 1/3 = 33.33
-  //   Model C hyp="Omi": every draw = 100 (an exact match survives in every
+  //   Model C hyp="Owi": every draw = 100 (an exact match survives in every
   //                    2-of-3 reference subset) -> M = 100
   //                    -> agreementScore = 100/66.667*100 = 150 (> 100, BY MEASUREMENT:
   //                       the model matches the majority pattern better than one
@@ -738,8 +738,8 @@ describe("computeMethodMetrics - like-for-like agreementScore and speakerRank (f
   //                    speakerRank: 100 >= [100,100,0] on all three (two ties, one
   //                       beat) -> share 3/3 = 100 - the speakerRank UPPER bound.
   const golds: WorldGold[] = [
-    { promptId: "P", answerText: "Omi", annotatorId: "ann1", createdAt: t0 },
-    { promptId: "P", answerText: "Omi", annotatorId: "ann2", createdAt: t0 },
+    { promptId: "P", answerText: "Owi", annotatorId: "ann1", createdAt: t0 },
+    { promptId: "P", answerText: "Owi", annotatorId: "ann2", createdAt: t0 },
     { promptId: "P", answerText: "xyz", annotatorId: "ann3", createdAt: t0 },
   ];
   const cand = (name: string, outputText: string) => ({
@@ -755,7 +755,7 @@ describe("computeMethodMetrics - like-for-like agreementScore and speakerRank (f
   const outputs: WorldOutput[] = [
     cand("Model A", "xyz"),
     cand("Model B", "kkk"),
-    cand("Model C", "Omi"),
+    cand("Model C", "Owi"),
   ];
 
   async function metrics() {
@@ -804,7 +804,7 @@ describe("computeMethodMetrics - tone-insensitive column (finding 5)", () => {
   // Two real speakers write the SAME word with two DIFFERENT tone marks
   // (grave vs acute); the model under-marks tone entirely, same pattern the
   // audit found in the v4 -> v4.1 gain. stripToneMarks removes tone (dot-below
-  // survives), so all three texts become byte-identical "Ọmi" - an EXACT
+  // survives), so all three texts become byte-identical "Ọwi" - an EXACT
   // match, chrF exactly 100, at every effective order. Raw chrF cannot reach
   // 100: the model's answer is strictly shorter (3 codepoints) than either
   // reference (4 codepoints - base letter + tone mark), so no reference-set
@@ -812,13 +812,13 @@ describe("computeMethodMetrics - tone-insensitive column (finding 5)", () => {
   const golds: WorldGold[] = [
     {
       promptId: "T",
-      answerText: "Ọ̀mi", // Ọ + grave
+      answerText: "Ọ̀wi", // Ọ + grave
       annotatorId: "ann1",
       createdAt: t0,
     },
     {
       promptId: "T",
-      answerText: "Ọ́mi", // Ọ + acute
+      answerText: "Ọ́wi", // Ọ + acute
       annotatorId: "ann2",
       createdAt: t0,
     },
@@ -826,7 +826,7 @@ describe("computeMethodMetrics - tone-insensitive column (finding 5)", () => {
   const outputs: WorldOutput[] = [
     {
       promptId: "T",
-      outputText: "Ọmi", // no tone mark at all
+      outputText: "Ọwi", // no tone mark at all
       candidateModel: {
         name: "Tone-blind model",
         kind: "rag",
@@ -871,7 +871,7 @@ describe("computeMethodMetrics - tone-insensitive column (finding 5)", () => {
 
 describe("computeMethodMetrics - sourcefree sensitivity (finding 7)", () => {
   // Prompt "S": 3 real speakers, but only 2 carry provenance
-  // speaker_authored_sourcefree ("Omi" x2); the third ("xyz") is
+  // speaker_authored_sourcefree ("Owi" x2); the third ("xyz") is
   // corrected_from_inadequate - written after seeing rejected model output -
   // and must drop out of the sourcefree construction while still counting
   // for the main (provenance-blind) like-for-like construction.
@@ -882,14 +882,14 @@ describe("computeMethodMetrics - sourcefree sensitivity (finding 7)", () => {
   const golds: WorldGold[] = [
     {
       promptId: "S",
-      answerText: "Omi",
+      answerText: "Owi",
       annotatorId: "ann1",
       createdAt: t0,
       provenance: "speaker_authored_sourcefree",
     },
     {
       promptId: "S",
-      answerText: "Omi",
+      answerText: "Owi",
       annotatorId: "ann2",
       createdAt: t0,
       provenance: "speaker_authored_sourcefree",
@@ -919,7 +919,7 @@ describe("computeMethodMetrics - sourcefree sensitivity (finding 7)", () => {
   const outputs: WorldOutput[] = [
     {
       promptId: "S",
-      outputText: "Omi",
+      outputText: "Owi",
       candidateModel: {
         name: "Model",
         kind: "rag",
@@ -946,14 +946,14 @@ describe("computeMethodMetrics - sourcefree sensitivity (finding 7)", () => {
   it("only S qualifies (S2 has a single sourcefree speaker)", async () => {
     const m = await metrics();
     expect(m.nSourcefreePrompts).toBe(1);
-    // Sourcefree ceiling on S: chrf(Omi,[Omi]) twice, exactly 100.
+    // Sourcefree ceiling on S: chrf(Owi,[Owi]) twice, exactly 100.
     expect(m.agreementCeilingChrfSourcefree).toBeCloseTo(100, 6);
   });
 
   it("agreementScoreSourcefree (2 speakers) differs from the main score (3 speakers, includes the non-sourcefree outlier)", async () => {
     const m = await metrics();
     const c = m.candidates[0];
-    // Sourcefree-only: hyp="Omi" against 2 identical sourcefree refs -> 100.
+    // Sourcefree-only: hyp="Owi" against 2 identical sourcefree refs -> 100.
     expect(c.agreementScoreSourcefree).toBeCloseTo(100, 6);
     // Main construction on S alone would be 150 (same arithmetic as "Model C"
     // above); S2 also qualifies for the main construction (2 distinct real
@@ -965,9 +965,9 @@ describe("computeMethodMetrics - sourcefree sensitivity (finding 7)", () => {
 
 describe("computeMethodMetrics - empty outputs excluded from every score (finding 11)", () => {
   const golds: WorldGold[] = [
-    { promptId: "E1", answerText: "Omi", annotatorId: "ann1", createdAt: t0 },
-    { promptId: "E1", answerText: "Ọmi", annotatorId: "ann2", createdAt: t0 },
-    { promptId: "E2", answerText: "Oji", annotatorId: "ann1", createdAt: t0 },
+    { promptId: "E1", answerText: "Owi", annotatorId: "ann1", createdAt: t0 },
+    { promptId: "E1", answerText: "Ọwi", annotatorId: "ann2", createdAt: t0 },
+    { promptId: "E2", answerText: "Opi", annotatorId: "ann1", createdAt: t0 },
   ];
   const flaky = {
     name: "Flaky Model",
@@ -980,7 +980,7 @@ describe("computeMethodMetrics - empty outputs excluded from every score (findin
     // never scored as chrF 0, and never a hypothesis for like-for-like.
     { promptId: "E1", outputText: "   ", candidateModel: flaky },
     // A whitespace-only string is "empty after trimming" too.
-    { promptId: "E2", outputText: "Oji", candidateModel: flaky },
+    { promptId: "E2", outputText: "Opi", candidateModel: flaky },
   ];
 
   it("counts the empty output separately and excludes it from n, nClean, and nLikeForLike", async () => {
@@ -1001,14 +1001,14 @@ describe("computeMethodMetrics - empty outputs excluded from every score (findin
 });
 
 describe("computeMethodMetrics - seed accounts excluded from gold and ceiling, functionally (finding 24)", () => {
-  // Two REAL speakers agree exactly ("Omi" x2, ceiling = 100 exactly); one
+  // Two REAL speakers agree exactly ("Owi" x2, ceiling = 100 exactly); one
   // @test.com seed account contributes a wildly different answer ("xyz") that
   // would drag the ceiling down to 200/3 = 66.667 (the exact "Model C"
   // pattern from the like-for-like fixture above) if it were not excluded.
   // The gap between 100 and 66.667 makes the leak impossible to miss.
   const golds: WorldGold[] = [
-    { promptId: "SEED", answerText: "Omi", annotatorId: "ann1", createdAt: t0 },
-    { promptId: "SEED", answerText: "Omi", annotatorId: "ann2", createdAt: t0 },
+    { promptId: "SEED", answerText: "Owi", annotatorId: "ann1", createdAt: t0 },
+    { promptId: "SEED", answerText: "Owi", annotatorId: "ann2", createdAt: t0 },
     {
       promptId: "SEED",
       answerText: "xyz",
@@ -1020,7 +1020,7 @@ describe("computeMethodMetrics - seed accounts excluded from gold and ceiling, f
   const outputs: WorldOutput[] = [
     {
       promptId: "SEED",
-      outputText: "Omi",
+      outputText: "Owi",
       candidateModel: {
         name: "Model",
         kind: "rag",
@@ -1047,7 +1047,7 @@ describe("computeMethodMetrics - edit: and toOrthography leak-guard fixes wired 
   const golds: WorldGold[] = [
     {
       promptId: "PEDIT",
-      answerText: "Ọkọ",
+      answerText: "Ọrọ",
       annotatorId: "ann1",
       createdAt: t0,
     },
@@ -1082,7 +1082,7 @@ describe("computeMethodMetrics - edit: and toOrthography leak-guard fixes wired 
     {
       id: "E1",
       originalText: "wrong",
-      correctedText: "the correct word is Ọkọ",
+      correctedText: "the correct word is Ọrọ",
       rationale: null,
       segments: null,
     },

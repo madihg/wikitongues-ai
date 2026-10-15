@@ -16,64 +16,74 @@ import {
  * REAL community gold answers, sampled from the production ColdAuthorAnswer
  * table (isDemo=false). Embedded rather than fetched so the test is
  * deterministic and offline, and so the fixture is reviewable.
+ *
+ * Since 2026-10-15 every entry comes from a TRAIN-split prompt and clears
+ * scripts/leak-check-files.ts: this repository is public, and the earlier
+ * sample carried frozen-benchmark answers. Each frozen entry was swapped for
+ * the train-split answer nearest in length, so the profile is still built
+ * from real community Igala.
  */
 const IGALA_GOLD = [
-  "ọdudu",
-  "Ọdudu",
-  "ódùdù",
-  "Ọ lo’dudu",
-  "Baba ọ lo’dudu",
-  "Wọla ọdudu",
-  "Ọma lẹ a jẹ ñwu",
-  "Ọma lẹ aj'ẹñwu",
-  "Ọma le a jẹñwu",
-  "Iye lẹ aj'ẹñwu",
+  "Abẹle",
+  "Ajirẹ",
+  "Ajuwẹ",
+  "Agba nago",
+  "\"Oda'a\" \" Ììí“",
+  "A'la, A'ta",
+  "\"Oda'a.\" \" Ììí\"",
+  "Apo kogi state",
+  "Ch'ugba t'ugba",
+  "Chẹ’gba tu’gba",
   "I’moto",
   "Imọtọ",
   "Imoto",
-  "Ụñyi",
-  "Ujẹñwu",
-  "Uchu",
-  "Ukwọ",
-  "Áttáh",
+  "Agba",
+  "A'jọfẹ",
+  "Anya",
+  "Awa.",
+  "Ajọfẹ",
   "Abẹrẹ mẹlẹ",
-  "Ọlañẹ",
-  "Mama ọlañẹ",
-  "Ọjọ ki deñyo ñwe",
-  "Aka ma gbọ ñ oñwu chi ukwu imọtọ",
-  "Egwu chi ureya ami ata ata wa",
-  "ẹnẹ ki chi ìmoto dupẹ tẹkpe baki da'ñyeku ki gwi ogijo",
-  "A d'ọmọ aluchẹ ẹgba k'omi chanẹ elọ",
-  "A gwa luchẹ ọkọ ka ki ọmi chanẹ lọ",
-  "Á jì òkò à lùchẹ tàkòmì chànẹ",
-  "Á mà àtẹñwù á wá kwì èfù ájá",
+  "Da’go",
+  "Agba gwanẹ",
+  "Nago, ugbo ẹkwo?",
+  "Abia ki d'achiku wa a'ñọ du dabi",
+  "Che chi, ẹñwu du anya nyọ fai",
+  "Agba bu mi ch'ukọlọ yi ta Please, bu mi ch'ukọlọ yi ta",
+  "Ami ọnọbulẹ mẹji i chi ọmayẹ ma chẹ",
+  "Là (is to buy) and tà (is to sell)",
+  "E bi- to borrow E mẹ- to lend",
+  "Agba mẹ wa l'ẹñwu ku na ta-i",
   "Á tódù kọlá ñwù chẹkpà ì dólù ì",
-  "Abẹ le ñw'ọjọ",
-  "Ábía lẹ á rúle",
-  "Àbìà lẹ à rùle",
-  "Abimọtọ lẹ ach'iya",
+  "De’ju tọla wẹ",
+  "Emẹ and Dù mẹ́",
+  "Okolo or olopu",
+  "Alo mi kpa kpa kpa",
   "Abo obulẹ mẹjì-ì chì ọmaye",
   "Ábo'gìjo ágwu amo'ma gwa",
-  "Achichi kima gbọ'ọlañ a lebi ọgwu tefura",
+  "Abo Ajookuta kakini Ibrahim lo ti Lokoja",
   "Agba du ba ñwu mi",
   "Agba ẹñwu choduwẹ",
   "Agba kpia etẹkpẹ baki eda'ñyẹkwu",
-  "Agba ọjọ ki pẹnẹ",
-  "Agba ọmi atẹnẹ lọ ta",
+  "Okwọ (same term)",
+  "Agbulu, ẹbo and akpẹ",
   "Agba, mẹ w'ọla eche",
-  "Ajẹ uchu or aj'uchu",
+  ": Kọ̀, Àgbá ù chẹ ǹ",
   "Alu ku ma luchẹ nana alu lẹ ma ja",
   "Alu ma mujọñ, ya fifon",
   "Am'onobulẹ meji lẹ ch'ọmaye ma che",
-  "Ama a'ñyaja chi ẹfu aja ma gwo í",
+  "Agba-Idah, Anya-okuku, Awa-Ankpa",
   "Ámá má ká kìnì Ògìjò á wà, á mà dèdè ñwù",
-  "amanyaja dáwa Kwa aja",
+  "Abu wele\", or \"Agbebo",
 ];
 
-/** REAL prompt texts from the frozen benchmark (Prompt.text, isHoldout=true). */
+/**
+ * REAL prompt texts from the frozen benchmark (Prompt.text, isHoldout=true).
+ * One quoted sentence is paraphrased (2026-10-15): it collides with a
+ * protected answer.
+ */
 const ENGLISH_PROMPTS = [
   "Write a short, natural Igala blessing as a community member would say it, not back-translated from English.",
-  "Translate 'The woman cooks food' into Igala, keeping correct word order.",
+  "Translate 'The woman sells cloth' into Igala, keeping correct word order.",
   "Translate 'The man goes to the farm' into Igala with correct sentence structure.",
   "Translate 'I drink water' into Igala.",
   "Translate 'The child sleeps' into Igala.",
@@ -121,7 +131,7 @@ describe("identifyLanguage - the axis we actually trained on", () => {
   it("calls a long Igala sentence Igala", () => {
     const r = identifyLanguage(
       model,
-      "Aka ma gbọ ñ oñwu chi ukwu imọtọ ka ki ali maka la",
+      "Abọ Igala a di amakpa chi amọ, ukpa ucha, manyi ugba",
     );
     expect(r.top).toBe("igala");
     expect(r.isIgala).toBe(true);
@@ -151,7 +161,7 @@ describe("identifyLanguage - the axis we actually trained on", () => {
   });
 
   it("returns a normalised probability distribution", () => {
-    const r = identifyLanguage(model, "Ọma lẹ a jẹ ñwu");
+    const r = identifyLanguage(model, "E fi ẹñwu jẹ gba mẹ");
     const total = LANGUAGES.reduce((s, l) => s + r.probs[l], 0);
     expect(total).toBeCloseTo(1, 8);
     expect(r.topProb).toBeGreaterThan(0);
@@ -180,7 +190,7 @@ describe("identifyLanguage - abstention", () => {
   });
 
   it("does not set noEvidence on real text", () => {
-    expect(identifyLanguage(model, "Ọma lẹ a jẹ ñwu").noEvidence).toBe(false);
+    expect(identifyLanguage(model, "E fi ẹñwu jẹ gba mẹ").noEvidence).toBe(false);
   });
 });
 
@@ -200,13 +210,14 @@ describe("orthographic signatures", () => {
   });
 
   it("treats the Igala n-tilde as POSITIVE evidence, not evidence against", () => {
-    const withTilde = identifyLanguage(model, "Ọma lẹ a jẹ ñwu");
+    const withTilde = identifyLanguage(model, "E fi ẹñwu jẹ gba mẹ");
     expect(withTilde.signals.signatureChars.igala).toEqual(["ñ"]);
     expect(withTilde.top).toBe("igala");
   });
 
   it("is case-insensitive, because one real gold answer capitalises Ụ", () => {
-    const r = identifyLanguage(model, "Ụñyi Ụñyi Ụñyi");
+    // An invented word: only the capital Ụ matters here.
+    const r = identifyLanguage(model, "Ụñgi Ụñgi Ụñgi");
     expect(r.signals.signatureChars.igbo).toEqual(["ụ"]);
   });
 

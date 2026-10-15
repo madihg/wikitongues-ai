@@ -111,10 +111,11 @@ export function diffToSegments(
 
   // Merge changed runs separated by WHITESPACE-ONLY unchanged gaps. The
   // word-LCS matches single spaces promiscuously, so without this a joint
-  // two-word respell ("Àgbá Ọ́jọ́" -> "Agba ọjọ") splits into two per-word
-  // segments and a full-paragraph rewrite splinters into dozens - one card per
-  // word instead of one card per change. Real gaps (an unchanged WORD between
-  // two fixes) contain non-whitespace and never merge.
+  // two-word respell (a fully tone-marked phrase written plain) splits into
+  // two per-word segments and a full-paragraph rewrite splinters into
+  // dozens - one card per word instead of one card per change. Real gaps
+  // (an unchanged WORD between two fixes) contain non-whitespace and never
+  // merge.
   const merged: EditSegment[] = [];
   for (const seg of out) {
     const prev = merged[merged.length - 1];

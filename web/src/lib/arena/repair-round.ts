@@ -394,7 +394,7 @@ export function findSourceProperNouns(sourceText: string): string[] {
  * Igala", "'...' means", "'...' as a market woman would say it"). A closing
  * mark followed by one of them is the end of the passage; a closing mark
  * followed by anything else may be a plural possessive or an elision inside
- * it ("the farmers' union", "ch' ọma").
+ * it ("the farmers' union", or an elided "ch'" before the next word).
  */
 const AFTER_QUOTE_WORDS = new Set([
   "into", "in", "to", "as", "means", "mean", "for", "and", "or", "from",
@@ -513,7 +513,7 @@ export function findHyphenPrefixViolations(text: string): string[] {
 /**
  * Saturation thresholds. R8.3 (grade A) says community writing carries tone
  * only on request; pattern 4's examples are FULLY marked short answers
- * (Àgbá Ọ́jọ́), so the heuristic is a proportion with a floor: at least
+ * (a two-word phrase with every vowel marked), so the heuristic is a proportion with a floor: at least
  * MIN_TONE_MARKED_VOWELS accented vowels AND at least TONE_SATURATION_RATIO
  * of all vowels accented. A single stray accent never trips it - that is an
  * edit-distance nit, not saturation.

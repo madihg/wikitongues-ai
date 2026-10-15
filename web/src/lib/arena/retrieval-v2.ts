@@ -280,12 +280,13 @@ export interface DictSense {
  * One dictionary line, DiPMT-compact. The attested headword is served
  * verbatim - never folded, because a folded form reaching the model is
  * exactly the spelling corruption v2 exists to stop. A sense whose gloss is
- * not the queried word (a prefix match, or a curated confusion pairing like
- * ọ́kọ/ọ́ya) carries its own gloss with an explicit warning, because Igala
- * near-forms differ in meaning and the model must be told which is which:
+ * not the queried word (a prefix match, or a curated confusion pairing such
+ * as the words for husband and wife) carries its own gloss with an explicit
+ * warning, because Igala near-forms differ in meaning and the model must be
+ * told which is which (headwords bracketed here, not spelled):
  *
- *   "water" is Ómi.
- *   "husband" is ọ́kọ, or ọ́ya (wife - do not confuse).
+ *   "water" is [headword].
+ *   "husband" is [headword], or [near-form] (wife - do not confuse).
  */
 export function renderDictionaryLine(
   word: string,

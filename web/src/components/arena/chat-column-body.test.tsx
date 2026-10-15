@@ -28,7 +28,7 @@ const render = (reply: StreamingReply) =>
 
 describe("a column cut short by the time limit", () => {
   const cutOff = column({
-    text: "Ẹ nwu ọdudu, this much arrived before",
+    text: "Ẹ nwu ọkuku, this much arrived before",
     error: TURN_CUTOFF_NOTICE,
     done: true,
   });
@@ -44,7 +44,7 @@ describe("a column cut short by the time limit", () => {
     // The partial text is the model's output and reads as such; the note is
     // secondary and marked as the failure.
     expect(markup).toMatch(
-      /class="[^"]*text-text-primary[^"]*"[^>]*>Ẹ nwu ọdudu/,
+      /class="[^"]*text-text-primary[^"]*"[^>]*>Ẹ nwu ọkuku/,
     );
     expect(markup).toMatch(/class="[^"]*text-danger[^"]*"[^>]*>The platform/);
   });
@@ -83,14 +83,14 @@ describe("the repair round's note", () => {
   const reasons = ["letters that are not in the Igala alphabet"];
 
   it("says a rewrite is under way while the second attempt streams", () => {
-    const markup = render(column({ revisedFor: reasons, text: "ojo " }));
+    const markup = render(column({ revisedFor: reasons, text: "opo " }));
     expect(markup).toContain("Rewriting its answer");
     expect(markup).toContain(reasons[0]);
   });
 
   it("says it rewrote, past tense, once the column is done", () => {
     const markup = render(
-      column({ revisedFor: reasons, text: "ojo daa", done: true }),
+      column({ revisedFor: reasons, text: "opo daa", done: true }),
     );
     expect(markup).toContain("Rewrote its answer");
   });
@@ -115,7 +115,7 @@ describe("the repair round's note", () => {
   });
 
   it("says nothing at all when no revision happened", () => {
-    const markup = render(column({ text: "Wọla ọdudu", done: true }));
+    const markup = render(column({ text: "Fọta ọkuku", done: true }));
     expect(markup).not.toContain("Rewrote");
     expect(markup).not.toContain("flagged");
   });

@@ -83,7 +83,7 @@ function comparisonFixtures() {
       createdAt: t(6),
       promptId: "P2",
       modelOutputA: out(POOL_BASE, "wrong order"),
-      modelOutputB: out(POOL_RAG, "ójó dá"),
+      modelOutputB: out(POOL_RAG, "ópó dá"),
     },
     {
       winner: "a",
@@ -441,7 +441,7 @@ describe("recent decided examples", () => {
       (r) => r.explanation === "B reads like real Igala.",
     )!;
     expect(sideB.winnerName).toBe("Gemini + RAG v3");
-    expect(sideB.winnerOutput).toBe("ójó dá");
+    expect(sideB.winnerOutput).toBe("ópó dá");
     expect(sideB.loserName).toBe("Bare Gemini");
     expect(sideB.loserTags).toEqual(["grammar"]);
   });
