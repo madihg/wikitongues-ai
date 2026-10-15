@@ -61,7 +61,7 @@ function trackingPrisma() {
           {
             id: "g1",
             promptId: "p1",
-            answerText: "Ọma",
+            answerText: "Ọwa",
             bucket: "orthography",
             consentTraining: true,
             isDemo: false,

@@ -2348,3 +2348,64 @@ OPEN, Halim's call: how to clear the remaining 55 (asked Oct 15).
   and exact token so it cannot mask a new leak elsewhere.
 - Alternative: an allow-list for all code. Cheaper, but leaves whole gold
   answers in public test files (answer-variants.test.ts alone carries 43).
+
+### Oct 15 (2): the leak check passes on the whole of web/src
+
+CLOSES the open item of the Oct 15 triage entry above (Halim's call, Oct 15:
+scrub fixtures and comments; allow-list only the langid seed lexicons and
+the one chikhapo filter entry).
+
+Sweep of every tracked ts, tsx, md and json file under web/src: 55 FAIL
+before, 0 after (327 files PASS, exit 0, negative control live).
+
+WHAT CHANGED
+- Test fixtures (39 files): every word span that fold-matches a frozen gold
+  is replaced by an invented word made with a fixed consonant substitution
+  inside the Igala alphabet (vowels, case, tone marks, dotted vowels and
+  n-tilde kept). Fold-equalities, tone contrasts, diffs, lengths and offsets
+  are unchanged, so the tests exercise the same code paths. The key is
+  deliberately not written down anywhere public. Hand fixes where the
+  substitution could not reach: words split across stream deltas, words
+  glued to a newline escape, two IPA transcriptions that spelled the old
+  word, and one English sentence that is itself a protected answer
+  (paraphrased in three files).
+- langid.test.ts: the 35 embedded "real gold" entries that carried frozen
+  answers are replaced by the nearest-length TRAIN-split answers that clear
+  the guard, so the language profile is still real Igala. Cross-validation
+  on the fixture: overall 0.89, Igala 0.84, English 1.0 (thresholds 0.8,
+  0.7, 0.9).
+- Generation-prompt tests v3, v4, v4.1: no hashes (a hash of a 3-letter word
+  reverses in milliseconds). The sample protected sets use invented words and
+  each file gains a spiked control that must fail; a gold inside a banned
+  phrase is dropped from the phrase (a strictly stronger check); a gold on
+  its own is left to the static-leak-check scripts, which check the served
+  prompt against the real set. The "no spelled subject before kì ..." check
+  is now any-word, not one word.
+- Comments in 10 shipped files: examples are bracketed English descriptions
+  or invented words, marked as invented.
+- lexicon-parse.ts exports CHIKHAPO_BAD_LINES so its test reads the flagged
+  headword from the filter instead of spelling it.
+
+THE CHECKER (scripts/leak-check-files.ts)
+- Reviewed allow-list, scripts/leak-check-allow.ts: 14 entries, file + exact
+  token + exact count + reason (9 Yoruba, 3 Igbo, 1 Pidgin seed word in
+  eval/langid.ts; the one chikhapo headword in lexicon-parse.ts). Logic in
+  src/lib/eval/leak-allow.ts (no Igala in it, 8 tests on invented words).
+  A count that differs from the file fails; a different spelling is never
+  masked. Proven by mutation: a second use of an allowed word, and a new
+  spelling of one, each fail.
+- Backslash escapes are neutralised before matching. A word right after a
+  newline escape in a string literal used to read as one token starting
+  with "n", so the checker never saw it; two such golds were found that
+  way and fixed.
+
+NOT COVERED (follow-up candidates)
+- The checker does not read IPA (ɔ, ɛ, syllable dots). A one-off scan with
+  IPA mapped to spelling found the two fixed above and nothing else in
+  web/src; nothing keeps it that way.
+- The words remain in the public git history (not rewritten, by
+  instruction). The substitution keeps the current tree out of training
+  scrapes; it does not stop a person reading old commits.
+
+GATES: pnpm typecheck 0, pnpm lint 0, vitest 104 files, 1,612 tests (was
+103 / 1,601). static-leak-check v3, v4, v4.1, v4.2, v4.4, v4.5 all PASS.

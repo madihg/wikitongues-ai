@@ -22,8 +22,8 @@ import { SuggestingEditor, SuggestionPreview } from "./suggesting-editor";
 // A hostile payload: diacritic-heavy, one ludicrously long unbroken token
 // (the worst case for 375px), a real multi-word change, and an insertion.
 const LONG_TOKEN = "ọ̀jọ̀gbàdámẹ́lẹ̀ánẹ́".repeat(12);
-const ORIGINAL = `Àgbá Ọ́jọ́ ${LONG_TOKEN} ki chẹnyọ ñwu wẹ`;
-const CORRECTED = `Agba ọjọ ${LONG_TOKEN} ki d'ẹnyọ ñwu wẹ dẹẹ`;
+const ORIGINAL = `Àgbá Ọ́pọ́ ${LONG_TOKEN} ki chẹnyọ ñwu wẹ`;
+const CORRECTED = `Agba ọpọ ${LONG_TOKEN} ki d'ẹnyọ ñwu wẹ dẹẹ`;
 
 function render(readOnly = false): string {
   return renderToStaticMarkup(

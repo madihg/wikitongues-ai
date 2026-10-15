@@ -36,13 +36,13 @@ const OUTPUT_A = {
   id: "out-a",
   promptId: "prompt-db-id",
   bucket: "orthography",
-  outputText: "Ọjọ ki chẹnyọ ñwu wẹ",
+  outputText: "Ọpọ ki chẹnyọ ñwu wẹ",
 };
 const OUTPUT_B = {
   id: "out-b",
   promptId: "prompt-db-id",
   bucket: "orthography",
-  outputText: "Àgbá Ọ́jọ́",
+  outputText: "Àgbá Ọ́pọ́",
 };
 
 /** A rubric payload that satisfies "every axis answered, at least one scored". */
@@ -195,7 +195,7 @@ describe("required failure tags (server-side)", () => {
 });
 
 describe("required edit rationale (server-side)", () => {
-  const correctedA = "Ọjọ ki d'ẹnyọ ñwu wẹ";
+  const correctedA = "Ọpọ ki d'ẹnyọ ñwu wẹ";
 
   it("400s an edit that changes text but carries no rationale", async () => {
     const res = await post(
@@ -241,7 +241,7 @@ describe("required edit rationale (server-side)", () => {
         rubricAxes: undefined,
         edit: {
           modelOutputId: OUTPUT_B.id,
-          correctedText: "Agba ọjọ",
+          correctedText: "Agba ọpọ",
           rationale: "The tone marks do not belong on this greeting.",
         },
       }),

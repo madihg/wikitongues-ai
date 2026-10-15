@@ -7,13 +7,13 @@ import {
 } from "./reference";
 
 /** Real multi-annotator gold for ig_bank_orth_012 ("hand"/"vehicle" family). */
-const REAL_GOLD_TIGHT = ["Ọdudu", "ọdudu", "ódùdù", "Ọ lo’dudu", "Wọla ọdudu"];
+const REAL_GOLD_TIGHT = ["Ọkuku", "ọkuku", "ókùkù", "Ọ to’kuku", "Fọta ọkuku"];
 
 /** Real gold for an OPEN prompt - the annotators genuinely disagree. */
 const REAL_GOLD_OPEN = [
   "Agba du ba ñwu mi",
   "Agba ẹñwu choduwẹ",
-  "Agba ọjọ ki pẹnẹ",
+  "Agba ọpọ ki pẹnẹ",
   "Agba, mẹ w'ọla eche",
   "Ámá má ká kìnì Ògìjò á wà, á mà dèdè ñwù",
 ];
@@ -29,30 +29,30 @@ describe("scoreAgainstReferences", () => {
   });
 
   it("scores an exact copy of one gold at the ceiling of every metric", () => {
-    const s = scoreAgainstReferences("ọdudu", REAL_GOLD_TIGHT);
+    const s = scoreAgainstReferences("ọkuku", REAL_GOLD_TIGHT);
     expect(s.best.exactMatch).toBe(1);
     expect(s.best.chrf).toBeCloseTo(1, 10);
     expect(s.best.tokenEditSimilarity).toBe(1);
   });
 
   it("keeps best >= mean for every metric", () => {
-    const s = scoreAgainstReferences("Ọ lo’dudu", REAL_GOLD_TIGHT);
+    const s = scoreAgainstReferences("Ọ to’kuku", REAL_GOLD_TIGHT);
     for (const m of REFERENCE_METRICS) {
       expect(s.best[m]).toBeGreaterThanOrEqual(s.meanOverRefs[m] - 1e-12);
     }
   });
 
   it("flags a tone-only miss as toneVariantOnly", () => {
-    // ódùdù carries tone; ọdudu does not. A hypothesis that matches only after
+    // ókùkù carries tone; ọkuku does not. A hypothesis that matches only after
     // tone folding must be reported as a near miss, not a match.
-    const s = scoreAgainstReferences("odudu", ["ódùdù"]);
+    const s = scoreAgainstReferences("okuku", ["ókùkù"]);
     expect(s.best.exactMatch).toBe(0);
     expect(s.best.toneInsensitiveMatch).toBe(1);
     expect(s.toneVariantOnly).toBe(true);
   });
 
   it("does not call it a tone variant when the dotted vowel differs", () => {
-    const s = scoreAgainstReferences("odudu", ["ọdudu"]);
+    const s = scoreAgainstReferences("okuku", ["ọkuku"]);
     expect(s.best.toneInsensitiveMatch).toBe(0);
     expect(s.toneVariantOnly).toBe(false);
     // ... but the loosest fold DOES match, which is why folded match is only
@@ -78,7 +78,7 @@ describe("scoreAgainstReferences", () => {
 
 describe("interGoldAgreement - the human ceiling", () => {
   it("is not computable from a single gold answer", () => {
-    const c = interGoldAgreement(["ọdudu"]);
+    const c = interGoldAgreement(["ọkuku"]);
     expect(c.computable).toBe(false);
     expect(c.nGolds).toBe(1);
     expect(c.perGoldChrf).toEqual([]);
@@ -89,7 +89,7 @@ describe("interGoldAgreement - the human ceiling", () => {
   });
 
   it("is 1 when every annotator wrote the same thing", () => {
-    const c = interGoldAgreement(["ọdudu", "ọdudu", "ọdudu"]);
+    const c = interGoldAgreement(["ọkuku", "ọkuku", "ọkuku"]);
     expect(c.computable).toBe(true);
     expect(c.best.chrf).toBeCloseTo(1, 10);
     expect(c.best.exactMatch).toBe(1);

@@ -14,7 +14,7 @@ import type { SftSourceRow } from "./training-export";
  * Igala gold with no English gloss, rationale, or framing attached.
  */
 
-const GOLD = "Ọ̀má lẹ aj'ẹñwu";
+const GOLD = "Ọ̀wá lẹ aj'ẹñwu";
 
 describe("buildOpenAiChatRow", () => {
   it("emits exactly system, user, assistant in OpenAI chat order", () => {
@@ -35,7 +35,7 @@ describe("buildOpenAiChatRow", () => {
       const row = buildOpenAiChatRow({
         systemPrompt,
         prompt: "Write the Igala word for 'water'.",
-        completion: "ọ̀mì",
+        completion: "ọ̀wì",
       });
       expect(row.messages[0].role).toBe("system");
       expect(row.messages[0].content).toBe(IGALA_FORCING_INSTRUCTION);
@@ -70,7 +70,7 @@ describe("buildOpenAiChatRow", () => {
   });
 
   it("preserves Igala diacritics and dotted vowels byte-for-byte", () => {
-    const tricky = "ẹ́jẹ̀ñwú ọ̀kọ́ Ògìjò";
+    const tricky = "ẹ́jẹ̀ñwú ọ̀rọ́ Ògìjò";
     const row = buildOpenAiChatRow({
       systemPrompt: null,
       prompt: "x",
@@ -83,10 +83,10 @@ describe("buildOpenAiChatRow", () => {
     const row = buildOpenAiChatRow({
       systemPrompt: null,
       prompt: "  ask  ",
-      completion: "\n ọ̀mì ọ̀kọ́ \n",
+      completion: "\n ọ̀wì ọ̀rọ́ \n",
     });
     expect(row.messages[1].content).toBe("ask");
-    expect(row.messages[2].content).toBe("ọ̀mì ọ̀kọ́");
+    expect(row.messages[2].content).toBe("ọ̀wì ọ̀rọ́");
   });
 
   it("refuses an empty user or assistant turn rather than uploading a junk row", () => {
@@ -100,8 +100,8 @@ describe("buildOpenAiChatRow", () => {
 
   it("serializes to one JSON object per line that round-trips", () => {
     const rows = [
-      buildOpenAiChatRow({ prompt: "p1", completion: "ọ̀mì" }),
-      buildOpenAiChatRow({ prompt: "p2", completion: "ọ̀kọ́" }),
+      buildOpenAiChatRow({ prompt: "p1", completion: "ọ̀wì" }),
+      buildOpenAiChatRow({ prompt: "p2", completion: "ọ̀rọ́" }),
     ];
     const jsonl = toJsonl(rows);
     const lines = jsonl.split("\n");
@@ -118,7 +118,7 @@ describe("held-out prompts never reach a training row", () => {
   const base: SftSourceRow = {
     promptId: "p-train",
     promptText: "Write the Igala word for 'water'.",
-    correctedText: "ọ̀mì",
+    correctedText: "ọ̀wì",
     bucket: "orthography",
     isHoldout: false,
     verificationStatus: "single_annotator",

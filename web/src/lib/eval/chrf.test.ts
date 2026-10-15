@@ -42,7 +42,7 @@ describe("chrfSingle - hand-computed reference values", () => {
 
 describe("chrfSingle - properties", () => {
   it("scores identical strings 1", () => {
-    expect(chrfSingle("ọ̀dudu", "ọ̀dudu")).toBeCloseTo(1, 10);
+    expect(chrfSingle("ọ̀kuku", "ọ̀kuku")).toBeCloseTo(1, 10);
   });
 
   it("scores fully disjoint strings 0", () => {
@@ -103,7 +103,7 @@ describe("chrfSingle - properties", () => {
     // and why chrF alone must not be read as "how correct is the Igala".
     expect(chrfSingle("ẹ́gẹ", "ẹgẹ")).toBeCloseTo(0.464015, 5);
     // The same mark on a longer string costs far less.
-    expect(chrfSingle("ọ́ma lẹ a jẹ ñwu", "ọma lẹ a jẹ ñwu")).toBeGreaterThan(
+    expect(chrfSingle("ọ́wa lẹ a jẹ ñwu", "ọwa lẹ a jẹ ñwu")).toBeGreaterThan(
       0.85,
     );
   });
@@ -111,21 +111,21 @@ describe("chrfSingle - properties", () => {
 
 describe("chrf++ (word n-grams)", () => {
   it("scores identical text 1, like chrF", () => {
-    expect(chrfppSingle("iye lẹ a jẹ", "iye lẹ a jẹ")).toBeCloseTo(1, 10);
+    expect(chrfppSingle("ige lẹ a jẹ", "ige lẹ a jẹ")).toBeCloseTo(1, 10);
   });
 
   it("punishes wrong word segmentation, which chrF alone cannot see", () => {
     // Same characters, different word boundaries. chrF strips whitespace so it
     // is blind to this; chrF++'s word n-grams are not. This is the whole reason
     // to carry chrF++ alongside chrF for multi-word Igala answers.
-    const plain = chrfSingle("iyelea jẹ", "iye lẹ a jẹ", CHRF_DEFAULTS);
-    const plusplus = chrfppSingle("iyelea jẹ", "iye lẹ a jẹ");
+    const plain = chrfSingle("iyelea jẹ", "ige lẹ a jẹ", CHRF_DEFAULTS);
+    const plusplus = chrfppSingle("iyelea jẹ", "ige lẹ a jẹ");
     expect(plusplus).toBeLessThan(plain);
   });
 
   it("rewards recovering word order over scrambling it", () => {
-    const ordered = chrfppSingle("iye lẹ a jẹ", "iye lẹ a jẹ ñwu");
-    const scrambled = chrfppSingle("jẹ a lẹ iye", "iye lẹ a jẹ ñwu");
+    const ordered = chrfppSingle("ige lẹ a jẹ", "ige lẹ a jẹ ñwu");
+    const scrambled = chrfppSingle("jẹ a lẹ ige", "ige lẹ a jẹ ñwu");
     expect(ordered).toBeGreaterThan(scrambled);
   });
 
@@ -136,16 +136,16 @@ describe("chrf++ (word n-grams)", () => {
 });
 
 describe("chrfMulti", () => {
-  const refs = ["ọdudu", "ódùdù", "wọla ọdudu"];
+  const refs = ["ọkuku", "ókùkù", "fọta ọkuku"];
 
   it("returns the best matching reference and its index", () => {
-    const r = chrfMulti("ọdudu", refs);
+    const r = chrfMulti("ọkuku", refs);
     expect(r.bestIndex).toBe(0);
     expect(r.best).toBeCloseTo(1, 10);
   });
 
   it("reports a mean that is never above the best", () => {
-    const r = chrfMulti("ọdudu", refs);
+    const r = chrfMulti("ọkuku", refs);
     expect(r.mean).toBeLessThanOrEqual(r.best);
     expect(r.perReference).toHaveLength(3);
   });

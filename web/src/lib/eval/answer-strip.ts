@@ -45,7 +45,7 @@ const LEADING_FRAMES: RegExp[] = [
  */
 const LEADING_CLAUSE = /^\s*[A-Za-z][A-Za-z0-9 ,'"()-]{0,79}:\s+(?=\S)/;
 
-/** A trailing English gloss in brackets: "Ọma (child)" -> "Ọma". */
+/** A trailing English gloss in brackets: "[word] (child)" -> "[word]". */
 const TRAILING_GLOSS = /\s*[([][^)\]]{0,80}[)\]]\s*$/;
 
 /** Trailing English explanation after an em dash or " - ". */

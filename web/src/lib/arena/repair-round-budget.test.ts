@@ -39,7 +39,7 @@ const gen = (text: string): CandidateGeneration => ({
 
 /** A dirty first answer (the s in "sooro" is not in the Igala allowlist). */
 const DIRTY = "sooro ada";
-const CLEAN = "Wọla ọdudu";
+const CLEAN = "Fọta ọkuku";
 
 function scriptedModel(...texts: string[]) {
   const calls: GenerateArgs[] = [];

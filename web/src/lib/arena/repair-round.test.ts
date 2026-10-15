@@ -38,7 +38,7 @@ describe("findAllowlistViolations", () => {
 
   it("flags dotted i and u (ị, ụ) while dotted e and o stay legal", () => {
     expect(findAllowlistViolations("mị̀ ọlụ̀mẹ́")).toEqual(["mị̀", "ọlụ̀mẹ́"]);
-    expect(findAllowlistViolations("ẹnyọ ọjọ")).toEqual([]);
+    expect(findAllowlistViolations("ẹnyọ ọpọ")).toEqual([]);
   });
 
   it("flags plain letters Igala lacks (s, z, x, q, v)", () => {
@@ -49,7 +49,7 @@ describe("findAllowlistViolations", () => {
   it("passes clean community Igala: digraphs, engma, elision, tone, digits", () => {
     expect(
       findAllowlistViolations(
-        "Ẹnẹ ẹnyọ, wọla ọdudu! Ọjọ kì d'ẹnyọ ñwu ọma. Ochu ẹkẹta, 1999. Àgbá.",
+        "Ẹnẹ ẹnyọ, fọta ọkuku! Ọpọ kì d'ẹnyọ ñwu ọwa. Ochu ẹkẹta, 1999. Àgbá.",
       ),
     ).toEqual([]);
   });
@@ -63,7 +63,7 @@ describe("findAllowlistViolations", () => {
 
 describe("findHyphenPrefixViolations", () => {
   it("flags the é- tic fused to a word", () => {
-    expect(findHyphenPrefixViolations("Ọjọ é-gbítì wa")).toEqual(["é-gbítì"]);
+    expect(findHyphenPrefixViolations("Ọpọ é-gbítì wa")).toEqual(["é-gbítì"]);
     expect(findHyphenPrefixViolations("é-jẹu")).toEqual(["é-jẹu"]);
   });
 
@@ -73,7 +73,7 @@ describe("findHyphenPrefixViolations", () => {
 
   it("passes community-attested multi-letter hyphen compounds", () => {
     expect(findHyphenPrefixViolations("ugbo-wn de")).toEqual([]);
-    expect(findHyphenPrefixViolations("Ọjọ kì danyedo-we")).toEqual([]);
+    expect(findHyphenPrefixViolations("Ọpọ kì danyedo-we")).toEqual([]);
   });
 
   it("passes a trailing hyphen and hyphen-free text", () => {
@@ -85,19 +85,19 @@ describe("findHyphenPrefixViolations", () => {
 
 describe("isToneSaturated", () => {
   it("flags a fully tone-marked short answer (pattern 4's shape)", () => {
-    expect(isToneSaturated("Àgbá Ọ́jọ́")).toBe(true);
+    expect(isToneSaturated("Àgbá Ọ́pọ́")).toBe(true);
   });
 
   it("flags a saturated sentence", () => {
-    expect(isToneSaturated("Ọ́jọ́ kì d'ẹ́nyọ́ ñwú ẹ̀")).toBe(true);
+    expect(isToneSaturated("Ọ́pọ́ kì d'ẹ́nyọ́ ñwú ẹ̀")).toBe(true);
   });
 
   it("does not flag a single stray accent (edit nit, not saturation)", () => {
-    expect(isToneSaturated("Wọla ọ́ma tito ẹnẹ")).toBe(false);
+    expect(isToneSaturated("Wọla ọ́wa tito ẹnẹ")).toBe(false);
   });
 
   it("does not flag clean unmarked community writing", () => {
-    expect(isToneSaturated("Wọla ọma tito. Ẹnẹ ẹnyọ ñwu wa.")).toBe(false);
+    expect(isToneSaturated("Wọla ọwa tito. Ẹnẹ ẹnyọ ñwu wa.")).toBe(false);
   });
 
   it("counts the macron as a tone mark", () => {
@@ -109,7 +109,7 @@ describe("isToneSaturated", () => {
 
 describe("checkIgalaOutput", () => {
   it("returns one violation per failing check, all three at once when earned", () => {
-    const v = checkIgalaOutput("é-jẹu ádṣa Àgbá Ọ́jọ́");
+    const v = checkIgalaOutput("é-jẹu ádṣa Àgbá Ọ́pọ́");
     expect(v.map((x) => x.kind).sort()).toEqual([
       "banned-character",
       "hyphenated-prefix",
@@ -128,12 +128,12 @@ describe("checkIgalaOutput", () => {
   });
 
   it("clean text passes with zero violations", () => {
-    expect(checkIgalaOutput("Wọla ọdudu. Ẹnẹ ẹnyọ ñwu wa.")).toEqual([]);
+    expect(checkIgalaOutput("Fọta ọkuku. Ẹnẹ ẹnyọ ñwu wa.")).toEqual([]);
   });
 
   it("allowTone suppresses ONLY the saturation check (R8.3: on request)", () => {
-    expect(checkIgalaOutput("Àgbá Ọ́jọ́", { allowTone: true })).toEqual([]);
-    const v = checkIgalaOutput("ádṣa Ọ́jọ́ Àgbá", { allowTone: true });
+    expect(checkIgalaOutput("Àgbá Ọ́pọ́", { allowTone: true })).toEqual([]);
+    const v = checkIgalaOutput("ádṣa Ọ́pọ́ Àgbá", { allowTone: true });
     expect(v.map((x) => x.kind)).toEqual(["banned-character"]);
   });
 });
@@ -141,7 +141,7 @@ describe("checkIgalaOutput", () => {
 describe("buildRepairInstruction", () => {
   it("names every violation and restates the output contract", () => {
     const text = buildRepairInstruction(
-      checkIgalaOutput("é-jẹu ádṣa Àgbá Ọ́jọ́"),
+      checkIgalaOutput("é-jẹu ádṣa Àgbá Ọ́pọ́"),
     );
     expect(text).toContain("Your answer breaks these Igala writing rules:");
     expect(text).toContain("ádṣa");
@@ -171,7 +171,7 @@ const baseArgs: GenerateArgs = {
 
 describe("generateWithRepairRound - rag-v4-1", () => {
   it("clean first answer: one call, no repair, violations recorded as empty", async () => {
-    const generate = vi.fn(async () => gen("Wọla ọdudu"));
+    const generate = vi.fn(async () => gen("Fọta ọkuku"));
     const result = await generateWithRepairRound(
       { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
       baseArgs,
@@ -179,7 +179,7 @@ describe("generateWithRepairRound - rag-v4-1", () => {
     );
     expect(generate).toHaveBeenCalledTimes(1);
     expect(generate).toHaveBeenCalledWith(baseArgs);
-    expect(result.text).toBe("Wọla ọdudu");
+    expect(result.text).toBe("Fọta ọkuku");
     expect(result.repaired).toBe(false);
     expect(result.repairViolations).toEqual([]);
     // Clean first pass IS the served text - nothing was discarded.
@@ -190,7 +190,7 @@ describe("generateWithRepairRound - rag-v4-1", () => {
     const generate = vi
       .fn<(a: GenerateArgs) => Promise<CandidateGeneration>>()
       .mockResolvedValueOnce(gen("é-jẹu ádṣa"))
-      .mockResolvedValueOnce(gen("Jẹñwu aja"));
+      .mockResolvedValueOnce(gen("Jẹñwu apa"));
     const result = await generateWithRepairRound(
       { versionLabel: "rag-v4-1" },
       baseArgs,
@@ -216,7 +216,7 @@ describe("generateWithRepairRound - rag-v4-1", () => {
 
     expect(result.repaired).toBe(true);
     expect(result.repairViolations!.length).toBeGreaterThan(0);
-    expect(result.text).toBe("Jẹñwu aja");
+    expect(result.text).toBe("Jẹñwu apa");
     // The discarded first pass is kept, separately from the served text.
     expect(result.firstPassText).toBe("é-jẹu ádṣa");
   });
@@ -281,7 +281,7 @@ describe("generateWithRepairRound - rag-v4-1", () => {
   });
 
   it("honours allowTone: a tone-saturated answer is not repaired when tone was requested", async () => {
-    const generate = vi.fn(async () => gen("Àgbá Ọ́jọ́"));
+    const generate = vi.fn(async () => gen("Àgbá Ọ́pọ́"));
     const result = await generateWithRepairRound(
       { versionLabel: "rag-v4-1" },
       baseArgs,
@@ -310,7 +310,7 @@ describe("generateWithRepairRound - the no-op guarantee for every other arm", ()
       // repair round belongs to rag-v4-1 alone. Other arms' serving must stay
       // byte-identical to what their registration measured.
       const generate = vi.fn<(a: GenerateArgs) => Promise<CandidateGeneration>>(
-        async () => gen("é-jẹu ádṣa Àgbá Ọ́jọ́"),
+        async () => gen("é-jẹu ádṣa Àgbá Ọ́pọ́"),
       );
       const result = await generateWithRepairRound(
         { versionLabel: label },
@@ -321,7 +321,7 @@ describe("generateWithRepairRound - the no-op guarantee for every other arm", ()
       // Args object passed through by REFERENCE - nothing rebuilt, nothing
       // reordered, so the assembled request is provably the same.
       expect(generate.mock.calls[0][0]).toBe(baseArgs);
-      expect(result.text).toBe("é-jẹu ádṣa Àgbá Ọ́jọ́");
+      expect(result.text).toBe("é-jẹu ádṣa Àgbá Ọ́pọ́");
       expect(result.latencyMs).toBe(100);
       expect(result.repaired).toBe(false);
       expect(result.repairViolations).toBeNull();
@@ -333,7 +333,7 @@ describe("generateWithRepairRound - the no-op guarantee for every other arm", ()
 
 describe("describeViolations", () => {
   it("names each rule family once, in check order", () => {
-    expect(describeViolations(checkIgalaOutput("é-jẹu ádṣa Àgbá Ọ́jọ́"))).toEqual(
+    expect(describeViolations(checkIgalaOutput("é-jẹu ádṣa Àgbá Ọ́pọ́"))).toEqual(
       [
         REPAIR_VIOLATION_LABELS["banned-character"],
         REPAIR_VIOLATION_LABELS["hyphenated-prefix"],
@@ -365,7 +365,7 @@ describe("describeViolations", () => {
   });
 
   it("is empty for a clean answer, so no revision can be announced", () => {
-    expect(describeViolations(checkIgalaOutput("Wọla ọdudu"))).toEqual([]);
+    expect(describeViolations(checkIgalaOutput("Fọta ọkuku"))).toEqual([]);
   });
 });
 
@@ -411,7 +411,7 @@ function scriptedModel(...texts: string[]) {
 
 describe("streamWithRepairRound", () => {
   it("a clean answer streams once and announces nothing", async () => {
-    const m = scriptedModel("Wọla ọdudu");
+    const m = scriptedModel("Fọta ọkuku");
     const onRevision = vi.fn();
     const result = await streamWithRepairRound(
       { versionLabel: REPAIR_ROUND_VERSION_LABELS[0] },
@@ -422,13 +422,13 @@ describe("streamWithRepairRound", () => {
     expect(m.calls).toHaveLength(1);
     expect(m.calls[0]).toBe(baseArgs);
     expect(onRevision).not.toHaveBeenCalled();
-    expect(m.deltas.join("")).toBe("Wọla ọdudu");
-    expect(result.text).toBe("Wọla ọdudu");
+    expect(m.deltas.join("")).toBe("Fọta ọkuku");
+    expect(result.text).toBe("Fọta ọkuku");
     expect(result.repaired).toBe(false);
   });
 
   it("a dirty answer streams, announces the revision, then streams the repair", async () => {
-    const m = scriptedModel("é-jẹu ádṣa", "Jẹñwu aja");
+    const m = scriptedModel("é-jẹu ádṣa", "Jẹñwu apa");
     const seen: string[] = [];
     const order: string[] = [];
     let announced: string[] = [];
@@ -457,16 +457,16 @@ describe("streamWithRepairRound", () => {
     expect(order.slice(0, at).every((o) => o === "delta")).toBe(true);
     expect(order.slice(at + 1).every((o) => o === "delta")).toBe(true);
     // Both attempts' tokens crossed the wire, in order.
-    expect(seen.join("")).toBe("é-jẹu ádṣaJẹñwu aja");
+    expect(seen.join("")).toBe("é-jẹu ádṣaJẹñwu apa");
     // And the served answer is the repaired one.
-    expect(result.text).toBe("Jẹñwu aja");
+    expect(result.text).toBe("Jẹñwu apa");
     expect(result.repaired).toBe(true);
     expect(m.calls).toHaveLength(2);
     expect(m.calls[1].userMessage).toContain("ádṣa");
   });
 
   it("announces exactly the violations the checker found", async () => {
-    const m = scriptedModel("Àgbá Ọ́jọ́", "Agba Ojo");
+    const m = scriptedModel("Àgbá Ọ́pọ́", "Agba Opo");
     const onRevision = vi.fn();
     await streamWithRepairRound(
       { versionLabel: "rag-v4-1" },
@@ -482,7 +482,7 @@ describe("streamWithRepairRound", () => {
 
   it("never announces a revision for another arm, however dirty (the no-op guarantee)", async () => {
     for (const label of ["rag-v4", "rag-v3", "baseline", null, undefined]) {
-      const m = scriptedModel("é-jẹu ádṣa Àgbá Ọ́jọ́");
+      const m = scriptedModel("é-jẹu ádṣa Àgbá Ọ́pọ́");
       const onRevision = vi.fn();
       const result = await streamWithRepairRound(
         { versionLabel: label },
@@ -535,10 +535,10 @@ describe("streamWithRepairRound", () => {
  */
 describe("streamed and buffered rounds are the same round", () => {
   const scripts: [string, string[]][] = [
-    ["clean first answer", ["Wọla ọdudu"]],
-    ["dirty then clean", ["é-jẹu ádṣa", "Jẹñwu aja"]],
+    ["clean first answer", ["Fọta ọkuku"]],
+    ["dirty then clean", ["é-jẹu ádṣa", "Jẹñwu apa"]],
     ["dirty then still dirty (kept regardless)", ["é-jẹu", "ádṣa still bad"]],
-    ["tone-saturated then bare", ["Àgbá Ọ́jọ́", "Agba Ojo"]],
+    ["tone-saturated then bare", ["Àgbá Ọ́pọ́", "Agba Opo"]],
   ];
 
   for (const [name, texts] of scripts) {
@@ -570,8 +570,8 @@ describe("streamed and buffered rounds are the same round", () => {
 
   it("holds for every other versionLabel too - one untouched call either way", async () => {
     for (const label of ["rag-v4", "rag-v2", null]) {
-      const buffered = scriptedModel("é-jẹu ádṣa Àgbá Ọ́jọ́");
-      const streamed = scriptedModel("é-jẹu ádṣa Àgbá Ọ́jọ́");
+      const buffered = scriptedModel("é-jẹu ádṣa Àgbá Ọ́pọ́");
+      const streamed = scriptedModel("é-jẹu ádṣa Àgbá Ọ́pọ́");
       const a = await generateWithRepairRound(
         { versionLabel: label },
         baseArgs,

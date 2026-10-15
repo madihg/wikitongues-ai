@@ -109,7 +109,7 @@ describe("generation through the openrouter path", () => {
         choices: [
           {
             index: 0,
-            message: { role: "assistant", content: "Ómi" },
+            message: { role: "assistant", content: "Ówi" },
             finish_reason: "stop",
           },
         ],
@@ -153,7 +153,7 @@ describe("generation through the openrouter path", () => {
     // Anthropic path this replaces spent a couple of hundred.
     expect(body.reasoning).toEqual({ enabled: false });
 
-    expect(result.text).toBe("Ómi");
+    expect(result.text).toBe("Ówi");
     expect(result.tokensIn).toBe(11);
     expect(result.tokensOut).toBe(3);
     expect(result.modelId).toBe("anthropic/claude-opus-5");

@@ -833,7 +833,7 @@ describe("qualifyCorrectionTargets", () => {
   });
 
   it("NFC-normalizes the served output text", () => {
-    const nfd = "Ọjọ ki".normalize("NFD");
+    const nfd = "Ọpọ ki".normalize("NFD");
     const input: CorrectionComparisonInput[] = [
       {
         comparisonId: "cmp_nfd",

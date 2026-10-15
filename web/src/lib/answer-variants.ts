@@ -6,9 +6,11 @@ import { foldIgala } from "@/lib/annotations-query";
  * When two annotators answer the same prompt, they disagree in one of two very
  * different ways, and the difference matters enormously for training data:
  *
- *   1. SAME WORD, WRITTEN DIFFERENTLY. Everyone agrees the answer is "odudu",
- *      but it comes back as "Ọdudu", "Òdúdú", "ódùdù". Or the same sentence is
- *      written "Ọma lẹ a jẹ ñwu" by one person and "Ọma lẹ aj'ẹñwu" by another
+ *   1. SAME WORD, WRITTEN DIFFERENTLY. Everyone agrees the answer is "okuku",
+ *      but it comes back as "Ọkuku", "Òkúkú", "ókùkù". Or the same sentence is
+ *      written "Ọwa lẹ a jẹ ñwu" by one person and "Ọwa lẹ aj'ẹñwu" by another
+ *      (the example words in this file are invented: real answers here
+ *      would be frozen-benchmark gold, and this repository is public)
  *      - identical words, different tone marks, spacing and elision marks.
  *      This is an orthographic-convention decision. A session can settle it,
  *      and settling it is worth real money: inconsistent spelling of the same
@@ -41,8 +43,8 @@ import { foldIgala } from "@/lib/annotations-query";
  * Characters that carry no sound of their own in written Igala: whitespace,
  * the elision apostrophes writers use for contracted vowels (straight, curly
  * and modifier-letter forms all appear in our data), hyphens, and sentence
- * punctuation. Stripping these is what lets "Ọma lẹ a jẹ ñwu" and
- * "Ọma lẹ aj'ẹñwu" be recognised as the same sentence.
+ * punctuation. Stripping these is what lets "Ọwa lẹ a jẹ ñwu" and
+ * "Ọwa lẹ aj'ẹñwu" be recognised as the same sentence.
  */
 const JOINERS = /[\s'‘’ʼ`´‐-―_.,;:!?"“”()[\]-]/g;
 
@@ -55,7 +57,7 @@ const JOINERS = /[\s'‘’ʼ`´‐-―_.,;:!?"“”()[\]-]/g;
  * both Unicode shapes: "Ọ" typed on one keyboard is the single codepoint
  * U+1ECC, and on another it is a plain "O" followed by a combining dot below.
  * They render identically on screen. Without composing them first the page
- * shows "Ọdudu" and "Ọdudu" side by side as if they were rival spellings,
+ * shows "Ọkuku" and "Ọkuku" side by side as if they were rival spellings,
  * which is nonsense to anyone reading it. NFC also leaves the toned dotted
  * vowels that have no precomposed codepoint (e.g. "ẹ" + an acute) in one
  * consistent shape, so they compare reliably too.

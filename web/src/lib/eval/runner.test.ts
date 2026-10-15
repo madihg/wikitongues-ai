@@ -10,14 +10,14 @@ import { buildLanguageIdModel } from "./langid";
 
 const langModel = buildLanguageIdModel({
   igalaTexts: [
-    "ọdudu",
-    "Ọma lẹ a jẹ ñwu",
+    "ọkuku",
+    "Ọwa lẹ a jẹ ñwu",
     "Imọtọ",
-    "Agba ọjọ ki pẹnẹ",
-    "Aka ma gbọ ñ oñwu chi ukwu imọtọ",
-    "Abẹ le ñw'ọjọ",
-    "Ujẹñwu",
-    "Uchu",
+    "Agba ọpọ ki pẹnẹ",
+    "Ara wa mhọ ñ oñfu jni urfu iwọdọ",
+    "Abẹ le ñw'ọpọ",
+    "Upẹñfu",
+    "Ujnu",
   ],
   englishTexts: [
     "Translate 'I drink water' into Igala.",
@@ -31,7 +31,7 @@ const prompts: EvalPromptInput[] = [
     promptId: "p1",
     bucket: "orthography",
     text: "Give the Igala word for 'vehicle'.",
-    golds: ["ọdudu", "Ọdudu", "ódùdù"],
+    golds: ["ọkuku", "Ọkuku", "ókùkù"],
   },
   {
     promptId: "p2",
@@ -43,14 +43,14 @@ const prompts: EvalPromptInput[] = [
     promptId: "p3",
     bucket: "grammar_tone",
     text: "Translate 'the child eats food'.",
-    golds: ["Ọma lẹ a jẹ ñwu", "Ọma lẹ aj'ẹñwu"],
+    golds: ["Ọwa lẹ a jẹ ñwu", "Ọwa lẹ aj'ẹñwu"],
   },
   {
     // Single gold: scorable, but contributes NO ceiling.
     promptId: "p4",
     bucket: "grammar_tone",
     text: "Translate 'thank you'.",
-    golds: ["Agba ọjọ ki pẹnẹ"],
+    golds: ["Agba ọpọ ki pẹnẹ"],
   },
   {
     // No gold at all: must not enter reference aggregates.
@@ -75,11 +75,11 @@ function outputsFor(
 }
 
 const perfect = outputsFor("good", "Copies the gold", {
-  p1: "ọdudu",
+  p1: "ọkuku",
   p2: "imọtọ",
-  p3: "Ọma lẹ a jẹ ñwu",
-  p4: "Agba ọjọ ki pẹnẹ",
-  p5: "Ọma lẹ a jẹ ñwu",
+  p3: "Ọwa lẹ a jẹ ñwu",
+  p4: "Agba ọpọ ki pẹnẹ",
+  p5: "Ọwa lẹ a jẹ ñwu",
 });
 
 const englishy = outputsFor("bad", "Answers in English", {
@@ -186,13 +186,13 @@ describe("runEval - sort order is not a ranking", () => {
       promptId: `q${i}`,
       bucket: "orthography",
       text: "Give the Igala word.",
-      golds: ["ọdudu", "ódùdù"],
+      golds: ["ọkuku", "ókùkù"],
     }));
     const good = many.map((p) => ({
       candidateId: "good",
       candidateName: "good",
       promptId: p.promptId,
-      text: "ọdudu",
+      text: "ọkuku",
     }));
     const bad = many.map((p) => ({
       candidateId: "bad",
@@ -210,8 +210,8 @@ describe("runEval - sort order is not a ranking", () => {
     const r = runEval({
       prompts,
       outputs: [
-        ...outputsFor("solo-a", "Solo A", { p1: "ọdudu" }),
-        ...outputsFor("solo-b", "Solo B", { p3: "Ọma lẹ a jẹ ñwu" }),
+        ...outputsFor("solo-a", "Solo A", { p1: "ọkuku" }),
+        ...outputsFor("solo-b", "Solo B", { p3: "Ọwa lẹ a jẹ ñwu" }),
       ],
       langModel,
     });
@@ -273,13 +273,13 @@ describe("headToHead", () => {
       promptId: `q${i}`,
       bucket: "orthography",
       text: "Give the Igala word.",
-      golds: ["ọdudu", "ódùdù"],
+      golds: ["ọkuku", "ókùkù"],
     }));
     const a = many.map((p) => ({
       candidateId: "good",
       candidateName: "good",
       promptId: p.promptId,
-      text: "ọdudu",
+      text: "ọkuku",
     }));
     const b = many.map((p) => ({
       candidateId: "bad",
@@ -311,12 +311,12 @@ describe("headToHead", () => {
   it("returns nPaired 0 when two candidates share no scored prompts", () => {
     const a = runEval({
       prompts,
-      outputs: outputsFor("x", "x", { p1: "ọdudu" }),
+      outputs: outputsFor("x", "x", { p1: "ọkuku" }),
       langModel,
     }).candidates[0];
     const b = runEval({
       prompts,
-      outputs: outputsFor("y", "y", { p3: "Ọma lẹ a jẹ ñwu" }),
+      outputs: outputsFor("y", "y", { p3: "Ọwa lẹ a jẹ ñwu" }),
       langModel,
     }).candidates[0];
     expect(headToHead(a, b).nPaired).toBe(0);

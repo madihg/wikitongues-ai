@@ -368,7 +368,7 @@ describe("ranking", () => {
 
 describe("similarity primitives", () => {
   it("folds diacritics and case so tone variants match", () => {
-    expect(normalizeForMatch("Ọ̀jọ́ dú!")).toBe("ojo du");
+    expect(normalizeForMatch("Ọ̀pọ́ dú!")).toBe("opo du");
   });
 
   it("scores dice at 1 for identical strings and 0 for disjoint ones", () => {

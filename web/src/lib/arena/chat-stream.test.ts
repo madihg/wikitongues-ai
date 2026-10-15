@@ -37,7 +37,7 @@ const reply = (slug: string, over: Partial<ChatReply> = {}): ChatReply => ({
 describe("encodeChatEvent / ChatStreamParser round trip", () => {
   it("parses events fed in exactly one chunk per line", () => {
     const events: ChatStreamEvent[] = [
-      { type: "delta", slug: "a", text: "Ómi" },
+      { type: "delta", slug: "a", text: "Ówi" },
       { type: "reply", reply: reply("a") },
     ];
     const parser = new ChatStreamParser();
@@ -48,7 +48,7 @@ describe("encodeChatEvent / ChatStreamParser round trip", () => {
 
   it("survives a chunk boundary falling mid-line", () => {
     const wire =
-      encodeChatEvent({ type: "delta", slug: "a", text: "ọ́kọ" }) +
+      encodeChatEvent({ type: "delta", slug: "a", text: "ọ́rọ" }) +
       encodeChatEvent({ type: "delta", slug: "b", text: "second" });
     const parser = new ChatStreamParser();
     const collected: ChatStreamEvent[] = [];
@@ -59,7 +59,7 @@ describe("encodeChatEvent / ChatStreamParser round trip", () => {
     }
     collected.push(...parser.flush());
     expect(collected).toEqual([
-      { type: "delta", slug: "a", text: "ọ́kọ" },
+      { type: "delta", slug: "a", text: "ọ́rọ" },
       { type: "delta", slug: "b", text: "second" },
     ]);
   });
@@ -129,7 +129,7 @@ describe("ChatStreamParser under randomized chunk boundaries", () => {
   }
 
   const events: ChatStreamEvent[] = [
-    { type: "delta", slug: "a", text: "Ọ́jọ́ " },
+    { type: "delta", slug: "a", text: "Ọ́pọ́ " },
     { type: "delta", slug: "b", text: "neighbour tokens" },
     { type: "delta", slug: "a", text: "é-jẹu ádṣa" },
     {
@@ -140,8 +140,8 @@ describe("ChatStreamParser under randomized chunk boundaries", () => {
         "a hyphenated prefix Igala does not use",
       ],
     },
-    { type: "delta", slug: "a", text: "Wọla\nọdudu" },
-    { type: "reply", reply: reply("a", { text: "Wọla\nọdudu" }) },
+    { type: "delta", slug: "a", text: "Fọta\nọkuku" },
+    { type: "reply", reply: reply("a", { text: "Fọta\nọkuku" }) },
     { type: "reply", reply: reply("b", { text: "neighbour tokens" }) },
   ];
   const wire = events.map(encodeChatEvent).join("");
@@ -183,7 +183,7 @@ describe("ChatStreamParser under randomized chunk boundaries", () => {
         i += size;
       }
       replies = applyChatEvents(replies, parser.flush());
-      expect(replies[0].text, `trial ${trial}`).toBe("Wọla\nọdudu");
+      expect(replies[0].text, `trial ${trial}`).toBe("Fọta\nọkuku");
       expect(replies[0].revisedFor).toHaveLength(2);
       expect(replies[0].done).toBe(true);
       expect(replies[1].text).toBe("neighbour tokens");
@@ -201,11 +201,11 @@ describe("applyChatEvents - the client-side fold", () => {
   it("accumulates deltas per column, leaving other columns untouched", () => {
     let replies = initStreamingReplies(models);
     replies = applyChatEvents(replies, [
-      { type: "delta", slug: "a", text: "Ómi " },
+      { type: "delta", slug: "a", text: "Ówi " },
       { type: "delta", slug: "a", text: "du" },
       { type: "delta", slug: "b", text: "other" },
     ]);
-    expect(replies[0].text).toBe("Ómi du");
+    expect(replies[0].text).toBe("Ówi du");
     expect(replies[0].done).toBe(false);
     expect(replies[1].text).toBe("other");
   });
@@ -231,10 +231,10 @@ describe("applyChatEvents - the client-side fold", () => {
       { type: "delta", slug: "b", text: "streaming neighbour" },
       {
         type: "reply",
-        reply: reply("a", { text: "Wọla ọdudu", latencyMs: 4200 }),
+        reply: reply("a", { text: "Fọta ọkuku", latencyMs: 4200 }),
       },
     ]);
-    expect(replies[0].text).toBe("Wọla ọdudu");
+    expect(replies[0].text).toBe("Fọta ọkuku");
     expect(replies[0].done).toBe(true);
     expect(replies[0].error).toBeNull();
     expect(replies[0].latencyMs).toBe(4200);
@@ -288,17 +288,17 @@ describe("applyChatEvents - the rag-v4-1 repair-round column", () => {
     // repair round costs nothing visible when it finds nothing.
     let replies = initStreamingReplies(models);
     replies = applyChatEvents(replies, [
-      { type: "delta", slug: "v41", text: "Wọla " },
-      { type: "delta", slug: "v41", text: "ọdudu" },
+      { type: "delta", slug: "v41", text: "Fọta " },
+      { type: "delta", slug: "v41", text: "ọkuku" },
     ]);
-    expect(replies[0].text).toBe("Wọla ọdudu");
+    expect(replies[0].text).toBe("Fọta ọkuku");
     expect(replies[0].done).toBe(false);
     expect(replies[0].revisedFor).toBeNull();
 
     replies = applyChatEvents(replies, [
-      { type: "reply", reply: reply("v41", { text: "Wọla ọdudu" }) },
+      { type: "reply", reply: reply("v41", { text: "Fọta ọkuku" }) },
     ]);
-    expect(replies[0].text).toBe("Wọla ọdudu");
+    expect(replies[0].text).toBe("Fọta ọkuku");
     expect(replies[0].done).toBe(true);
     expect(replies[0].revisedFor).toBeNull();
   });
@@ -337,13 +337,13 @@ describe("applyChatEvents - the rag-v4-1 repair-round column", () => {
     // reply lands the repaired text - what the exam would have measured.
     replies = applyChatEvents(replies, [
       { type: "delta", slug: "v41", text: "Jẹñwu " },
-      { type: "delta", slug: "v41", text: "aja" },
+      { type: "delta", slug: "v41", text: "apa" },
       {
         type: "reply",
-        reply: reply("v41", { text: "Jẹñwu aja", latencyMs: 9000 }),
+        reply: reply("v41", { text: "Jẹñwu apa", latencyMs: 9000 }),
       },
     ]);
-    expect(replies[0].text).toBe("Jẹñwu aja");
+    expect(replies[0].text).toBe("Jẹñwu apa");
     expect(replies[0].done).toBe(true);
     // Latency sums both attempts, as generateWithRepairRound reports it.
     expect(replies[0].latencyMs).toBe(9000);
@@ -360,13 +360,13 @@ describe("applyChatEvents - the rag-v4-1 repair-round column", () => {
     const wire: ChatStreamEvent[] = [
       { type: "delta", slug: "v41", text: "é-jẹu ádṣa" },
       { type: "revision", slug: "v41", reasons: ["ignored by an old client"] },
-      { type: "delta", slug: "v41", text: "Jẹñwu aja" },
-      { type: "reply", reply: reply("v41", { text: "Jẹñwu aja" }) },
+      { type: "delta", slug: "v41", text: "Jẹñwu apa" },
+      { type: "reply", reply: reply("v41", { text: "Jẹñwu apa" }) },
     ];
     const asOldClient = wire.filter((e) => e.type !== "revision");
     let replies = initStreamingReplies(models);
     replies = applyChatEvents(replies, asOldClient);
-    expect(replies[0].text).toBe("Jẹñwu aja");
+    expect(replies[0].text).toBe("Jẹñwu apa");
     expect(replies[0].done).toBe(true);
     expect(replies[0].revisedFor).toBeNull();
   });

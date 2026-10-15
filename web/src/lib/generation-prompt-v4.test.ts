@@ -24,7 +24,7 @@ describe("IGALA_SYSTEM_V4 - static text is leak-free (Scope A)", () => {
     // tone-marked as gold actually is. The v4 headers ship on every request
     // that renders their block, so they are checked here too.
     const protectedSet = buildProtectedSet(
-      ["Ómi", "ẹ́kọ̀", "Ọ́ma", "Áta mi", "Ọ̀gbẹ́nẹ́ chojẹ", "àdagbá"].map(
+      ["Ówi", "ẹ́kọ̀", "Ọ́wa", "Áda mi", "Ọ̀gbẹ́nẹ́ chojẹ", "àdagbá"].map(
         (answerText, i) => ({ promptId: `ig_bank_${i}`, answerText }),
       ),
     );
@@ -38,6 +38,21 @@ describe("IGALA_SYSTEM_V4 - static text is leak-free (Scope A)", () => {
     );
     expect(report.pass).toBe(true);
     expect(report.hits).toEqual([]);
+  });
+
+  it("would catch a protected word spiked into the prompt (control)", () => {
+    // The sample words above are invented (2026-10-15): the real frozen
+    // answers are never spelled in this public repository. This control proves
+    // the check is awake; the real set is checked by the static-leak-check
+    // script against the database.
+    const protectedSet = buildProtectedSet([
+      { promptId: "ig_bank_0", answerText: "Ówi" },
+    ]);
+    const report = checkStatic(
+      [{ where: "IGALA_SYSTEM_V4+spike", text: `${IGALA_SYSTEM_V4} owi` }],
+      protectedSet,
+    );
+    expect(report.pass).toBe(false);
   });
 });
 
@@ -189,7 +204,10 @@ describe("IGALA_SYSTEM_V4 - improvement 4: Igbo prohibitions", () => {
     // gold (Scope A, same rule as the Yoruba list carrying no replacements).
     expect(neverWrite).not.toMatch(/\bEke\b/);
     expect(neverWrite).not.toMatch(/Afọ/);
-    expect(neverWrite).not.toMatch(/Ẹdẹ|Ukwọ|Ẹkẹ|Afor/);
+    // The fourth day of that week is itself a frozen gold answer, so it is not
+    // spelled here; static-leak-check-v4.ts checks the whole prompt against
+    // the real protected set, which covers it.
+    expect(neverWrite).not.toMatch(/Ẹdẹ|Ẹkẹ|Afor/);
   });
 });
 

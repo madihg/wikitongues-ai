@@ -4,8 +4,9 @@
  * Written after Agnes's live test of 2026-08-11: the models have Igala
  * vocabulary but no Igala syntax ("the first sentence is saying three
  * different things"), and their spelling errors are meaning errors - a nasal
- * ending (Ojọ vs Ojọn), a dropped prefix (Onokotu vs Nokotu), or a homograph
- * read without context (oko) each produce a different word, not a variant of
+ * ending ([a word] vs the same word with a final n), a dropped prefix
+ * (Onokotu vs Nokotu), or a homograph read without context ([a word with
+ * several meanings]) each produce a different word, not a variant of
  * the same one. So this prompt does two things v1's did not: it gives the
  * model an explicit PROCEDURE for using the retrieved material (dictionary
  * for forms, examples for sentence shape), and it makes "spelling is meaning"

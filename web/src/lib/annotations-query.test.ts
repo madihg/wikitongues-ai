@@ -84,8 +84,8 @@ describe("parseAnnotationsQuery", () => {
 
   it("trims a search query", () => {
     expect(
-      parseAnnotationsQuery(q("q=" + encodeURIComponent("  odudu  "))).q,
-    ).toBe("odudu");
+      parseAnnotationsQuery(q("q=" + encodeURIComponent("  okuku  "))).q,
+    ).toBe("okuku");
   });
 
   it("ignores a query shorter than MIN_QUERY_LENGTH after trim", () => {
@@ -138,12 +138,12 @@ describe("foldIgala", () => {
   it("folds a precomposed dotted vowel + lowercases", () => {
     // "Ọ" (U+1ECD, LATIN CAPITAL LETTER O WITH DOT BELOW) - the shape most
     // Igala orthography in the data uses for this sound.
-    expect(foldIgala("Ọdudu")).toBe("odudu");
+    expect(foldIgala("Ọkuku")).toBe("okuku");
   });
 
   it("folds precomposed tone marks", () => {
     // "ó" (U+00F3, o + acute) and "ù" (U+00F9, u + grave).
-    expect(foldIgala("ódùdù")).toBe("odudu");
+    expect(foldIgala("ókùkù")).toBe("okuku");
   });
 
   it("folds a mixed sequence: precomposed dot-below base + standalone combining mark", () => {

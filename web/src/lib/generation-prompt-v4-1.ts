@@ -26,7 +26,7 @@
  *     jenwu" (spelled with the dotted vowels) is a known leak-risk string and
  *     ships only if the real Scope-A check clears it - it has NOT been added.
  * E2. Affirmative optative ki appended to the negation line (R2.4 ext, B:
- *     blessing golds + 393 corpus "Ojo ki " verses). Targets pattern 22.
+ *     blessing golds + 393 corpus "[God] ki " verses). Targets pattern 22.
  * E3. Dative allomorphy appended to the elision line (R6.1 detail, A: 2,547
  *     vs 14 / 7,061 vs 876 corpus split + corrections). Targets pattern 13.
  * E4. No hyphenated prefixes (new negative rule; corpus tokens shaped V-: 0

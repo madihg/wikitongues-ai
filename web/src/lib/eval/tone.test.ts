@@ -64,7 +64,7 @@ describe("stripToneMarks", () => {
   });
 
   it("a real Igala line with both tone marks and subdots strips only tone", () => {
-    // "Ágbá ọ́jọ́" - tone-marked greeting-style line carrying both dot-below
+    // "Ágbá ọ́pọ́" - tone-marked greeting-style line carrying both dot-below
     // vowels and acute tone. Only the tone accents should disappear.
     const line = `A${GRAVE}gba${ACUTE} ${O_DOT}${ACUTE}j${O_DOT}${ACUTE}`;
     const stripped = stripToneMarks(line);

@@ -26,8 +26,8 @@ import { igalaTerminalContract } from "@/lib/generation-prompt-v2";
  *    R10.6's gate (clauses join through real connectives or not at all).
  * 3. A dates line (in the grammar section) and a missing-word rule (in THE
  *    METHOD). Dates: R5.3 (grade B) - ordinals are corpus-attested AS dates
- *    ("ochu ekebie" seventh month [187], "ojo ejodudu" first day [188]) and
- *    community-attested the same way ("ọjọ ẹkẹgwẹlẹ" 14th day x2, "ọchu
+ *    ("ochu ekebie" seventh month [187], "[day] ejodudu" first day [188]) and
+ *    community-attested the same way ("[day] ẹkẹgwẹlẹ" 14th day x2, "ọchu
  *    ẹkẹta" third month). Years in digits is the anti-fabrication corollary
  *    of section 12 #1 (5xA): measured 2026-08-28, NO year-name exists in any
  *    source class (0 digit characters and no year phrase in 30,907 Bible
@@ -43,7 +43,7 @@ import { igalaTerminalContract } from "@/lib/generation-prompt-v2";
  * 4. NEVER WRITE gains the Igbo market-day names Orie and Nkwọ - the one
  *    Igbo-contamination channel in the evidence (deduced grammar section 11
  *    #10; corrections doc conflict 6: the elicited Igala week Ẹkẹ/Ẹdẹ/Afor/
- *    Ukwọ is suspiciously identical to the Igbo week). Only the two forms
+ *    [a fourth day] is suspiciously identical to the Igbo week). Only the two forms
  *    UNIQUE to Igbo are banned: Eke and Afọ differ from the attested Igala
  *    Ẹkẹ/Afor only in diacritics, and banning near-forms of attested Igala
  *    words would teach the model to avoid the real ones. DON'T-side only, no

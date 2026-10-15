@@ -22,7 +22,7 @@ describe("IGALA_SYSTEM_V3 - static text is leak-free (Scope A)", () => {
     // leaks an answer key on every query. Same sample set as the v2 test:
     // one-word answers and a phrase, tone-marked as gold actually is.
     const protectedSet = buildProtectedSet(
-      ["Ómi", "ẹ́kọ̀", "Ọ́ma", "Áta mi", "Ọ̀gbẹ́nẹ́ chojẹ", "àdagbá"].map(
+      ["Ówi", "ẹ́kọ̀", "Ọ́wa", "Áda mi", "Ọ̀gbẹ́nẹ́ chojẹ", "àdagbá"].map(
         (answerText, i) => ({ promptId: `ig_bank_${i}`, answerText }),
       ),
     );
@@ -32,6 +32,21 @@ describe("IGALA_SYSTEM_V3 - static text is leak-free (Scope A)", () => {
     );
     expect(report.pass).toBe(true);
     expect(report.hits).toEqual([]);
+  });
+
+  it("would catch a protected word spiked into the prompt (control)", () => {
+    // The sample words above are invented (2026-10-15): the real frozen
+    // answers are never spelled in this public repository. This control proves
+    // the check is awake; the real set is checked by the static-leak-check
+    // script against the database.
+    const protectedSet = buildProtectedSet([
+      { promptId: "ig_bank_0", answerText: "Ówi" },
+    ]);
+    const report = checkStatic(
+      [{ where: "IGALA_SYSTEM_V3+spike", text: `${IGALA_SYSTEM_V3} owi` }],
+      protectedSet,
+    );
+    expect(report.pass).toBe(false);
   });
 });
 

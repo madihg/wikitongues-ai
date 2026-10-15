@@ -46,7 +46,7 @@ describe("streamForCandidate", () => {
     const model = mockStream([
       { type: "stream-start", warnings: [] },
       { type: "text-start", id: "t1" },
-      { type: "text-delta", id: "t1", delta: "Ómi " },
+      { type: "text-delta", id: "t1", delta: "Ówi " },
       { type: "text-delta", id: "t1", delta: "du " },
       { type: "text-delta", id: "t1", delta: "dẹ́ẹ̀." },
       { type: "text-end", id: "t1" },
@@ -73,8 +73,8 @@ describe("streamForCandidate", () => {
       model,
     );
 
-    expect(deltas).toEqual(["Ómi ", "du ", "dẹ́ẹ̀."]);
-    expect(result.text).toBe("Ómi du dẹ́ẹ̀.");
+    expect(deltas).toEqual(["Ówi ", "du ", "dẹ́ẹ̀."]);
+    expect(result.text).toBe("Ówi du dẹ́ẹ̀.");
     expect(result.tokensIn).toBe(42);
     expect(result.tokensOut).toBe(7);
     expect(result.modelId).toBe("claude-test");
@@ -108,7 +108,7 @@ describe("streamForCandidate", () => {
         {
           id: "g1",
           question: "What is the Igala word for child?",
-          answer: "Ọma",
+          answer: "Ọwa",
         },
       ],
     };
@@ -128,7 +128,7 @@ describe("streamForCandidate", () => {
         ? m.content
         : m.content.map((p) => ("text" in p ? p.text : "")).join(""),
     );
-    expect(texts.some((t) => t.includes("Ọma"))).toBe(true);
+    expect(texts.some((t) => t.includes("Ọwa"))).toBe(true);
     expect(texts[texts.length - 1]).toContain("water");
   });
 
@@ -181,7 +181,7 @@ describe("assembleGenerationRequest - shared by both paths", () => {
     const baseline: CandidateLike = { ...candidate, ragEnabled: false };
     const { messages } = assembleGenerationRequest(baseline, {
       userMessage: "q",
-      goldExamples: [{ question: "other", answer: "Ọma" }],
+      goldExamples: [{ question: "other", answer: "Ọwa" }],
     });
     expect(messages).toEqual([{ role: "user", content: "q" }]);
   });
@@ -191,10 +191,10 @@ describe("assembleGenerationRequest - shared by both paths", () => {
       userMessage: "What is the Igala word for water?",
       goldExamples: [
         { question: "What is the Igala word for water?", answer: "LEAK" },
-        { question: "What is the Igala word for child?", answer: "Ọma" },
+        { question: "What is the Igala word for child?", answer: "Ọwa" },
       ],
     });
     expect(JSON.stringify(messages)).not.toContain("LEAK");
-    expect(JSON.stringify(messages)).toContain("Ọma");
+    expect(JSON.stringify(messages)).toContain("Ọwa");
   });
 });

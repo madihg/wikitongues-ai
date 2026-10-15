@@ -146,13 +146,13 @@ vi.mock("@/lib/prisma", () => {
             return [
               {
                 promptId: "P1",
-                answerText: "Ẹ́ nwụ ọma",
+                answerText: "Ẹ́ nwụ ọwa",
                 annotatorId: "annA",
                 createdAt: t(1),
               },
               {
                 promptId: "P1",
-                answerText: "Ẹ nwu ọma",
+                answerText: "Ẹ nwu ọwa",
                 annotatorId: "annB",
                 createdAt: t(2),
               },
@@ -167,7 +167,7 @@ vi.mock("@/lib/prisma", () => {
         findMany: async () => [
           {
             promptId: "P1",
-            outputText: "Ẹ́ nwụ ọma",
+            outputText: "Ẹ́ nwụ ọwa",
             ragContextIds: [],
             candidateModel: POOL_RAG,
           },

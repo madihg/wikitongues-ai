@@ -17,13 +17,13 @@ import {
 
 /** OutputEdit on ig_bank_auth_012 (Charity Ogali, 2026-08-25): joint two-word
  *  respell, diacritic-heavy. */
-const AUTH_012 = { original: "Àgbá Ọ́jọ́", corrected: "Agba ọjọ" };
+const AUTH_012 = { original: "Àgbá Ọ́pọ́", corrected: "Agba ọpọ" };
 
 /** OutputEdit on ig_bank_auth_001 (Charity Ogali, 2026-08-25): single-token
  *  fix with an elision apostrophe. */
 const AUTH_001 = {
-  original: "Ọjọ ki chẹnyọ ñwu wẹ",
-  corrected: "Ọjọ ki d'ẹnyọ ñwu wẹ",
+  original: "Ọpọ ki chẹnyọ ñwu wẹ",
+  corrected: "Ọpọ ki d'ẹnyọ ñwu wẹ",
 };
 
 /** OutputEdit on ig_bank_reg_033 (Agnes, 2026-08-07): full-paragraph rewrite -
@@ -32,13 +32,13 @@ const REG_033 = {
   original:
     "Ọjọ̀mọ̀mọ̀ àgbà, ẹ̀kpẹ̀lẹ̀ ọlụ̀mẹ́, ẹ nẹ́ ọ̀bẹ̀rɛ̀ kẹ́ àchá kẹ́ àbá, mị̀ nà íjì ínyí mẹrẹ̀ wá, álé ẹ̀kpẹ̀lẹ̀ mị̀ wá nẹ̀ kẹ́ àbá mị̀ bọ̀. Ẹ jọ̀ọ́, ẹ jé k'á mụọ̀nù k'á bọ̀ n'ọ́kán mị̀, k'á mụọ̀nù k'á sọọ̀nù k'á yẹnù n'ámá. Ẹ kpànyá mị̀, mị̀ kọ́ bọ̀ yẹnù n'ámá, álé ẹ̀kpẹ̀lẹ̀ k'á bọ̀ mị̀ n'ẹ́kpẹ̀lẹ̀ ọlụ̀mẹ́. Ọjọ̀mọ̀mọ̀ àgbà, ẹ̀kpẹ̀lẹ̀ ọlụ̀mẹ́, mị̀ gbàdá n'ámá.",
   corrected:
-    "Agba abọ ọgijọ, na tẹne gbọkọ bumẹ ka ki ni ujẹju dẹ weeki eyi ka ñya tu'nwu ọjọ aladi ọgọ mẹlẹ anẹ",
+    "Agba abọ ọgijọ, na tẹne gbọkọ bumẹ ka ki ni ujẹju dẹ weeki eyi ka ñya tu'nwu ọpọ aladi ọgọ mẹlẹ anẹ",
 };
 
 /** Multi-line synthetic pair: newlines must survive the round trip. */
 const MULTILINE = {
-  original: "Ọjọ ki chẹnyọ\nñwu wẹ dẹẹ",
-  corrected: "Ọjọ ki d'ẹnyọ\nñwu wẹ",
+  original: "Ọpọ ki chẹnyọ\nñwu wẹ dẹẹ",
+  corrected: "Ọpọ ki d'ẹnyọ\nñwu wẹ",
 };
 
 const ROUND_TRIP_PAIRS = [
@@ -47,9 +47,9 @@ const ROUND_TRIP_PAIRS = [
   REG_033,
   MULTILINE,
   // pure insertion
-  { original: "Agba ọjọ", corrected: "Agba ọjọ dẹẹ" },
+  { original: "Agba ọpọ", corrected: "Agba ọpọ dẹẹ" },
   // pure deletion (the "unnecessary ki" class of fix from Agnes's live review)
-  { original: "Ọjọ ki d'ẹnyọ ñwu wẹ", corrected: "Ọjọ d'ẹnyọ ñwu wẹ" },
+  { original: "Ọpọ ki d'ẹnyọ ñwu wẹ", corrected: "Ọpọ d'ẹnyọ ñwu wẹ" },
 ];
 
 /** True at a whitespace boundary or string edge of s. */
@@ -79,7 +79,7 @@ describe("diffToSegments / applySegments - the reconstruction proof", () => {
   });
 
   it("pure insertion yields start === end with empty original", () => {
-    const segs = diffToSegments("Agba ọjọ", "Agba ọjọ dẹẹ");
+    const segs = diffToSegments("Agba ọpọ", "Agba ọpọ dẹẹ");
     expect(segs.length).toBe(1);
     expect(segs[0].original).toBe("");
     expect(segs[0].start).toBe(segs[0].end);
@@ -87,7 +87,7 @@ describe("diffToSegments / applySegments - the reconstruction proof", () => {
   });
 
   it("pure deletion yields an empty replacement", () => {
-    const segs = diffToSegments("Ọjọ ki d'ẹnyọ ñwu wẹ", "Ọjọ d'ẹnyọ ñwu wẹ");
+    const segs = diffToSegments("Ọpọ ki d'ẹnyọ ñwu wẹ", "Ọpọ d'ẹnyọ ñwu wẹ");
     expect(segs.length).toBe(1);
     expect(segs[0].replacement).toBe("");
     expect(segs[0].original).toContain("ki");
@@ -140,8 +140,8 @@ describe("diffToSegments / applySegments - the reconstruction proof", () => {
 });
 
 describe("sanitizeSegments", () => {
-  const o = nfc(AUTH_012.original); // "Àgbá Ọ́jọ́"
-  const c = nfc(AUTH_012.corrected); // "Agba ọjọ"
+  const o = nfc(AUTH_012.original); // "Àgbá Ọ́pọ́"
+  const c = nfc(AUTH_012.corrected); // "Agba ọpọ"
   const good = () => diffToSegments(AUTH_012.original, AUTH_012.corrected);
 
   it("server-derivation parity: what the server derives, the server accepts", () => {
@@ -236,8 +236,8 @@ describe("adversarial: tampering with a stored segment set is DETECTED", () => {
   // re-validation gate (every consumer that trusts segments must go through
   // it), so each mutation below MUST come back null - the mutated set can
   // never masquerade as a faithful reconstruction of correctedText.
-  const o = nfc(AUTH_001.original); // "Ọjọ ki chẹnyọ ñwu wẹ"
-  const c = nfc(AUTH_001.corrected); // "Ọjọ ki d'ẹnyọ ñwu wẹ"
+  const o = nfc(AUTH_001.original); // "Ọpọ ki chẹnyọ ñwu wẹ"
+  const c = nfc(AUTH_001.corrected); // "Ọpọ ki d'ẹnyọ ñwu wẹ"
   const stored = () => diffToSegments(AUTH_001.original, AUTH_001.corrected);
 
   it("the untampered stored set still validates (control)", () => {
@@ -294,19 +294,19 @@ describe("adversarial: the full Igala grapheme hazard battery", () => {
     // tone-mark-only change on a dotted vowel: ẹ́ -> ẹ̀ (acute to grave)
     { original: "ẹ́ dẹ́", corrected: "ẹ̀ dẹ́" },
     // ọ̀ respelled to bare ọ
-    { original: "ọ̀jọ̀ gbọ", corrected: "ọjọ gbọ" },
+    { original: "ọ̀pọ̀ gbọ", corrected: "ọpọ gbọ" },
     // ñ added and removed (ñwu <-> nwu, the Igbo-word class of fix)
-    { original: "Ọjọ ñwu wẹ", corrected: "Ọjọ nwu wẹ" },
+    { original: "Ọpọ ñwu wẹ", corrected: "Ọpọ nwu wẹ" },
     // clause-final ǹ appended (precomposed U+01F9)
-    { original: "Ọjọ d'ẹnyọ wẹ", corrected: "Ọjọ d'ẹnyọ wẹ ǹ" },
+    { original: "Ọpọ d'ẹnyọ wẹ", corrected: "Ọpọ d'ẹnyọ wẹ ǹ" },
     // clause-final ǹ typed decomposed (explicit escape: n + U+0300)
-    { original: "Ọjọ d'ẹnyọ wẹ", corrected: "Ọjọ d'ẹnyọ wẹ n\u0300" },
+    { original: "Ọpọ d'ẹnyọ wẹ", corrected: "Ọpọ d'ẹnyọ wẹ n\u0300" },
     // apostrophized elision inserted (straight apostrophe)
-    { original: "Ọjọ ki chẹnyọ ñwu wẹ", corrected: "Ọjọ ki d'ẹnyọ ñwu wẹ" },
+    { original: "Ọpọ ki chẹnyọ ñwu wẹ", corrected: "Ọpọ ki d'ẹnyọ ñwu wẹ" },
     // curly apostrophe variant of the same elision
-    { original: "Ọjọ ki chẹnyọ ñwu wẹ", corrected: "Ọjọ ki d’ẹnyọ ñwu wẹ" },
+    { original: "Ọpọ ki chẹnyọ ñwu wẹ", corrected: "Ọpọ ki d’ẹnyọ ñwu wẹ" },
     // straight -> curly apostrophe INSIDE a token (punctuation-only change)
-    { original: "Ọjọ ki d'ẹnyọ ñwu wẹ", corrected: "Ọjọ ki d’ẹnyọ ñwu wẹ" },
+    { original: "Ọpọ ki d'ẹnyọ ñwu wẹ", corrected: "Ọpọ ki d’ẹnyọ ñwu wẹ" },
   ];
 
   it("round-trips every hazard pair exactly", () => {
@@ -338,8 +338,8 @@ describe("adversarial: the full Igala grapheme hazard battery", () => {
     // The realistic phone case: the model output arrives NFD, the annotator's
     // keyboard emits NFC, and they change one word. Without normalization the
     // whole string would light up as a phantom diff.
-    const originalNfd = "Ọjọ ki chẹnyọ ñwu wẹ".normalize("NFD");
-    const correctedNfc = nfc("Ọjọ ki d'ẹnyọ ñwu wẹ");
+    const originalNfd = "Ọpọ ki chẹnyọ ñwu wẹ".normalize("NFD");
+    const correctedNfc = nfc("Ọpọ ki d'ẹnyọ ñwu wẹ");
     const segs = diffToSegments(originalNfd, correctedNfc);
     expect(segs).toHaveLength(1);
     expect(segs[0].original).toBe("chẹnyọ");
@@ -349,7 +349,7 @@ describe("adversarial: the full Igala grapheme hazard battery", () => {
 
   it("MIXED normalization inside one string still yields zero phantom segments", () => {
     // First half NFC, second half NFD of the same visible text.
-    const visible = "ẹ́lẹ̀ ọ̀nà ñwu ǹ";
+    const visible = "ẹ́lẹ̀ ọ̀yà ñwu ǹ";
     const mixed =
       visible.slice(0, 6).normalize("NFC") + visible.slice(6).normalize("NFD");
     expect(diffToSegments(mixed, visible.normalize("NFC"))).toEqual([]);

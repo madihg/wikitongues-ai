@@ -15,8 +15,8 @@ import {
 // by three annotators, and one sentence written with different spacing and
 // elision. Fixed inputs, exact expectations - every assertion is a
 // re-computation of a pure function, never a statistical gamble.
-const ODUDU = ["Ọdudu", "Òdúdú", "ódùdù"];
-const CHILD_EATS = ["Ọma lẹ a jẹ ñwu", "Ọma lẹ aj'ẹñwu", "Ọma le a jẹñwu"];
+const OKUKU = ["Ọkuku", "Òkúkú", "ókùkù"];
+const CHILD_EATS = ["Ọwa lẹ a jẹ ñwu", "Ọwa lẹ aj'ẹñwu", "Ọwa le a jẹñwu"];
 // Same word, two Unicode shapes: precomposed U+1ECC vs plain O + combining
 // dot below (U+0323). They look identical on screen.
 const PRECOMPOSED = "\u1ECCdudu";
@@ -63,53 +63,53 @@ describe("comparison keys", () => {
   });
 
   it("spellingKey folds tone marks, dotted vowels and case but keeps spacing", () => {
-    expect(ODUDU.map(spellingKey)).toEqual(["odudu", "odudu", "odudu"]);
-    expect(spellingKey("Ọma lẹ a jẹ ñwu")).toBe("oma le a je nwu");
+    expect(OKUKU.map(spellingKey)).toEqual(["okuku", "okuku", "okuku"]);
+    expect(spellingKey("Ọwa lẹ a jẹ ñwu")).toBe("owa le a je nwu");
     // Spacing is preserved, so a differently-spaced sentence gets a different key.
-    expect(spellingKey("Ọma lẹ aj'ẹñwu")).not.toBe(
-      spellingKey("Ọma lẹ a jẹ ñwu"),
+    expect(spellingKey("Ọwa lẹ aj'ẹñwu")).not.toBe(
+      spellingKey("Ọwa lẹ a jẹ ñwu"),
     );
   });
 
   it("toneKey keeps tone marks but strips spacing and elision apostrophes", () => {
-    expect(toneKey("Ọma lẹ a jẹñwu")).toBe(toneKey("Ọma lẹ aj'ẹñwu"));
+    expect(toneKey("Ọwa lẹ a jẹñwu")).toBe(toneKey("Ọwa lẹ aj'ẹñwu"));
     // Straight, curly and modifier apostrophes are all treated as elision marks.
     expect(toneKey("aj'ẹ")).toBe(toneKey("aj’ẹ"));
     expect(toneKey("aj'ẹ")).toBe(toneKey("ajʼẹ"));
     // Tone marks still tell two spellings apart.
-    expect(toneKey("Òdúdú")).not.toBe(toneKey("ódùdù"));
+    expect(toneKey("Òkúkú")).not.toBe(toneKey("ókùkù"));
   });
 
   it("soundKey strips both, so every writing of one word collapses together", () => {
-    expect(new Set(ODUDU.map(soundKey)).size).toBe(1);
+    expect(new Set(OKUKU.map(soundKey)).size).toBe(1);
     expect(new Set(CHILD_EATS.map(soundKey)).size).toBe(1);
-    expect(soundKey("Ọdudu")).not.toBe(soundKey("Ọjọ"));
+    expect(soundKey("Ọkuku")).not.toBe(soundKey("Ọpọ"));
   });
 
   it("soundKey does not collapse genuinely different words", () => {
-    const different = ["Baba ọ lo'dudu", "Mama ọlañẹ", "Edanyekwu ñwu ogijo"];
+    const different = ["Haha ọ to'kuku", "Wawa ọtañẹ", "Ekaygerfu ñfu omipo"];
     expect(new Set(different.map(soundKey)).size).toBe(3);
   });
 });
 
 describe("describeDifference", () => {
   it("returns null for a single form", () => {
-    expect(describeDifference(["Ọdudu"])).toBeNull();
+    expect(describeDifference(["Ọkuku"])).toBeNull();
   });
 
   it("calls tone marks and letter forms 'marks'", () => {
-    expect(describeDifference(ODUDU)).toBe("marks");
-    expect(describeDifference(["Ọdudu", "odudu"])).toBe("marks");
+    expect(describeDifference(OKUKU)).toBe("marks");
+    expect(describeDifference(["Ọkuku", "okuku"])).toBe("marks");
   });
 
   it("calls spacing and elision 'spacing' when the marks are identical", () => {
-    expect(describeDifference(["Ọma lẹ a jẹñwu", "Ọma lẹ aj'ẹñwu"])).toBe(
+    expect(describeDifference(["Ọwa lẹ a jẹñwu", "Ọwa lẹ aj'ẹñwu"])).toBe(
       "spacing",
     );
   });
 
   it("calls it 'marks_and_spacing' when both differ", () => {
-    expect(describeDifference(["Ọma lẹ a jẹ ñwu", "Ọma le aj'ẹñwu"])).toBe(
+    expect(describeDifference(["Ọwa lẹ a jẹ ñwu", "Ọwa le aj'ẹñwu"])).toBe(
       "marks_and_spacing",
     );
   });
@@ -143,9 +143,9 @@ describe("classifyVariantKind", () => {
 
 describe("buildAnswerVariantGroups", () => {
   it("classifies one word written three ways as a spelling group", () => {
-    const [group] = buildAnswerVariantGroups(rowsFrom(ODUDU));
+    const [group] = buildAnswerVariantGroups(rowsFrom(OKUKU));
     expect(group.kind).toBe("spelling");
-    expect(group.variants.map((v) => v.text)).toEqual(ODUDU);
+    expect(group.variants.map((v) => v.text)).toEqual(OKUKU);
     expect(group.clusters).toHaveLength(1);
     expect(group.clusters[0].variantIndexes).toEqual([0, 1, 2]);
     expect(group.clusters[0].difference).toBe("marks");
@@ -162,7 +162,7 @@ describe("buildAnswerVariantGroups", () => {
 
   it("classifies genuinely different answers as a different-words group", () => {
     const [group] = buildAnswerVariantGroups(
-      rowsFrom(["Baba ọ lo'dudu", "Mama ọlañẹ"]),
+      rowsFrom(["Haha ọ to'kuku", "Wawa ọtañẹ"]),
     );
     expect(group.kind).toBe("different");
     expect(group.clusters).toHaveLength(2);
@@ -171,7 +171,7 @@ describe("buildAnswerVariantGroups", () => {
 
   it("classifies a group holding both kinds as mixed", () => {
     const [group] = buildAnswerVariantGroups(
-      rowsFrom(["Ọdudu", "ódùdù", "Mama ọlañẹ"]),
+      rowsFrom(["Ọkuku", "ókùkù", "Wawa ọtañẹ"]),
     );
     expect(group.kind).toBe("mixed");
     expect(group.clusters.map((c) => c.variantIndexes)).toEqual([[0, 1], [2]]);
@@ -179,7 +179,7 @@ describe("buildAnswerVariantGroups", () => {
 
   it("leads a mixed group with its biggest same-word cluster", () => {
     const [group] = buildAnswerVariantGroups(
-      rowsFrom(["Mama ọlañẹ", "Ọdudu", "ódùdù", "Òdúdú"]),
+      rowsFrom(["Wawa ọtañẹ", "Ọkuku", "ókùkù", "Òkúkú"]),
     );
     expect(group.kind).toBe("mixed");
     expect(group.clusters.map((c) => c.variantIndexes)).toEqual([
@@ -192,15 +192,15 @@ describe("buildAnswerVariantGroups", () => {
 
   it("drops a prompt only one annotator answered, however many times", () => {
     const rows = [
-      row({ answerText: "Ọdudu" }),
-      row({ answerText: "Òdúdú" }),
-      row({ answerText: "ódùdù" }),
+      row({ answerText: "Ọkuku" }),
+      row({ answerText: "Òkúkú" }),
+      row({ answerText: "ókùkù" }),
     ];
     expect(buildAnswerVariantGroups(rows)).toEqual([]);
   });
 
   it("drops a prompt everybody wrote identically - agreement is not a disagreement", () => {
-    const rows = rowsFrom(["Ọdudu", "Ọdudu", "Ọdudu"]);
+    const rows = rowsFrom(["Ọkuku", "Ọkuku", "Ọkuku"]);
     expect(buildAnswerVariantGroups(rows)).toEqual([]);
   });
 
@@ -211,15 +211,15 @@ describe("buildAnswerVariantGroups", () => {
   });
 
   it("treats a stray double space as the same wording, not a variant", () => {
-    const rows = rowsFrom(["Ọdudu", "Ọdudu "]);
+    const rows = rowsFrom(["Ọkuku", "Ọkuku "]);
     expect(buildAnswerVariantGroups(rows)).toEqual([]);
   });
 
   it("collapses exact re-submissions but still counts every row", () => {
     const rows = [
-      row({ answerText: "Ọdudu", annotatorId: "a", annotatorName: "A" }),
-      row({ answerText: "Ọdudu", annotatorId: "a", annotatorName: "A" }),
-      row({ answerText: "Òdúdú", annotatorId: "b", annotatorName: "B" }),
+      row({ answerText: "Ọkuku", annotatorId: "a", annotatorName: "A" }),
+      row({ answerText: "Ọkuku", annotatorId: "a", annotatorName: "A" }),
+      row({ answerText: "Òkúkú", annotatorId: "b", annotatorName: "B" }),
     ];
     const [group] = buildAnswerVariantGroups(rows);
     expect(group.variants).toHaveLength(2);
@@ -231,13 +231,13 @@ describe("buildAnswerVariantGroups", () => {
   it("lists every annotator who wrote a wording, and keeps their dialect", () => {
     const rows = [
       row({
-        answerText: "Ọdudu",
+        answerText: "Ọkuku",
         annotatorId: "a",
         annotatorName: "A",
         dialect: "ibaji",
       }),
-      row({ answerText: "Ọdudu", annotatorId: "b", annotatorName: "B" }),
-      row({ answerText: "Òdúdú", annotatorId: "c", annotatorName: "C" }),
+      row({ answerText: "Ọkuku", annotatorId: "b", annotatorName: "B" }),
+      row({ answerText: "Òkúkú", annotatorId: "c", annotatorName: "C" }),
     ];
     const [group] = buildAnswerVariantGroups(rows);
     expect(group.variants[0].writers).toEqual([
@@ -248,14 +248,14 @@ describe("buildAnswerVariantGroups", () => {
 
   it("backfills a dialect that a later identical row carries", () => {
     const rows = [
-      row({ answerText: "Ọdudu", annotatorId: "a", annotatorName: "A" }),
+      row({ answerText: "Ọkuku", annotatorId: "a", annotatorName: "A" }),
       row({
-        answerText: "Ọdudu",
+        answerText: "Ọkuku",
         annotatorId: "a",
         annotatorName: "A",
         dialect: "ankpa",
       }),
-      row({ answerText: "Òdúdú", annotatorId: "b", annotatorName: "B" }),
+      row({ answerText: "Òkúkú", annotatorId: "b", annotatorName: "B" }),
     ];
     const [group] = buildAnswerVariantGroups(rows);
     expect(group.variants[0].writers[0].dialect).toBe("ankpa");
@@ -264,19 +264,19 @@ describe("buildAnswerVariantGroups", () => {
   it("collects distinct English glosses per wording, ignoring blanks", () => {
     const rows = [
       row({
-        answerText: "Ọdudu",
+        answerText: "Ọkuku",
         annotatorId: "a",
         annotatorName: "A",
         englishGloss: "morning",
       }),
       row({
-        answerText: "Ọdudu",
+        answerText: "Ọkuku",
         annotatorId: "b",
         annotatorName: "B",
         englishGloss: "  morning  ",
       }),
       row({
-        answerText: "Òdúdú",
+        answerText: "Òkúkú",
         annotatorId: "c",
         annotatorName: "C",
         englishGloss: "   ",
@@ -289,19 +289,19 @@ describe("buildAnswerVariantGroups", () => {
 
   it("ignores empty answers rather than showing a blank variant", () => {
     const rows = [
-      row({ answerText: "Ọdudu", annotatorId: "a", annotatorName: "A" }),
+      row({ answerText: "Ọkuku", annotatorId: "a", annotatorName: "A" }),
       row({ answerText: "   ", annotatorId: "b", annotatorName: "B" }),
-      row({ answerText: "Òdúdú", annotatorId: "c", annotatorName: "C" }),
+      row({ answerText: "Òkúkú", annotatorId: "c", annotatorName: "C" }),
     ];
     const [group] = buildAnswerVariantGroups(rows);
-    expect(group.variants.map((v) => v.text)).toEqual(["Ọdudu", "Òdúdú"]);
+    expect(group.variants.map((v) => v.text)).toEqual(["Ọkuku", "Òkúkú"]);
   });
 
   it("sorts spelling groups first, then mixed, then different words", () => {
     const groups = buildAnswerVariantGroups([
-      ...rowsFrom(["Baba ọ lo'dudu", "Mama ọlañẹ"], "p_different"),
-      ...rowsFrom(["Ọdudu", "ódùdù", "Mama ọlañẹ"], "p_mixed"),
-      ...rowsFrom(ODUDU, "p_spelling"),
+      ...rowsFrom(["Haha ọ to'kuku", "Wawa ọtañẹ"], "p_different"),
+      ...rowsFrom(["Ọkuku", "ókùkù", "Wawa ọtañẹ"], "p_mixed"),
+      ...rowsFrom(OKUKU, "p_spelling"),
     ]);
     expect(groups.map((g) => g.promptId)).toEqual([
       "p_spelling",
@@ -312,9 +312,9 @@ describe("buildAnswerVariantGroups", () => {
 
   it("puts the most-answered prompt first inside a kind, tiebreaking on promptId", () => {
     const groups = buildAnswerVariantGroups([
-      ...rowsFrom(["Ọdudu", "Òdúdú"], "p_b"),
-      ...rowsFrom(["Ọdudu", "Òdúdú"], "p_a"),
-      ...rowsFrom(ODUDU, "p_c"),
+      ...rowsFrom(["Ọkuku", "Òkúkú"], "p_b"),
+      ...rowsFrom(["Ọkuku", "Òkúkú"], "p_a"),
+      ...rowsFrom(OKUKU, "p_c"),
     ]);
     expect(groups.map((g) => g.promptId)).toEqual(["p_c", "p_a", "p_b"]);
   });
@@ -323,10 +323,10 @@ describe("buildAnswerVariantGroups", () => {
 describe("countByKind", () => {
   it("counts each kind separately so the badges never double-count", () => {
     const groups = buildAnswerVariantGroups([
-      ...rowsFrom(ODUDU, "p1"),
+      ...rowsFrom(OKUKU, "p1"),
       ...rowsFrom(CHILD_EATS, "p2"),
-      ...rowsFrom(["Ọdudu", "ódùdù", "Mama ọlañẹ"], "p3"),
-      ...rowsFrom(["Baba ọ lo'dudu", "Mama ọlañẹ"], "p4"),
+      ...rowsFrom(["Ọkuku", "ókùkù", "Wawa ọtañẹ"], "p3"),
+      ...rowsFrom(["Haha ọ to'kuku", "Wawa ọtañẹ"], "p4"),
     ]);
     expect(countByKind(groups)).toEqual({
       spelling: 2,
