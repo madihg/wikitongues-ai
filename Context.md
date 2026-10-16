@@ -2380,14 +2380,18 @@ LYDIA'S DOC, checked against the bank and the screen
   config plus about a day; audio is 2 to 3 days plus a storage choice. No
   migration is needed for any but audio.
 
+DONE Oct 16 (Fable 5.1, on Halim's instruction)
+- Salem's researcher account created 2026-10-16 06:17 UTC with
+  prisma/create-annotators.ts --role researcher (Igala native assigned).
+  Lydia still has no account.
+- Reply sent in Lydia's "notes!" thread to Lydia and Salem with the login
+  (Gmail message 1a1435d8c8758ae7), 84 body words. Numbers as of Oct 16
+  05:11 UTC, round-4 non-demo: v4.5 vs plain 14 to 2 of 20 (2 ties, 2 both
+  inadequate); v4.5 vs v4.4 6 to 3 of 20 (8 ties, 3 both inadequate); v4.4 vs
+  plain 26 to 2 of 41; v4.4 vs v3 13 to 7 of 32 (10 ties); v3 vs plain 9 to 1
+  of 16.
+
 PENDING, Halim
-- Salem's account is NOT created yet. Command (prints the password in the
-  terminal only): from web/, npx tsx --env-file=.env.local
-  prisma/create-annotators.ts --role researcher "<email>:Salem Ejeba". Lydia
-  has no account either.
-- Gmail draft, unsent, reply in Lydia's "notes!" thread to Lydia and Salem
-  (draft id r5342141266021640389), 85 body words, one slot to fill (the
-  password).
 - Salem was not a recipient of Halim's Oct 12 reply on the write-up thread, so
   he has not seen the furigana answer.
 - Small public-site mismatches found: 1,767 comparisons in /api/public/stats
