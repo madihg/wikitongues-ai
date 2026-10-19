@@ -243,6 +243,14 @@ describe("POST /api/lab/speech/recording: refusals", () => {
 });
 
 describe("POST /api/lab/speech/recording: happy path", () => {
+  it("an answer written in the Lab is created with no consent pre-granted", async () => {
+    const res = await post({ ...valid, coldAuthorAnswerId: undefined, answerText: "an answer" });
+    expect(res.status).toBe(201);
+    const data = mockPrisma.coldAuthorAnswer.create.mock.calls[0][0].data;
+    expect(data.consentBenchmark).toBe(false);
+    expect(data.consentTraining).toBe(false);
+  });
+
   it("creates the row with the chosen tier and consent, and returns the upload", async () => {
     const res = await post({ ...valid, tier: "open", dialect: null });
     expect(res.status).toBe(201);

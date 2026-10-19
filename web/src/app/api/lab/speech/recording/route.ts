@@ -246,6 +246,12 @@ export async function POST(req: Request) {
         annotatorId,
         isDemo,
         demoSessionId,
+        // The model's defaults for these two are true (the pre-checked boxes
+        // of the text flow). The 2026-10-19 rights decision forbids any
+        // default toward licensing: an answer written here is community-only
+        // until its author chooses otherwise through the consent flow.
+        consentBenchmark: false,
+        consentTraining: false,
       },
       select: { id: true },
     });
