@@ -67,7 +67,7 @@ Run from `web/` for every story: `pnpm typecheck` (exit 0), `pnpm lint` (exit 0)
 - [ ] No public endpoint returns LICENSED, COMMUNITY-ONLY or test-set data; /api/public stays numbers and ids only (test).
 - [ ] Licensee accounts (new role LICENSEE) see only a delivery page: their agreements, snapshots, expiring signed URLs; every download writes access_log.
 - [ ] RLS on with deny-all policies on every data table; the app's service role path stays; no public bucket is ever created by code (test on the storage helper).
-- [ ] Public self-registration no longer grants ANNOTATOR; new annotators are created by a researcher or by invite.
+- [ ] Public self-registration is removed; every account (annotator or researcher) is created by the owner account only (Halim), through the existing create-annotators script or an owner-only admin screen; researchers cannot invite.
 
 ### 5. Opt-out and renewal enforcement
 
@@ -154,9 +154,9 @@ Run from `web/` for every story: `pnpm typecheck` (exit 0), `pnpm lint` (exit 0)
 ## Open questions (Halim)
 
 - Royalty pool share; free-tier revenue threshold; price tiers.
-- History remediation and the fate of the current 43-item test set (AUDIT.md A10).
+- (decided 2026-10-19) History is rewritten to purge the files; the 43-item test set is kept, not rotated.
 - Funding-source tags for existing data.
 - Consent translations (Igala first) and who records the oral script.
 - Counsel review of: consent wording, grant text, cross-border basis, BIPA, UBIT treatment, Gates and Lacuna terms.
-- Code licence for the site repo (none today).
+- (decided 2026-10-19) MIT on the platform, Apache-2.0 on the site; code only.
 [/PRD]

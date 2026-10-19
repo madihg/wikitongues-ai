@@ -96,7 +96,15 @@ Rule from Halim: third-party text sits in private storage only. Permissions (Bib
 
 Scope note (addendum): every finding in sections A to E applies to text contributions as much as to speech: gold answers, prompts, corrections, preferences, confidence ratings, annotations, dialect tags, transcriptions and translations. All existing text is COMMUNITY-ONLY until retrospective consent; the original terms (pre-checked benchmark and training boxes) are recorded on the rows by the Phase 3 backfill.
 
-## Decisions only Halim can make (so far)
+## Halim's decisions (2026-10-19, after reading this audit)
+
+- A10 history: HIDE it. Rewrite history to purge the files in sections A, B and H; do not rotate the 43-item test set (continuity of the exam matters more); remove the files from the tree now. The force-push itself happens only after Halim says "push" on the exact plan.
+- Private storage: Supabase for anything the app loads; a private repository for documents the team reads. Nothing drastic: loaders replace seeds, pages keep working.
+- H6: method open, Igala content private. The Igala-specific rules and prompt text leave the public repo and load from private storage; the marketing site shows the method, not the Igala prompt.
+- Code licences: MIT on the platform (as the README states), Apache-2.0 on the site. These cover code only, never language data.
+- D1 accounts: invite-only; only Halim creates accounts (researchers, Agnes and Salem included, cannot invite).
+
+## Decisions still open
 
 - A10 history: rewrite, or rotate the test set, or accept.
 - A6: keep the external-source retrieval seed in the public repo with attribution, or move it.
