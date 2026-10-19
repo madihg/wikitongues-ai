@@ -31,6 +31,7 @@
     "@ai-sdk/openai": "^3.0.29",
     "@auth/prisma-adapter": "^2.11.1",
     "@prisma/client": "^6.19.2",
+    "@supabase/supabase-js": "^2.106.0",
     "ai": "^6.0.89",
     "bcryptjs": "^3.0.3",
     "next": "16.1.6",

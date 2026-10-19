@@ -101,6 +101,9 @@ model User {
   rubricAxisScores    RubricAxisScore[]
   outputEdits         OutputEdit[]
   coldAuthorAnswers   ColdAuthorAnswer[]
+  speechRecordings    SpeechRecording[]
+  speechComparisons   SpeechComparison[]
+  consentGrants       ConsentGrant[]
   promptFlags         PromptFlag[]
   handoffReviews      HandoffItem[]        @relation("ReviewedBy")
   promptsCreated      Prompt[]             @relation("CreatedBy")
@@ -142,6 +145,8 @@ model Prompt {
   modelOutputs      ModelOutput[]
   coldAuthorAnswers ColdAuthorAnswer[]
   flags             PromptFlag[]
+  speechRecordings  SpeechRecording[]
+  speechComparisons SpeechComparison[]
 
   @@index([language, bucket])
   @@index([split])
@@ -199,6 +204,7 @@ model ModelOutput {
   rubricScores     RubricScore[]
   rubricAxisScores RubricAxisScore[]
   edits            OutputEdit[]
+  speechRecordings SpeechRecording[]
 
   @@index([candidateModelId])
   @@index([evalRunId])
@@ -368,8 +374,9 @@ model ColdAuthorAnswer {
   demoSessionId      String?
   createdAt          DateTime           @default(now())
 
-  prompt    Prompt @relation(fields: [promptId], references: [id])
-  annotator User   @relation(fields: [annotatorId], references: [id])
+  prompt           Prompt            @relation(fields: [promptId], references: [id])
+  annotator        User              @relation(fields: [annotatorId], references: [id])
+  speechRecordings SpeechRecording[]
 
   @@index([promptId])
   @@index([annotatorId])
@@ -779,4 +786,142 @@ model ParallelPair {
   // lexical-overlap retrieval but is deliberately not mapped here - Prisma
   // must never try to write a generated column. Query it with $queryRaw.
   @@unique([source, ref])
+}
+
+// ─── Speech Lab (researcher-only, behind SPEECH_LAB_ENABLED) ──────
+// Design: tasks/speech/lab-design-2026-10-19.md. Audio lives in the private
+// Supabase Storage bucket `igala-speech`; rows hold the path, never a URL.
+// The export rules (what may leave, and what never does) are code, not
+// convention: src/lib/speech/guard.ts.
+
+// What the speaker agreed to for ONE clip. community_only is the default and
+// never leaves the platform; open is CC-BY 4.0 and permanent once published.
+enum DataTier {
+  open
+  licensed
+  community_only
+}
+
+enum SourceType {
+  contributor // a consenting speaker recorded it for us
+  third_party // existing audio (e.g. a published recording): needs a rights check
+  derived // synthesised (TTS output)
+}
+
+enum RightsStatus {
+  cleared
+  pending
+  restricted
+}
+
+enum ConsentMethod {
+  written
+  oral
+}
+
+// A versioned consent text, stored verbatim with its hash so a grant can be
+// audited against exactly what the speaker saw or heard.
+model Consent {
+  id        String        @id @default(cuid())
+  version   String // e.g. 2026-10-19-v1
+  language  String        @default("en")
+  method    ConsentMethod
+  textHash  String // sha256 hex of `text`
+  text      String
+  createdAt DateTime      @default(now())
+
+  grants     ConsentGrant[]
+  recordings SpeechRecording[]
+
+  @@unique([version, language, method, textHash])
+}
+
+// One speaker's answers to the four separate questions, nothing pre-checked.
+// A new grant row is written on every change; the latest row is current.
+model ConsentGrant {
+  id                  String   @id @default(cuid())
+  consentId           String
+  userId              String
+  grantedAt           DateTime @default(now())
+  commercialLicensing Boolean  @default(false)
+  crossBorder         Boolean  @default(false)
+  voiceCloning        Boolean  @default(false)
+  speakerId           Boolean  @default(false)
+
+  consent Consent @relation(fields: [consentId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([userId, grantedAt])
+}
+
+model SpeechRecording {
+  id                 String         @id @default(cuid())
+  promptId           String
+  coldAuthorAnswerId String?
+  modelOutputId      String? // set for synthesised clips (later TTS outputs)
+  annotatorId        String?
+  storagePath        String // path inside the private bucket, never a URL
+  mimeType           String
+  durationMs         Int
+  sampleRate         Int
+  sizeBytes          Int? // set when the upload is confirmed
+  checksumSha256     String? // set when the upload is confirmed
+  uploadedAt         DateTime? // null until the client confirms the upload
+  dialect            String?
+  tier               DataTier       @default(community_only)
+  consentId          String?
+  consentVersion     String?
+  consentMethod      ConsentMethod?
+  voiceCloningOptIn  Boolean        @default(false)
+  speakerIdOptIn     Boolean        @default(false)
+  sourceType         SourceType     @default(contributor)
+  sourceRef          String?
+  sourceLicense      String?
+  rightsStatus       RightsStatus   @default(pending)
+  fundingSource      String         @default("unknown")
+  isTestSet          Boolean        @default(false) // forced true for frozen prompts
+  publishedOpenAt    DateTime? // set only by the publish step for OPEN clips
+  reviewStatus       String? // "keep" | "bad_audio" | "wrong_text"
+  isDemo             Boolean        @default(false)
+  demoSessionId      String?
+  createdAt          DateTime       @default(now())
+
+  prompt           Prompt             @relation(fields: [promptId], references: [id])
+  coldAuthorAnswer ColdAuthorAnswer?  @relation(fields: [coldAuthorAnswerId], references: [id])
+  modelOutput      ModelOutput?       @relation(fields: [modelOutputId], references: [id])
+  annotator        User?              @relation(fields: [annotatorId], references: [id])
+  consent          Consent?           @relation(fields: [consentId], references: [id])
+  comparisonsAsA   SpeechComparison[] @relation("ClipA")
+  comparisonsAsB   SpeechComparison[] @relation("ClipB")
+
+  @@index([promptId])
+  @@index([annotatorId])
+  @@index([isDemo])
+  @@index([tier])
+}
+
+// Blind A/B judgment of two clips for one prompt, mirroring PairwiseComparison.
+// winner: "a" | "b" | "tie" | "both_unusable". One counted (non-demo) row per
+// annotator and prompt, enforced in the route.
+model SpeechComparison {
+  id            String   @id @default(cuid())
+  promptId      String
+  recordingAId  String
+  recordingBId  String
+  winner        String
+  reasonTags    String[] @default([])
+  note          String   @default("")
+  annotatorId   String
+  isDemo        Boolean  @default(false)
+  demoSessionId String?
+  createdAt     DateTime @default(now())
+
+  prompt     Prompt          @relation(fields: [promptId], references: [id])
+  recordingA SpeechRecording @relation("ClipA", fields: [recordingAId], references: [id])
+  recordingB SpeechRecording @relation("ClipB", fields: [recordingBId], references: [id])
+  annotator  User            @relation(fields: [annotatorId], references: [id])
+
+  @@index([promptId])
+  @@index([annotatorId])
+  @@index([isDemo])
 }
