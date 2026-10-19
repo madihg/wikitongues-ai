@@ -15,6 +15,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/api-auth", () => ({ requireResearcher: mockRequireResearcher }));
 
 import { GET as exportRoute } from "@/app/api/lab/speech/export/route";
+import { exportOpenManifest } from "../../../scripts/speech/export-manifest";
 
 beforeEach(() => {
   process.env.SPEECH_LAB_ENABLED = "1";
@@ -76,6 +77,14 @@ const ENTRY_POINTS: EntryPoint[] = [
         .filter(Boolean)
         .map((l) => JSON.parse(l).clip as string);
     },
+  },
+  {
+    name: "script scripts/speech/export-manifest.ts (exportOpenManifest)",
+    released: (rows) =>
+      exportOpenManifest(rows.map((r) => ({ ...r, storagePath: r.id })))
+        .jsonl.split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l).clip as string),
   },
 ];
 
@@ -139,6 +148,8 @@ const REGISTERED_FILES = [
   "src/lib/speech/guard.ts", // defines the predicates
   "src/lib/speech/manifest.ts", // buildOpenManifest, the one builder
   "src/app/api/lab/speech/export/route.ts", // the export route
+  "src/lib/speech/open-rows.ts", // the shared candidate query (narrowing only)
+  "scripts/speech/export-manifest.ts", // the export script
 ];
 
 function sourceFiles(dir: string): string[] {
