@@ -78,6 +78,24 @@ All rows collected to date (1,547 judgments, 1,465 cold answers, 249 corrections
 4. Decide on history (A10). Default proposal: rotate the 43-item test set after the public copies are removed, rather than rewrite history, because the benchmark has been public since July and a rewrite still leaves forks and caches.
 5. Phase 2 to 7 as planned, all on this branch, PRs only.
 
+## H. Third-party text in the public repo (addendum of 2026-10-19)
+
+Rule from Halim: third-party text sits in private storage only. Permissions (Bible Society of Nigeria via Lydia Wiernik, GRN, authors) were granted to Wikitongues for internal use, not for republication, and the policy treats all third-party text as restricted until cleared. Every row below is a BLOCKER for that reason; none is deleted or rewritten without Halim's yes.
+
+| # | Where | What it is now | What it must become | Severity |
+|---|---|---|---|---|
+| H1 | web/prisma/seed-rag-igala.ts | About 1,000 lines of retrieval rows seeded from code: Igala Wikipedia prose (CC BY-SA 4.0), Wiktionary, Koelle 1854 via Lexibank (CC BY), ASJP and Glottolog (CC BY), chikhapo lexicon (MIT), three African Storybook titles (CC BY), plus project-written entries. Attribution is in each row's source column. Legal to publish under those licences, but it is third-party text in the public repo and a BY-SA block can never travel inside a LICENSED package. | Move the data to private storage (JSON loaded at seed time); keep only the loader in the repo. Tag every row source_type third_party, rights_status restricted until cleared, source_license as listed. | BLOCKER |
+| H2 | web/prisma/seed-rag-igala-concord.ts | Four retrieval rows paraphrasing Ejeba (2023), a CC BY-NC 4.0 JWAL article; header says cited and described, never copied. Also carries the author's personal email (see B1). | Derived from an NC source: source_type derived, inputs restricted; move content to private storage; remove the email. Flag the paraphrase-versus-excerpt line for counsel. | BLOCKER |
+| H3 | tasks/jwal-ejeba-2023-rule-inventory.md | Line-by-line inventory of Ejeba (2023) with 305 dotted-vowel characters of Igala example material and 7 frozen-item matches. | Private storage. | BLOCKER |
+| H4 | tasks/grammar-evidence-scholarship.md | Deep read of every accessible Igala document (papers, JSTOR-hosted and journal PDFs) with paradigms as tables; says prose is paraphrased with attribution. | Private storage (internal research use only under the sources' terms). | BLOCKER |
+| H5 | tasks/salem-lydia-writeup-2026-09-25-inventory.md | Inventory of Salem Ejeba and Lydia Wiernik's unpublished write-up (their copyright, no republication permission recorded). | Private storage, or written permission from both authors. | BLOCKER |
+| H6 | web/prisma/seed-rag-v4-3-grammar.ts, seed-rag-v4-5-grammar.ts, web/src/lib/generation-prompt-v4*.ts, web/src/lib/prompt-bank-v45.ts | Derived artifacts: grammar rules and prompt text written in our words from Ejeba (2023), the write-up and community corrections. Public today, hash-pinned on the marketing site. | Per the addendum these are source_type derived and inherit the most restrictive input (restricted). Decision for Halim: the method (rule templates, prompt skeleton) stays open; the Igala-specific rule content moves to private storage and is loaded at build or runtime. The site's verbatim prompt copy (content/en/igalaPrompts.ts) follows the same decision. | HIGH (decision) |
+| H7 | tasks/prompt-bank-v45-evidence-2026-10-08.md, tasks/rag-design.md, tasks/igala-corpus-sources.md | Evidence and design documents quoting model Igala and schematised community material; 0 frozen hits after the Oct 8 schematisation, but they are derived from community judgments and name sources under permission. | Private storage, or English-only summaries. | HIGH |
+| H8 | Bible sentence pairs | Not in the repo: ingested into ParallelPair (30,907 rows) from the Bible Society of Nigeria's IGL70 text under a permission recorded 2026-08-12 (web/prisma/ingest-bible-parallel.ts header: written terms held by Wikitongues, confirm before any public release). No committed file quotes verses. | Rows tagged third_party, restricted, source_ref IGL70; never exported; permission scope confirmed in writing before any derived artifact built on them leaves the community layer. | HIGH |
+| H9 | GRN "Words of Life" audio | Not in the repo (gitignored); provenance file only. Project-scoped signed agreement, non-commercial terms. | third_party, restricted; never OPEN or LICENSED. | MEDIUM |
+
+Scope note (addendum): every finding in sections A to E applies to text contributions as much as to speech: gold answers, prompts, corrections, preferences, confidence ratings, annotations, dialect tags, transcriptions and translations. All existing text is COMMUNITY-ONLY until retrospective consent; the original terms (pre-checked benchmark and training boxes) are recorded on the rows by the Phase 3 backfill.
+
 ## Decisions only Halim can make (so far)
 
 - A10 history: rewrite, or rotate the test set, or accept.
@@ -85,3 +103,5 @@ All rows collected to date (1,547 judgments, 1,465 cold answers, 249 corrections
 - A8: ask Salem and Lydia for permission to keep their inventory public, or move it.
 - C6: add LICENSE (MIT, code only) to the platform repo; pick a code licence for the site repo.
 - D1: how new annotator accounts are created from now on.
+- H6: whether the Igala-specific grammar rules and prompt text (today public and hash-pinned on the site) move to private storage, leaving only the method templates public.
+- H1 to H5: confirm the move of all third-party text to private storage and name the storage (private repo, Drive, or Supabase bucket).

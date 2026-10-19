@@ -1,11 +1,15 @@
 [PRD]
 # PRD: Data rights, consent and three-tier licensing
 
-Date: 2026-10-19. Owner: Halim Madi. Status: draft, supersedes the ownership answer in tasks/speech/prd-igala-speech-tts-first-2026-10-19.md. Audit of the current state: AUDIT.md. Legal wording is PENDING COUNSEL throughout; this document specifies product behaviour, not legal advice.
+Date: 2026-10-19, addendum applied the same day (scope widened to all contributions, provenance, derived artifacts, open methodology). Owner: Halim Madi. Status: draft, supersedes the ownership answer in tasks/speech/prd-igala-speech-tts-first-2026-10-19.md. Audit of the current state: AUDIT.md. Legal wording is PENDING COUNSEL throughout; this document specifies product behaviour, not legal advice.
 
 ## Overview
 
-Contributors (Igala speakers who record, write, correct and judge) keep the copyright in what they create. Wikitongues holds a non-exclusive, sublicensable licence scoped per item by a tier the contributor chooses, and holds the compilation. Every item is one of three tiers: OPEN (CC-BY 4.0, permanent once published), LICENSED (bespoke non-exclusive commercial licence under a signed agreement and gated access), or COMMUNITY-ONLY (used only inside that community's own retrieval layer). Nothing is pre-selected toward licensing; an item without an explicit choice is COMMUNITY-ONLY. The private benchmark never leaves. Contributors are paid a fixed share of licensing revenue. Everything collected so far is COMMUNITY-ONLY until each contributor gives retrospective consent.
+Scope: every contribution type, not only speech: recordings, written gold answers, prompts and question-answer pairs, corrections, pairwise preferences, confidence ratings, annotations, dialect tags, transcriptions and translations. The held-out test set includes text (the 43 held-out Igala questions). Where any document, schema, screen or copy says "speech data" for something that applies to all of these, it says "contributions" or "language data".
+
+Contributors (Igala speakers who record, write, correct and judge) keep the copyright in what they create. Wikitongues holds a non-exclusive, sublicensable licence scoped per item by a tier the contributor chooses, and holds the compilation. Every item is one of three tiers: OPEN (CC-BY 4.0, permanent once published), LICENSED (bespoke non-exclusive commercial licence under a signed agreement and gated access), or COMMUNITY-ONLY (used only inside that community's own retrieval layer). Nothing is pre-selected toward licensing; an item without an explicit choice is COMMUNITY-ONLY. The private benchmark never leaves. Contributors are paid a fixed share of licensing revenue. Everything collected so far, text included, is COMMUNITY-ONLY until each contributor gives retrospective consent; where original terms are documented (the pre-checked benchmark and training boxes, the GRN agreement) they are recorded on the row.
+
+Three layers are kept apart: code (open), method writing (open), data (the three tiers, never in the repo). Copy rule: "Our method is open. Our communities' data is theirs."
 
 Copy rule for every surface: "Speakers keep the rights to what they record and write." and "Wikitongues licenses data only as each speaker chooses."
 
@@ -25,7 +29,7 @@ The Oct 19 speech PRD said "Wikitongues owns the data and releases it CC-BY-4.0"
 - Every data item carries a tier, a consent record (versioned text, hash, method) and a funding source, and the defaults protect the contributor.
 - No path (API, export, script, backup, repo) can move COMMUNITY-ONLY or test-set data out; this is proven by tests that try every path.
 - Contributors can see, change and opt out of their items' tiers and see their royalty statements.
-- Licensees receive data only through authenticated, logged, expiring delivery under an active signed agreement, with the community allow-list enforced.
+- Licensees receive language data only through authenticated, logged, expiring delivery under an active signed agreement, with the community allow-list enforced.
 - Labs evaluate against the private benchmark only as a service that returns scores.
 - The repository holds no contributor data, no test-set content and no personal data.
 
@@ -111,6 +115,26 @@ Run from `web/` for every story: `pnpm typecheck` (exit 0), `pnpm lint` (exit 0)
 - [ ] No contributor data, test-set content or personal data in the repo; synthetic fixtures only; .gitignore for backups and results.
 - [ ] LICENSE: MIT, code only (the README already says MIT). DATA_LICENSE.md: the three tiers, no data covered by the code licence, how to request a licence, the opt-out promise. README section "Data and licensing". CONTRIBUTING: real contributor data never goes in the repo.
 - [ ] Dataset card template for OPEN releases: CC-BY 4.0, Local Contexts labels, funding source, consent version, known limits.
+
+### 12b. Provenance of every corpus item
+
+- [ ] Every row in LexEntry, ParallelPair, RagEntry and every contribution table carries source_type (contributor | third_party | derived), source_ref, source_license, rights_status (cleared | pending | restricted; default restricted for third_party, pending for contributor until consent, derived computed from inputs).
+- [ ] Known third-party sources are seeded as restricted until cleared: Igala Wikipedia text (CC BY-SA 4.0: may go out only under BY-SA with attribution, never inside a proprietary licensed package); Bible sentence pairs (publisher copyright; permission request to GRN pending); JSTOR PDFs and linguistics papers (no redistribution, internal research use under their terms); Salem Ejeba's Igala catalogue (rights unknown).
+- [ ] Export rule, tested: LICENSED and OPEN exports include only items with rights_status cleared and source_type contributor, or derived items whose inputs are all cleared. Third-party text never ships to a licensee by any path.
+
+### 12c. Derived artifacts
+
+- [ ] Extracted grammar rules, retrieval context rows and per-language system prompts are source_type derived and inherit the most restrictive tier and rights_status of their inputs (computed and stored, with the input ids).
+- [ ] A language's retrieval layer belongs to its community: the community uses it free; labs receive it only under LICENSED.
+- [ ] Prefer rules paraphrased in our own words; verbatim third-party excerpts are kept out of anything shipped and flagged for counsel (PENDING COUNSEL).
+
+### 12d. Methodology is open
+
+- [ ] Code (pipeline, platform): the platform keeps its stated MIT; where no licence exists (site repo) propose Apache-2.0 in the PR and ask Halim before adding it. Never AGPL or Hippocratic.
+- [ ] Method writing (papers, annotation guidelines, rubrics, prompt templates with no community data): CC-BY 4.0, stated in a README section and docs/LICENSE-METHOD.md.
+- [ ] Data: the three tiers, never in the repo.
+- [ ] Paid services are separate from both layers: evaluation-as-a-service against the private test set, and onboarding a new language for a lab or government. Service income may be taxable unlike passive royalties (PENDING COUNSEL).
+- [ ] Copy on every surface: "Our method is open. Our communities' data is theirs." Never imply the method or code is proprietary; never imply contributors' data is open.
 
 ### 13. Non-goals
 
