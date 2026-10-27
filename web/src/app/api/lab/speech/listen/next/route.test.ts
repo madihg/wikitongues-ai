@@ -1,26 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 
-const { mockPrisma, mockRequireResearcher, mockSignedRead } = vi.hoisted(
-  () => ({
-    mockPrisma: {
-      speechRecording: { findMany: vi.fn() },
-      speechComparison: { findMany: vi.fn() },
-    },
-    mockRequireResearcher: vi.fn(),
-    mockSignedRead: vi.fn(),
-  }),
-);
+const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
+  mockPrisma: {
+    speechRecording: { findMany: vi.fn() },
+    speechComparison: { findMany: vi.fn() },
+  },
+  mockRequireResearcher: vi.fn(),
+}));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/api-auth", () => ({ requireResearcher: mockRequireResearcher }));
-vi.mock("@/lib/speech/storage", async (orig) => ({
-  ...(await orig<typeof import("@/lib/speech/storage")>()),
-  signedReadUrl: mockSignedRead,
-}));
 
 import { GET } from "./route";
 import { abSwap, assignedPair } from "@/lib/pairing";
-import { StorageConfigError } from "@/lib/speech/storage";
 
 const original = process.env.SPEECH_LAB_ENABLED;
 
@@ -31,7 +23,7 @@ let t = 0;
 const clip = (over: Record<string, unknown> = {}) => ({
   id: `clip-${++t}`,
   promptId: "p-1",
-  storagePath: `clips/clip-${t}.webm`,
+  language: "igala",
   annotatorId: `speaker-${t}`,
   modelOutputId: null,
   sourceType: "contributor",
@@ -51,9 +43,6 @@ beforeEach(() => {
   });
   mockPrisma.speechRecording.findMany.mockResolvedValue([]);
   mockPrisma.speechComparison.findMany.mockResolvedValue([]);
-  mockSignedRead.mockImplementation(
-    async (p: string) => `https://storage.example/sign/${p}?token=t`,
-  );
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -106,7 +95,10 @@ describe("GET /api/lab/speech/listen/next", () => {
       promptId: "code_001",
       text: "Say hello.",
     });
-    expect(body.task.clipA.url).toContain("token=t");
+    expect(body.task.clipA.url).toBe(
+      `/api/lab/speech/recording/${expectA}/audio`,
+    );
+    expect(body.task.language).toBe("igala");
   });
 
   it("keeps the same A and B across reloads", async () => {
@@ -167,7 +159,7 @@ describe("GET /api/lab/speech/listen/next", () => {
   it("skips prompts the researcher already judged", async () => {
     mockPrisma.speechRecording.findMany.mockResolvedValue([clip(), clip()]);
     mockPrisma.speechComparison.findMany.mockResolvedValue([
-      { promptId: "p-1" },
+      { promptId: "p-1", recordingA: { language: "igala" } },
     ]);
     const body = await (await get()).json();
     expect(body.complete).toBe(true);
@@ -202,11 +194,44 @@ describe("GET /api/lab/speech/listen/next", () => {
     ).toEqual([{ isDemo: false }, { demoSessionId: "sess-1" }]);
   });
 
-  it("503 when storage is not configured, 502 on another storage failure", async () => {
-    mockPrisma.speechRecording.findMany.mockResolvedValue([clip(), clip()]);
-    mockSignedRead.mockRejectedValue(new StorageConfigError("no key"));
-    expect((await get()).status).toBe(503);
-    mockSignedRead.mockRejectedValue(new Error("boom"));
-    expect((await get()).status).toBe(502);
+  it("never pairs an Igala clip with an English one", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      clip({ language: "igala" }),
+      clip({ language: "english" }),
+    ]);
+    expect((await (await get()).json()).complete).toBe(true);
+  });
+
+  it("pairs English clips with each other, and says the language", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      clip({ language: "igala" }),
+      clip({ language: "english" }),
+      clip({ language: "english" }),
+    ]);
+    const body = await (await get()).json();
+    expect(body.complete).toBe(false);
+    expect(body.task.language).toBe("english");
+    expect(body.task.clipA.id).not.toBe("clip-1");
+    expect(body.task.clipB.id).not.toBe("clip-1");
+  });
+
+  it("a judgment in one language does not finish the other language", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      clip({ language: "igala" }),
+      clip({ language: "igala" }),
+      clip({ language: "english" }),
+      clip({ language: "english" }),
+    ]);
+    mockPrisma.speechComparison.findMany.mockResolvedValue([
+      { promptId: "p-1", recordingA: { language: "igala" } },
+    ]);
+    const body = await (await get()).json();
+    expect(body.task.language).toBe("english");
+  });
+
+  it("selects no audio bytes", async () => {
+    await get();
+    const sel = mockPrisma.speechRecording.findMany.mock.calls[0][0].select;
+    expect(sel).not.toHaveProperty("bytes");
   });
 });

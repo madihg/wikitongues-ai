@@ -23,6 +23,7 @@ const answerRow = (over: Record<string, unknown> = {}) => ({
   id: "ans-1",
   promptId: "p-1",
   answerText: "an english stand-in answer",
+  englishGloss: "what it means in english",
   dialect: null,
   createdAt: new Date("2026-10-01T00:00:00Z"),
   prompt: {
@@ -73,6 +74,7 @@ describe("GET /api/lab/speech/next", () => {
     expect(body.task.ownAnswer).toEqual({
       id: "ans-1",
       text: "an english stand-in answer",
+      englishGloss: "what it means in english",
       dialect: null,
     });
     expect(body.task.prompt.promptId).toBe("code_001");
@@ -155,7 +157,7 @@ describe("GET /api/lab/speech/next", () => {
     });
   });
 
-  it("leaves out prompts already recorded for real", async () => {
+  it("leaves out prompts already recorded for real in Igala (an English clip alone does not finish a prompt)", async () => {
     mockPrisma.speechRecording.findMany.mockResolvedValue([
       { promptId: "p-1" },
       { promptId: "p-1" },
@@ -166,6 +168,7 @@ describe("GET /api/lab/speech/next", () => {
     expect(mockPrisma.speechRecording.findMany.mock.calls[0][0].where).toEqual({
       annotatorId: "r1",
       isDemo: false,
+      language: "igala",
     });
     expect(
       mockPrisma.coldAuthorAnswer.findMany.mock.calls[0][0].where.prompt.id,

@@ -1,27 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 
-const { mockPrisma, mockRequireResearcher, mockSignedUpload } = vi.hoisted(
-  () => ({
-    mockPrisma: {
-      prompt: { findUnique: vi.fn() },
-      consentGrant: { findFirst: vi.fn() },
-      coldAuthorAnswer: { findFirst: vi.fn(), create: vi.fn() },
-      speechRecording: { create: vi.fn() },
-    },
-    mockRequireResearcher: vi.fn(),
-    mockSignedUpload: vi.fn(),
-  }),
-);
+const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
+  mockPrisma: {
+    prompt: { findUnique: vi.fn() },
+    consentGrant: { findFirst: vi.fn() },
+    coldAuthorAnswer: { findFirst: vi.fn(), create: vi.fn() },
+    speechRecording: { create: vi.fn() },
+  },
+  mockRequireResearcher: vi.fn(),
+}));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/api-auth", () => ({ requireResearcher: mockRequireResearcher }));
-vi.mock("@/lib/speech/storage", async (orig) => ({
-  ...(await orig<typeof import("@/lib/speech/storage")>()),
-  signedUploadUrl: mockSignedUpload,
-}));
 
 import { POST } from "./route";
-import { StorageConfigError } from "@/lib/speech/storage";
 import { CONSENT_VERSION } from "@/lib/speech/consent-text";
 
 const original = process.env.SPEECH_LAB_ENABLED;
@@ -71,12 +63,6 @@ beforeEach(() => {
   mockPrisma.speechRecording.create.mockImplementation(
     async ({ data }: { data: { id: string } }) => ({ id: data.id }),
   );
-  mockSignedUpload.mockImplementation(async (path: string, mime: string) => ({
-    uploadUrl: `https://storage.example/upload/${path}?token=t`,
-    token: "t",
-    path,
-    contentType: mime.split(";")[0],
-  }));
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -124,13 +110,49 @@ describe("POST /api/lab/speech/recording: refusals", () => {
     expect((await post({ ...valid, durationMs: 30_000 })).status).toBe(201);
   });
 
-  it("400 for a declared size over 5 MB, and none at exactly 5 MB", async () => {
+  it("400 for a declared size over 4 MB, and none at exactly 4 MB", async () => {
     expect(
-      (await post({ ...valid, sizeBytes: 5 * 1024 * 1024 + 1 })).status,
+      (await post({ ...valid, sizeBytes: 4 * 1024 * 1024 + 1 })).status,
     ).toBe(400);
-    expect((await post({ ...valid, sizeBytes: 5 * 1024 * 1024 })).status).toBe(
+    expect((await post({ ...valid, sizeBytes: 4 * 1024 * 1024 })).status).toBe(
       201,
     );
+  });
+
+  it("400 for an unknown language; igala is the default; english is accepted", async () => {
+    expect((await post({ ...valid, language: "french" })).status).toBe(400);
+    expect((await post({ ...valid, language: 7 })).status).toBe(400);
+    await post(valid);
+    await post({ ...valid, language: "english" });
+    const calls = mockPrisma.speechRecording.create.mock.calls;
+    expect(calls[0][0].data.language).toBe("igala");
+    expect(calls[1][0].data.language).toBe("english");
+  });
+
+  it("keeps sanitised quality metrics, drops junk, and never fails on them", async () => {
+    const quality = {
+      durationMs: 4100,
+      leadingSilenceMs: 200,
+      trailingSilenceMs: 400,
+      speechShare: 0.8,
+      rmsDbfs: -21.3,
+      peakDbfs: -3,
+      clippingShare: 0,
+      syllables: 9,
+      syllablesPerSecond: 2.4,
+      retakes: 1,
+      evil: "<script>",
+    };
+    expect((await post({ ...valid, quality })).status).toBe(201);
+    expect((await post({ ...valid, quality: "nonsense" })).status).toBe(201);
+    const calls = mockPrisma.speechRecording.create.mock.calls;
+    expect(calls[0][0].data.quality).toMatchObject({
+      durationMs: 4100,
+      rmsDbfs: -21.3,
+      retakes: 1,
+    });
+    expect(calls[0][0].data.quality).not.toHaveProperty("evil");
+    expect(calls[1][0].data).not.toHaveProperty("quality");
   });
 
   it("400 for a non-audio mime type, a bad duration, or a malformed body", async () => {
@@ -157,7 +179,6 @@ describe("POST /api/lab/speech/recording: refusals", () => {
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: "Forbidden" });
     expect(mockPrisma.consentGrant.findFirst).not.toHaveBeenCalled();
-    expect(mockSignedUpload).not.toHaveBeenCalled();
     expect(created()).toBe(0);
   });
 
@@ -224,22 +245,6 @@ describe("POST /api/lab/speech/recording: refusals", () => {
     ).toBe(400);
     expect((await post({ ...valid, answerText: "   " })).status).toBe(400);
   });
-
-  it("503 and no row when storage is not configured", async () => {
-    mockSignedUpload.mockRejectedValue(new StorageConfigError("no key"));
-    expect((await post(valid)).status).toBe(503);
-    expect(created()).toBe(0);
-    expect(mockPrisma.coldAuthorAnswer.create).not.toHaveBeenCalled();
-  });
-
-  it("502 and no row when the storage call fails", async () => {
-    mockSignedUpload.mockRejectedValue(new Error("boom"));
-    expect((await post({ ...valid, answerText: "an answer" })).status).toBe(
-      502,
-    );
-    expect(created()).toBe(0);
-    expect(mockPrisma.coldAuthorAnswer.create).not.toHaveBeenCalled();
-  });
 });
 
 describe("POST /api/lab/speech/recording: happy path", () => {
@@ -251,7 +256,7 @@ describe("POST /api/lab/speech/recording: happy path", () => {
     expect(data.consentTraining).toBe(false);
   });
 
-  it("creates the row with the chosen tier and consent, and returns the upload", async () => {
+  it("creates the row with the chosen tier and consent, and returns the audio URL", async () => {
     const res = await post({ ...valid, tier: "open", dialect: null });
     expect(res.status).toBe(201);
     const body = await res.json();
@@ -282,16 +287,15 @@ describe("POST /api/lab/speech/recording: happy path", () => {
     expect(data).not.toHaveProperty("uploadedAt");
 
     expect(body.id).toBe(data.id);
-    expect(body.upload.uploadUrl).toContain("token=t");
-    expect(body.upload.contentType).toBe("audio/webm");
+    expect(body.audioUrl).toBe(`/api/lab/speech/recording/${data.id}/audio`);
+    expect(body).not.toHaveProperty("upload");
     expect(body.limits).toEqual({
-      maxBytes: 5 * 1024 * 1024,
+      maxBytes: 4 * 1024 * 1024,
       maxDurationMs: 30000,
     });
-    expect(mockSignedUpload).toHaveBeenCalledWith(
-      data.storagePath,
-      "audio/webm;codecs=opus",
-    );
+    // The row carries no audio yet: bytes come with the PUT, which also sets
+    // uploadedAt.
+    expect(data).not.toHaveProperty("bytes");
   });
 
   it("stores the row as community_only when the speaker chose that", async () => {
@@ -367,21 +371,5 @@ describe("POST /api/lab/speech/recording: happy path", () => {
       isDemo: true,
       demoSessionId: "sess-1",
     });
-  });
-
-  it("mints the upload URL before writing any row", async () => {
-    const order: string[] = [];
-    mockSignedUpload.mockImplementation(async (path: string) => {
-      order.push("url");
-      return { uploadUrl: "u", token: "t", path, contentType: "audio/webm" };
-    });
-    mockPrisma.speechRecording.create.mockImplementation(
-      async ({ data }: { data: { id: string } }) => {
-        order.push("row");
-        return { id: data.id };
-      },
-    );
-    await post(valid);
-    expect(order).toEqual(["url", "row"]);
   });
 });

@@ -103,6 +103,26 @@ function forbiddenRows(): ManifestRow[] {
       id: "frozen-prompt",
       prompt: { isHoldout: true, split: "test" },
     }),
+    // The second-slice columns never weaken a guard: an English clip, a row
+    // with take metrics, a row still carrying audio bytes (as a careless query
+    // might hand it over) are refused exactly like any other forbidden row.
+    {
+      ...openRow({ id: "community-english", tier: "community_only" }),
+      language: "english",
+    },
+    {
+      ...openRow({ id: "testset-quality", isTestSet: true }),
+      quality: { rmsDbfs: -20 },
+      bytes: new Uint8Array([1, 2, 3]),
+    } as ManifestRow,
+    {
+      ...openRow({
+        id: "frozen-english-bytes",
+        prompt: { isHoldout: false, split: "test" },
+      }),
+      language: "english",
+      bytes: new Uint8Array([1, 2, 3]),
+    } as ManifestRow,
   ];
 }
 
@@ -115,7 +135,12 @@ describe.each(ENTRY_POINTS)("export entry point: $name", (entry) => {
   it("refuses test-set rows and rows on frozen prompts", async () => {
     const out = await entry.released(forbiddenRows());
     expect(
-      out.filter((id) => id.startsWith("testset") || id === "frozen-prompt"),
+      out.filter(
+        (id) =>
+          id.startsWith("testset") ||
+          id === "frozen-prompt" ||
+          id.startsWith("frozen"),
+      ),
     ).toEqual([]);
   });
 
@@ -129,6 +154,20 @@ describe.each(ENTRY_POINTS)("export entry point: $name", (entry) => {
       : openRow({ id: "fine" });
     const out = await entry.released([...forbiddenRows(), eligible]);
     expect(out).toEqual(["fine"]);
+  });
+});
+
+describe("an eligible English clip is released like any other, and bytes never leave", () => {
+  it("the manifest line carries the language and no audio or metrics", () => {
+    const row = {
+      ...openRow({ id: "en", storagePath: "clips/en.webm" }),
+      language: "english",
+      quality: { rmsDbfs: -20 },
+      bytes: new Uint8Array([9, 9, 9]),
+    } as ManifestRow;
+    const text = JSON.stringify(buildOpenManifest([row]));
+    expect(text).toContain('"language":"english"');
+    expect(text).not.toMatch(/bytes|quality|rmsDbfs/);
   });
 });
 

@@ -6,39 +6,42 @@ import { labGate } from "@/lib/speech/lab-route";
 import { CONSENT_VERSION } from "@/lib/speech/consent-text";
 import { FrozenPromptError, assertRecordable } from "@/lib/speech/guard";
 import {
+  LANGUAGES,
   MAX_ANSWER_CHARS,
   MAX_BYTES,
   MAX_DURATION_MS,
   TIERS,
+  type SpeechLanguage,
   type Tier,
 } from "@/lib/speech/limits";
+import { sanitizeQuality } from "@/lib/speech/analyse";
 import {
-  StorageConfigError,
+  audioUrl,
   isAllowedAudioMime,
   recordingPath,
-  signedUploadUrl,
 } from "@/lib/speech/storage";
 
 /**
- * Create a recording row and hand back a signed upload URL
- * (POST /api/lab/speech/recording). Researcher-only; 404 when the flag is off.
+ * Create a recording row (POST /api/lab/speech/recording) and hand back the
+ * URL to PUT its audio to (/api/lab/speech/recording/[id]/audio). Researcher-only; 404 when the flag is off.
  *
  * The body must carry a TIER (open | licensed | community_only): there is no
  * default, because the speaker chooses for each clip and the screen
  * preselects nothing. Refusals, in order:
- *   400  malformed body, missing or unknown tier, bad mime, bad duration,
- *        a declared size over 5 MB, or a duration over 30 s
+ *   400  malformed body, missing or unknown tier, an unknown language
+ *        (igala or english; igala when omitted), bad mime, bad duration,
+ *        a declared size over 4 MB, or a duration over 30 s
  *   404  unknown prompt
  *   403  frozen prompt (isHoldout or split test), no detail, per FR-3
  *   428  no consent grant for the CURRENT consent version
  *   400  a tier or opt-in the speaker's consent answers do not allow
  *        (licensed needs the licensing answer, cloning needs the cloning
  *        answer, speaker identity needs the identity answer)
- * The upload URL is minted BEFORE the row is written, so a storage failure
- * leaves no orphan row. The row starts with uploadedAt null and is invisible
- * to review, listening and export until PATCH /recording/[id] confirms the
- * upload. Rights stay "pending" and publishedOpenAt null: only a reviewer and
- * the publish step move those.
+ * The row starts with uploadedAt null and no bytes, and is invisible to
+ * review, listening and export until the audio PUT stores the clip and sets
+ * uploadedAt. Rights stay "pending" and publishedOpenAt null: only a reviewer
+ * and the publish step move those. `quality` (optional) is the client's take
+ * metrics, sanitised and kept only to sort and filter; no rule reads it.
  *
  * Demo mode (`demoSessionId`) stores the row with isDemo true; it is never
  * counted, listened to or exported.
@@ -75,6 +78,18 @@ export async function POST(req: Request) {
   }
   const tier: Tier = b.tier;
 
+  let language: SpeechLanguage = "igala";
+  if (b.language !== undefined) {
+    if (
+      typeof b.language !== "string" ||
+      !(LANGUAGES as readonly string[]).includes(b.language)
+    ) {
+      return bad("language must be igala or english");
+    }
+    language = b.language as SpeechLanguage;
+  }
+  const quality = b.quality === undefined ? null : sanitizeQuality(b.quality);
+
   if (typeof b.mimeType !== "string" || !isAllowedAudioMime(b.mimeType)) {
     return bad("mimeType must be an audio type the recorder produces");
   }
@@ -98,7 +113,7 @@ export async function POST(req: Request) {
     ) {
       return bad("sizeBytes must be a positive integer");
     }
-    if (b.sizeBytes > MAX_BYTES) return bad("A clip can be at most 5 MB");
+    if (b.sizeBytes > MAX_BYTES) return bad("A clip can be at most 4 MB");
   }
 
   let sampleRate = 48000;
@@ -214,24 +229,8 @@ export async function POST(req: Request) {
     }
   }
 
-  // Mint the upload URL first: a storage failure then leaves no orphan row.
   const id = randomUUID();
   const path = recordingPath(id, mimeType);
-  let upload;
-  try {
-    upload = await signedUploadUrl(path, mimeType);
-  } catch (e) {
-    if (e instanceof StorageConfigError) {
-      return NextResponse.json(
-        { error: "Speech storage is not configured." },
-        { status: 503 },
-      );
-    }
-    return NextResponse.json(
-      { error: "Could not prepare the upload. Try again." },
-      { status: 502 },
-    );
-  }
 
   // Lock a new answer in the same call when none exists (the text flow's
   // rule: the answer is fixed before the clip is made).
@@ -265,6 +264,8 @@ export async function POST(req: Request) {
       coldAuthorAnswerId: answerId,
       annotatorId,
       storagePath: path,
+      language,
+      ...(quality ? { quality: quality as unknown as object } : {}),
       mimeType,
       durationMs: b.durationMs,
       sampleRate,
@@ -287,7 +288,7 @@ export async function POST(req: Request) {
     {
       id: row.id,
       coldAuthorAnswerId: answerId,
-      upload,
+      audioUrl: audioUrl(row.id),
       limits: { maxBytes: MAX_BYTES, maxDurationMs: MAX_DURATION_MS },
     },
     { status: 201 },

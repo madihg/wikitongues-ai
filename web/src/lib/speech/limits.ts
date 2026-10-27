@@ -10,8 +10,19 @@ export const MAX_DURATION_MS = 30_000;
 /** The visible countdown starts once this much has elapsed (the last 5 s). */
 export const COUNTDOWN_FROM_MS = 25_000;
 
-/** A clip is at most 5 MB. A bucket file-size limit should say the same. */
-export const MAX_BYTES = 5 * 1024 * 1024;
+/**
+ * A clip is at most 4 MB, enforced server side on the audio PUT (the clip is
+ * a request body, and a serverless function accepts at most 4.5 MB of one).
+ */
+export const MAX_BYTES = 4 * 1024 * 1024;
+
+/** What the speaker said in a clip: the Igala answer, or its English meaning. */
+export const LANGUAGES = ["igala", "english"] as const;
+export type SpeechLanguage = (typeof LANGUAGES)[number];
+export const LANGUAGE_LABEL: Record<SpeechLanguage, string> = {
+  igala: "Igala",
+  english: "English",
+};
 
 /** What the speaker chooses for each clip. No default: the UI preselects none. */
 export const TIERS = ["open", "licensed", "community_only"] as const;

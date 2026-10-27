@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
+import { sanitizeAxes } from "@/lib/speech/speech-axes";
 import {
   MAX_NOTE_CHARS,
   REASON_KEYS,
@@ -14,17 +15,21 @@ import {
  * Researcher-only; 404 when the flag is off.
  *
  * Body: { promptId (the public code), recordingAId, recordingBId,
- * winner: a | b | tie | both_unusable, reasonTags, note?, demoSessionId? }.
+ * winner: a | b | tie | both_unusable, reasonTags, note?, axes?,
+ * demoSessionId? }. `axes` is the optional provisional speech rubric
+ * (lib/speech/speech-axes.ts): integer 0 to 5 or "na" per axis, scored on the
+ * winner (on both when it is a tie); a both_unusable verdict takes none.
  *
  *   400  bad winner; no recognised reason tag (one is REQUIRED, unknown keys
  *        are dropped, as in the text route, so a stale client cannot 500);
- *        the same clip on both sides; a note over 500 characters
+ *        the same clip on both sides; clips in different languages; a note
+ *        over 500 characters; malformed axes
  *   404  unknown prompt, or a clip that is not a confirmed, unrejected clip
  *        of this prompt
  *   403  frozen prompt, no detail
- *   409  this researcher already has a counted judgment on this prompt
- *        (one per researcher and prompt, whatever the pair; matches the text
- *        route after its 2026-10-09 fix)
+ *   409  this researcher already has a counted judgment on this prompt in
+ *        this language (one per researcher, prompt and language, whatever
+ *        the pair; matches the text route after its 2026-10-09 fix)
  *
  * A demo submission (`demoSessionId`) is stored with isDemo true and neither
  * blocks nor is blocked by the one-per-prompt rule.
@@ -80,6 +85,11 @@ export async function POST(req: Request) {
   const note = typeof b.note === "string" ? b.note.trim() : "";
   if (note.length > MAX_NOTE_CHARS) return bad("The note is too long.");
 
+  const axes = sanitizeAxes(b.axes, winner);
+  if (axes === "invalid") {
+    return bad("axes must score the five speech axes 0 to 5 or na.");
+  }
+
   const demoSessionId =
     typeof b.demoSessionId === "string" && b.demoSessionId
       ? b.demoSessionId
@@ -99,7 +109,13 @@ export async function POST(req: Request) {
 
   const clips = await prisma.speechRecording.findMany({
     where: { id: { in: [b.recordingAId, b.recordingBId] } },
-    select: { id: true, promptId: true, uploadedAt: true, reviewStatus: true },
+    select: {
+      id: true,
+      promptId: true,
+      language: true,
+      uploadedAt: true,
+      reviewStatus: true,
+    },
   });
   const usable = (id: string) => {
     const c = clips.find((x) => x.id === id);
@@ -114,16 +130,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Clip not found" }, { status: 404 });
   }
 
+  // Listen pairs clips of one language; refuse a hand-made cross-language pair.
+  const language = clips.find((c) => c.id === b.recordingAId)!.language;
+  if (clips.find((c) => c.id === b.recordingBId)!.language !== language) {
+    return bad("A and B must be in the same language");
+  }
+
   if (!isDemo) {
     const existing = await prisma.speechComparison.findFirst({
-      where: { annotatorId, isDemo: false, promptId: prompt.id },
+      where: {
+        annotatorId,
+        isDemo: false,
+        promptId: prompt.id,
+        recordingA: { language },
+      },
       select: { id: true },
     });
     if (existing) {
       return NextResponse.json(
         {
           error:
-            "You have already judged this question (in another tab, perhaps). Reload the page to get the next one.",
+            "You have already judged this question in this language (in another tab, perhaps). Reload the page to get the next one.",
         },
         { status: 409 },
       );
@@ -138,6 +165,7 @@ export async function POST(req: Request) {
       winner,
       reasonTags,
       note,
+      ...(axes ? { axes: axes as unknown as object } : {}),
       annotatorId,
       isDemo,
       demoSessionId,

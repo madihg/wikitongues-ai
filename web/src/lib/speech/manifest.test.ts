@@ -27,6 +27,41 @@ describe("buildOpenManifest", () => {
     expect(line.speaker).toMatch(/^spk_[0-9a-f]{12}$/);
   });
 
+  it("an Igala clip's transcript is the locked answer and says igala", () => {
+    const [line] = buildOpenManifest([
+      openRow({
+        coldAuthorAnswer: { answerText: "an answer", englishGloss: "its meaning" },
+      }),
+    ]);
+    expect(line.language).toBe("igala");
+    expect(line.transcript).toBe("an answer");
+  });
+
+  it("an English clip's transcript is the locked meaning, else the prompt text it was read from", () => {
+    const base = {
+      language: "english",
+      coldAuthorAnswer: { answerText: "an answer", englishGloss: "  its meaning " },
+      prompt: { isHoldout: false, split: "train", text: "Say hello." },
+    };
+    const [withGloss] = buildOpenManifest([openRow(base)]);
+    expect(withGloss.language).toBe("english");
+    expect(withGloss.transcript).toBe("its meaning");
+    expect(withGloss.transcriptToneStripped).toBe("its meaning");
+
+    const [noGloss] = buildOpenManifest([
+      openRow({
+        ...base,
+        coldAuthorAnswer: { answerText: "an answer", englishGloss: "  " },
+      }),
+    ]);
+    expect(noGloss.transcript).toBe("Say hello.");
+
+    const [nothing] = buildOpenManifest([
+      openRow({ ...base, coldAuthorAnswer: null, prompt: { isHoldout: false, split: "train" } }),
+    ]);
+    expect(nothing.transcript).toBeNull();
+  });
+
   it("never carries the account id, a URL, or a consent id", () => {
     const text = toJsonl(buildOpenManifest([openRow()]));
     expect(text).not.toContain("speaker-account-1");

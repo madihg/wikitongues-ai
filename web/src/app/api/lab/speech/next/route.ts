@@ -12,7 +12,8 @@ import { labGate } from "@/lib/speech/lab-route";
  *      write the answer first, then record it).
  * Frozen prompts (isHoldout or split "test") never appear, in either step:
  * the filter is in the query itself, not applied after the fact. Prompts the
- * researcher already recorded (non-demo) are done. `?exclude=a,b` skips
+ * researcher already recorded in Igala (non-demo) are done; the English clip
+ * of an answer is optional and does not keep a prompt in the queue. `?exclude=a,b` skips
  * prompts the screen has dismissed this visit. Demo mode (`?demo=<id>`)
  * ignores recording history, as the text queue does, so a live walkthrough
  * always has something to show.
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
   const recordedRows = isDemo
     ? []
     : await prisma.speechRecording.findMany({
-        where: { annotatorId, isDemo: false },
+        where: { annotatorId, isDemo: false, language: "igala" },
         select: { promptId: true },
       });
   const recordedIds = [...new Set(recordedRows.map((r) => r.promptId))];
@@ -61,6 +62,7 @@ export async function GET(req: Request) {
       id: true,
       promptId: true,
       answerText: true,
+      englishGloss: true,
       dialect: true,
       createdAt: true,
       prompt: {
@@ -92,6 +94,7 @@ export async function GET(req: Request) {
         ownAnswer: {
           id: a.id,
           text: a.answerText,
+          englishGloss: a.englishGloss,
           dialect: a.dialect,
         },
         source: "own_answer" as const,

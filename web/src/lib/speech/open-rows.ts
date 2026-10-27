@@ -8,6 +8,8 @@ import type { ManifestRow } from "./manifest";
  * buildOpenManifest (canExportOpen), which re-checks tier, publishedOpenAt,
  * test set, rights, source, consent, review and the prompt's frozen status.
  * Keeping the query here means the two entry points cannot drift apart.
+ * The select is explicit and omits `bytes`: an export never carries audio
+ * (audio-bytes-guard.test.ts).
  */
 export const OPEN_ROWS_QUERY = {
   where: {
@@ -22,6 +24,7 @@ export const OPEN_ROWS_QUERY = {
   select: {
     id: true,
     storagePath: true,
+    language: true,
     mimeType: true,
     durationMs: true,
     sampleRate: true,
@@ -39,8 +42,8 @@ export const OPEN_ROWS_QUERY = {
     uploadedAt: true,
     reviewStatus: true,
     voiceCloningOptIn: true,
-    prompt: { select: { isHoldout: true, split: true } },
-    coldAuthorAnswer: { select: { answerText: true } },
+    prompt: { select: { isHoldout: true, split: true, text: true } },
+    coldAuthorAnswer: { select: { answerText: true, englishGloss: true } },
   },
 } as const;
 

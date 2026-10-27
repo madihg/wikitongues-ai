@@ -1,28 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 
-const { mockPrisma, mockRequireResearcher, mockSignedRead } = vi.hoisted(
-  () => ({
-    mockPrisma: {
-      speechRecording: {
-        findMany: vi.fn(),
-        findUnique: vi.fn(),
-        update: vi.fn(),
-      },
+const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
+  mockPrisma: {
+    speechRecording: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
     },
-    mockRequireResearcher: vi.fn(),
-    mockSignedRead: vi.fn(),
-  }),
-);
+  },
+  mockRequireResearcher: vi.fn(),
+}));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/api-auth", () => ({ requireResearcher: mockRequireResearcher }));
-vi.mock("@/lib/speech/storage", async (orig) => ({
-  ...(await orig<typeof import("@/lib/speech/storage")>()),
-  signedReadUrl: mockSignedRead,
-}));
 
 import { GET, PATCH } from "./route";
-import { StorageConfigError } from "@/lib/speech/storage";
 
 const original = process.env.SPEECH_LAB_ENABLED;
 
@@ -39,8 +31,9 @@ const patch = (body: unknown) =>
 
 const row = (over: Record<string, unknown> = {}) => ({
   id: "rec-1",
-  storagePath: "clips/rec-1.webm",
   mimeType: "audio/webm",
+  language: "igala",
+  quality: null,
   durationMs: 4200,
   annotatorId: "speaker-account-1",
   dialect: null,
@@ -50,7 +43,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   rightsStatus: "pending",
   createdAt: new Date("2026-10-18T00:00:00Z"),
   prompt: { promptId: "code_001", text: "Say hello." },
-  coldAuthorAnswer: { answerText: "an english stand-in" },
+  coldAuthorAnswer: { answerText: "an english stand-in", englishGloss: null },
   ...over,
 });
 
@@ -77,9 +70,6 @@ beforeEach(() => {
       reviewStatus: data.reviewStatus,
     }),
   );
-  mockSignedRead.mockImplementation(
-    async (path: string) => `https://storage.example/sign/${path}?token=t`,
-  );
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -96,12 +86,13 @@ describe("GET /api/lab/speech/recordings", () => {
     expect(mockPrisma.speechRecording.findMany).not.toHaveBeenCalled();
   });
 
-  it("lists clips with a signed read URL, the pseudonym and never the account id", async () => {
+  it("lists clips with their audio URL, the pseudonym and never the account id", async () => {
     const res = await get();
     const text = await res.text();
     const body = JSON.parse(text);
     const r = body.recordings[0];
-    expect(r.url).toBe("https://storage.example/sign/clips/rec-1.webm?token=t");
+    expect(r.url).toBe("/api/lab/speech/recording/rec-1/audio");
+    expect(r.language).toBe("igala");
     expect(r.speaker).toMatch(/^spk_[0-9a-f]{12}$/);
     expect(r).toMatchObject({
       promptId: "code_001",
@@ -113,9 +104,12 @@ describe("GET /api/lab/speech/recordings", () => {
       reviewStatus: null,
     });
     expect(text).not.toContain("speaker-account-1");
-    expect(text).not.toContain("/object/public/");
-    // A row's storage path is not exposed beyond its signed URL.
+    // The storage name is not exposed, and the audio never rides in a list.
     expect(r.storagePath).toBeUndefined();
+    expect(r.bytes).toBeUndefined();
+    expect(text).not.toContain('"bytes"');
+    const sel = mockPrisma.speechRecording.findMany.mock.calls[0][0].select;
+    expect(sel).not.toHaveProperty("bytes");
   });
 
   it("only lists confirmed, non-demo clips", async () => {
@@ -147,25 +141,69 @@ describe("GET /api/lab/speech/recordings", () => {
     expect(mockPrisma.speechRecording.findMany.mock.calls[1][0].take).toBe(50);
   });
 
-  it("503 when storage is not configured", async () => {
-    mockSignedRead.mockRejectedValue(new StorageConfigError("no key"));
-    expect((await get()).status).toBe(503);
+  const q = (over: Record<string, number> = {}) => ({
+    durationMs: 4000,
+    leadingSilenceMs: 200,
+    trailingSilenceMs: 400,
+    speechShare: 0.8,
+    rmsDbfs: -22,
+    peakDbfs: -4,
+    clippingShare: 0,
+    syllables: 9,
+    syllablesPerSecond: 2.5,
+    ...over,
   });
 
-  it("a single failed URL leaves that clip's url null, not the whole list", async () => {
+  it("filters by language in the query, and rejects an unknown one", async () => {
+    await get("?language=english");
+    expect(
+      mockPrisma.speechRecording.findMany.mock.calls[0][0].where.language,
+    ).toBe("english");
+    expect((await get("?language=french")).status).toBe(400);
+  });
+
+  it("returns the take metrics and the verdict flags with each clip", async () => {
     mockPrisma.speechRecording.findMany.mockResolvedValue([
-      row({ id: "a", storagePath: "clips/a.webm" }),
-      row({ id: "b", storagePath: "clips/b.webm" }),
+      row({ id: "q", quality: q({ rmsDbfs: -45 }) }),
+      row({ id: "n", quality: null }),
     ]);
-    mockSignedRead.mockImplementation(async (p: string) => {
-      if (p.includes("b.")) throw new Error("boom");
-      return "https://storage.example/ok";
-    });
     const body = await (await get()).json();
-    expect(body.recordings.map((r: { url: string | null }) => r.url)).toEqual([
-      "https://storage.example/ok",
-      null,
+    expect(body.recordings[0].quality.rmsDbfs).toBe(-45);
+    expect(body.recordings[0].flags).toContain("too_quiet");
+    expect(body.recordings[1].quality).toBeNull();
+    expect(body.recordings[1].flags).toEqual([]);
+  });
+
+  it("sorts by loudness, clips without metrics last", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      row({ id: "none", quality: null }),
+      row({ id: "loud", quality: q({ rmsDbfs: -12 }) }),
+      row({ id: "quiet", quality: q({ rmsDbfs: -40 }) }),
     ]);
+    const ids = (b: { recordings: { id: string }[] }) =>
+      b.recordings.map((r) => r.id);
+    expect(ids(await (await get("?sort=quietest")).json())).toEqual([
+      "quiet",
+      "loud",
+      "none",
+    ]);
+    expect(ids(await (await get("?sort=loudest")).json())).toEqual([
+      "loud",
+      "quiet",
+      "none",
+    ]);
+    expect((await get("?sort=nonsense")).status).toBe(400);
+  });
+
+  it("filters to takes with one verdict, in memory over a wider window", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      row({ id: "ok", quality: q() }),
+      row({ id: "clip", quality: q({ clippingShare: 0.05 }) }),
+    ]);
+    const body = await (await get("?flag=clipped&limit=10")).json();
+    expect(body.recordings.map((r: { id: string }) => r.id)).toEqual(["clip"]);
+    expect(mockPrisma.speechRecording.findMany.mock.calls[0][0].take).toBe(500);
+    expect((await get("?flag=nonsense")).status).toBe(400);
   });
 });
 

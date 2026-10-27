@@ -860,7 +860,10 @@ model SpeechRecording {
   coldAuthorAnswerId String?
   modelOutputId      String? // set for synthesised clips (later TTS outputs)
   annotatorId        String?
-  storagePath        String // path inside the private bucket, never a URL
+  storagePath        String // stable clip name ("clips/<id>.<ext>"), never a URL; the audio itself is `bytes`
+  language           String         @default("igala") // "igala" | "english": what the speaker said
+  bytes              Bytes? // the clip, stored in Postgres; never selected into a list or an export
+  quality            Json? // client-side take metrics (lib/speech/analyse.ts), for sorting and filtering
   mimeType           String
   durationMs         Int
   sampleRate         Int
@@ -911,6 +914,7 @@ model SpeechComparison {
   winner        String
   reasonTags    String[] @default([])
   note          String   @default("")
+  axes          Json? // provisional speech axes (lib/speech/speech-axes.ts), replaced by the Lydia rubric layer
   annotatorId   String
   isDemo        Boolean  @default(false)
   demoSessionId String?

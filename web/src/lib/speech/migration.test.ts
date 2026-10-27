@@ -66,3 +66,54 @@ describe("speech lab migration", () => {
     expect(up).toContain(`"voiceCloningOptIn" BOOLEAN NOT NULL DEFAULT false`);
   });
 });
+
+/**
+ * The second slice is four additive columns. Same discipline: the up file
+ * only adds, the down file only drops what the up file added, and the
+ * schema declares exactly those columns.
+ */
+describe("speech lab 2 migration", () => {
+  const dir2 = join(root, "migrations", "20261026120000_speech_lab_2");
+  const up2 = readFileSync(join(dir2, "migration.sql"), "utf8");
+  const down2 = readFileSync(join(dir2, "down.sql"), "utf8");
+
+  it("adds language, bytes and quality to SpeechRecording and axes to SpeechComparison", () => {
+    expect(up2).toContain('ALTER TABLE "SpeechRecording"');
+    expect(up2).toContain('ADD COLUMN     "bytes" BYTEA');
+    expect(up2).toContain(`ADD COLUMN     "language" TEXT NOT NULL DEFAULT 'igala'`);
+    expect(up2).toContain('ADD COLUMN     "quality" JSONB');
+    expect(up2).toContain('ALTER TABLE "SpeechComparison" ADD COLUMN     "axes" JSONB');
+    expect(schema).toMatch(/bytes\s+Bytes\?/);
+    expect(schema).toMatch(/language\s+String\s+@default\("igala"\)/);
+    expect(schema).toMatch(/quality\s+Json\?/);
+    expect(schema).toMatch(/axes\s+Json\?/);
+  });
+
+  it("is additive only: nothing dropped, no other table touched, existing clips default to igala", () => {
+    const code = up2
+      .split("\n")
+      .filter((l) => !l.startsWith("--"))
+      .join("\n");
+    expect(code).not.toMatch(/DROP\s/i);
+    expect(code).not.toMatch(/\bRENAME\b|\bALTER COLUMN\b|\bSET NOT NULL\b/i);
+    const tables = [...code.matchAll(/ALTER TABLE "(\w+)"/g)].map((m) => m[1]);
+    expect(new Set(tables)).toEqual(
+      new Set(["SpeechRecording", "SpeechComparison"]),
+    );
+    // Must not touch the table the datasource-form diff wrongly wanted to drop.
+    expect(code).not.toContain("englishTsv");
+    expect(code).not.toContain("ParallelPair");
+  });
+
+  it("down.sql drops exactly the four columns and nothing else", () => {
+    for (const [table, col] of [
+      ["SpeechComparison", "axes"],
+      ["SpeechRecording", "quality"],
+      ["SpeechRecording", "language"],
+      ["SpeechRecording", "bytes"],
+    ]) {
+      expect(down2).toContain(`ALTER TABLE "${table}" DROP COLUMN IF EXISTS "${col}"`);
+    }
+    expect(down2).not.toMatch(/DROP TABLE|DROP TYPE/i);
+  });
+});

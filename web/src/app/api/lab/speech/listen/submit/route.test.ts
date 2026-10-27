@@ -37,6 +37,7 @@ const clips = (over: Record<string, unknown> = {}) => [
   {
     id: "clip-a",
     promptId: "p-1",
+    language: "igala",
     uploadedAt: new Date(),
     reviewStatus: null,
     ...over,
@@ -44,6 +45,7 @@ const clips = (over: Record<string, unknown> = {}) => [
   {
     id: "clip-b",
     promptId: "p-1",
+    language: "igala",
     uploadedAt: new Date(),
     reviewStatus: "keep",
   },
@@ -186,7 +188,7 @@ describe("POST /api/lab/speech/listen/submit", () => {
     expect(created()).toBe(0);
   });
 
-  it("409 on a second counted judgment for the same prompt, whatever the pair", async () => {
+  it("409 on a second counted judgment for the same prompt and language, whatever the pair", async () => {
     mockPrisma.speechComparison.findFirst.mockResolvedValue({ id: "earlier" });
     const res = await post(valid);
     expect(res.status).toBe(409);
@@ -196,6 +198,7 @@ describe("POST /api/lab/speech/listen/submit", () => {
       annotatorId: "r1",
       isDemo: false,
       promptId: "p-1",
+      recordingA: { language: "igala" },
     });
     expect(created()).toBe(0);
   });
@@ -211,5 +214,64 @@ describe("POST /api/lab/speech/listen/submit", () => {
       isDemo: true,
       demoSessionId: "sess-1",
     });
+  });
+
+  it("400 for clips in two different languages", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      { ...clips()[0] },
+      { ...clips()[1], language: "english" },
+    ]);
+    const res = await post(valid);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/same language/);
+    expect(created()).toBe(0);
+  });
+
+  it("stores the provisional axes on the winner, tagged with its version", async () => {
+    const axes = { intelligibility: 4, tone: "na", pace: 0 };
+    expect((await post({ ...valid, axes })).status).toBe(201);
+    expect(
+      mockPrisma.speechComparison.create.mock.calls[0][0].data.axes,
+    ).toEqual({
+      version: "provisional-1",
+      target: "a",
+      scores: axes,
+    });
+  });
+
+  it("scores both clips on a tie, and takes no axes on both_unusable", async () => {
+    const axes = { naturalness: 3 };
+    await post({ ...valid, winner: "tie", axes });
+    expect(
+      mockPrisma.speechComparison.create.mock.calls[0][0].data.axes.target,
+    ).toBe("both");
+    expect((await post({ ...valid, winner: "both_unusable", axes })).status).toBe(
+      400,
+    );
+  });
+
+  it("axes are optional: none stored when absent or empty", async () => {
+    await post(valid);
+    await post({ ...valid, axes: {} });
+    for (const call of mockPrisma.speechComparison.create.mock.calls) {
+      expect(call[0].data).not.toHaveProperty("axes");
+    }
+  });
+
+  it("400 for out-of-range, unknown or non-integer axes", async () => {
+    for (const axes of [
+      { tone: 6 },
+      { tone: -1 },
+      { tone: 2.5 },
+      { volume: 3 },
+      { tone: "yes" },
+      [1, 2],
+      "x",
+    ]) {
+      expect((await post({ ...valid, axes })).status, JSON.stringify(axes)).toBe(
+        400,
+      );
+    }
+    expect(created()).toBe(0);
   });
 });
