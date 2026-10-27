@@ -163,7 +163,9 @@ export function RecordClip(props: RecordClipProps) {
   // stored a fresh object, rendered again, and the page looped ("Maximum
   // update depth exceeded", found on the first browser run, 2026-10-27).
   const onBusyChangeRef = useRef(onBusyChange);
-  onBusyChangeRef.current = onBusyChange;
+  useEffect(() => {
+    onBusyChangeRef.current = onBusyChange;
+  });
   useEffect(() => {
     onBusyChangeRef.current?.(uploading);
   }, [uploading]);
