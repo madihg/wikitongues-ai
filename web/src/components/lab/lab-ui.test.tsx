@@ -1025,3 +1025,19 @@ describe("the session line", () => {
     );
   });
 });
+
+describe("busy notification cannot loop (regression, 2026-10-27)", () => {
+  const clip = readFileSync(join(__dirname, "record-clip.tsx"), "utf8");
+  it("the busy effect depends on `uploading` only and calls through a ref", () => {
+    expect(clip).toContain("onBusyChangeRef.current?.(uploading);\n  }, [uploading]);");
+    expect(clip).not.toContain("[uploading, onBusyChange]");
+  });
+  it("both parents keep the same state object when the value is unchanged", () => {
+    for (const f of ["record-interface.tsx", "say-it-block.tsx"]) {
+      const src = readFileSync(join(__dirname, f), "utf8");
+      expect(src, f).toContain("s.igala === b ? s : { ...s, igala: b }");
+      expect(src, f).toContain("s.english === b ? s : { ...s, english: b }");
+      expect(src, f).not.toContain("setBusy((s) => ({ ...s, igala: b }))");
+    }
+  });
+});

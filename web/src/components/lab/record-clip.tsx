@@ -158,9 +158,15 @@ export function RecordClip(props: RecordClipProps) {
   const retakesRef = useRef(0);
 
   const uploading = upload.status === "uploading";
+  // The parent usually passes an inline callback, so it must not be a
+  // dependency: with it, every parent render re-ran this effect, the parent
+  // stored a fresh object, rendered again, and the page looped ("Maximum
+  // update depth exceeded", found on the first browser run, 2026-10-27).
+  const onBusyChangeRef = useRef(onBusyChange);
+  onBusyChangeRef.current = onBusyChange;
   useEffect(() => {
-    onBusyChange?.(uploading);
-  }, [uploading, onBusyChange]);
+    onBusyChangeRef.current?.(uploading);
+  }, [uploading]);
 
   // Analyse each new take as soon as the recorder hands it over.
   const take = recorder.state === "recorded" ? recorder.take : null;
