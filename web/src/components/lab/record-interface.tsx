@@ -240,7 +240,7 @@ export function RecordInterface() {
             licensedAllowed={licensedAllowed}
             cloningAllowed={cloningAllowed}
             blocked={busy.english}
-            onBusyChange={(b) => setBusy((s) => ({ ...s, igala: b }))}
+            onBusyChange={(b) => setBusy((s) => (s.igala === b ? s : { ...s, igala: b }))}
             onConsentRequired={needAgain}
             onSaved={(c) => {
               setSavedIgala(true);
@@ -266,7 +266,7 @@ export function RecordInterface() {
             licensedAllowed={licensedAllowed}
             cloningAllowed={cloningAllowed}
             blocked={busy.igala}
-            onBusyChange={(b) => setBusy((s) => ({ ...s, english: b }))}
+            onBusyChange={(b) => setBusy((s) => (s.english === b ? s : { ...s, english: b }))}
             onConsentRequired={needAgain}
             onSaved={(c) => {
               if (c.coldAuthorAnswerId) setCreatedAnswerId(c.coldAuthorAnswerId);
