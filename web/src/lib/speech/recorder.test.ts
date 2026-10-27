@@ -4,7 +4,6 @@ import {
   countdownSeconds,
   formatClock,
   pickRecorderMime,
-  sha256Hex,
 } from "./recorder";
 
 describe("pickRecorderMime", () => {
@@ -64,13 +63,5 @@ describe("formatClock", () => {
   it("clamps to the 30 second cap and below zero", () => {
     expect(formatClock(45_000)).toBe("0:30.0");
     expect(formatClock(-5)).toBe("0:00.0");
-  });
-});
-
-describe("sha256Hex", () => {
-  it("matches the sha256 test vector for abc", async () => {
-    expect(await sha256Hex(new Blob(["abc"]))).toBe(
-      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-    );
   });
 });

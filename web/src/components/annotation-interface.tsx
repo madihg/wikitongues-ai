@@ -18,6 +18,8 @@ import {
 } from "@/lib/failure-tags";
 import { IGALA_DIALECTS, DIALECT_STORAGE_KEY, isDialect } from "@/lib/dialects";
 import { InfoTip } from "@/components/info-tip";
+import { SayItBlock } from "@/components/lab/say-it-block";
+import { useSpeechLayer } from "@/components/lab/use-speech-layer";
 import { ToneKeyboard } from "@/components/tone-keyboard";
 import { SuggestingEditor } from "@/components/suggesting-editor";
 import {
@@ -226,6 +228,14 @@ export function AnnotationInterface() {
   // server decides everything else again for itself.
   const { data: session } = useSession();
   const researcher = canUseDemoSwitch(session?.user?.role);
+  // The speech layer: researchers only, and only while the Lab flag is on.
+  // An annotator's episode never shows the block and never asks the server.
+  const speechLayer = useSpeechLayer(researcher);
+  // True between locking the answer and continuing to the AI outputs, while
+  // the optional "Say it" block is open. Never persisted: a reload skips it.
+  const [sayIt, setSayIt] = useState(false);
+  // Clips recorded in the block, attached to the answer after submit.
+  const speechClipIds = useRef<string[]>([]);
 
   const [task, setTask] = useState<TaskData | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -392,6 +402,8 @@ export function AnnotationInterface() {
   }
 
   const resetEpisode = useCallback(() => {
+    setSayIt(false);
+    speechClipIds.current = [];
     setStep("prompt");
     setColdAnswer("");
     setEnglishGloss("");
@@ -745,6 +757,13 @@ export function AnnotationInterface() {
 
   function revealModels() {
     setColdLocked(true);
+    // A researcher with the speech layer on and an answer written gets the
+    // optional "Say it" block first; everyone else goes straight to the
+    // outputs. The block never blocks: Skip continues.
+    if (speechLayer && coldAnswer.trim()) {
+      setSayIt(true);
+      return;
+    }
     setStep("pairwise");
   }
 
@@ -864,6 +883,20 @@ export function AnnotationInterface() {
     if (winner === "tie") return tieRationaleOk;
     return markupRationaleOk; // both_inadequate: a made markup needs its why
   };
+
+  // Link the clips recorded in the "Say it" block to the answer the episode
+  // just saved. Fire and forget: the episode is already saved, and a clip left
+  // unattached is only a clip without a transcript (the Lab shows it so).
+  function attachSpeechClips(promptCode: string) {
+    const ids = speechClipIds.current;
+    speechClipIds.current = [];
+    if (ids.length === 0) return;
+    void fetch("/api/lab/speech/attach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ promptId: promptCode, recordingIds: ids }),
+    }).catch(() => undefined);
+  }
 
   async function handleSubmit() {
     if (!task || !winner || submitting || !canSubmit()) return;
@@ -1008,6 +1041,7 @@ export function AnnotationInterface() {
           "success",
         );
       }
+      attachSpeechClips(task.prompt.promptId);
       clearDraft();
       releasePin();
       await fetchNext();
@@ -1781,12 +1815,30 @@ export function AnnotationInterface() {
                   source-free, so it&apos;s no longer offered here.
                 </p>
               )}
-              <button
-                onClick={() => setStep("pairwise")}
-                className="mt-4 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
-              >
-                Back to the AI outputs
-              </button>
+              {sayIt && coldAnswer.trim() ? (
+                <SayItBlock
+                  promptCode={task.prompt.promptId}
+                  promptText={task.prompt.text}
+                  igalaText={coldAnswer.trim()}
+                  glossText={englishGloss}
+                  dialect={dialect || null}
+                  demoSessionId={demoSessionId}
+                  onClipSaved={(id) => {
+                    speechClipIds.current = [...speechClipIds.current, id];
+                  }}
+                  onDone={() => {
+                    setSayIt(false);
+                    setStep("pairwise");
+                  }}
+                />
+              ) : (
+                <button
+                  onClick={() => setStep("pairwise")}
+                  className="mt-4 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+                >
+                  Back to the AI outputs
+                </button>
+              )}
             </>
           ) : task.goldFirst ? (
             <>

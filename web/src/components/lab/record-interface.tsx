@@ -1,59 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MAX_BYTES, type Tier } from "@/lib/speech/limits";
-import { sha256Hex } from "@/lib/speech/recorder";
-import {
-  ConsentGate,
-  type ConsentDoc,
-  type ConsentFlags,
-} from "./consent-gate";
-import {
-  AnswerBox,
-  Countdown,
-  RecordButton,
-  SaveBar,
-  TierChoice,
-  Timer,
-  UploadProgress,
-  VoiceCloningOptIn,
-} from "./record-parts";
-import { useRecorder } from "./use-recorder";
+import { ConsentGate } from "./consent-gate";
+import { AnswerBox } from "./record-parts";
+import { RecordClip, type ClipAnswerRef } from "./record-clip";
+import { useLabConsent } from "./use-lab-consent";
 
 /**
- * The Record page. One column, mobile first:
+ * The Record page, the catch-up place for past answers. One column, mobile
+ * first:
  *   1. the prompt, then the researcher's own answer (or a box to write and
  *      lock one first);
- *   2. one primary control, the 56px record button, with the elapsed time and
- *      a countdown for the last five seconds of the 30;
- *   3. after stop: the take plays back inline; Keep, Re-record or Discard;
- *   4. after Keep: the tier choice (three cards, NOTHING pre-selected) and an
- *      unchecked voice cloning box. Save stays disabled until a tier is
- *      chosen. Save uploads (a progress bar replaces the buttons). The row is
- *      created with the chosen tier, so the clip is never stored without one.
+ *   2. two clips of that answer, each a RecordClip: the Igala answer, then
+ *      its English meaning (the answer's locked meaning, or the English
+ *      question when no meaning was written, and the page says so). The
+ *      English clip is optional; a prompt is done once its Igala clip is
+ *      saved.
  * Recording is disabled until the consent for the current text version is on
- * record. A failed save keeps the take and the locked answer and offers
- * Try again; it never creates a second row for the same take.
+ * record. Everything inside a clip (feedback, Keep, tier, save) is
+ * record-clip.tsx; the Episode's "Say it" block uses the same component.
  */
 
 interface QueueTask {
   prompt: { id: string; promptId: string; text: string; bucket: string };
-  ownAnswer: { id: string; text: string; dialect: string | null } | null;
+  ownAnswer: {
+    id: string;
+    text: string;
+    englishGloss?: string | null;
+    dialect: string | null;
+  } | null;
   source: "own_answer" | "no_answer";
 }
-
-type ConsentState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | {
-      status: "needed";
-      doc: ConsentDoc;
-    }
-  | {
-      status: "granted";
-      doc: ConsentDoc;
-      grant: { commercialLicensing: boolean; voiceCloning: boolean };
-    };
 
 type QueueState =
   | { status: "loading" }
@@ -61,65 +38,12 @@ type QueueState =
   | { status: "complete" }
   | { status: "task"; task: QueueTask };
 
-type UploadState =
-  | { status: "idle" }
-  | { status: "uploading"; pct: number }
-  | { status: "saved" }
-  | { status: "error"; message: string };
-
-interface Saved {
-  id: string;
-  uploadUrl: string;
-  coldAuthorAnswerId: string | null;
-}
-
-/** PUT the clip to the signed URL as multipart (the form Storage expects). */
-function putWithProgress(
-  url: string,
-  blob: Blob,
-  onProgress: (pct: number) => void,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("cacheControl", "3600");
-    form.append("", blob);
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress((e.loaded / e.total) * 100);
-    };
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`Upload failed (${xhr.status}).`));
-    xhr.onerror = () =>
-      reject(new Error("Upload failed. Check your connection."));
-    xhr.send(form);
-  });
-}
-
-async function api(
-  url: string,
-  init?: { method: string; body: unknown },
-): Promise<{
-  ok: boolean;
-  status: number;
-  json: Record<string, unknown> | null;
-}> {
-  const res = await fetch(url, {
-    method: init?.method ?? "GET",
-    headers: init ? { "Content-Type": "application/json" } : undefined,
-    body: init ? JSON.stringify(init.body) : undefined,
-  });
-  const json = await res.json().catch(() => null);
-  return { ok: res.ok, status: res.status, json };
-}
+const NEXT_BUTTON =
+  "min-h-[44px] cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover focus-visible:outline-none focus-visible:shadow-[var(--ring)]";
 
 export function RecordInterface() {
-  const recorder = useRecorder();
-  const [consent, setConsent] = useState<ConsentState>({ status: "loading" });
-  const [consentBusy, setConsentBusy] = useState(false);
-  const [consentError, setConsentError] = useState<string | null>(null);
+  const { consent, busy: consentBusy, error: consentError, accept, needAgain } =
+    useLabConsent();
 
   const [queue, setQueue] = useState<QueueState>({ status: "loading" });
   const [recorded, setRecorded] = useState(0);
@@ -128,13 +52,13 @@ export function RecordInterface() {
 
   const [draft, setDraft] = useState("");
   const [lockedText, setLockedText] = useState<string | null>(null);
-
-  const [kept, setKept] = useState(false);
-  // No default: nothing is pre-selected.
-  const [tier, setTier] = useState<Tier | null>(null);
-  const [voiceCloning, setVoiceCloning] = useState(false);
-  const [upload, setUpload] = useState<UploadState>({ status: "idle" });
-  const savedRef = useRef<Saved | null>(null);
+  // The answer row the first clip created (when the answer was written here),
+  // so the second clip attaches to it instead of making another.
+  const [createdAnswerId, setCreatedAnswerId] = useState<string | null>(null);
+  const [savedIgala, setSavedIgala] = useState(false);
+  const [busy, setBusy] = useState({ igala: false, english: false });
+  // Bumped to remount the clips for the next prompt.
+  const [round, setRound] = useState(0);
 
   const loadNext = useCallback(async () => {
     setQueue({ status: "loading" });
@@ -143,16 +67,16 @@ export function RecordInterface() {
     if (excludeRef.current.length)
       qs.set("exclude", excludeRef.current.join(","));
     try {
-      const r = await api(`/api/lab/speech/next?${qs.toString()}`);
-      if (!r.ok)
-        throw new Error(
-          (r.json?.error as string) ?? "Could not load a prompt.",
-        );
-      const j = r.json as {
+      const res = await fetch(`/api/lab/speech/next?${qs.toString()}`);
+      const j = (await res.json().catch(() => null)) as {
+        error?: string;
         complete: boolean;
         progress?: { recorded: number };
         task?: QueueTask;
-      };
+      } | null;
+      if (!res.ok || !j) {
+        throw new Error(j?.error ?? "Could not load a prompt.");
+      }
       setRecorded(j.progress?.recorded ?? 0);
       setQueue(
         j.complete || !j.task
@@ -169,170 +93,50 @@ export function RecordInterface() {
 
   useEffect(() => {
     demoRef.current = new URLSearchParams(window.location.search).get("demo");
-    void (async () => {
-      try {
-        const r = await api("/api/lab/consent");
-        if (!r.ok)
-          throw new Error(
-            (r.json?.error as string) ?? "Could not load consent.",
-          );
-        const j = r.json as unknown as ConsentDoc & {
-          needsConsent: boolean;
-          grant: { commercialLicensing: boolean; voiceCloning: boolean } | null;
-        };
-        setConsent(
-          j.needsConsent || !j.grant
-            ? { status: "needed", doc: j }
-            : { status: "granted", doc: j, grant: j.grant },
-        );
-      } catch (e) {
-        setConsent({
-          status: "error",
-          message: e instanceof Error ? e.message : "Could not load consent.",
-        });
-      }
-    })();
     void loadNext();
   }, [loadNext]);
-
-  const acceptConsent = async (flags: ConsentFlags) => {
-    if (consent.status !== "needed") return;
-    setConsentBusy(true);
-    setConsentError(null);
-    const r = await api("/api/lab/consent", {
-      method: "POST",
-      body: { accepted: true, version: consent.doc.currentVersion, ...flags },
-    }).catch(() => null);
-    setConsentBusy(false);
-    if (!r || !r.ok) {
-      setConsentError(
-        (r?.json?.error as string) ?? "Could not save your consent. Try again.",
-      );
-      return;
-    }
-    setConsent({
-      status: "granted",
-      doc: consent.doc,
-      grant: {
-        commercialLicensing: flags.commercialLicensing,
-        voiceCloning: flags.voiceCloning,
-      },
-    });
-  };
 
   const task = queue.status === "task" ? queue.task : null;
   const answerText = task?.ownAnswer?.text ?? lockedText;
   const answerReady = answerText !== null;
   const consentOk = consent.status === "granted";
-  const canRecord =
-    consentOk &&
-    answerReady &&
-    recorder.supported &&
-    upload.status !== "uploading" &&
-    upload.status !== "saved";
+  const licensedAllowed =
+    consent.status === "granted" ? consent.grant.commercialLicensing : false;
+  const cloningAllowed =
+    consent.status === "granted" ? consent.grant.voiceCloning : false;
 
-  const resetTake = () => {
-    recorder.reset();
-    setKept(false);
-    setTier(null);
-    setVoiceCloning(false);
-    setUpload({ status: "idle" });
-    savedRef.current = null;
-  };
+  const offReason = !consentOk
+    ? consent.status === "error"
+      ? null
+      : "Read and accept the consent above to turn recording on."
+    : task && !answerReady
+      ? "Lock your answer to turn recording on."
+      : null;
 
+  const answerRef: ClipAnswerRef | null = task?.ownAnswer
+    ? { coldAuthorAnswerId: task.ownAnswer.id }
+    : createdAnswerId
+      ? { coldAuthorAnswerId: createdAnswerId }
+      : lockedText !== null
+        ? { answerText: lockedText }
+        : null;
+
+  const gloss = task?.ownAnswer?.englishGloss?.trim() ?? "";
   const nextPrompt = () => {
-    resetTake();
     setDraft("");
     setLockedText(null);
+    setCreatedAnswerId(null);
+    setSavedIgala(false);
+    setBusy({ igala: false, english: false });
+    setRound((r) => r + 1);
     void loadNext();
   };
-
   const skip = () => {
     if (task) excludeRef.current.push(task.prompt.promptId);
     nextPrompt();
   };
 
-  const save = async () => {
-    const take = recorder.take;
-    if (!take || !task || tier === null) return;
-    if (take.blob.size > MAX_BYTES) {
-      setUpload({
-        status: "error",
-        message: "This clip is over 5 MB. Record a shorter one.",
-      });
-      return;
-    }
-    setUpload({ status: "uploading", pct: 0 });
-    try {
-      let saved = savedRef.current;
-      if (!saved) {
-        const r = await api("/api/lab/speech/recording", {
-          method: "POST",
-          body: {
-            promptId: task.prompt.promptId,
-            tier,
-            mimeType: take.mime,
-            durationMs: take.durationMs,
-            sampleRate: take.sampleRate,
-            sizeBytes: take.blob.size,
-            voiceCloningOptIn: voiceCloning,
-            ...(task.ownAnswer
-              ? { coldAuthorAnswerId: task.ownAnswer.id }
-              : { answerText: lockedText }),
-            ...(demoRef.current ? { demoSessionId: demoRef.current } : {}),
-          },
-        });
-        if (!r.ok) {
-          if (r.status === 428) {
-            setConsent((c) =>
-              c.status === "granted" ? { status: "needed", doc: c.doc } : c,
-            );
-          }
-          throw new Error(
-            (r.json?.error as string) ?? "Could not save the clip.",
-          );
-        }
-        const j = r.json as {
-          id: string;
-          coldAuthorAnswerId: string | null;
-          upload: { uploadUrl: string };
-        };
-        saved = {
-          id: j.id,
-          uploadUrl: j.upload.uploadUrl,
-          coldAuthorAnswerId: j.coldAuthorAnswerId,
-        };
-        savedRef.current = saved;
-      }
-      await putWithProgress(saved.uploadUrl, take.blob, (pct) =>
-        setUpload({ status: "uploading", pct }),
-      );
-      const checksum = await sha256Hex(take.blob);
-      const c = await api(`/api/lab/speech/recording/${saved.id}`, {
-        method: "PATCH",
-        body: { sizeBytes: take.blob.size, checksumSha256: checksum },
-      });
-      // 409 means an earlier attempt already confirmed it: that is success.
-      if (!c.ok && c.status !== 409) {
-        throw new Error(
-          (c.json?.error as string) ?? "Could not confirm the upload.",
-        );
-      }
-      setUpload({ status: "saved" });
-    } catch (e) {
-      setUpload({
-        status: "error",
-        message: e instanceof Error ? e.message : "Could not save the clip.",
-      });
-    }
-  };
-
-  const recording = recorder.state === "recording";
-  const hasTake = recorder.state === "recorded" && recorder.take;
-  const licensedAllowed =
-    consent.status === "granted" ? consent.grant.commercialLicensing : false;
-  const cloningAllowed =
-    consent.status === "granted" ? consent.grant.voiceCloning : false;
+  const anyBusy = busy.igala || busy.english;
 
   return (
     <div className="space-y-6">
@@ -347,7 +151,7 @@ export function RecordInterface() {
           doc={consent.doc}
           busy={consentBusy}
           error={consentError}
-          onAccept={acceptConsent}
+          onAccept={accept}
         />
       )}
       {consent.status === "error" && (
@@ -419,162 +223,72 @@ export function RecordInterface() {
         </section>
       )}
 
-      <section
-        aria-label="Recorder"
-        className="rounded-lg border border-border bg-surface p-4 sm:p-6"
-      >
-        {upload.status === "uploading" ? (
-          <UploadProgress pct={upload.pct} />
-        ) : (
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <RecordButton
-              recording={recording}
-              disabled={recording ? false : !canRecord || !!hasTake}
-              onClick={() =>
-                recording ? recorder.stop() : void recorder.start()
-              }
-            />
-            <Timer elapsedMs={recorder.elapsedMs} recording={recording} />
-            <Countdown elapsedMs={recorder.elapsedMs} />
-          </div>
-        )}
-
-        {!consentOk && consent.status !== "error" && (
-          <p className="mt-3 text-xs text-text-tertiary">
-            Read and accept the consent above to turn recording on.
-          </p>
-        )}
-        {consentOk && task && !answerReady && (
-          <p className="mt-3 text-xs text-text-tertiary">
-            Lock your answer to turn recording on.
-          </p>
-        )}
-        {consentOk && !recorder.supported && (
-          <p className="mt-3 text-xs text-text-tertiary">
-            This browser cannot record audio. Try a current Chrome, Firefox or
-            Safari.
-          </p>
-        )}
-        {recorder.error && (
-          <p role="alert" className="mt-3 text-sm text-danger">
-            {recorder.error}
-          </p>
-        )}
-
-        {hasTake &&
-          upload.status !== "saved" &&
-          upload.status !== "uploading" && (
-            <div className="mt-4 space-y-4 border-t border-border pt-4">
-              <audio
-                controls
-                src={recorder.take!.url}
-                className="w-full"
-                aria-label="Your recording"
-              />
-              {!kept && (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setKept(true)}
-                    className="min-h-[44px] cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
-                  >
-                    Keep
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetTake();
-                      if (canRecord) void recorder.start();
-                    }}
-                    className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
-                  >
-                    Re-record
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetTake}
-                    className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
-                  >
-                    Discard
-                  </button>
-                </div>
-              )}
-
-              {kept && (
-                <div className="space-y-3">
-                  <TierChoice
-                    value={tier}
-                    onChange={setTier}
-                    licensedAllowed={licensedAllowed}
-                  />
-                  <VoiceCloningOptIn
-                    checked={voiceCloning}
-                    allowed={cloningAllowed}
-                    onChange={setVoiceCloning}
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <SaveBar
-                      tier={tier}
-                      busy={false}
-                      onSave={() => void save()}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setKept(false)}
-                      className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
-                    >
-                      Back
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-        <div aria-live="polite" className="mt-3">
-          {upload.status === "error" && (
-            <div>
-              <p role="alert" className="text-sm text-danger">
-                {upload.message}
-              </p>
-              <button
-                type="button"
-                onClick={() => void save()}
-                className="mt-2 min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
-              >
-                Try again
-              </button>
-            </div>
-          )}
-          {upload.status === "saved" && (
-            <div>
-              <p className="text-sm font-medium text-success">
-                Saved. Thank you.
-              </p>
-              <button
-                type="button"
-                onClick={nextPrompt}
-                className="mt-2 min-h-[44px] cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
-              >
-                Next prompt
-              </button>
-            </div>
+      {task && (
+        <div key={`${task.prompt.promptId}-${round}`} className="space-y-4">
+          <RecordClip
+            language="igala"
+            promptCode={task.prompt.promptId}
+            textToRead={answerText ?? "Your answer appears here once it is locked."}
+            textLabel="Read your answer out loud."
+            textIsIgala
+            syllableText={answerText ?? ""}
+            answer={answerRef}
+            dialect={task.ownAnswer?.dialect}
+            demoSessionId={demoRef.current}
+            consentOk={consentOk}
+            offReason={offReason}
+            licensedAllowed={licensedAllowed}
+            cloningAllowed={cloningAllowed}
+            blocked={busy.english}
+            onBusyChange={(b) => setBusy((s) => ({ ...s, igala: b }))}
+            onConsentRequired={needAgain}
+            onSaved={(c) => {
+              setSavedIgala(true);
+              if (c.coldAuthorAnswerId) setCreatedAnswerId(c.coldAuthorAnswerId);
+            }}
+          />
+          <RecordClip
+            language="english"
+            promptCode={task.prompt.promptId}
+            textToRead={gloss || task.prompt.text}
+            textLabel={
+              gloss
+                ? "Now say what it means, in English (optional)."
+                : "No English meaning was written for this answer, so read the English question instead (optional)."
+            }
+            textIsIgala={false}
+            syllableText={gloss || task.prompt.text}
+            answer={answerRef}
+            dialect={task.ownAnswer?.dialect}
+            demoSessionId={demoRef.current}
+            consentOk={consentOk}
+            offReason={offReason}
+            licensedAllowed={licensedAllowed}
+            cloningAllowed={cloningAllowed}
+            blocked={busy.igala}
+            onBusyChange={(b) => setBusy((s) => ({ ...s, english: b }))}
+            onConsentRequired={needAgain}
+            onSaved={(c) => {
+              if (c.coldAuthorAnswerId) setCreatedAnswerId(c.coldAuthorAnswerId);
+            }}
+          />
+          {savedIgala && !anyBusy && (
+            <button type="button" onClick={nextPrompt} className={NEXT_BUTTON}>
+              Next prompt
+            </button>
           )}
         </div>
-      </section>
+      )}
 
-      {task &&
-        !recording &&
-        upload.status !== "uploading" &&
-        upload.status !== "saved" && (
-          <button
-            type="button"
-            onClick={skip}
-            className="inline-flex min-h-[44px] cursor-pointer items-center text-sm text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline"
-          >
-            Skip this prompt
-          </button>
-        )}
+      {task && !savedIgala && !anyBusy && (
+        <button
+          type="button"
+          onClick={skip}
+          className="inline-flex min-h-[44px] cursor-pointer items-center text-sm text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+        >
+          Skip this prompt
+        </button>
+      )}
     </div>
   );
 }

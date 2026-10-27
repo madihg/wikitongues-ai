@@ -2,10 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  LANGUAGE_LABEL,
   MAX_NOTE_CHARS,
   REASON_TAGS,
+  type SpeechLanguage,
   type SpeechWinner,
 } from "@/lib/speech/limits";
+import {
+  AXES_BLOCK_LABEL,
+  AXIS_MAX,
+  AXIS_MIN,
+  SPEECH_AXES,
+  axesTargetFor,
+  type AxisScores,
+  type AxisValue,
+  type SpeechAxisKey,
+} from "@/lib/speech/speech-axes";
 
 /**
  * The Listen page: a blind A/B judgment of two clips of the same prompt.
@@ -13,12 +25,17 @@ import {
  * four 44px choices (A, B, Tie, Both unusable), a required reason chip row
  * and an optional note. Submit stays disabled until a choice and at least one
  * reason are in. The task carries no tier, speaker or source: the researcher
- * judges the sound only. One counted judgment per prompt (the server answers
- * 409 on a second, and the page then moves on).
+ * judges the sound only, and sees the language (a pair is always one
+ * language). After the verdict and reason, an optional row of five
+ * PROVISIONAL speech axes (0 to 5 or N/A) on the winner, or on both when it
+ * is a tie; labels come from lib/speech/speech-axes.ts. One counted judgment
+ * per prompt and language (the server answers 409 on a second, and the page
+ * then moves on).
  */
 
 export interface ListenTask {
   prompt: { id: string; promptId: string; text: string };
+  language?: SpeechLanguage;
   clipA: { id: string; url: string };
   clipB: { id: string; url: string };
 }
@@ -84,28 +101,111 @@ export function ClipPlayer({ side, url }: { side: "a" | "b"; url: string }) {
   );
 }
 
+const AXIS_VALUES: AxisValue[] = [
+  "na",
+  ...Array.from({ length: AXIS_MAX - AXIS_MIN + 1 }, (_, i) => AXIS_MIN + i),
+];
+
+/**
+ * The provisional speech axes. Optional and hidden when both clips are
+ * unusable. Each axis is a radio group of N/A and 0 to 5 in 44px buttons;
+ * tapping the chosen value again clears it.
+ */
+export function SpeechAxesRow({
+  winner,
+  scores,
+  onScore,
+}: {
+  winner: SpeechWinner;
+  scores: AxisScores;
+  onScore: (axis: SpeechAxisKey, value: AxisValue | null) => void;
+}) {
+  const target = axesTargetFor(winner);
+  if (target === null) return null;
+  const about =
+    target === "both"
+      ? "Scored on both clips (a tie)."
+      : `Scored on the winner, clip ${target.toUpperCase()}.`;
+  return (
+    <fieldset
+      data-testid="speech-axes"
+      className="rounded-lg border border-border bg-surface-sunken p-4"
+    >
+      <legend className="px-1 text-sm font-semibold text-text-primary">
+        {AXES_BLOCK_LABEL}
+      </legend>
+      <p className="text-xs text-text-tertiary">
+        Optional. {about} 0 is worst, 5 is best.
+      </p>
+      <div className="mt-3 space-y-4">
+        {SPEECH_AXES.map((axis) => (
+          <div
+            key={axis.key}
+            role="radiogroup"
+            aria-label={axis.label}
+            data-axis={axis.key}
+          >
+            <p className="text-sm font-medium text-text-primary">
+              {axis.label}{" "}
+              <span className="font-normal text-text-tertiary">
+                {axis.hint}
+              </span>
+            </p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {AXIS_VALUES.map((v) => {
+                const checked = scores[axis.key] === v;
+                return (
+                  <button
+                    key={String(v)}
+                    type="button"
+                    role="radio"
+                    aria-checked={checked}
+                    aria-label={`${axis.label} ${v === "na" ? "not applicable" : v}`}
+                    onClick={() => onScore(axis.key, checked ? null : v)}
+                    className={`min-h-[44px] min-w-[44px] cursor-pointer rounded-md border px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:shadow-[var(--ring)] ${
+                      checked
+                        ? "border-accent bg-accent-subtle text-accent-text"
+                        : "border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
+                    }`}
+                  >
+                    {v === "na" ? "N/A" : v}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 /** The pure view: render it with a task to see every control. */
 export function ListenView({
   task,
   winner,
   reasons,
   note,
+  axes,
   busy,
   error,
   onWinner,
   onToggleReason,
   onNote,
+  onAxis,
   onSubmit,
 }: {
   task: ListenTask;
   winner: SpeechWinner | null;
   reasons: string[];
   note: string;
+  axes: AxisScores;
   busy: boolean;
   error: string | null;
   onWinner: (w: SpeechWinner) => void;
   onToggleReason: (key: string) => void;
   onNote: (v: string) => void;
+  onAxis: (axis: SpeechAxisKey, value: AxisValue | null) => void;
   onSubmit: () => void;
 }) {
   const canSubmit = winner !== null && reasons.length > 0 && !busy;
@@ -114,6 +214,12 @@ export function ListenView({
       <section className="rounded-lg border border-border bg-surface p-4 sm:p-6">
         <p className="font-mono text-xs text-text-tertiary">
           {task.prompt.promptId}
+          {task.language && (
+            <span data-testid="clip-language">
+              {" "}
+              · {LANGUAGE_LABEL[task.language]} clips
+            </span>
+          )}
         </p>
         <p className="mt-1 text-base text-text-primary">{task.prompt.text}</p>
       </section>
@@ -179,6 +285,10 @@ export function ListenView({
         </div>
       </div>
 
+      {winner !== null && (
+        <SpeechAxesRow winner={winner} scores={axes} onScore={onAxis} />
+      )}
+
       <div>
         <label
           htmlFor="listen-note"
@@ -227,6 +337,7 @@ export function ListenInterface() {
   const [winner, setWinner] = useState<SpeechWinner | null>(null);
   const [reasons, setReasons] = useState<string[]>([]);
   const [note, setNote] = useState("");
+  const [axes, setAxes] = useState<AxisScores>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(0);
@@ -237,6 +348,7 @@ export function ListenInterface() {
     setWinner(null);
     setReasons([]);
     setNote("");
+    setAxes({});
     setError(null);
     const qs = demoRef.current
       ? `?demo=${encodeURIComponent(demoRef.current)}`
@@ -280,6 +392,9 @@ export function ListenInterface() {
           winner,
           reasonTags: reasons,
           note,
+          ...(Object.keys(axes).length > 0 && winner !== "both_unusable"
+            ? { axes }
+            : {}),
           ...(demoRef.current ? { demoSessionId: demoRef.current } : {}),
         }),
       });
@@ -336,6 +451,7 @@ export function ListenInterface() {
           winner={winner}
           reasons={reasons}
           note={note}
+          axes={axes}
           busy={busy}
           error={error}
           onWinner={setWinner}
@@ -345,6 +461,14 @@ export function ListenInterface() {
             )
           }
           onNote={setNote}
+          onAxis={(axis, value) =>
+            setAxes((cur) => {
+              const next = { ...cur };
+              if (value === null) delete next[axis];
+              else next[axis] = value;
+              return next;
+            })
+          }
           onSubmit={() => void submit()}
         />
       )}

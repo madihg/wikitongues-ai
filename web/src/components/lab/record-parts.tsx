@@ -122,11 +122,14 @@ export function TierChoice({
   onChange,
   licensedAllowed,
   disabled = false,
+  name = "tier",
 }: {
   value: Tier | null;
   onChange: (tier: Tier) => void;
   licensedAllowed: boolean;
   disabled?: boolean;
+  /** Radio group name: unique per clip when two choices share a page. */
+  name?: string;
 }) {
   return (
     <fieldset disabled={disabled}>
@@ -148,7 +151,7 @@ export function TierChoice({
             >
               <input
                 type="radio"
-                name="tier"
+                name={name}
                 value={card.key}
                 checked={checked}
                 disabled={blocked}

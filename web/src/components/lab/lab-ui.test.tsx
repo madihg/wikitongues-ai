@@ -19,6 +19,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { RecordInterface } from "./record-interface";
+import { RecordClip, type RecordClipProps } from "./record-clip";
+import { TakeFeedback } from "./take-feedback";
+import { SayItBlock } from "./say-it-block";
+import { SessionLine } from "./session-line";
+import type { QualityMetrics } from "@/lib/speech/analyse";
 import {
   AnswerBox,
   Countdown,
@@ -30,8 +35,18 @@ import {
   VoiceCloningOptIn,
 } from "./record-parts";
 import { ConsentGate, type ConsentDoc } from "./consent-gate";
-import { ListenView, type ListenTask } from "./listen-interface";
-import { RecordingsView, type RecordingItem } from "./recordings-interface";
+import {
+  ListenView,
+  SpeechAxesRow,
+  type ListenTask,
+} from "./listen-interface";
+import {
+  DEFAULT_QUERY,
+  RecordingsView,
+  recordingsQueryString,
+  type RecordingItem,
+} from "./recordings-interface";
+import { AXES_BLOCK_LABEL, SPEECH_AXES } from "@/lib/speech/speech-axes";
 import { LabBand, LAB_TABS, activeLabTab } from "./lab-band";
 
 /**
@@ -91,6 +106,7 @@ const DOC: ConsentDoc = {
 
 const TASK: ListenTask = {
   prompt: { id: "p-1", promptId: "code_001", text: "Say hello." },
+  language: "igala",
   clipA: { id: "clip-a", url: "https://storage.example/a?token=t" },
   clipB: { id: "clip-b", url: "https://storage.example/b?token=t" },
 };
@@ -100,6 +116,9 @@ const ITEM: RecordingItem = {
   promptId: "code_001",
   promptText: "Say hello.",
   answerText: "an english stand-in",
+  language: "igala",
+  quality: null,
+  flags: [],
   speaker: "spk_0123456789ab",
   dialect: null,
   durationMs: 4200,
@@ -107,7 +126,34 @@ const ITEM: RecordingItem = {
   consentVersion: "2026-10-19-v1",
   reviewStatus: null,
   rightsStatus: "pending",
-  url: "https://storage.example/r?token=t",
+  url: "/api/lab/speech/recording/rec-1/audio",
+};
+
+const METRICS: QualityMetrics = {
+  durationMs: 5000,
+  leadingSilenceMs: 300,
+  trailingSilenceMs: 600,
+  speechShare: 0.8,
+  rmsDbfs: -22,
+  peakDbfs: -5,
+  clippingShare: 0,
+  syllables: 9,
+  syllablesPerSecond: 2.2,
+};
+
+const CLIP_PROPS: RecordClipProps = {
+  language: "igala",
+  promptCode: "code_001",
+  textToRead: "a stand-in answer",
+  textLabel: "Read your answer out loud.",
+  textIsIgala: true,
+  syllableText: "a stand-in answer",
+  answer: null,
+  consentOk: false,
+  offReason: "Read and accept the consent above to turn recording on.",
+  licensedAllowed: true,
+  cloningAllowed: false,
+  onSaved: () => {},
 };
 
 const noop = () => {};
@@ -131,7 +177,7 @@ const TARGET = /min-h-\[44px\]|\bh-14\b/;
 // ---------- Record: consent and the record button ----------------------
 
 describe("Record: consent gates recording", () => {
-  const html = renderToStaticMarkup(<RecordInterface />);
+  const html = renderToStaticMarkup(<RecordClip {...CLIP_PROPS} />);
 
   it("renders the record button DISABLED before consent is known or given", () => {
     const [button] = tagsOf(html, "button").filter((t) =>
@@ -143,15 +189,24 @@ describe("Record: consent gates recording", () => {
 
   it("tells the visitor why, and shows no tier cards, Save or Keep yet", () => {
     expect(html).toContain("Read and accept the consent above");
-    expect(html).not.toContain('name="tier"');
+    expect(html).not.toContain('name="tier');
     expect(html).not.toContain('data-testid="save-button"');
     expect(html).not.toContain(">Keep<");
   });
 
+  it("the page itself renders no clip until a prompt has loaded", () => {
+    const page = renderToStaticMarkup(<RecordInterface />);
+    expect(page).not.toContain('data-testid="record-button"');
+    expect(page).toContain("Loading a prompt");
+  });
+
   it("the source enables recording only on granted consent and a locked answer", () => {
-    const src = sourceOf("record-interface.tsx");
-    expect(src).toContain('const consentOk = consent.status === "granted"');
-    expect(src).toMatch(/canRecord =\s*consentOk\s*&&\s*answerReady/);
+    const iface = sourceOf("record-interface.tsx");
+    expect(iface).toContain('const consentOk = consent.status === "granted"');
+    expect(iface).toContain("Lock your answer to turn recording on.");
+    expect(sourceOf("record-clip.tsx")).toMatch(
+      /canRecord =\s*consentOk\s*&&\s*offReason === null/,
+    );
   });
 });
 
@@ -243,7 +298,7 @@ describe("Record: the tier choice", () => {
   });
 
   it("the container starts with no tier and never defaults one", () => {
-    const src = sourceOf("record-interface.tsx");
+    const src = sourceOf("record-clip.tsx");
     expect(src).toContain("useState<Tier | null>(null)");
     expect(src).not.toMatch(/defaultChecked/);
     expect(src).not.toMatch(/setTier\(\s*["']/); // no code path sets a literal tier
@@ -256,7 +311,7 @@ describe("Record: the tier choice", () => {
     const [box] = tagsOf(html, "input");
     expect(box).toContain('type="checkbox"');
     expect(box).not.toMatch(CHECKED);
-    expect(sourceOf("record-interface.tsx")).toContain("useState(false)");
+    expect(sourceOf("record-clip.tsx")).toContain("useState(false)");
   });
 });
 
@@ -282,8 +337,8 @@ describe("Record: the save control", () => {
   });
 
   it("the container's save requires a tier before anything is sent", () => {
-    expect(sourceOf("record-interface.tsx")).toMatch(
-      /if \(!take \|\| !task \|\| tier === null\) return/,
+    expect(sourceOf("record-clip.tsx")).toMatch(
+      /if \(!take \|\| tier === null\) return/,
     );
   });
 });
@@ -321,7 +376,7 @@ describe("Record: the countdown and the timer", () => {
   });
 
   it("the container wires the 30 second cap and the countdown", () => {
-    expect(sourceOf("record-interface.tsx")).toContain(
+    expect(sourceOf("record-clip.tsx")).toContain(
       "<Countdown elapsedMs={recorder.elapsedMs}",
     );
     expect(sourceOf("use-recorder.ts")).toContain("MAX_DURATION_MS");
@@ -359,11 +414,13 @@ const listen = (over: Partial<Parameters<typeof ListenView>[0]> = {}) =>
       winner={null}
       reasons={[]}
       note=""
+      axes={{}}
       busy={false}
       error={null}
       onWinner={noop}
       onToggleReason={noop}
       onNote={noop}
+      onAxis={noop}
       onSubmit={noop}
       {...over}
     />,
@@ -446,10 +503,10 @@ describe("Recordings", () => {
   const html = renderToStaticMarkup(
     <RecordingsView
       items={[ITEM]}
-      filter=""
+      query={DEFAULT_QUERY}
       exporting={false}
       message={null}
-      onFilter={noop}
+      onQuery={noop}
       onFlag={noop}
       onExport={noop}
     />,
@@ -460,7 +517,7 @@ describe("Recordings", () => {
     expect(html).toContain("Community only");
     expect(html).toContain("2026-10-19-v1");
     expect(html).toContain("<audio");
-    expect(html).toContain("https://storage.example/r?token=t");
+    expect(html).toContain("/api/lab/speech/recording/rec-1/audio");
   });
 
   it("has the three one-tap flags and the export button", () => {
@@ -519,6 +576,22 @@ describe("LabBand", () => {
 describe("44px minimum targets", () => {
   const allHtml = [
     renderToStaticMarkup(<RecordInterface />),
+    renderToStaticMarkup(<RecordClip {...CLIP_PROPS} />),
+    renderToStaticMarkup(
+      <SayItBlock
+        promptCode="code_001"
+        promptText="Say hello."
+        igalaText="a stand-in answer"
+        glossText=""
+        onClipSaved={noop}
+        onDone={noop}
+      />,
+    ),
+    renderToStaticMarkup(
+      <SpeechAxesRow winner="a" scores={{ tone: 3 }} onScore={noop} />,
+    ),
+    renderToStaticMarkup(<TakeFeedback metrics={METRICS} status="done" />),
+    renderToStaticMarkup(<SessionLine />),
     renderToStaticMarkup(
       <RecordButton recording={false} disabled={false} onClick={noop} />,
     ),
@@ -537,10 +610,10 @@ describe("44px minimum targets", () => {
     renderToStaticMarkup(
       <RecordingsView
         items={[ITEM]}
-        filter=""
+        query={DEFAULT_QUERY}
         exporting={false}
         message={null}
-        onFilter={noop}
+        onQuery={noop}
         onFlag={noop}
         onExport={noop}
       />,
@@ -624,7 +697,331 @@ describe("accessibility and design rules", () => {
 
   it("the live regions exist: countdown, upload status, results", () => {
     expect(sourceOf("record-parts.tsx")).toContain('aria-live="polite"');
-    expect(sourceOf("record-interface.tsx")).toContain('aria-live="polite"');
+    expect(sourceOf("record-clip.tsx")).toContain('aria-live="polite"');
+    expect(sourceOf("take-feedback.tsx")).toContain('aria-live="polite"');
+    expect(sourceOf("session-line.tsx")).toContain('aria-live="polite"');
     expect(sourceOf("listen-interface.tsx")).toContain('aria-live="polite"');
+  });
+});
+
+// ---------- Slice 2: clips, feedback, the episode block, axes ----------
+
+describe("RecordClip: one component for both languages", () => {
+  it("says which language it records and the words to say", () => {
+    const igala = renderToStaticMarkup(<RecordClip {...CLIP_PROPS} />);
+    expect(igala).toContain("Say it in Igala");
+    expect(igala).toContain('data-testid="clip-igala"');
+    expect(igala).toContain("igala "); // the Igala face for Igala text
+    const english = renderToStaticMarkup(
+      <RecordClip
+        {...CLIP_PROPS}
+        language="english"
+        textIsIgala={false}
+        textToRead="Say hello."
+      />,
+    );
+    expect(english).toContain("Say it in English");
+    expect(english).toContain('data-testid="clip-english"');
+  });
+
+  it("gives each clip its own tier radio group so two clips never fight over one", () => {
+    const src = sourceOf("record-clip.tsx");
+    expect(src).toContain("name={`tier-${language}`}");
+    expect(sourceOf("record-parts.tsx")).toContain("name={name}");
+  });
+
+  it("the Record page and the episode block both use it, and neither re-implements recording", () => {
+    for (const f of ["record-interface.tsx", "say-it-block.tsx"]) {
+      const src = sourceOf(f);
+      expect(src, f).toContain("<RecordClip");
+      expect(src, f).not.toContain("useRecorder");
+      expect(src, f).not.toContain("MediaRecorder");
+    }
+  });
+
+  it("uploads in two steps: the row, then the audio as the PUT body (no signed URL, no multipart)", () => {
+    const src = sourceOf("record-clip.tsx");
+    expect(src).toContain('"/api/lab/speech/recording"');
+    expect(src).toContain('xhr.open("PUT", url)');
+    expect(src).toContain("xhr.send(blob)");
+    expect(src).not.toContain("FormData");
+    expect(src).not.toMatch(/uploadUrl|signed|sha256/i);
+  });
+
+  it("stores the take metrics and the retake count with the clip", () => {
+    const src = sourceOf("record-clip.tsx");
+    expect(src).toContain("retakes: retakesRef.current");
+    expect(src).toContain("analyseBlob(take.blob, syllableText, language)");
+  });
+
+  it("shows the feedback before Keep, and Keep is never disabled by a warning", () => {
+    const src = sourceOf("record-clip.tsx");
+    expect(src.indexOf("<TakeFeedback")).toBeGreaterThan(-1);
+    expect(src.indexOf("<TakeFeedback")).toBeLessThan(
+      src.indexOf('data-testid="keep-button"'),
+    );
+    expect(src).not.toMatch(/keep-button"[^>]*disabled/);
+  });
+});
+
+describe("TakeFeedback", () => {
+  it("a clean take reads as one good line", () => {
+    const html = renderToStaticMarkup(
+      <TakeFeedback metrics={METRICS} status="done" />,
+    );
+    expect(html).toContain("Good take: clear level, 4.1 s for 9 syllables");
+    expect(html).toContain('data-verdict="good"');
+    expect(html).toContain("level -22 dBFS");
+  });
+
+  it("each problem is named in plain language", () => {
+    const html = renderToStaticMarkup(
+      <TakeFeedback
+        metrics={{
+          ...METRICS,
+          rmsDbfs: -45,
+          clippingShare: 0.05,
+          trailingSilenceMs: 10,
+        }}
+        status="done"
+      />,
+    );
+    expect(html).toContain("Too quiet: hold the phone closer and try again");
+    expect(html).toContain("Clipped: speak a little further from the microphone");
+    expect(html).toContain(
+      "Cut short: the clip ends while you are still speaking",
+    );
+    expect(html).not.toContain("Good take");
+  });
+
+  it("says so when the browser could not analyse, and while it is checking", () => {
+    expect(
+      renderToStaticMarkup(<TakeFeedback metrics={null} status="done" />),
+    ).toContain("could not check the take");
+    const checking = renderToStaticMarkup(
+      <TakeFeedback metrics={null} status="analysing" />,
+    );
+    expect(checking).toContain("Checking the take");
+    expect(checking).toContain('aria-live="polite"');
+  });
+});
+
+describe("the episode's Say it block", () => {
+  const block = (glossText: string) =>
+    renderToStaticMarkup(
+      <SayItBlock
+        promptCode="code_001"
+        promptText="Say hello."
+        igalaText="a stand-in answer"
+        glossText={glossText}
+        onClipSaved={noop}
+        onDone={noop}
+      />,
+    );
+
+  it("has two clips, one per language, and is optional", () => {
+    const html = block("what it means");
+    expect(html).toContain('data-testid="say-it-block"');
+    expect(html).toContain('data-testid="clip-igala"');
+    expect(html).toContain('data-testid="clip-english"');
+    expect(html).toContain("Optional");
+  });
+
+  it("never blocks: Skip for now is there before anything is recorded", () => {
+    const html = block("what it means");
+    const skip = tagsOf(html, "button").find((t) =>
+      t.includes('data-testid="say-it-continue"'),
+    )!;
+    expect(skip).not.toMatch(DISABLED);
+    expect(html).toContain(">Skip for now<");
+  });
+
+  it("reads the locked English meaning when there is one", () => {
+    const html = block("what it means");
+    expect(html).toContain("what it means");
+    expect(html).toContain("Now say what it means, in English.");
+  });
+
+  it("with no meaning, shows the English prompt to read and says so", () => {
+    const html = block("   ");
+    expect(html).toContain("Say hello.");
+    expect(html).toContain(
+      "You wrote no English meaning, so read the English question instead.",
+    );
+  });
+
+  it("is wired only for researchers with the flag on, after the lock and before the outputs", () => {
+    const src = readFileSync(join(dir, "..", "annotation-interface.tsx"), "utf8");
+    expect(src).toContain("useSpeechLayer(researcher)");
+    expect(src).toMatch(/if \(speechLayer && coldAnswer\.trim\(\)\) \{\s*setSayIt\(true\);\s*return;/);
+    // The block renders inside the locked first step, not in the pairwise step.
+    const first = src.indexOf("<SayItBlock");
+    expect(first).toBeGreaterThan(src.indexOf('{/* STEP: prompt / cold-authoring'));
+    expect(first).toBeLessThan(src.indexOf("{/* STEP: blind pairwise */}"));
+    expect(src.match(/<SayItBlock/g)).toHaveLength(1);
+  });
+
+  it("the hook asks the server only for researchers", () => {
+    const src = sourceOf("use-speech-layer.ts");
+    expect(src).toContain("if (!researcher)");
+    expect(src).toContain("/api/lab/flags");
+  });
+
+  it("clips are attached to the saved answer only after the episode is submitted", () => {
+    const src = readFileSync(join(dir, "..", "annotation-interface.tsx"), "utf8");
+    const submit = src.indexOf('fetch("/api/annotations/submit"');
+    const attach = src.indexOf("attachSpeechClips(task.prompt.promptId)");
+    expect(submit).toBeGreaterThan(-1);
+    expect(attach).toBeGreaterThan(submit);
+  });
+});
+
+describe("Listen: language and the provisional speech axes", () => {
+  it("shows the language of the pair", () => {
+    expect(listen()).toContain("Igala clips");
+    expect(
+      listen({ task: { ...TASK, language: "english" } }),
+    ).toContain("English clips");
+  });
+
+  it("shows no axes before a verdict, and none for both unusable", () => {
+    expect(listen()).not.toContain('data-testid="speech-axes"');
+    expect(listen({ winner: "both_unusable" })).not.toContain(
+      'data-testid="speech-axes"',
+    );
+  });
+
+  it("after a verdict, offers the five axes under the exact provisional label", () => {
+    const html = listen({ winner: "a", reasons: ["robotic"] });
+    expect(html).toContain('data-testid="speech-axes"');
+    // The label is the config's text, with the apostrophe escaped by React.
+    expect(html).toContain(AXES_BLOCK_LABEL.replace("'", "&#x27;"));
+    expect(AXES_BLOCK_LABEL).toBe(
+      "Provisional speech axes, Lydia's rubric layer replaces these",
+    );
+    for (const axis of SPEECH_AXES) {
+      expect(html).toContain(`data-axis="${axis.key}"`);
+      expect(html).toContain(`>${axis.label}`);
+    }
+  });
+
+  it("each axis offers N/A and 0 to 5 as 44px radio buttons, nothing preselected", () => {
+    const html = renderToStaticMarkup(
+      <SpeechAxesRow winner="b" scores={{}} onScore={noop} />,
+    );
+    const radios = tagsOf(html, "button");
+    expect(radios).toHaveLength(5 * 7);
+    for (const r of radios) {
+      expect(r).toContain('role="radio"');
+      expect(r).toContain('aria-checked="false"');
+      expect(classOf(r)).toMatch(/min-h-\[44px\].*min-w-\[44px\]/);
+    }
+    expect(html).toContain(">N/A<");
+    expect(html).toContain("Scored on the winner, clip B.");
+  });
+
+  it("marks the chosen scores, and says both clips on a tie", () => {
+    const html = renderToStaticMarkup(
+      <SpeechAxesRow
+        winner="tie"
+        scores={{ tone: 3, pace: "na" }}
+        onScore={noop}
+      />,
+    );
+    expect(html).toContain("Scored on both clips (a tie).");
+    expect(html.match(/aria-checked="true"/g)).toHaveLength(2);
+  });
+
+  it("axes are optional: Submit does not wait for them", () => {
+    const submit = tagsOf(
+      listen({ winner: "a", reasons: ["robotic"] }),
+      "button",
+    ).find((t) => t.includes('data-testid="submit-button"'))!;
+    expect(submit).not.toMatch(DISABLED);
+  });
+
+  it("the page sends axes only with a usable verdict", () => {
+    const src = sourceOf("listen-interface.tsx");
+    expect(src).toContain('winner !== "both_unusable"');
+    expect(src).toContain("{ axes }");
+  });
+});
+
+describe("Recordings: language, take metrics, filters and sort", () => {
+  const withQuality = {
+    ...ITEM,
+    language: "english" as const,
+    quality: METRICS,
+    flags: ["too_quiet" as const],
+  };
+  const html = renderToStaticMarkup(
+    <RecordingsView
+      items={[withQuality]}
+      query={DEFAULT_QUERY}
+      exporting={false}
+      message={null}
+      onQuery={noop}
+      onFlag={noop}
+      onExport={noop}
+    />,
+  );
+
+  it("shows the language and the take metrics on each card", () => {
+    expect(html).toContain("English");
+    expect(html).toContain('data-testid="quality-line"');
+    expect(html).toContain("level -22 dBFS");
+    expect(html).toContain("too quiet");
+  });
+
+  it("offers language and take-warning filters and a sort", () => {
+    expect(html).toContain('aria-label="Filter by language"');
+    expect(html).toContain(">Clipped<");
+    expect(html).toContain(">Quietest first<");
+  });
+
+  it("says when a clip has no transcript attached", () => {
+    const orphan = renderToStaticMarkup(
+      <RecordingsView
+        items={[{ ...ITEM, answerText: null }]}
+        query={DEFAULT_QUERY}
+        exporting={false}
+        message={null}
+        onQuery={noop}
+        onFlag={noop}
+        onExport={noop}
+      />,
+    );
+    expect(orphan).toContain("No transcript attached.");
+  });
+
+  it("builds the list query from the filters, leaving defaults out", () => {
+    expect(recordingsQueryString(DEFAULT_QUERY)).toBe("");
+    expect(
+      recordingsQueryString({
+        status: "keep",
+        language: "english",
+        flag: "clipped",
+        sort: "quietest",
+      }),
+    ).toBe("?status=keep&language=english&flag=clipped&sort=quietest");
+  });
+});
+
+describe("the session line", () => {
+  it("is a polite live region under the Lab header, empty until it loads", () => {
+    const html = renderToStaticMarkup(<SessionLine />);
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('data-testid="session-line"');
+    expect(html).not.toContain("Today:");
+  });
+
+  it("the layout renders it under the band", () => {
+    const layout = readFileSync(
+      join(dir, "..", "..", "app", "(app)", "lab", "speech", "layout.tsx"),
+      "utf8",
+    );
+    expect(layout.indexOf("<SessionLine />")).toBeGreaterThan(
+      layout.indexOf("<LabBand />"),
+    );
   });
 });

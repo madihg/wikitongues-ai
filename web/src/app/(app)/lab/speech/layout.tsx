@@ -1,5 +1,6 @@
 import { requireLabPage } from "@/lib/speech/page-gate";
 import { LabBand } from "@/components/lab/lab-band";
+import { SessionLine } from "@/components/lab/session-line";
 
 /**
  * Gate and frame for the Speech Lab pages. Flag off: notFound, so a dark lab
@@ -23,6 +24,7 @@ export default async function SpeechLabLayout({
   return (
     <div className="-m-8 min-h-full">
       <LabBand />
+      <SessionLine />
       <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-8 sm:py-8">
         {children}
       </div>
