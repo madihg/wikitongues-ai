@@ -18,7 +18,7 @@ describe("speech axes config", () => {
     ]);
     for (const a of SPEECH_AXES) {
       expect(a.label.length).toBeGreaterThan(0);
-      expect(a.hint).not.toMatch(/—|–/);
+      expect(a.hint).not.toMatch(/\u2014|\u2013/);
     }
   });
   it("labels the block as provisional", () => {
