@@ -2409,3 +2409,59 @@ NOT COVERED (follow-up candidates)
 
 GATES: pnpm typecheck 0, pnpm lint 0, vitest 104 files, 1,612 tests (was
 103 / 1,601). static-leak-check v3, v4, v4.1, v4.2, v4.4, v4.5 all PASS.
+
+## Session State (2026-10-19, Fable 5.1) - SPEECH: ASKS, RESEARCH, PRD (nothing built)
+
+Halim's ask: sum up what Agnes, Google and the Gates Foundation want on
+speech; deep research on methodology; a PRD; then build.
+
+ASKS (Granola Oct 12 and 13, Oct 6, Sep 24; Drive note on Waxal)
+- Agnes: priority 1 Wikipedia translation, 2 voice-to-text or text-to-voice;
+  wants Wikipedia articles fed into the annotate screen with inline
+  correction; rates accuracy about 85%; Yoruba and Igbo words still bleed in.
+- Google: research agreement where Wikitongues keeps IP and data and Google
+  may license data back "for speech tech"; methodology paper; VP of
+  Languages ask ($750K plus $200K for 2 to 5 more languages).
+- Gates: Waxal (with Google) is the template: open CC-BY speech data, partner
+  ownership, image-prompted ASR speech, paired-script TTS speech. Sep 18 2026
+  Gates and Google.org $100M package with open speech and text data for 40+
+  African languages (Masakhane, Digital Umuganda); Sep 21 Gates coalition
+  (open data, benchmarks, tools, consent and data sovereignty). No open call.
+
+RESEARCH (tasks/speech/research-igala-speech-methodology-2026-10-19.md,
+sources in tasks/speech/papers-and-sources-2026-10-19.md, also as a Google
+Doc "[material] Igala speech papers and sources (2026-10-19)")
+- Igala already has an ASR: Meta Omnilingual ASR (Apache-2.0) lists
+  igl_Latn, 7.6 training hours, CER 27.6 for the 7B model (test set not
+  stated). Run it on the GRN recording first.
+- One other lead: a Lanfrica and NaijaVoices partner set, 11 languages
+  including Igala, 110 hours total, unpublished (Omnilingual paper 3.3.2).
+- No Igala TTS exists. Yoruba evidence: 5 to 15 hours of one studio speaker,
+  fine-tuning a pretrained model (OmniVoice first; MMS-TTS and F5-TTS are
+  non-commercial), gives a usable voice; tone-mark the scripts; LLM tone
+  restoration works on Yoruba (LREC 2026).
+- Metrics: CER and WER on normalised tone-stripped text, tone-retained and a
+  tone error rate alongside; speech LLMs are no shortcut (Gemini 3 Flash 27
+  WER on Yoruba, GPT-4o 101).
+- Pay: AfriVoices-KE rate card about $16 per speaker hour, $38 per
+  transcriber hour; a transcribed hour lands between about $81 and $1,370
+  depending on how the rates apply.
+
+DECISIONS (Halim, Oct 19): TTS first; first recordings inside the annotate
+screen; gates typecheck, lint, vitest. The ownership answer given that
+morning (Wikitongues owns, CC-BY-4.0) was REJECTED the same day: contributors
+keep copyright and choose a tier per item (OPEN, LICENSED, COMMUNITY-ONLY,
+default COMMUNITY-ONLY). Source of truth:
+tasks/licensing/prd-data-rights-and-licensing-2026-10-19.md; current-state
+findings in AUDIT.md (test set and community data in the public repo are
+BLOCKERs awaiting Halim's decision).
+
+PRD: tasks/speech/prd-igala-speech-tts-first-2026-10-19.md, 11 stories.
+Blockers named in it: Salem and Lydia's tone and contraction ruling (fills
+orthography.json), GRN redistribution terms, OmniVoice licence, a direct
+Google key if Gemini TTS is used (the app reaches Gemini via OpenRouter), a
+new private Supabase bucket igala-speech (none exists for this project).
+
+NOT DONE: no code built; Gemini CLI is not installed, so the paper list went
+to a Google Doc instead; the Gates press release link was never found in
+Gmail. PR #77 holds the three documents.
