@@ -134,3 +134,65 @@ describe("How it works points out to the public page", () => {
     expect(annotator.some((l) => l.label === "How it works")).toBe(false);
   });
 });
+
+describe("navForRole - the Speech Lab group", () => {
+  const labHrefs = (links: ReturnType<typeof navForRole>) =>
+    links.filter((l) => l.group === "lab").map((l) => l.href);
+
+  it("annotators never get a lab link, even when the flag is on", () => {
+    const links = navForRole("ANNOTATOR", "annotator@example.com", {
+      lab: true,
+    });
+    expect(labHrefs(links)).toEqual([]);
+    expect(links.map((l) => l.href)).not.toContain("/lab/speech");
+  });
+
+  it("learners and an absent role never get one either", () => {
+    expect(
+      labHrefs(navForRole("LEARNER", "l@example.com", { lab: true })),
+    ).toEqual([]);
+    expect(labHrefs(navForRole(null, null, { lab: true }))).toEqual([]);
+  });
+
+  it("researchers get no lab link when the flag is off (the default)", () => {
+    expect(labHrefs(navForRole("RESEARCHER", RESEARCHER_EMAIL))).toEqual([]);
+    expect(
+      labHrefs(navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: false })),
+    ).toEqual([]);
+  });
+
+  it("researchers get exactly the Speech link, tagged, when the flag is on", () => {
+    const links = navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: true });
+    const lab = links.filter((l) => l.group === "lab");
+    expect(lab).toEqual([
+      {
+        href: "/lab/speech",
+        label: "Speech",
+        tag: "researchers only",
+        group: "lab",
+      },
+    ]);
+    // Lab links come last, so the sidebar can render them after a divider.
+    expect(links[links.length - 1].group).toBe("lab");
+  });
+
+  it("the lab link does not disturb the existing researcher links", () => {
+    const off = navForRole("RESEARCHER", RESEARCHER_EMAIL).map((l) => l.href);
+    const on = navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: true })
+      .filter((l) => l.group !== "lab")
+      .map((l) => l.href);
+    expect(on).toEqual(off);
+  });
+
+  it("activeNavHref keeps Speech active on its sub-pages", () => {
+    const links = navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: true });
+    for (const path of [
+      "/lab/speech",
+      "/lab/speech/listen",
+      "/lab/speech/recordings",
+    ]) {
+      expect(activeNavHref(links, path), path).toBe("/lab/speech");
+    }
+    expect(activeNavHref(links, "/lab/speechx")).toBeNull();
+  });
+});

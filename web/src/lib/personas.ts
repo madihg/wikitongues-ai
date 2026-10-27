@@ -9,6 +9,8 @@
  * The owner account (Halim) can act as all three personas via a switcher.
  */
 
+import { canUseLab } from "@/lib/lab-flags";
+
 export const OWNER_EMAILS = ["madihalim@gmail.com"];
 
 export function isOwner(email?: string | null): boolean {
@@ -48,6 +50,16 @@ export interface NavLink {
   label: string;
   /** Renders as an out-link: new tab, rel-guarded, arrow-marked, never active. */
   external?: boolean;
+  /** Sidebar group. "lab" links render after a divider under a "Lab" heading. */
+  group?: "lab";
+  /** Small monospace tag beside the label (the lab links say who may see them). */
+  tag?: string;
+}
+
+/** Server-derived switches that change the nav. Passed in so navForRole stays pure. */
+export interface NavOptions {
+  /** The Speech Lab is on for this account (flag on AND a researcher). */
+  lab?: boolean;
 }
 
 /**
@@ -57,9 +69,10 @@ export interface NavLink {
 export function navForRole(
   role?: string | null,
   email?: string | null,
+  options: NavOptions = {},
 ): NavLink[] {
   if (isResearcher(role, email)) {
-    return [
+    const links: NavLink[] = [
       { href: "/annotator", label: "Dashboard" },
       { href: "/annotator/prompts", label: "Prompts" },
       { href: "/annotator/annotate", label: "Annotate" },
@@ -84,6 +97,17 @@ export function navForRole(
         external: true,
       },
     ];
+    // The Speech Lab ships dark (src/lib/lab-flags.ts): the link exists only
+    // when the server says the flag is on. Annotators never get it, below.
+    if (options.lab && canUseLab(role)) {
+      links.push({
+        href: "/lab/speech",
+        label: "Speech",
+        tag: "researchers only",
+        group: "lab",
+      });
+    }
+    return links;
   }
   // Pure annotator. NO Corrections tab (2026-08-28 rework, Halim's call):
   // corrections happen inside the episode, right after the A/B verdict - a
