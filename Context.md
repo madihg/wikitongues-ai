@@ -2409,3 +2409,52 @@ NOT COVERED (follow-up candidates)
 
 GATES: pnpm typecheck 0, pnpm lint 0, vitest 104 files, 1,612 tests (was
 103 / 1,601). static-leak-check v3, v4, v4.1, v4.2, v4.4, v4.5 all PASS.
+
+## Session State (2026-10-27, Fable 5.1) - SPEECH LAB LIVE FOR RESEARCHERS
+
+Shipped to production (PR #79 squash 9ec9819, hotfix PR #80 d192021):
+- Researcher-only Speech Lab behind SPEECH_LAB_ENABLED=1 (set on Vercel
+  production). Sidebar group "Lab" with "Speech, researchers only"; three
+  tabs: Record, Listen, Recordings. Annotators never see it; /api/lab/*
+  returns 404 with the flag off and 403 for non-researchers.
+- Lydia's Oct 20 recommendation applied: speech is a layer inside the
+  annotation episode ("Say it" block after the cold answer is locked, two
+  clips: the Igala answer and its English gloss), plus the Lab's own Record
+  page for catch-up. Listen pairs clips of the same language and carries five
+  provisional speech axes (intelligibility, pronunciation, tone, naturalness,
+  pace) until Lydia's rubric layer replaces them (web/src/lib/speech/speech-axes.ts).
+- Feedback after each take, deterministic (web/src/lib/speech/analyse.ts):
+  duration, silence, loudness, clipping, syllables per second, plain-language
+  verdicts; stored as quality JSON; Recordings tab filters and sorts by it.
+  Session line "Today: N clips kept, N re-recorded, N community-only, N
+  licensed". No ASR feedback yet (needs the Omnilingual baseline first).
+- Storage: clips live in Postgres (SpeechRecording.bytes, 4 MB cap) behind
+  researcher-only PUT and GET routes; no bucket, no public URL. The
+  @supabase/supabase-js dependency was removed.
+- Consent (version 2026-10-19-v1, written text and oral script, withdrawal
+  explained first, four separate questions, nothing pre-ticked) must be
+  accepted before the first recording; tier per clip (community_only default,
+  licensed, open), voice cloning opt-in separate and off.
+- Database: migrations 20261019120000_speech_lab and
+  20261026120000_speech_lab_2 applied by hand via Supabase apply_migration
+  (additive only) and recorded in _prisma_migrations; wikitongues_app granted
+  on the four new tables. The ledger had stopped at 20260820 (one row
+  unfinished), so `prisma migrate deploy` must not be used on this database.
+- Hotfix: the Record page looped (child effect depended on the parent's
+  inline callback; parent rebuilt its state object each call). Fixed with a
+  ref and bail-outs, regression test in web/src/components/lab/lab-ui.test.tsx.
+
+Verification: typecheck 0, lint 0, vitest 133 files / 2,025 tests, leak check
+0 hits, next build ok; walked through on a local run (login, consent, Record,
+Say it in demo mode, Listen, Recordings) with screenshots sent to Halim.
+
+Accounts: a test researcher account test.researcher@wikitongues.local was
+created for the local walkthrough (owner-only account creation per the
+licensing decision; Halim may disable it). Salem has a researcher account.
+
+Email: Gmail draft "Speech is live for researchers" to Lydia and Salem
+(id r-6573312623719807683), not sent.
+
+Still pending from earlier: the history rewrite push (Halim's terminal),
+PRs #74, #77, #78 (docs), Phase 3 of the licensing PRD, Lydia's rubric
+layer, Salem and Lydia's tone ruling for orthography.json.
