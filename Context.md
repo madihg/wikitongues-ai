@@ -2409,3 +2409,35 @@ NOT COVERED (follow-up candidates)
 
 GATES: pnpm typecheck 0, pnpm lint 0, vitest 104 files, 1,612 tests (was
 103 / 1,601). static-leak-check v3, v4, v4.1, v4.2, v4.4, v4.5 all PASS.
+
+## Session State (2026-11-05, Fable 5.1) - SPEECH PROGRAMME DOC: ONE PAGER, PRD v2, RESEARCH, COST
+
+Deliverable: a four-tab Google Doc in Drive "8. Earn / Wikitongues",
+"Igala speech: one pager, PRD, research, cost estimate (2026-11-05)",
+https://docs.google.com/document/d/1bTMnH1Nds4ZaUq5T5KaArqpR2thtWF5DsPE5Np72lPY/edit
+Tabs: One pager (t.0), PRD (t.ff26ok8c34r6), Research (t.lurmmu5ejoi3), Cost estimate (t.foc7vl8t3mao).
+Loop diagram PNG beside it in the same folder (Drive id 1tyPsP2RN9wI_eZo8HjwtxjVxWuO5qPSu); not inline
+because the Docs API only inserts images from public URLs.
+
+Sources and build live OUTSIDE the repo (private material): ~/wt-clones/speech-doc/
+(tabs/*.md are the markdown sources, build/md2docs.py converts them to Docs batchUpdate requests,
+src/ holds the inputs incl. Andy's Google-internal report; never commit src/).
+
+PRD v2 (the PRD tab) supersedes tasks/speech/prd-igala-speech-tts-first-2026-10-19.md on branch speech-prd (PR #77).
+40 stories: US-001 to US-011 kept their numbers (6 live: 001, 002, 003, 004, 005, 010), new US-012 to US-040 in
+epics B (speech inside the prompt system), C (improve ASR), D (improve TTS), E (nightly loop), F (rights).
+New flags proposed: SPEECH_LAYER_ANNOTATORS, SPEECH_LOOP_ENABLED. Regression cutoffs CER +1.0 / TER +2.0.
+Code contradictions with the Oct 19 PRD recorded in the tab (storage is Postgres bytes, consent is versioned
+tables, routes under /api/lab/speech, open manifest effectively empty until a publish step exists).
+
+Cost tab: A "Prove it" $3,639 (212 Halim h), B "A voice" $6,908 (390 h), C "Parity target" $18,820 (580 h),
+excluding Halim's rate, studio rental, legal, airtime. Pay rate ($16/$27/$38 AfriVoices-KE bands) is Halim's decision.
+
+Nothing was built in code this session. Halim asked for the screen-by-screen landing list before any build;
+it was given in chat (annotators: Say it block, Check, Listen, session line, profile; researchers: Recordings,
+dashboard card, ledger, promote/pause, prompt tone pairs).
+
+Open decisions surfaced: tone ruling (Salem, Lydia), pay rate, training provider and evaluation worker,
+object storage, studio speaker, GRN redistribution, Hypa-Speech-10k and Lanfrica checks, second language for
+the transferability claim, what Google receives (scores only vs recipe), community_only training makes models
+non-publishable.
