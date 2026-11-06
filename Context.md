@@ -2480,3 +2480,5 @@ non-publishable.
 6. Finder: mark `My Drive/Offload-2026-11-05` "Online only" to reclaim 7.6 GB; decide on `vm_bundles` (13.7 GB, untouched).
 7. Unsent Gmail draft "Speech is live for researchers" still waits for his yes.
 8. Earlier items unchanged: history rewrite push, docs PRs #74, #77, #78, #81 unmerged, Lydia's rubric.
+
+**Nov 6 addendum, Salem's access.** Salem wrote on Nov 4 that the Speech link did not work. His User row (RESEARCHER, created Oct 16) was intact; the password was reset with Halim's explicit permission (bcrypt hash updated through the Supabase MCP, hash kept in the private vault, plaintext deleted). Login verified against production: the NextAuth credentials callback returned a session for his email with role RESEARCHER, /lab/speech returned 200 logged in, and a wrong password was refused. The new password was emailed to him in the "Speech is live for researchers" thread on Nov 6 (sent, not drafted).
