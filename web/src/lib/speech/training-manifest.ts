@@ -55,7 +55,10 @@ function versionOf(ids: string[]): string {
 
 function lineOf(r: LoopRow, signedUrl: ManifestOptions["signedUrl"]) {
   const language = r.language === "english" ? "english" : "igala";
-  const transcript = transcriptFor(r, language);
+  // A studio clip read a tone-marked script line; that line is what it says.
+  const transcript = r.studioText?.trim()
+    ? r.studioText.normalize("NFC").trim()
+    : transcriptFor(r, language);
   // A clip with nothing written down cannot train or score anything.
   if (transcript === null) return null;
   const line: TrainingLine = {

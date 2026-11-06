@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { abSwap, assignedPair } from "@/lib/pairing";
 import { labGate } from "@/lib/speech/lab-route";
 import { REJECTED_REVIEW_STATUSES } from "@/lib/speech/limits";
+import { optionsFor } from "@/lib/speech/minimal-pairs";
 import { audioUrl } from "@/lib/speech/storage";
 
 /**
@@ -21,6 +22,11 @@ import { audioUrl } from "@/lib/speech/storage";
  * pairing, the same stable A and B across a reload. The response is blind: it
  * carries no tier, speaker, source or take metrics, only an id and the audio
  * endpoint URL per side, plus the language (both clips share it).
+ *
+ * A synthesised clip's voice is its model ref (sourceRef) when it has one, so
+ * two runs of one TTS model on a prompt are one voice, not two. A prompt with
+ * a tone minimal pair (an Igala pair) carries `minimalPair.options`: the two
+ * spellings in an order fixed per listener, never saying which is the target.
  *
  * A (prompt, language) is done for a researcher once they have a counted
  * (non-demo) SpeechComparison on a pair in that language. Demo mode (`?demo=<id>`) ignores that history and
@@ -55,6 +61,7 @@ export async function GET(req: Request) {
       annotatorId: true,
       modelOutputId: true,
       sourceType: true,
+      sourceRef: true,
       createdAt: true,
       prompt: { select: { promptId: true, text: true } },
     },
@@ -80,7 +87,7 @@ export async function GET(req: Request) {
     if (done.has(slot(c.promptId, c.language))) continue;
     const voice =
       c.sourceType === "derived" || c.modelOutputId
-        ? `synth:${c.modelOutputId ?? c.id}`
+        ? `synth:${c.sourceRef ?? c.modelOutputId ?? c.id}`
         : `human:${c.annotatorId ?? c.id}`;
     const key = slot(c.promptId, c.language);
     let voices = byPrompt.get(key);
@@ -124,11 +131,22 @@ export async function GET(req: Request) {
   const clipA = swap ? list[j] : list[i];
   const clipB = swap ? list[i] : list[j];
 
+  const minimalPair =
+    language === "igala"
+      ? await prisma.speechMinimalPair.findUnique({
+          where: { promptId: clipA.promptId },
+          select: { targetSpelling: true, foilSpelling: true },
+        })
+      : null;
+
   return NextResponse.json({
     complete: false,
     demo: isDemo,
     progress,
     task: {
+      ...(minimalPair
+        ? { minimalPair: { options: optionsFor(minimalPair, annotatorId, promptCode) } }
+        : {}),
       prompt: {
         id: clipA.promptId,
         promptId: promptCode,

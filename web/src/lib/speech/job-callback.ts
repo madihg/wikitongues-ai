@@ -203,6 +203,14 @@ export async function applyCallback(
   });
   if (claimed.count === 0) return false;
 
+  // A trained voice becomes a candidate the Synthesize action can name. The
+  // unique modelRef makes a repeat (or a nightly run registering it too) a no-op.
+  if (ok && p.kind === "train_tts" && p.modelRef) {
+    await tx.speechCandidate.createMany({
+      data: [{ system: "tts", modelRef: p.modelRef, jobId: p.jobId }],
+      skipDuplicates: true,
+    });
+  }
   if (ok && p.kind === "evaluate" && p.metrics && p.modelRef) {
     const m = p.metrics;
     await tx.speechEvalResult.create({

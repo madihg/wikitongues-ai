@@ -888,6 +888,8 @@ model SpeechRecording {
   reviewStatus       String? // "keep" | "bad_audio" | "wrong_text"
   isDemo             Boolean        @default(false)
   demoSessionId      String?
+  studioSessionId    String? // one studio sitting of the TTS voice speaker (PR H); null for every other clip
+  studioText         String? // the tone-marked script line the speaker read; the transcript of a studio clip
   createdAt          DateTime       @default(now())
 
   prompt           Prompt             @relation(fields: [promptId], references: [id])
@@ -904,6 +906,7 @@ model SpeechRecording {
   @@index([isDemo])
   @@index([tier])
   @@index([storageKey])
+  @@index([studioSessionId])
 }
 
 // Blind A/B judgment of two clips for one prompt, mirroring PairwiseComparison.
@@ -1094,4 +1097,37 @@ model ThirdPartyAudioSource {
 
   @@index([rightsStatus])
   @@index([confirmedById])
+}
+
+// ---------------------------------------------------------------------------
+// Tone minimal pairs (PR H): a researcher marks a train-side prompt with the
+// spelling its clips are meant to say and a foil that differs in tone marks
+// only. The Listen lane then asks "Which word did you hear?" of each clip.
+// Plain string keys, like the loop tables above.
+// ---------------------------------------------------------------------------
+
+model SpeechMinimalPair {
+  id             String   @id @default(cuid())
+  promptId       String   @unique // Prompt.id
+  targetSpelling String
+  foilSpelling   String
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  @@index([createdById])
+}
+
+model SpeechMinimalPairAnswer {
+  id          String   @id @default(cuid())
+  pairId      String
+  recordingId String
+  annotatorId String
+  heard       String // "target" | "foil" | "unsure"
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@unique([pairId, recordingId, annotatorId])
+  @@index([recordingId])
+  @@index([annotatorId])
+  @@index([isDemo])
 }

@@ -31,6 +31,7 @@ const SELECT = {
   uploadedAt: true,
   reviewStatus: true,
   voiceCloningOptIn: true,
+  studioText: true,
   prompt: { select: { isHoldout: true, split: true, text: true } },
   coldAuthorAnswer: { select: { answerText: true, englishGloss: true } },
 } as const;
@@ -58,6 +59,24 @@ type Db = Pick<PrismaClient, "speechRecording">;
 /** Candidate training rows. Guard them with buildTrainingManifest. */
 export async function loadTrainableRows(db: Db): Promise<LoopRow[]> {
   return db.speechRecording.findMany(TRAINABLE_ROWS_QUERY);
+}
+
+/**
+ * Candidate rows for a TTS job: the trainable query narrowed to the named
+ * studio sittings. Guard them with buildTrainingManifest (purpose "tts").
+ */
+export async function loadStudioRows(
+  db: Db,
+  studioSessionIds: string[],
+): Promise<LoopRow[]> {
+  return db.speechRecording.findMany({
+    where: {
+      ...TRAINABLE_ROWS_QUERY.where,
+      studioSessionId: { in: studioSessionIds },
+    },
+    orderBy: TRAINABLE_ROWS_QUERY.orderBy,
+    select: SELECT,
+  });
 }
 
 /** The exam clips. Only buildEvalManifest may turn these into a manifest. */

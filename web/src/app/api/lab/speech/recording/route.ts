@@ -15,6 +15,7 @@ import {
   type Tier,
 } from "@/lib/speech/limits";
 import { sanitizeQuality } from "@/lib/speech/analyse";
+import { STUDIO_TIER, isStudioSessionId } from "@/lib/speech/studio";
 import {
   audioUrl,
   isAllowedAudioMime,
@@ -45,6 +46,14 @@ import {
  *
  * Demo mode (`demoSessionId`) stores the row with isDemo true; it is never
  * counted, listened to or exported.
+ *
+ * Studio clips (PR H): a body with `studioSessionId` is one line read in the
+ * TTS studio. It carries `studioText` (the tone-marked script line, which is
+ * the clip's transcript), is community_only whatever else is sent (any other
+ * tier is a 400), attaches no cold answer (the script is built from other
+ * speakers' answers), and is set to reviewStatus "keep" only when the speaker
+ * sent `studioKeep: true` after the take check. Without a session id none of
+ * these fields is read, so every other clip is unchanged.
  *
  * A clip may attach to the researcher's own locked answer
  * (`coldAuthorAnswerId`, which must be theirs and for this prompt), or carry
@@ -137,8 +146,32 @@ export async function POST(req: Request) {
   const voiceCloningOptIn = b.voiceCloningOptIn === true;
   const speakerIdOptIn = b.speakerIdOptIn === true;
 
+  // Studio mode: all or nothing, validated before the database is touched.
+  let studio: { sessionId: string; text: string; keep: boolean } | null = null;
+  if (b.studioSessionId !== undefined) {
+    if (!isStudioSessionId(b.studioSessionId)) {
+      return bad("studioSessionId must be 8 to 64 letters, digits, - or _");
+    }
+    if (tier !== STUDIO_TIER) return bad("Studio clips are community_only");
+    if (
+      typeof b.studioText !== "string" ||
+      !b.studioText.trim() ||
+      b.studioText.length > MAX_ANSWER_CHARS
+    ) {
+      return bad("studioText is required, up to 2000 characters");
+    }
+    if (b.studioKeep !== undefined && typeof b.studioKeep !== "boolean") {
+      return bad("studioKeep must be true or false");
+    }
+    studio = {
+      sessionId: b.studioSessionId,
+      text: b.studioText.normalize("NFC").trim(),
+      keep: b.studioKeep === true,
+    };
+  }
+
   let answerText: string | null = null;
-  if (b.answerText !== undefined && b.answerText !== null) {
+  if (!studio && b.answerText !== undefined && b.answerText !== null) {
     if (typeof b.answerText !== "string") return bad("answerText must be text");
     const t = b.answerText.trim();
     if (t.length === 0) return bad("answerText must not be empty");
@@ -146,7 +179,7 @@ export async function POST(req: Request) {
     answerText = t;
   }
   const coldAuthorAnswerId =
-    typeof b.coldAuthorAnswerId === "string" && b.coldAuthorAnswerId
+    !studio && typeof b.coldAuthorAnswerId === "string" && b.coldAuthorAnswerId
       ? b.coldAuthorAnswerId
       : null;
   if (answerText && coldAuthorAnswerId) {
@@ -280,6 +313,15 @@ export async function POST(req: Request) {
       isTestSet: false,
       isDemo,
       demoSessionId,
+      ...(studio
+        ? {
+            studioSessionId: studio.sessionId,
+            studioText: studio.text,
+            // PR F's nightly loop finds studio clips by this prefix.
+            sourceRef: `studio:${studio.sessionId}`,
+            ...(studio.keep ? { reviewStatus: "keep" } : {}),
+          }
+        : {}),
     },
     select: { id: true },
   });

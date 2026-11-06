@@ -62,6 +62,30 @@ describe("buildTrainingManifest", () => {
     expect(line.url).toContain("bucket/a.webm");
   });
 
+  it("a studio clip's transcript is the script line it read, and purpose tts keeps it", () => {
+    const r = row("studio", {
+      tier: "community_only",
+      coldAuthorAnswer: null,
+      studioText: "Kw\u00e0 gb\u1ecd",
+    });
+    const [line] = buildTrainingManifest([r], { ...opts, purpose: "tts" }).lines;
+    expect(line.transcript).toBe("Kw\u00e0 gb\u1ecd".normalize("NFC"));
+    expect(line.transcriptStripped).toBe("Kwa gb\u1ecd".normalize("NFC"));
+    expect(line.tier).toBe("community_only");
+  });
+
+  it("a studio clip that is not kept, or sits on a frozen prompt, is still refused", () => {
+    const m = buildTrainingManifest(
+      [
+        row("unreviewed", { studioText: "kwa gbo", reviewStatus: null }),
+        row("frozen", { studioText: "kwa gbo", prompt: { isHoldout: true, split: "train" } }),
+        row("exam", { studioText: "kwa gbo", isTestSet: true }),
+      ],
+      { ...opts, purpose: "tts" },
+    );
+    expect(m.lines).toEqual([]);
+  });
+
   it("drops a clip with nothing to say (no transcript)", () => {
     const m = buildTrainingManifest(
       [row("a", { coldAuthorAnswer: null }), row("b")],

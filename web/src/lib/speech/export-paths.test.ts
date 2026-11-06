@@ -307,6 +307,7 @@ const REGISTERED_FILES = [
   "src/lib/speech/training-manifest.ts", // the training and eval manifest builders
   "src/lib/speech/loop-rows.ts", // the training and test-set candidate queries
   "scripts/speech/export-manifest.ts", // the export script
+  "src/lib/speech/tts-job.ts", // the TTS launch: buildTrainingManifest, purpose tts
 ];
 
 function sourceFiles(dir: string): string[] {

@@ -8,6 +8,7 @@ const { tx, mockPrisma } = vi.hoisted(() => {
     speechTranscript: { createMany: vi.fn() },
     speechRecording: { createMany: vi.fn() },
     prompt: { findMany: vi.fn() },
+    speechCandidate: { createMany: vi.fn() },
     costEntry: { create: vi.fn() },
   };
   const mockPrisma = {
@@ -125,6 +126,25 @@ describe("POST /api/speech/jobs/callback: what it writes", () => {
       refId: "job1",
     });
     expect(tx.speechEvalResult.create).not.toHaveBeenCalled();
+  });
+
+  it("a finished tts training job registers its voice as a tts candidate, once", async () => {
+    const res = await POST(
+      request({ ...base, kind: "train_tts", modelRef: "/checkpoints/tts/job1" }),
+    );
+    expect(res.status).toBe(200);
+    expect(tx.speechCandidate.createMany).toHaveBeenCalledWith({
+      data: [{ system: "tts", modelRef: "/checkpoints/tts/job1", jobId: "job1" }],
+      skipDuplicates: true,
+    });
+  });
+
+  it("an asr training job, a failed tts job and a duplicate callback register nothing", async () => {
+    await POST(request(base));
+    await POST(request({ ...base, kind: "train_tts", status: "failed", error: "oom", modelRef: null }));
+    mockPrisma.speechTrainJob.findUnique.mockResolvedValue({ id: "job1", status: "succeeded" });
+    await POST(request({ ...base, kind: "train_tts", modelRef: "/checkpoints/tts/job1" }));
+    expect(tx.speechCandidate.createMany).not.toHaveBeenCalled();
   });
 
   it("evaluate writes a SpeechEvalResult and an eval_generation cost entry", async () => {
