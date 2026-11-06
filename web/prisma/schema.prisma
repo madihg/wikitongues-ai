@@ -1049,6 +1049,8 @@ model SpeechCheck {
   reviewerId     String
   verdict        String // matches | does_not_match | cannot_hear
   wrongWordIndex Int?
+  level          String? // with does_not_match: word | sound | tone | missing_extra | other
+  note           String? // annotator free text, max 280; never logged or exported
   isDemo         Boolean  @default(false)
   createdAt      DateTime @default(now())
 

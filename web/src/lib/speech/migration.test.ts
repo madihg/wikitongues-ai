@@ -233,3 +233,34 @@ describe("speech loop migration", () => {
     expect(lUp).toContain('INSERT INTO "SpeechLoopState" ("id") VALUES (1)');
   });
 });
+
+/**
+ * The check level migration: two nullable columns on SpeechCheck, nothing else.
+ */
+describe("speech check level migration", () => {
+  const dirC = join(root, "migrations", "20261107130000_speech_check_level");
+  const cUp = readFileSync(join(dirC, "migration.sql"), "utf8");
+  const cDown = readFileSync(join(dirC, "down.sql"), "utf8");
+
+  it("starts with the search_path line", () => {
+    expect(cUp).toMatch(/^SET search_path TO "wikitongues", "extensions", "public";$/m);
+    expect(cDown).toMatch(/^SET search_path TO "wikitongues"/m);
+  });
+
+  it("adds level and note to SpeechCheck and nothing else", () => {
+    expect(cUp).toContain(
+      'ALTER TABLE "SpeechCheck" ADD COLUMN "level" TEXT, ADD COLUMN "note" TEXT;',
+    );
+    expect(cUp).not.toMatch(/\bDROP\s|\bDELETE\s+FROM|\bTRUNCATE|\bUPDATE\s+"|NOT NULL/i);
+    expect([...cUp.matchAll(/ALTER TABLE "(\w+)"/g)].map((m) => m[1])).toEqual([
+      "SpeechCheck",
+    ]);
+    expect(schema).toMatch(/model SpeechCheck \{[^}]*\blevel\s+String\?[^}]*\bnote\s+String\?/);
+  });
+
+  it("down.sql drops exactly the two columns", () => {
+    expect(cDown).toContain('DROP COLUMN IF EXISTS "level"');
+    expect(cDown).toContain('DROP COLUMN IF EXISTS "note"');
+    expect(cDown).not.toMatch(/DROP TABLE/i);
+  });
+});

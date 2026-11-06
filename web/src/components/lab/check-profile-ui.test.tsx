@@ -20,11 +20,15 @@ const view = (over: Partial<CheckViewProps> = {}) =>
       sent={null}
       picked={null}
       wrongWord={null}
+      level={null}
+      note=""
       busy={false}
       error={null}
       transcript={undefined}
       onPick={noop}
       onWrongWord={noop}
+      onLevel={noop}
+      onNote={noop}
       onSend={noop}
       onChange={noop}
       onNext={noop}
@@ -56,6 +60,44 @@ describe("Check screen", () => {
     const html = view({ picked: "does_not_match", wrongWord: 1 });
     expect(html).toContain("Pick the word that does not match");
     expect(html).toMatch(/aria-pressed="true"[^>]*>ba</);
+  });
+
+  it("shows the five level chips only for Does not match", () => {
+    const chips = /aria-label="On what level does it not match"/;
+    expect(view()).not.toMatch(chips);
+    expect(view({ picked: "matches" })).not.toMatch(chips);
+    expect(view({ picked: "cannot_hear" })).not.toMatch(chips);
+    const html = view({ picked: "does_not_match" });
+    expect(html).toMatch(chips);
+    for (const label of [
+      "A different word was said",
+      "Right word, a sound is off",
+      "Right word, the tone is off",
+      "Words missing or added",
+      "Something else, say what in the note",
+    ]) {
+      expect(html).toContain(`>${label}<`);
+    }
+  });
+
+  it("with Does not match, Send stays disabled until a level is picked", () => {
+    const disabled = /<button[^>]*data-testid="check-send"[^>]*\sdisabled=""/;
+    expect(view({ picked: "does_not_match" })).toMatch(disabled);
+    const html = view({ picked: "does_not_match", level: "tone" });
+    expect(html).not.toMatch(disabled);
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Right word, the tone is off</);
+  });
+
+  it("says a dialect pronunciation still matches, under Matches", () => {
+    expect(view()).toContain("A dialect pronunciation of the same word still matches.");
+  });
+
+  it("offers an optional note with a 280 counter for every verdict", () => {
+    for (const picked of ["matches", "does_not_match", "cannot_hear"] as const) {
+      const html = view({ picked, note: "abc" });
+      expect(html).toMatch(/<input[^>]*id="check-note"[^>]*maxLength="280"/);
+      expect(html).toContain("3/280");
+    }
   });
 
   it("after the verdict it shows the transcript with differing words marked, and Change my verdict", () => {
