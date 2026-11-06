@@ -1,4 +1,5 @@
 import type { EvalBucket, VerificationStatus } from "@prisma/client";
+import { isFrozenPrompt } from "@/lib/speech/guard";
 
 /**
  * Training-set export. Turns the platform's collected signal into clean
@@ -33,6 +34,8 @@ export interface DpoSourceRow {
   rejectedText: string;
   bucket: EvalBucket | null;
   isHoldout: boolean;
+  /** Prompt split ("train" | "dev" | "test"); a "test" prompt is frozen too. */
+  split?: string | null;
 }
 
 export interface SftSourceRow {
@@ -41,6 +44,8 @@ export interface SftSourceRow {
   correctedText: string;
   bucket: EvalBucket | null;
   isHoldout: boolean;
+  /** Prompt split ("train" | "dev" | "test"); a "test" prompt is frozen too. */
+  split?: string | null;
   verificationStatus: VerificationStatus;
   /** Where the completion came from. See SftProvenance above. */
   provenance: SftProvenance;
@@ -87,6 +92,11 @@ export interface ExportFilters {
   maxEditShare?: number;
 }
 
+/** Held out by flag or by test split; same rule as the speech guard. */
+function isFrozen(r: { isHoldout: boolean; split?: string | null }): boolean {
+  return isFrozenPrompt({ isHoldout: r.isHoldout, split: r.split ?? "" });
+}
+
 /** Build DPO (prompt, chosen, rejected) examples. Drops held-out prompts and degenerate pairs. */
 export function buildDpoExamples(
   rows: DpoSourceRow[],
@@ -94,7 +104,7 @@ export function buildDpoExamples(
 ): DpoExample[] {
   const out: DpoExample[] = [];
   for (const r of rows) {
-    if (r.isHoldout) continue; // contamination guard
+    if (isFrozen(r)) continue; // contamination guard
     if (!r.chosenText || !r.rejectedText) continue;
     if (r.chosenText.trim() === r.rejectedText.trim()) continue;
     if (filters.buckets && filters.buckets.length > 0) {
@@ -130,7 +140,7 @@ export function buildSftExamples(
   const cold: SftExample[] = [];
   const edits: SftExample[] = [];
   for (const r of rows) {
-    if (r.isHoldout) continue; // contamination guard
+    if (isFrozen(r)) continue; // contamination guard
     if (!r.correctedText?.trim()) continue;
     if (r.provenance === "edit" && !includeEdits) continue;
     if (VERIFICATION_RANK[r.verificationStatus] < minRank) continue;
