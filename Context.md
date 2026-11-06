@@ -2409,3 +2409,78 @@ NOT COVERED (follow-up candidates)
 
 GATES: pnpm typecheck 0, pnpm lint 0, vitest 104 files, 1,612 tests (was
 103 / 1,601). static-leak-check v3, v4, v4.1, v4.2, v4.4, v4.5 all PASS.
+
+## Session State (2026-11-05, Fable 5.1) - SPEECH PROGRAMME DOC: ONE PAGER, PRD v2, RESEARCH, COST
+
+Deliverable: a four-tab Google Doc in Drive "8. Earn / Wikitongues",
+"Igala speech: one pager, PRD, research, cost estimate (2026-11-05)",
+https://docs.google.com/document/d/1bTMnH1Nds4ZaUq5T5KaArqpR2thtWF5DsPE5Np72lPY/edit
+Tabs: One pager (t.0), PRD (t.ff26ok8c34r6), Research (t.lurmmu5ejoi3), Cost estimate (t.foc7vl8t3mao).
+Loop diagram PNG beside it in the same folder (Drive id 1tyPsP2RN9wI_eZo8HjwtxjVxWuO5qPSu); not inline
+because the Docs API only inserts images from public URLs.
+
+Sources and build live OUTSIDE the repo (private material): ~/wt-clones/speech-doc/
+(tabs/*.md are the markdown sources, build/md2docs.py converts them to Docs batchUpdate requests,
+src/ holds the inputs incl. Andy's Google-internal report; never commit src/).
+
+PRD v2 (the PRD tab) supersedes tasks/speech/prd-igala-speech-tts-first-2026-10-19.md on branch speech-prd (PR #77).
+40 stories: US-001 to US-011 kept their numbers (6 live: 001, 002, 003, 004, 005, 010), new US-012 to US-040 in
+epics B (speech inside the prompt system), C (improve ASR), D (improve TTS), E (nightly loop), F (rights).
+New flags proposed: SPEECH_LAYER_ANNOTATORS, SPEECH_LOOP_ENABLED. Regression cutoffs CER +1.0 / TER +2.0.
+Code contradictions with the Oct 19 PRD recorded in the tab (storage is Postgres bytes, consent is versioned
+tables, routes under /api/lab/speech, open manifest effectively empty until a publish step exists).
+
+Cost tab: A "Prove it" $3,639 (212 Halim h), B "A voice" $6,908 (390 h), C "Parity target" $18,820 (580 h),
+excluding Halim's rate, studio rental, legal, airtime. Pay rate ($16/$27/$38 AfriVoices-KE bands) is Halim's decision.
+
+Nothing was built in code this session. Halim asked for the screen-by-screen landing list before any build;
+it was given in chat (annotators: Say it block, Check, Listen, session line, profile; researchers: Recordings,
+dashboard card, ledger, promote/pause, prompt tone pairs).
+
+Open decisions surfaced: tone ruling (Salem, Lydia), pay rate, training provider and evaluation worker,
+object storage, studio speaker, GRN redistribution, Hypa-Speech-10k and Lanfrica checks, second language for
+the transferability claim, what Google receives (scores only vs recipe), community_only training makes models
+non-publishable.
+
+## Session State (2026-11-06, Fable 5.1) - SPEECH BUILD: NINE PRs, INFRASTRUCTURE LIVE, FIRST SPENDS RUN
+
+**What happened.** The approved plan (`~/.claude/plans/shimmying-wiggling-curry.md`) was built by nine parallel agents, one clone and one PR each, under `~/wt-clones/pr-*`. All nine PRs are open and unmerged; Halim merges in order. Infrastructure was then set up with Halim's explicit yes ("you have supabase cli so you do it same for modal same for vercel so do the thing you have a yes for the spends").
+
+**PR stack (merge in this order, each stacked on the previous where noted).**
+- #83 `speech/scoring`: `lib/speech/metrics.ts` (CER, WER stripped and tone-retained, TER over tone-marked vowels), `metrics.fixtures.json` (20 invented cases), `worker/igala_speech/{normalise,metrics}.py` on jiwer reading the same fixture, training export refuses `split === "test"`.
+- #84 `speech/storage`: `lib/speech/storage-supabase.ts` (putClip, signedUrl 3600 s, downloadClip, deleteClip, storageEnabled), migration `20261105120000_speech_storage` (SpeechRecording.storageKey), audio route 302s to a signed URL when the key is set, `scripts/speech/backfill-storage.ts`. Flag `SPEECH_STORAGE=1` turns writes on.
+- #85 `speech/openrouter`: `lib/llm/openrouter.ts` (60 s timeout, 3 retries on 429/5xx, usage into CostEntry), `lib/speech/llm-config.ts` (model ids in one place, default `google/gemini-3.1-pro-preview`), `tone-restore.ts` with `violations()`, `asr-correct.ts`, judge OpenRouter route, `scripts/speech/eval-tone-restore.ts` (`--offset`, `--limit`, `--dry-run`).
+- #86 `speech/dataset`: migration `20261105130000_speech_loop` (SpeechTrainJob, SpeechEvalResult, SpeechNightlyRun, SpeechCandidate, SpeechLoopState, SpeechCheck, SpeakerProfile, ThirdPartyAudioSource), `can-train.ts`, `training-manifest.ts` (version = sha256 of sorted ids plus orthography version), `/api/lab/speech/freeze` with the speaker-disjoint check, Recordings freeze UI.
+- #87 `speech/rights`: migrations `20261106120000_speech_consent_withdrawn`, `20261106120100_speech_retrain_required`; rights register page over ThirdPartyAudioSource; `/api/lab/consent/withdraw`; `scripts/speech/seed-rights-register.ts` (GRN, Hypa, Lanfrica rows, not yet run).
+- #88 `speech/worker`: `worker/speech.py` Modal app `wikitongues-speech` (/health, /transcribe, /train-asr, /evaluate, /train-tts, /synthesize, /status/{callId}; `x-shared-secret`; HMAC-SHA256 callback over `timestamp.body` with a 300 s window), `rates.py`, `signing.py`, migration `20261105140000_speech_transcript`, `lib/speech/train-providers.ts` (mock and modal), `/api/speech/jobs/callback`.
+- #89 `speech/annotators`: flag `SPEECH_LAYER_ANNOTATORS`, `canUseSpeech`, labGate audience, Check screen `/speak/check` (transcript shown only after the verdict), speaker profile, `coverage.ts`, nav merge, next-day exposure, a 191-case route matrix test.
+- #90 `speech/nightly`: `decide.ts` with DECIDE_CONFIG (30 new minutes for ASR; 30 new studio minutes plus 5 h total for TTS), `/api/speech/nightly` (idempotent by date), promote, pause and ledger routes, `/admin/speech` dashboard, migration `20261107120000_speech_nightly` (SpeechAlert, SpeechAudit), `notify.ts` on Resend, `modal.Cron("0 2 * * *")`.
+- #91 `speech/tts`: `scripts/speech/build-tts-script.ts`, studio page, migration `20261106130000_speech_studio` (studioSessionId, studioText, SpeechMinimalPair and answers), Bradley-Terry decision card with 300 and 600 judgment thresholds, `LYDIA_AXES` slot.
+- Every PR body carries the disclosure line (agent-written and test-verified vs read line by line).
+
+**Infrastructure now live (do not recreate).**
+- Supabase: bucket `igala-speech` (private, 50 MB per object). All seven migrations above applied through the Supabase MCP, `GRANT ... ON ALL TABLES IN SCHEMA wikitongues TO wikitongues_app`, and seven `_prisma_migrations` rows inserted with sha256 checksums (`~/wt-clones/speech-doc/build/ledger/`). Never run `prisma migrate deploy`.
+- Backfill ran for real: 15 of 15 clips copied, checksums verified, storageKey set, bytes kept; storage.objects shows 15 objects, 1.55 MB.
+- Secrets: `SUPABASE_SERVICE_ROLE_KEY`, `SPEECH_WORKER_SECRET`, `SPEECH_WORKER_URL` in Vercel production and preview, in `.env.local` of feat-annotate and every pr-* clone, and in the Modal secret `wikitongues-speech` (plus `APP_BASE_URL=https://app.wikitongues.org`, `SUPABASE_URL`). Values live only in `~/wt-clones/private-vault/speech-secrets/`; never printed, never committed.
+- Modal (workspace madihg): `modal deploy speech.py` from `~/wt-clones/pr-f-nightly/worker` succeeded in 135 s; functions speech_web, nightly_trigger, transcribe, train_asr, evaluate, train_tts, synthesize. URL `https://madihg--wikitongues-speech-speech-web.us-east.modal.run`. Smoke test: /health ok, POST /transcribe without or with a wrong secret returns 401.
+- Flags unset on purpose: `SPEECH_STORAGE` (set after #84 merges), `SPEECH_LOOP_ENABLED`, `SPEECH_LAYER_ANNOTATORS` (stay unset until the first manual nightly run is reviewed).
+
+**Approved spends, status.**
+- Tone-restoration eval (Gemini 3.1 Pro via OpenRouter), first 50 marked answers: 46 restored, 4 answers with violations, 4 exact matches, TER stub 22.9% (152 of 664 letters), $0.86. Log `~/wt-clones/speech-doc/build/tone-eval-50.log`. Next 240 answers (offset 50, log `tone-eval-290.log`): 153 restored, 83 answers with violations (107 items), 4 call failures, 3 exact matches, TER stub 23.5% (1380 of 5870 letters), $5.41. Total spent $6.27 against the $5 estimate: the per-answer cost rose with answer length. The remaining 246 answers were not run. Finding: on longer answers Gemini changes more than tone marks about a third of the time, so tone restoration needs a tighter instruction or a diff-only accept step before it feeds training text.
+- First baseline transcription and first ASR fine-tune on Modal: NOT run. The worker's callback target is production, where `/api/speech/jobs/callback` does not exist until #88 merges; the preview deployments are behind Vercel Authentication (GET returns 302 "Protected by Vercel Authentication", POST callback 401). Options: merge the stack, or Halim approves a deployment-protection bypass for the preview (a Vercel setting change, needs his yes).
+
+**Supporting material.** Google Doc "Igala speech: one pager, PRD, research, cost estimate (2026-11-05)" (id `1bTMnH1Nds4ZaUq5T5KaArqpR2thtWF5DsPE5Np72lPY`) in Drive "8. Earn / Wikitongues", rewritten in Halim's style; markdown sources and the md2docs converter in `~/wt-clones/speech-doc/` (README has the re-sync method). Diagram PNG in the same Drive folder. Briefs per PR in `~/wt-clones/speech-doc/briefs/`, build rules in `build-rules.md`.
+
+**Halim's list.**
+1. Review and merge #83 to #91 in order; then set `SPEECH_STORAGE=1` in Vercel.
+2. After #88 is on production: trigger a baseline transcription (about 0.3 A10G hours) and the first ASR fine-tune (20 to 40 A100 hours, estimate before launch) and watch the callback land.
+3. Run `scripts/speech/seed-rights-register.ts` once #87 merges.
+4. Optional alerts: `RESEND_API_KEY` and `ALERT_EMAIL_TO` in Vercel.
+5. Decisions still open: TER rule (Salem and Lydia tone ruling), annotator pay rate, Check verdict rule, third-party licences (GRN, Hypa, Lanfrica), consent wording, processor list (Modal added).
+6. Finder: mark `My Drive/Offload-2026-11-05` "Online only" to reclaim 7.6 GB; decide on `vm_bundles` (13.7 GB, untouched).
+7. Unsent Gmail draft "Speech is live for researchers" still waits for his yes.
+8. Earlier items unchanged: history rewrite push, docs PRs #74, #77, #78, #81 unmerged, Lydia's rubric.
+
+**Nov 6 addendum, Salem's access.** Salem wrote on Nov 4 that the Speech link did not work. His User row (RESEARCHER, created Oct 16) was intact; the password was reset with Halim's explicit permission (bcrypt hash updated through the Supabase MCP, hash kept in the private vault, plaintext deleted). Login verified against production: the NextAuth credentials callback returned a session for his email with role RESEARCHER, /lab/speech returned 200 logged in, and a wrong password was refused. The new password was emailed to him in the "Speech is live for researchers" thread on Nov 6 (sent, not drafted).
+
+**Nov 6 addendum, Lydia alignment and the team email.** Granola calls with Lydia (Aug 12, Oct 13, Oct 19, Oct 20) were read against the build. Her asks were: a speech layer inside the episode (built), record and write in Igala and English (built), her rubric as a layer on top of the baseline (slot built, LYDIA_RUBRIC_READY), rate BOTH outputs with the rubric not only the better one (Oct 13, was NOT built: Listen scored the winner only), and every judgment names the level of the error (Oct 13, was NOT built: Check stored a bare verdict). Two fix PRs closed the gaps: #93 `speech/axes-both-sides` (from main; axes stored as {version, scores:{a,b}}, legacy reader kept, UI shows both clips per axis) and #92 `speech/check-levels` (stacked on #89; SpeechCheck.level and .note, level required with does_not_match, dialect hint under Matches, migration 20261107130000_speech_check_level applied to production and ledgered on Nov 6). Merge order: #92 right after #89; #93 any time. Annotator guide written as a Google Doc "Speech for annotators: what you will do" in the Wikitongues AI Pilot shared folder (id 1cQ4JCKLpy3CxenBrCc6tLhG7YeG0D54OQRULoW6WKjA), shared read-only with Agnes, Lydia and Daniel. Email "Speech: what is built, and what annotators do next" SENT to the three on Nov 6. Still open for Lydia: her rubric axes (replace LYDIA_AXES), the IPA tool from her colleague, the per-speaker sound inventory (needs clips first).
