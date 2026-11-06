@@ -180,9 +180,11 @@ const TRAIN_ENTRY_POINTS: EntryPoint[] = (
   {
     name: `training-manifest.buildTrainingManifest (${scope})`,
     released: (rows: ManifestRow[]) =>
-      buildTrainingManifest(rows, { scope, purpose: "asr", signedUrl }).lines.map(
-        (l) => l.id,
-      ),
+      buildTrainingManifest(rows, {
+        scope,
+        purpose: "asr",
+        signedUrl,
+      }).lines.map((l) => l.id),
   },
 ]);
 
@@ -204,8 +206,9 @@ describe.each(TRAIN_ENTRY_POINTS)("training entry point: $name", (entry) => {
   });
 
   it("still releases an eligible row", async () => {
-    expect(await entry.released([...forbiddenRows(), openRow({ id: "fine" })]))
-      .toContain("fine");
+    expect(
+      await entry.released([...forbiddenRows(), openRow({ id: "fine" })]),
+    ).toContain("fine");
   });
 });
 
@@ -225,7 +228,9 @@ describe("eval entry points release test-set rows and nothing else", () => {
       name: "can-train.canEvaluate",
       released: (rows) =>
         rows
-          .filter((r) => canEvaluate(r, { scope: "internal", purpose: "asr" }).ok)
+          .filter(
+            (r) => canEvaluate(r, { scope: "internal", purpose: "asr" }).ok,
+          )
           .map((r) => r.id),
     },
     {
@@ -256,10 +261,39 @@ describe("eval entry points release test-set rows and nothing else", () => {
   });
 });
 
+/**
+ * Outside audio and withdrawn clips (US-039, US-040): no export entry point
+ * releases a third_party clip whose source is not cleared, or a clip its
+ * speaker withdrew. Same registry, so a new path is covered the day it is added.
+ */
+describe.each(ENTRY_POINTS)("rights guards: $name", (entry) => {
+  const own = entry.name.includes("canExportLicensed") ? licensedRow : openRow;
+  it("refuses outside audio whose source is pending or restricted", async () => {
+    const rows = (["pending", "restricted"] as const).map((rightsStatus) =>
+      own({
+        id: `tp-${rightsStatus}`,
+        sourceType: "third_party",
+        sourceRef: "src-1",
+        rightsStatus,
+      }),
+    );
+    expect(await entry.released(rows)).toEqual([]);
+  });
+
+  it("refuses a clip its speaker withdrew", async () => {
+    expect(
+      await entry.released([own({ id: "gone", reviewStatus: "withdrawn" })]),
+    ).toEqual([]);
+  });
+});
+
 describe("the loop queries select explicit fields, never bytes", () => {
   it("loadTrainableRows and loadTestSetRows name a select without bytes", async () => {
     const findMany = vi.fn().mockResolvedValue([]);
-    const db = { speechRecording: { findMany } } as never;
+    const db = {
+      speechRecording: { findMany },
+      consentGrant: { findMany: vi.fn().mockResolvedValue([]) },
+    } as never;
     await loadTrainableRows(db);
     await loadTestSetRows(db);
     for (const [arg] of findMany.mock.calls) {

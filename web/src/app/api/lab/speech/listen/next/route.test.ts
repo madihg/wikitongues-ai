@@ -151,7 +151,7 @@ describe("GET /api/lab/speech/listen/next", () => {
     expect(where.uploadedAt).toEqual({ not: null });
     expect(where.AND[0].OR).toEqual([
       { reviewStatus: null },
-      { reviewStatus: { notIn: ["bad_audio", "wrong_text"] } },
+      { reviewStatus: { notIn: ["bad_audio", "wrong_text", "withdrawn"] } },
     ]);
     expect(where.OR).toEqual([{ isDemo: false }]);
   });
