@@ -33,6 +33,16 @@ describe("buildDpoExamples", () => {
     expect(out).toHaveLength(0);
   });
 
+  it("NEVER exports prompts whose split is test, even when isHoldout is false", () => {
+    expect(buildDpoExamples([{ ...base, split: "test" }])).toHaveLength(0);
+  });
+
+  it("keeps train and dev splits, and rows that carry no split", () => {
+    expect(buildDpoExamples([{ ...base, split: "train" }])).toHaveLength(1);
+    expect(buildDpoExamples([{ ...base, split: "dev" }])).toHaveLength(1);
+    expect(buildDpoExamples([base])).toHaveLength(1);
+  });
+
   it("drops degenerate pairs where chosen == rejected", () => {
     const out = buildDpoExamples([{ ...base, rejectedText: base.chosenText }]);
     expect(out).toHaveLength(0);
@@ -76,6 +86,16 @@ describe("buildSftExamples", () => {
   it("NEVER exports held-out prompts (contamination guard)", () => {
     const out = buildSftExamples([{ ...base, isHoldout: true }]);
     expect(out).toHaveLength(0);
+  });
+
+  it("NEVER exports prompts whose split is test, even when isHoldout is false", () => {
+    expect(buildSftExamples([{ ...base, split: "test" }])).toHaveLength(0);
+  });
+
+  it("keeps train and dev splits, and rows that carry no split", () => {
+    expect(buildSftExamples([{ ...base, split: "train" }])).toHaveLength(1);
+    expect(buildSftExamples([{ ...base, split: "dev" }])).toHaveLength(1);
+    expect(buildSftExamples([base])).toHaveLength(1);
   });
 
   it("filters out edits below the minimum verification status", () => {
