@@ -25,22 +25,52 @@ export function activeLabTab(pathname: string): string | null {
   return null;
 }
 
+/** The four /speak tabs, in order: the speaker side of the lab, for annotators and researchers. */
+export const SPEAK_TABS = [
+  { href: "/speak", label: "Speak" },
+  { href: "/speak/listen", label: "Listen" },
+  { href: "/speak/check", label: "Check" },
+  { href: "/speak/profile", label: "Profile" },
+] as const;
+
+/** Which /speak tab a pathname belongs to; "/speak" matches only exactly. */
+export function activeSpeakTab(pathname: string): string | null {
+  if (pathname === "/speak") return "/speak";
+  for (const tab of SPEAK_TABS) {
+    if (tab.href === "/speak") continue;
+    if (pathname === tab.href || pathname.startsWith(`${tab.href}/`)) {
+      return tab.href;
+    }
+  }
+  return null;
+}
+
 /**
  * The one mark that says "this is the lab": a full-width ink band, 56px tall,
- * the same on all three tabs. Left, "LAB" then "Speech"; right, the tab
- * strip. Below it the page is the normal light surface.
+ * the same on all tabs. Left, a tag then a name; right, the tab strip. Below
+ * it the page is the normal light surface.
  */
-export function LabBand() {
-  const pathname = usePathname();
-  const active = activeLabTab(pathname);
+function Band({
+  tag,
+  name,
+  label,
+  tabs,
+  active,
+}: {
+  tag: string;
+  name: string;
+  label: string;
+  tabs: readonly { href: string; label: string }[];
+  active: string | null;
+}) {
   return (
     <header className="flex h-14 items-center justify-between gap-3 bg-foreground px-4 text-background sm:px-8">
       <div className="flex items-baseline gap-3">
-        <span className="font-mono text-xs tracking-widest">LAB</span>
-        <span className="text-sm font-medium">Speech</span>
+        <span className="font-mono text-xs tracking-widest">{tag}</span>
+        <span className="text-sm font-medium">{name}</span>
       </div>
-      <nav aria-label="Speech Lab" className="flex items-center gap-1">
-        {LAB_TABS.map((tab) => (
+      <nav aria-label={label} className="flex items-center gap-1">
+        {tabs.map((tab) => (
           <Link
             key={tab.href}
             href={tab.href}
@@ -56,5 +86,27 @@ export function LabBand() {
         ))}
       </nav>
     </header>
+  );
+}
+
+/** The Lab band: LAB, Speech, then Record, Listen, Recordings. */
+export function LabBand() {
+  const active = activeLabTab(usePathname());
+  return (
+    <Band tag="LAB" name="Speech" label="Speech Lab" tabs={LAB_TABS} active={active} />
+  );
+}
+
+/** The Speak band for /speak/*: Speak, Listen, Check, Profile. */
+export function SpeakBand() {
+  const active = activeSpeakTab(usePathname());
+  return (
+    <Band
+      tag="SPEECH"
+      name="Add your voice"
+      label="Speech"
+      tabs={SPEAK_TABS}
+      active={active}
+    />
   );
 }

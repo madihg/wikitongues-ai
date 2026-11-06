@@ -243,13 +243,19 @@ describe("sanitizeQuality", () => {
 
 describe("sessionLine", () => {
   it("reads like the brief", () => {
-    expect(
-      sessionLine({ kept: 6, retakes: 2, communityOnly: 3, licensed: 3, open: 0 }),
-    ).toBe("Today: 6 clips kept, 2 re-recorded, 3 community-only, 3 licensed");
+    expect(sessionLine(12, 41.5)).toBe(
+      "You added 12 minutes today. The pool is at 41.5 hours.",
+    );
   });
-  it("singular, and open only when there is one", () => {
-    expect(
-      sessionLine({ kept: 1, retakes: 0, communityOnly: 0, licensed: 0, open: 1 }),
-    ).toBe("Today: 1 clip kept, 0 re-recorded, 0 community-only, 0 licensed, 1 open");
+  it("rounds to one decimal, singular at exactly one, zero when empty", () => {
+    expect(sessionLine(0, 0)).toBe(
+      "You added 0 minutes today. The pool is at 0 hours.",
+    );
+    expect(sessionLine(1, 1)).toBe(
+      "You added 1 minute today. The pool is at 1 hour.",
+    );
+    expect(sessionLine(2.46, 0.04)).toBe(
+      "You added 2.5 minutes today. The pool is at 0 hours.",
+    );
   });
 });

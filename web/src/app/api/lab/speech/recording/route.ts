@@ -56,7 +56,7 @@ function isTier(v: unknown): v is Tier {
 }
 
 export async function POST(req: Request) {
-  const gate = await labGate();
+  const gate = await labGate({ audience: "speaker" });
   if (gate.error) return gate.error;
   const annotatorId = gate.userId;
 

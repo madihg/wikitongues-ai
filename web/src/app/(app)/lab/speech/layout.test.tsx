@@ -12,16 +12,25 @@ vi.mock("next/navigation", () => ({
   forbidden: () => {
     throw new Error("NEXT_FORBIDDEN");
   },
+  redirect: (to: string) => {
+    throw new Error(`NEXT_REDIRECT:${to}`);
+  },
   usePathname: () => "/lab/speech",
 }));
 
 import SpeechLabLayout from "./layout";
 
 const original = process.env.SPEECH_LAB_ENABLED;
-beforeEach(() => vi.clearAllMocks());
+const originalLayer = process.env.SPEECH_LAYER_ANNOTATORS;
+beforeEach(() => {
+  vi.clearAllMocks();
+  delete process.env.SPEECH_LAYER_ANNOTATORS;
+});
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
   else process.env.SPEECH_LAB_ENABLED = original;
+  if (originalLayer === undefined) delete process.env.SPEECH_LAYER_ANNOTATORS;
+  else process.env.SPEECH_LAYER_ANNOTATORS = originalLayer;
 });
 
 const render = () => SpeechLabLayout({ children: "child" });
@@ -39,6 +48,19 @@ describe("the Speech Lab layout gate", () => {
       user: { id: "a1", role: "ANNOTATOR" },
     });
     await expect(render()).rejects.toThrow("NEXT_FORBIDDEN");
+  });
+
+  it("with the annotator layer on, an annotator passes the layout without the lab band", async () => {
+    process.env.SPEECH_LAB_ENABLED = "1";
+    process.env.SPEECH_LAYER_ANNOTATORS = "1";
+    mockGetServerSession.mockResolvedValue({
+      user: { id: "a1", role: "ANNOTATOR" },
+    });
+    const el = await render();
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const html = renderToStaticMarkup(el);
+    expect(html).toBe("child");
+    expect(html).not.toContain("LAB");
   });
 
   it("403 for a signed-out visitor", async () => {
@@ -66,9 +88,17 @@ describe("every page asks for the gate itself", () => {
   it("each page.tsx calls requireLabPage before rendering", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
-    for (const f of ["page.tsx", "listen/page.tsx", "recordings/page.tsx"]) {
+    // Record and Listen send an annotator on to the matching /speak page;
+    // Recordings is researcher-only and refuses them.
+    const pages = {
+      "page.tsx": 'await requireLabPage({ annotatorRedirect: "/speak" })',
+      "listen/page.tsx":
+        'await requireLabPage({ annotatorRedirect: "/speak/listen" })',
+      "recordings/page.tsx": "await requireLabPage()",
+    };
+    for (const [f, call] of Object.entries(pages)) {
       const src = readFileSync(join(__dirname, f), "utf8");
-      expect(src, f).toContain("await requireLabPage()");
+      expect(src, f).toContain(call);
     }
   });
 

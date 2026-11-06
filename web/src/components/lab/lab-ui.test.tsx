@@ -922,13 +922,13 @@ describe("the episode's Say it block", () => {
     expect(html).toContain("Optional");
   });
 
-  it("never blocks: Skip for now is there before anything is recorded", () => {
+  it("never blocks: Skip, no recording is there before anything is recorded", () => {
     const html = block("what it means");
     const skip = tagsOf(html, "button").find((t) =>
       t.includes('data-testid="say-it-continue"'),
     )!;
     expect(skip).not.toMatch(DISABLED);
-    expect(html).toContain(">Skip for now<");
+    expect(html).toContain(">Skip, no recording<");
   });
 
   it("reads the locked English meaning when there is one", () => {
@@ -945,9 +945,9 @@ describe("the episode's Say it block", () => {
     );
   });
 
-  it("is wired only for researchers with the flag on, after the lock and before the outputs", () => {
+  it("is wired for any speaker the server allows, after the lock and before the outputs", () => {
     const src = readFileSync(join(dir, "..", "annotation-interface.tsx"), "utf8");
-    expect(src).toContain("useSpeechLayer(researcher)");
+    expect(src).toContain("useSpeechLayer(canProbeSpeech(");
     expect(src).toMatch(/if \(speechLayer && coldAnswer\.trim\(\)\) \{\s*setSayIt\(true\);\s*return;/);
     // The block renders inside the locked first step, not in the pairwise step.
     const first = src.indexOf("<SayItBlock");
@@ -956,9 +956,9 @@ describe("the episode's Say it block", () => {
     expect(src.match(/<SayItBlock/g)).toHaveLength(1);
   });
 
-  it("the hook asks the server only for researchers", () => {
+  it("the hook asks the server only for eligible roles", () => {
     const src = sourceOf("use-speech-layer.ts");
-    expect(src).toContain("if (!researcher)");
+    expect(src).toContain("if (!eligible)");
     expect(src).toContain("/api/lab/flags");
   });
 

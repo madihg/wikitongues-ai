@@ -361,14 +361,17 @@ export interface SessionCounts {
   open: number;
 }
 
-/** "Today: 6 clips kept, 2 re-recorded, 3 community-only, 3 licensed". */
-export function sessionLine(c: SessionCounts): string {
-  const parts = [
-    `${c.kept} clip${c.kept === 1 ? "" : "s"} kept`,
-    `${c.retakes} re-recorded`,
-    `${c.communityOnly} community-only`,
-    `${c.licensed} licensed`,
-  ];
-  if (c.open > 0) parts.push(`${c.open} open`);
-  return `Today: ${parts.join(", ")}`;
+/** Minutes or hours to one decimal; whole numbers print without ".0". */
+function oneDecimal(n: number): string {
+  return String(Math.round(n * 10) / 10);
+}
+
+/**
+ * "You added 12 minutes today. The pool is at 41.5 hours." Both numbers come
+ * from the server: the caller's own non-demo confirmed clips since the start
+ * of today, and the pool (kept, consented, non-demo clips of every tier).
+ */
+export function sessionLine(minutesToday: number, poolHours: number): string {
+  const minutes = Math.round(minutesToday * 10) / 10;
+  return `You added ${oneDecimal(minutes)} ${minutes === 1 ? "minute" : "minutes"} today. The pool is at ${oneDecimal(poolHours)} ${Math.round(poolHours * 10) / 10 === 1 ? "hour" : "hours"}.`;
 }
