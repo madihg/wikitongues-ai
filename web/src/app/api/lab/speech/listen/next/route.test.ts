@@ -5,6 +5,7 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
   mockPrisma: {
     speechRecording: { findMany: vi.fn() },
     speechComparison: { findMany: vi.fn() },
+    speechMinimalPair: { findUnique: vi.fn() },
   },
   mockRequireResearcher: vi.fn(),
 }));
@@ -43,6 +44,7 @@ beforeEach(() => {
   });
   mockPrisma.speechRecording.findMany.mockResolvedValue([]);
   mockPrisma.speechComparison.findMany.mockResolvedValue([]);
+  mockPrisma.speechMinimalPair.findUnique.mockResolvedValue(null);
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -233,5 +235,48 @@ describe("GET /api/lab/speech/listen/next", () => {
     await get();
     const sel = mockPrisma.speechRecording.findMany.mock.calls[0][0].select;
     expect(sel).not.toHaveProperty("bytes");
+  });
+});
+
+describe("GET /api/lab/speech/listen/next: TTS voices and minimal pairs", () => {
+  it("two clips of one model ref are one voice; two models are two", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      clip({ annotatorId: null, sourceType: "derived", sourceRef: "tts/job-1" }),
+      clip({ annotatorId: null, sourceType: "derived", sourceRef: "tts/job-1" }),
+    ]);
+    expect((await (await get()).json()).complete).toBe(true);
+    t = 10;
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      clip({ annotatorId: null, sourceType: "derived", sourceRef: "tts/job-1" }),
+      clip({ annotatorId: null, sourceType: "derived", sourceRef: "tts/job-2" }),
+    ]);
+    expect((await (await get()).json()).complete).toBe(false);
+  });
+
+  it("carries the two spellings, and not which is the target, when the prompt has a pair", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([clip(), clip()]);
+    mockPrisma.speechMinimalPair.findUnique.mockResolvedValue({
+      targetSpelling: "kw\u00e0ba",
+      foilSpelling: "kw\u00e1ba",
+    });
+    const j = await (await get()).json();
+    expect(j.task.minimalPair.options.map((o: { text: string }) => o.text).sort()).toEqual(
+      ["kw\u00e0ba", "kw\u00e1ba"].sort(),
+    );
+    expect(JSON.stringify(j)).not.toMatch(/target|foil/i);
+    expect(mockPrisma.speechMinimalPair.findUnique.mock.calls[0][0].where).toEqual({ promptId: "p-1" });
+  });
+
+  it("adds nothing for a prompt without a pair, and no lookup for English clips", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([clip(), clip()]);
+    expect((await (await get()).json()).task).not.toHaveProperty("minimalPair");
+    t = 10;
+    mockPrisma.speechMinimalPair.findUnique.mockClear();
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      clip({ language: "english" }),
+      clip({ language: "english" }),
+    ]);
+    await get();
+    expect(mockPrisma.speechMinimalPair.findUnique).not.toHaveBeenCalled();
   });
 });

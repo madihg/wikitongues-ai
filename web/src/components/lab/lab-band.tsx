@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** The three Lab Speech tabs, in order. Nested routes under /lab/speech. */
+/** The four Lab Speech tabs, in order. Nested routes under /lab/speech. */
 export const LAB_TABS = [
   { href: "/lab/speech", label: "Record" },
   { href: "/lab/speech/listen", label: "Listen" },
   { href: "/lab/speech/recordings", label: "Recordings" },
+  { href: "/lab/speech/studio", label: "Studio" },
 ] as const;
 
 /**
@@ -27,7 +28,7 @@ export function activeLabTab(pathname: string): string | null {
 
 /**
  * The one mark that says "this is the lab": a full-width ink band, 56px tall,
- * the same on all three tabs. Left, "LAB" then "Speech"; right, the tab
+ * the same on all four tabs. Left, "LAB" then "Speech"; right, the tab
  * strip. Below it the page is the normal light surface.
  */
 export function LabBand() {

@@ -7,6 +7,7 @@ import {
   type SpeechLanguage,
   type Tier,
 } from "@/lib/speech/limits";
+import { STUDIO_TIER } from "@/lib/speech/studio";
 import { analyseBlob } from "@/lib/speech/analyse-client";
 import type { QualityMetrics } from "@/lib/speech/analyse";
 import { SaveError, saveClip, type SavedRow } from "@/lib/speech/save-clip";
@@ -20,6 +21,8 @@ import {
   UploadProgress,
   VoiceCloningOptIn,
 } from "./record-parts";
+import { studioClipKept } from "@/lib/speech/studio";
+import { LevelMeter } from "./level-meter";
 import { TakeFeedback } from "./take-feedback";
 import { useRecorder, type Take } from "./use-recorder";
 
@@ -69,6 +72,14 @@ export interface RecordClipProps {
   cloningAllowed: boolean;
   /** Another clip of this prompt is uploading: wait, so one answer row is made. */
   blocked?: boolean;
+  /**
+   * Studio mode (TTS voice sessions). The clip is one script line: it is saved
+   * community_only with no tier choice, against the session, with the line as
+   * its transcript, and is marked kept when the take check raised no warning.
+   * The recorder runs raw (no echo cancelling or noise suppression) and a live
+   * level meter shows while it records.
+   */
+  studio?: { sessionId: string; text: string };
   onSaved: (clip: { id: string; coldAuthorAnswerId: string | null }) => void;
   onBusyChange?: (busy: boolean) => void;
   /** The server said consent is needed again (428). */
@@ -136,14 +147,17 @@ export function RecordClip(props: RecordClipProps) {
     licensedAllowed,
     cloningAllowed,
     blocked = false,
+    studio,
     onSaved,
     onBusyChange,
     onConsentRequired,
   } = props;
 
-  const recorder = useRecorder();
+  const recorder = useRecorder({ raw: !!studio });
   const [kept, setKept] = useState(false);
-  const [tier, setTier] = useState<Tier | null>(null);
+  const [chosenTier, setTier] = useState<Tier | null>(null);
+  // A studio take has no choice to make: it is community_only.
+  const tier: Tier | null = studio ? STUDIO_TIER : chosenTier;
   const [voiceCloning, setVoiceCloning] = useState(false);
   const [upload, setUpload] = useState<UploadState>({ status: "idle" });
   // The analysis of one take, tagged with the take it belongs to so a new
@@ -243,6 +257,13 @@ export function RecordClip(props: RecordClipProps) {
             ...(metrics
               ? { quality: { ...metrics, retakes: retakesRef.current } }
               : {}),
+            ...(studio
+              ? {
+                  studioSessionId: studio.sessionId,
+                  studioText: studio.text,
+                  studioKeep: studioClipKept(metrics),
+                }
+              : {}),
             ...(answer?.coldAuthorAnswerId
               ? { coldAuthorAnswerId: answer.coldAuthorAnswerId }
               : answer?.answerText
@@ -306,6 +327,11 @@ export function RecordClip(props: RecordClipProps) {
             <Countdown elapsedMs={recorder.elapsedMs} />
           </div>
         ) : null}
+        {studio && recording && (
+          <div className="mt-3">
+            <LevelMeter stream={recorder.stream} />
+          </div>
+        )}
 
         {offReason && upload.status !== "saved" && (
           <p className="mt-3 text-xs text-text-tertiary">{offReason}</p>
@@ -374,17 +400,27 @@ export function RecordClip(props: RecordClipProps) {
 
           {kept && (
             <div className="space-y-3">
-              <TierChoice
-                name={`tier-${language}`}
-                value={tier}
-                onChange={setTier}
-                licensedAllowed={licensedAllowed}
-              />
-              <VoiceCloningOptIn
-                checked={voiceCloning}
-                allowed={cloningAllowed}
-                onChange={setVoiceCloning}
-              />
+              {studio ? (
+                <p className="text-sm text-text-secondary">
+                  Saved as community only until the speaker&apos;s contract and
+                  consent say otherwise.
+                  {take.sampleRate ? ` Captured at ${take.sampleRate / 1000} kHz.` : ""}
+                </p>
+              ) : (
+                <>
+                  <TierChoice
+                    name={`tier-${language}`}
+                    value={tier}
+                    onChange={setTier}
+                    licensedAllowed={licensedAllowed}
+                  />
+                  <VoiceCloningOptIn
+                    checked={voiceCloning}
+                    allowed={cloningAllowed}
+                    onChange={setVoiceCloning}
+                  />
+                </>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <SaveBar
                   tier={tier}
