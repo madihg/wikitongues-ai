@@ -897,6 +897,7 @@ model SpeechRecording {
   consent          Consent?           @relation(fields: [consentId], references: [id])
   comparisonsAsA   SpeechComparison[] @relation("ClipA")
   comparisonsAsB   SpeechComparison[] @relation("ClipB")
+  transcripts      SpeechTranscript[]
 
   @@index([promptId])
   @@index([annotatorId])
@@ -1028,6 +1029,21 @@ model SpeechCandidate {
   @@index([evalResultId])
   @@index([system])
   @@index([promotedById])
+}
+
+// What a model heard in one clip: written by the worker's transcribe callback.
+// One row per clip and model (modelRef is "base" or a checkpoint path).
+model SpeechTranscript {
+  id          String   @id @default(cuid())
+  recordingId String
+  modelRef    String
+  text        String
+  createdAt   DateTime @default(now())
+
+  recording SpeechRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+
+  @@unique([recordingId, modelRef])
+  @@index([modelRef])
 }
 
 // Singleton row (id 1): the nightly loop's pause switch, last run times and cap.

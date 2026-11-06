@@ -233,3 +233,35 @@ describe("speech loop migration", () => {
     expect(lUp).toContain('INSERT INTO "SpeechLoopState" ("id") VALUES (1)');
   });
 });
+
+/**
+ * The transcript table (PR D): one new table, in its own small migration.
+ */
+describe("speech transcript migration", () => {
+  const dirT = join(root, "migrations", "20261105140000_speech_transcript");
+  const tUp = readFileSync(join(dirT, "migration.sql"), "utf8");
+  const tDown = readFileSync(join(dirT, "down.sql"), "utf8");
+
+  it("starts with the search_path line and creates the table the schema declares", () => {
+    expect(tUp).toMatch(
+      /^SET search_path TO "wikitongues", "extensions", "public";$/m,
+    );
+    expect(tDown).toMatch(/^SET search_path TO "wikitongues"/m);
+    expect(schema).toContain("model SpeechTranscript {");
+    expect(tUp).toContain('CREATE TABLE "SpeechTranscript"');
+  });
+
+  it("is additive: the only ALTER TABLE is the new table's foreign key", () => {
+    expect(tUp).not.toMatch(/\bDROP\s|\bDELETE\s+FROM|\bTRUNCATE/i);
+    for (const m of tUp.matchAll(/ALTER TABLE "(\w+)"/g)) {
+      expect(m[1]).toBe("SpeechTranscript");
+    }
+  });
+
+  it("is unique per recording and model, and down.sql drops the table", () => {
+    expect(tUp).toContain(
+      'CREATE UNIQUE INDEX "SpeechTranscript_recordingId_modelRef_key"',
+    );
+    expect(tDown).toContain('DROP TABLE IF EXISTS "SpeechTranscript"');
+  });
+});
