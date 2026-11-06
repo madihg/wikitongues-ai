@@ -6,6 +6,8 @@ import { buildOpenManifest } from "./manifest";
 import { canTrain, canEvaluate } from "./can-train";
 import { buildTrainingManifest, buildEvalManifest } from "./training-manifest";
 import { loadTrainableRows, loadTestSetRows } from "./loop-rows";
+import { buildSigned } from "./loop-launch";
+import { mockProvider } from "./train-providers";
 import { licensedRow, openRow } from "./fixtures";
 import type { ManifestRow } from "./manifest";
 
@@ -177,6 +179,18 @@ const TRAIN_ENTRY_POINTS: EntryPoint[] = (
         .filter((r) => canTrain(r, { scope, purpose: "asr" }).ok)
         .map((r) => r.id),
   },
+  ...(scope === "internal"
+    ? [
+        {
+          // What the nightly run sends the worker: the same builder, signed.
+          name: "loop-launch.buildSigned (nightly training manifest)",
+          released: async (rows: ManifestRow[]) =>
+            (await buildSigned(buildTrainingManifest, rows, "asr", mockProvider)).lines.map(
+              (l) => l.id,
+            ),
+        },
+      ]
+    : []),
   {
     name: `training-manifest.buildTrainingManifest (${scope})`,
     released: (rows: ManifestRow[]) =>
@@ -340,6 +354,8 @@ const REGISTERED_FILES = [
   "src/lib/speech/can-train.ts", // the training guard (canTrain, canEvaluate)
   "src/lib/speech/training-manifest.ts", // the training and eval manifest builders
   "src/lib/speech/loop-rows.ts", // the training and test-set candidate queries
+  "src/lib/speech/loop-launch.ts", // signs and launches the manifests (entry point above)
+  "src/lib/speech/nightly.ts", // the nightly run: builds manifests only through buildSigned
   "scripts/speech/export-manifest.ts", // the export script
 ];
 

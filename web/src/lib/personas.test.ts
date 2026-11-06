@@ -161,13 +161,19 @@ describe("navForRole - the Speech Lab group", () => {
     ).toEqual([]);
   });
 
-  it("researchers get exactly the Speech link, tagged, when the flag is on", () => {
+  it("researchers get exactly the Speech and Speech loop links, tagged, when the flag is on", () => {
     const links = navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: true });
     const lab = links.filter((l) => l.group === "lab");
     expect(lab).toEqual([
       {
         href: "/lab/speech",
         label: "Speech",
+        tag: "researchers only",
+        group: "lab",
+      },
+      {
+        href: "/admin/speech",
+        label: "Speech loop",
         tag: "researchers only",
         group: "lab",
       },

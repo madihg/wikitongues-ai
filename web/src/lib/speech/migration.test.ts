@@ -337,3 +337,56 @@ describe("withdrawal migrations (US-040)", () => {
     });
   }
 });
+
+/**
+ * The nightly-loop migration (PR F): columns on SpeechTrainJob, the alert
+ * table and the audit table. Additive; down.sql reverses exactly that.
+ */
+describe("speech nightly migration", () => {
+  const dirN = join(root, "migrations", "20261107120000_speech_nightly");
+  const nUp = readFileSync(join(dirN, "migration.sql"), "utf8");
+  const nDown = readFileSync(join(dirN, "down.sql"), "utf8");
+
+  it("starts with the search_path line, in both directions", () => {
+    expect(nUp).toMatch(
+      /^SET search_path TO "wikitongues", "extensions", "public";$/m,
+    );
+    expect(nDown).toMatch(/^SET search_path TO "wikitongues"/m);
+  });
+
+  it("sorts after every earlier speech migration", () => {
+    expect("20261107120000_speech_nightly" > "20261106120100_speech_retrain_required").toBe(true);
+  });
+
+  it("is additive: new tables and nullable columns, nothing dropped or rewritten", () => {
+    expect(nUp).not.toMatch(/\bDROP\s|\bDELETE\s+FROM|\bTRUNCATE|\bUPDATE\s/i);
+    expect(nUp).toContain('CREATE TABLE "SpeechAlert"');
+    expect(nUp).toContain('CREATE TABLE "SpeechAudit"');
+    for (const col of ["kind", "externalId", "manifestLines"]) {
+      expect(nUp).toMatch(new RegExp(`"${col}" (TEXT|JSONB)[,;]`));
+    }
+    // Only SpeechTrainJob is altered, and only to add columns.
+    for (const m of nUp.matchAll(/ALTER TABLE "(\w+)"/g)) {
+      expect(m[1]).toBe("SpeechTrainJob");
+    }
+    const alter = nUp.match(/ALTER TABLE "SpeechTrainJob"[^;]*;/)?.[0] ?? "";
+    expect(alter).not.toMatch(/NOT NULL/);
+  });
+
+  it("is declared in schema.prisma", () => {
+    expect(schema).toContain("model SpeechAlert {");
+    expect(schema).toContain("model SpeechAudit {");
+    expect(schema).toContain("manifestLines");
+  });
+
+  it("down.sql drops the two tables and the three columns, nothing else", () => {
+    expect(nDown).toContain('DROP TABLE IF EXISTS "SpeechAudit"');
+    expect(nDown).toContain('DROP TABLE IF EXISTS "SpeechAlert"');
+    for (const col of ["kind", "externalId", "manifestLines"]) {
+      expect(nDown).toContain(
+        `ALTER TABLE "SpeechTrainJob" DROP COLUMN IF EXISTS "${col}"`,
+      );
+    }
+    expect(nDown).not.toMatch(/DROP TYPE|DROP TABLE IF EXISTS "Speech(TrainJob|Candidate)"/);
+  });
+});

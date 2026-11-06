@@ -37,3 +37,11 @@ def test_every_endpoint_kind_has_a_function(speech):
     from igala_speech.jobs import ENDPOINT_KINDS
 
     assert set(mod.SPAWN) == set(ENDPOINT_KINDS.values())
+
+
+def test_nightly_trigger_is_scheduled_at_0200_utc(speech):
+    mod, stub = speech
+    stub.Cron.assert_called_once_with("0 2 * * *")
+    assert callable(mod.nightly_trigger)
+    kwargs = [c.kwargs for c in stub.App.return_value.function.call_args_list if "schedule" in c.kwargs]
+    assert len(kwargs) == 1 and kwargs[0]["schedule"] is stub.Cron.return_value

@@ -971,6 +971,9 @@ model SpeechTrainJob {
   startedAt       DateTime?
   completedAt     DateTime?
   createdAt       DateTime        @default(now())
+  kind            String? // train_asr | train_tts | evaluate | transcribe: what the worker was asked to do
+  externalId      String? // the worker's call id, read back by the status poll
+  manifestLines   Json? // [{id, speakerPseudonym}] of a training job: ids only, read by the withdrawal check
 
   evalResults SpeechEvalResult[]
   candidates  SpeechCandidate[]
@@ -1096,4 +1099,33 @@ model ThirdPartyAudioSource {
 
   @@index([rightsStatus])
   @@index([confirmedById])
+}
+
+// A message for the researcher dashboard banner (and one email, when Resend is
+// configured). Ids and numbers only, never clip text. One per kind per night.
+model SpeechAlert {
+  id        String    @id @default(cuid())
+  kind      String // job_failed | frozen_set_missing | regressed | two_skipped_nights | cap_reached
+  message   String
+  runId     String?
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  @@index([kind, createdAt])
+  @@index([readAt])
+}
+
+// Who did what to the loop: a promotion, a pause. Kept apart from stepLog
+// because a human acts on days with no nightly run.
+model SpeechAudit {
+  id          String   @id @default(cuid())
+  action      String // promote | pause | resume
+  subjectType String
+  subjectId   String
+  actorId     String?
+  detail      Json?
+  createdAt   DateTime @default(now())
+
+  @@index([subjectType, subjectId])
+  @@index([actorId])
 }

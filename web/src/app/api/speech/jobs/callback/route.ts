@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { notify } from "@/lib/notify";
+import { registerCandidate } from "@/lib/speech/candidates";
 import { applyCallback, parseCallback } from "@/lib/speech/job-callback";
+import { loopProvider, scoreModel } from "@/lib/speech/loop-launch";
+import { speechLoopEnabled } from "@/lib/speech/loop-flags";
 import {
   secretMatches,
   timestampFresh,
@@ -15,6 +19,9 @@ import {
  * (404), so the unconfigured app behaves as before. Idempotent: a callback
  * for a finished job answers 200 and writes nothing.
  */
+// Scoring a model that just finished training signs the exam clips and calls the worker.
+export const maxDuration = 60;
+
 const unauthorized = () => new NextResponse(null, { status: 401 });
 
 export async function POST(req: Request) {
@@ -52,6 +59,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, duplicate: true });
   }
 
-  const applied = await prisma.$transaction((tx) => applyCallback(tx, payload));
-  return NextResponse.json({ ok: true, duplicate: !applied });
+  const registered = await prisma.$transaction(async (tx) => {
+    const applied = await applyCallback(tx, payload);
+    if (!applied) return { applied, candidate: null };
+    // An evaluate that scored a trained model makes it a candidate (PR F).
+    return { applied, candidate: await registerCandidate(tx, payload) };
+  });
+  if (!registered.applied) return NextResponse.json({ ok: true, duplicate: true });
+
+  if (registered.candidate?.regressed) {
+    const d = registered.candidate.delta;
+    await notify("regressed", [
+      `candidate ${registered.candidate.candidateId} is worse than the promoted model`,
+      d ? `cer ${d.cer.toFixed(2)} points, ter ${d.ter.toFixed(2)} points` : "",
+    ].filter(Boolean));
+  }
+  if (
+    payload.kind === "train_asr" &&
+    payload.status === "succeeded" &&
+    payload.modelRef &&
+    speechLoopEnabled()
+  ) {
+    // Score the new model on the exam set now, not at the next 02:00. The
+    // nightly run retries it if this fails; the callback itself still succeeds.
+    try {
+      await scoreModel(payload.modelRef, loopProvider());
+    } catch (e) {
+      await notify("job_failed", [
+        `scoring ${payload.jobId} could not start: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`,
+      ]);
+    }
+  }
+  return NextResponse.json({ ok: true, duplicate: false });
 }
