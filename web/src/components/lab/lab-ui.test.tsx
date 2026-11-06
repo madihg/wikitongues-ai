@@ -414,7 +414,7 @@ const listen = (over: Partial<Parameters<typeof ListenView>[0]> = {}) =>
       winner={null}
       reasons={[]}
       note=""
-      axes={{}}
+      axes={{ a: {}, b: {} }}
       busy={false}
       error={null}
       onWinner={noop}
@@ -588,7 +588,11 @@ describe("44px minimum targets", () => {
       />,
     ),
     renderToStaticMarkup(
-      <SpeechAxesRow winner="a" scores={{ tone: 3 }} onScore={noop} />,
+      <SpeechAxesRow
+        winner="a"
+        scores={{ a: { tone: 3 }, b: {} }}
+        onScore={noop}
+      />,
     ),
     renderToStaticMarkup(<TakeFeedback metrics={METRICS} status="done" />),
     renderToStaticMarkup(<SessionLine />),
@@ -905,31 +909,52 @@ describe("Listen: language and the provisional speech axes", () => {
     }
   });
 
-  it("each axis offers N/A and 0 to 5 as 44px radio buttons, nothing preselected", () => {
+  it("each axis offers N/A and 0 to 5 for Clip A and for Clip B, 44px, nothing preselected", () => {
     const html = renderToStaticMarkup(
-      <SpeechAxesRow winner="b" scores={{}} onScore={noop} />,
+      <SpeechAxesRow winner="b" scores={{ a: {}, b: {} }} onScore={noop} />,
     );
     const radios = tagsOf(html, "button");
-    expect(radios).toHaveLength(5 * 7);
+    expect(radios).toHaveLength(5 * 2 * 7);
     for (const r of radios) {
       expect(r).toContain('role="radio"');
       expect(r).toContain('aria-checked="false"');
       expect(classOf(r)).toMatch(/min-h-\[44px\].*min-w-\[44px\]/);
     }
     expect(html).toContain(">N/A<");
-    expect(html).toContain("Scored on the winner, clip B.");
+    for (const axis of SPEECH_AXES) {
+      expect(html).toContain(`aria-label="${axis.label}, Clip A"`);
+      expect(html).toContain(`aria-label="${axis.label}, Clip B"`);
+    }
+    expect(html.match(/>Clip A</g)).toHaveLength(5);
+    expect(html.match(/>Clip B</g)).toHaveLength(5);
+    // Side by side from sm up, stacked at phone width.
+    expect(html).toContain("sm:grid-cols-2");
   });
 
-  it("marks the chosen scores, and says both clips on a tie", () => {
+  it("both clips are rated for a, b and tie, whichever won", () => {
+    for (const winner of ["a", "b", "tie"] as const) {
+      const html = listen({ winner, reasons: ["robotic"] });
+      expect(html, winner).toContain('data-testid="speech-axes"');
+      expect(html, winner).toContain('data-side="a"');
+      expect(html, winner).toContain('data-side="b"');
+      expect(html, winner).toContain("Score both clips, whichever won.");
+    }
+  });
+
+  it("marks the chosen scores on the side they belong to", () => {
     const html = renderToStaticMarkup(
       <SpeechAxesRow
         winner="tie"
-        scores={{ tone: 3, pace: "na" }}
+        scores={{ a: { tone: 3 }, b: { tone: 1, pace: "na" } }}
         onScore={noop}
       />,
     );
-    expect(html).toContain("Scored on both clips (a tie).");
-    expect(html.match(/aria-checked="true"/g)).toHaveLength(2);
+    expect(html.match(/aria-checked="true"/g)).toHaveLength(3);
+    expect(html).toMatch(/aria-checked="true" aria-label="Tone, Clip A 3"/);
+    expect(html).toMatch(/aria-checked="true" aria-label="Tone, Clip B 1"/);
+    expect(html).toMatch(
+      /aria-checked="true" aria-label="Pace, Clip B not applicable"/,
+    );
   });
 
   it("axes are optional: Submit does not wait for them", () => {

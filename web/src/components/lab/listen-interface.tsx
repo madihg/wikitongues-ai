@@ -13,9 +13,10 @@ import {
   AXIS_MAX,
   AXIS_MIN,
   SPEECH_AXES,
-  axesTargetFor,
-  type AxisScores,
+  takesAxes,
+  type AxisSide,
   type AxisValue,
+  type PairScores,
   type SpeechAxisKey,
 } from "@/lib/speech/speech-axes";
 
@@ -27,8 +28,9 @@ import {
  * reason are in. The task carries no tier, speaker or source: the researcher
  * judges the sound only, and sees the language (a pair is always one
  * language). After the verdict and reason, an optional row of five
- * PROVISIONAL speech axes (0 to 5 or N/A) on the winner, or on both when it
- * is a tie; labels come from lib/speech/speech-axes.ts. One counted judgment
+ * PROVISIONAL speech axes (0 to 5 or N/A) scored on both clips, whichever
+ * won (the linguist's Oct 13 ask: both, to see systematic errors); labels
+ * come from lib/speech/speech-axes.ts. One counted judgment
  * per prompt and language (the server answers 409 on a second, and the page
  * then moves on).
  */
@@ -106,10 +108,13 @@ const AXIS_VALUES: AxisValue[] = [
   ...Array.from({ length: AXIS_MAX - AXIS_MIN + 1 }, (_, i) => AXIS_MIN + i),
 ];
 
+const SIDES: readonly AxisSide[] = ["a", "b"];
+
 /**
  * The provisional speech axes. Optional and hidden when both clips are
- * unusable. Each axis is a radio group of N/A and 0 to 5 in 44px buttons;
- * tapping the chosen value again clears it.
+ * unusable. Each axis has two radio groups side by side, Clip A and Clip B
+ * (stacked at phone width), of N/A and 0 to 5 in 44px buttons; tapping the
+ * chosen value again clears it.
  */
 export function SpeechAxesRow({
   winner,
@@ -117,15 +122,14 @@ export function SpeechAxesRow({
   onScore,
 }: {
   winner: SpeechWinner;
-  scores: AxisScores;
-  onScore: (axis: SpeechAxisKey, value: AxisValue | null) => void;
+  scores: PairScores;
+  onScore: (
+    side: AxisSide,
+    axis: SpeechAxisKey,
+    value: AxisValue | null,
+  ) => void;
 }) {
-  const target = axesTargetFor(winner);
-  if (target === null) return null;
-  const about =
-    target === "both"
-      ? "Scored on both clips (a tie)."
-      : `Scored on the winner, clip ${target.toUpperCase()}.`;
+  if (!takesAxes(winner)) return null;
   return (
     <fieldset
       data-testid="speech-axes"
@@ -135,41 +139,55 @@ export function SpeechAxesRow({
         {AXES_BLOCK_LABEL}
       </legend>
       <p className="text-xs text-text-tertiary">
-        Optional. {about} 0 is worst, 5 is best.
+        Optional. Score both clips, whichever won. 0 is worst, 5 is best.
       </p>
       <div className="mt-3 space-y-4">
         {SPEECH_AXES.map((axis) => (
-          <div
-            key={axis.key}
-            role="radiogroup"
-            aria-label={axis.label}
-            data-axis={axis.key}
-          >
+          <div key={axis.key} data-axis={axis.key}>
             <p className="text-sm font-medium text-text-primary">
               {axis.label}{" "}
               <span className="font-normal text-text-tertiary">
                 {axis.hint}
               </span>
             </p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {AXIS_VALUES.map((v) => {
-                const checked = scores[axis.key] === v;
+            <div className="mt-1 grid gap-3 sm:grid-cols-2">
+              {SIDES.map((side) => {
+                const clip = `Clip ${side.toUpperCase()}`;
                 return (
-                  <button
-                    key={String(v)}
-                    type="button"
-                    role="radio"
-                    aria-checked={checked}
-                    aria-label={`${axis.label} ${v === "na" ? "not applicable" : v}`}
-                    onClick={() => onScore(axis.key, checked ? null : v)}
-                    className={`min-h-[44px] min-w-[44px] cursor-pointer rounded-md border px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:shadow-[var(--ring)] ${
-                      checked
-                        ? "border-accent bg-accent-subtle text-accent-text"
-                        : "border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
-                    }`}
+                  <div
+                    key={side}
+                    role="radiogroup"
+                    aria-label={`${axis.label}, ${clip}`}
+                    data-side={side}
                   >
-                    {v === "na" ? "N/A" : v}
-                  </button>
+                    <p className="text-xs font-medium text-text-secondary">
+                      {clip}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {AXIS_VALUES.map((v) => {
+                        const checked = scores[side][axis.key] === v;
+                        return (
+                          <button
+                            key={String(v)}
+                            type="button"
+                            role="radio"
+                            aria-checked={checked}
+                            aria-label={`${axis.label}, ${clip} ${v === "na" ? "not applicable" : v}`}
+                            onClick={() =>
+                              onScore(side, axis.key, checked ? null : v)
+                            }
+                            className={`min-h-[44px] min-w-[44px] cursor-pointer rounded-md border px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:shadow-[var(--ring)] ${
+                              checked
+                                ? "border-accent bg-accent-subtle text-accent-text"
+                                : "border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
+                            }`}
+                          >
+                            {v === "na" ? "N/A" : v}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -199,13 +217,17 @@ export function ListenView({
   winner: SpeechWinner | null;
   reasons: string[];
   note: string;
-  axes: AxisScores;
+  axes: PairScores;
   busy: boolean;
   error: string | null;
   onWinner: (w: SpeechWinner) => void;
   onToggleReason: (key: string) => void;
   onNote: (v: string) => void;
-  onAxis: (axis: SpeechAxisKey, value: AxisValue | null) => void;
+  onAxis: (
+    side: AxisSide,
+    axis: SpeechAxisKey,
+    value: AxisValue | null,
+  ) => void;
   onSubmit: () => void;
 }) {
   const canSubmit = winner !== null && reasons.length > 0 && !busy;
@@ -332,12 +354,16 @@ type QueueState =
   | { status: "complete" }
   | { status: "task"; task: ListenTask };
 
+const EMPTY_AXES: PairScores = { a: {}, b: {} };
+const hasAxes = (p: PairScores) =>
+  Object.keys(p.a).length > 0 || Object.keys(p.b).length > 0;
+
 export function ListenInterface() {
   const [queue, setQueue] = useState<QueueState>({ status: "loading" });
   const [winner, setWinner] = useState<SpeechWinner | null>(null);
   const [reasons, setReasons] = useState<string[]>([]);
   const [note, setNote] = useState("");
-  const [axes, setAxes] = useState<AxisScores>({});
+  const [axes, setAxes] = useState<PairScores>(EMPTY_AXES);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(0);
@@ -348,7 +374,7 @@ export function ListenInterface() {
     setWinner(null);
     setReasons([]);
     setNote("");
-    setAxes({});
+    setAxes(EMPTY_AXES);
     setError(null);
     const qs = demoRef.current
       ? `?demo=${encodeURIComponent(demoRef.current)}`
@@ -392,7 +418,7 @@ export function ListenInterface() {
           winner,
           reasonTags: reasons,
           note,
-          ...(Object.keys(axes).length > 0 && winner !== "both_unusable"
+          ...(hasAxes(axes) && winner !== "both_unusable"
             ? { axes }
             : {}),
           ...(demoRef.current ? { demoSessionId: demoRef.current } : {}),
@@ -461,12 +487,12 @@ export function ListenInterface() {
             )
           }
           onNote={setNote}
-          onAxis={(axis, value) =>
+          onAxis={(side, axis, value) =>
             setAxes((cur) => {
-              const next = { ...cur };
-              if (value === null) delete next[axis];
-              else next[axis] = value;
-              return next;
+              const nextSide = { ...cur[side] };
+              if (value === null) delete nextSide[axis];
+              else nextSide[axis] = value;
+              return { ...cur, [side]: nextSide };
             })
           }
           onSubmit={() => void submit()}

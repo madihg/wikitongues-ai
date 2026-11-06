@@ -227,32 +227,39 @@ describe("POST /api/lab/speech/listen/submit", () => {
     expect(created()).toBe(0);
   });
 
-  it("stores the provisional axes on the winner, tagged with its version", async () => {
-    const axes = { intelligibility: 4, tone: "na", pace: 0 };
+  it("stores the provisional axes on both clips, tagged with its version", async () => {
+    const axes = {
+      a: { intelligibility: 4, tone: "na", pace: 0 },
+      b: { intelligibility: 2, tone: 1 },
+    };
     expect((await post({ ...valid, axes })).status).toBe(201);
     expect(
       mockPrisma.speechComparison.create.mock.calls[0][0].data.axes,
-    ).toEqual({
-      version: "provisional-1",
-      target: "a",
-      scores: axes,
-    });
+    ).toEqual({ version: "provisional-1", scores: axes });
   });
 
-  it("scores both clips on a tie, and takes no axes on both_unusable", async () => {
-    const axes = { naturalness: 3 };
+  it("scores both clips on b and on a tie, and takes no axes on both_unusable", async () => {
+    const axes = { a: { naturalness: 3 }, b: { naturalness: 1 } };
+    await post({ ...valid, winner: "b", axes });
     await post({ ...valid, winner: "tie", axes });
-    expect(
-      mockPrisma.speechComparison.create.mock.calls[0][0].data.axes.target,
-    ).toBe("both");
+    for (const call of mockPrisma.speechComparison.create.mock.calls) {
+      expect(call[0].data.axes.scores).toEqual(axes);
+      expect(call[0].data.axes).not.toHaveProperty("target");
+    }
     expect((await post({ ...valid, winner: "both_unusable", axes })).status).toBe(
       400,
     );
   });
 
+  it("400 for the flat one-clip shape the old screen sent", async () => {
+    expect((await post({ ...valid, axes: { tone: 3 } })).status).toBe(400);
+    expect(created()).toBe(0);
+  });
+
   it("axes are optional: none stored when absent or empty", async () => {
     await post(valid);
     await post({ ...valid, axes: {} });
+    await post({ ...valid, axes: { a: {}, b: {} } });
     for (const call of mockPrisma.speechComparison.create.mock.calls) {
       expect(call[0].data).not.toHaveProperty("axes");
     }
@@ -260,11 +267,12 @@ describe("POST /api/lab/speech/listen/submit", () => {
 
   it("400 for out-of-range, unknown or non-integer axes", async () => {
     for (const axes of [
-      { tone: 6 },
-      { tone: -1 },
-      { tone: 2.5 },
-      { volume: 3 },
-      { tone: "yes" },
+      { a: { tone: 6 } },
+      { a: { tone: -1 } },
+      { b: { tone: 2.5 } },
+      { a: {}, b: { volume: 3 } },
+      { a: { tone: "yes" } },
+      { c: { tone: 3 } },
       [1, 2],
       "x",
     ]) {
