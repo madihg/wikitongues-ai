@@ -36,6 +36,9 @@ function callText(src: string, open: number): string {
 }
 
 const AUDIO_ROUTE = "src/app/api/lab/speech/recording/[id]/audio/route.ts";
+// The one-off backfill reads bytes to copy them into the bucket (US-038). It
+// is a local script run by a human, never served, and prints ids and counts.
+const BACKFILL = "scripts/speech/backfill-storage.ts";
 const files = ["src", "scripts"].flatMap((r) => sources(join(web, r)));
 
 describe("audio bytes stay out of every list and export", () => {
@@ -68,7 +71,7 @@ describe("audio bytes stay out of every list and export", () => {
   it("only the audio endpoint selects bytes", () => {
     for (const f of files) {
       const rel = relative(web, f);
-      if (rel === AUDIO_ROUTE) continue;
+      if (rel === AUDIO_ROUTE || rel === BACKFILL) continue;
       const src = readFileSync(f, "utf8");
       expect(src, rel).not.toMatch(/\bbytes\s*:\s*true/);
     }

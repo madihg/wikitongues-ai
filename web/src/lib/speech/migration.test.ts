@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -80,9 +80,13 @@ describe("speech lab 2 migration", () => {
   it("adds language, bytes and quality to SpeechRecording and axes to SpeechComparison", () => {
     expect(up2).toContain('ALTER TABLE "SpeechRecording"');
     expect(up2).toContain('ADD COLUMN     "bytes" BYTEA');
-    expect(up2).toContain(`ADD COLUMN     "language" TEXT NOT NULL DEFAULT 'igala'`);
+    expect(up2).toContain(
+      `ADD COLUMN     "language" TEXT NOT NULL DEFAULT 'igala'`,
+    );
     expect(up2).toContain('ADD COLUMN     "quality" JSONB');
-    expect(up2).toContain('ALTER TABLE "SpeechComparison" ADD COLUMN     "axes" JSONB');
+    expect(up2).toContain(
+      'ALTER TABLE "SpeechComparison" ADD COLUMN     "axes" JSONB',
+    );
     expect(schema).toMatch(/bytes\s+Bytes\?/);
     expect(schema).toMatch(/language\s+String\s+@default\("igala"\)/);
     expect(schema).toMatch(/quality\s+Json\?/);
@@ -112,8 +116,49 @@ describe("speech lab 2 migration", () => {
       ["SpeechRecording", "language"],
       ["SpeechRecording", "bytes"],
     ]) {
-      expect(down2).toContain(`ALTER TABLE "${table}" DROP COLUMN IF EXISTS "${col}"`);
+      expect(down2).toContain(
+        `ALTER TABLE "${table}" DROP COLUMN IF EXISTS "${col}"`,
+      );
     }
     expect(down2).not.toMatch(/DROP TABLE|DROP TYPE/i);
+  });
+});
+
+describe("speech storage migration", () => {
+  const sdir = join(root, "migrations");
+  const name = readdirSync(sdir).find((d) => d.endsWith("_speech_storage"));
+  const sUp = name
+    ? readFileSync(join(sdir, name, "migration.sql"), "utf8")
+    : "";
+  const sDown = name ? readFileSync(join(sdir, name, "down.sql"), "utf8") : "";
+
+  it("exists, sorts after the speech lab migrations, and sets the search path", () => {
+    expect(name).toBeDefined();
+    expect(name! > "20261026120000_speech_lab_2").toBe(true);
+    expect(sUp).toContain(
+      'SET search_path TO "wikitongues", "extensions", "public";',
+    );
+    expect(sDown).toContain(
+      'SET search_path TO "wikitongues", "extensions", "public";',
+    );
+  });
+
+  it("adds one nullable storageKey column and an index, nothing destructive", () => {
+    expect(sUp).toMatch(
+      /ALTER TABLE "SpeechRecording" ADD COLUMN\s+"storageKey" TEXT/,
+    );
+    expect(sUp).not.toMatch(/NOT NULL/);
+    expect(sUp).toMatch(/CREATE INDEX "SpeechRecording_storageKey_idx"/);
+    expect(sUp).not.toMatch(/DROP\s|DELETE\s|UPDATE\s/i);
+    expect(schema).toMatch(/storageKey\s+String\?/);
+    expect(schema).toContain("@@index([storageKey])");
+  });
+
+  it("down.sql reverses exactly that and keeps bytes", () => {
+    expect(sDown).toContain(
+      'DROP INDEX IF EXISTS "SpeechRecording_storageKey_idx"',
+    );
+    expect(sDown).toContain('DROP COLUMN IF EXISTS "storageKey"');
+    expect(sDown).not.toContain('"bytes"');
   });
 });
