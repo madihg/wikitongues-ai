@@ -3,6 +3,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { canExportLicensed, canExportOpen, neverLeaves } from "./guard";
 import { buildOpenManifest } from "./manifest";
+import { canTrain, canEvaluate } from "./can-train";
+import { buildTrainingManifest, buildEvalManifest } from "./training-manifest";
+import { loadTrainableRows, loadTestSetRows } from "./loop-rows";
+import { buildSigned } from "./loop-launch";
+import { mockProvider } from "./train-providers";
 import { licensedRow, openRow } from "./fixtures";
 import type { ManifestRow } from "./manifest";
 
@@ -157,6 +162,164 @@ describe.each(ENTRY_POINTS)("export entry point: $name", (entry) => {
   });
 });
 
+/**
+ * The TRAINING paths. A training manifest never carries a test-set row or a
+ * frozen-prompt row, on any scope; on the provider scope it also refuses
+ * community_only. The EVAL path is the one place test-set rows are allowed and
+ * it refuses every row that is not in the test set.
+ */
+const signedUrl = (k: string) => `https://signed.example/${k}`;
+const TRAIN_ENTRY_POINTS: EntryPoint[] = (
+  ["internal", "provider"] as const
+).flatMap((scope) => [
+  {
+    name: `can-train.canTrain (${scope})`,
+    released: (rows: ManifestRow[]) =>
+      rows
+        .filter((r) => canTrain(r, { scope, purpose: "asr" }).ok)
+        .map((r) => r.id),
+  },
+  ...(scope === "internal"
+    ? [
+        {
+          // What the nightly run sends the worker: the same builder, signed.
+          name: "loop-launch.buildSigned (nightly training manifest)",
+          released: async (rows: ManifestRow[]) =>
+            (await buildSigned(buildTrainingManifest, rows, "asr", mockProvider)).lines.map(
+              (l) => l.id,
+            ),
+        },
+      ]
+    : []),
+  {
+    name: `training-manifest.buildTrainingManifest (${scope})`,
+    released: (rows: ManifestRow[]) =>
+      buildTrainingManifest(rows, {
+        scope,
+        purpose: "asr",
+        signedUrl,
+      }).lines.map((l) => l.id),
+  },
+]);
+
+describe.each(TRAIN_ENTRY_POINTS)("training entry point: $name", (entry) => {
+  it("refuses test-set rows and rows on frozen prompts", async () => {
+    const out = await entry.released(forbiddenRows());
+    expect(
+      out.filter((id) => id.startsWith("testset") || id.startsWith("frozen")),
+    ).toEqual([]);
+  });
+
+  it("refuses demo rows and rejected reviews", async () => {
+    const rows = [
+      openRow({ id: "demo", isDemo: true }),
+      openRow({ id: "bad", reviewStatus: "bad_audio" }),
+      openRow({ id: "fine" }),
+    ];
+    expect(await entry.released(rows)).toEqual(["fine"]);
+  });
+
+  it("still releases an eligible row", async () => {
+    expect(
+      await entry.released([...forbiddenRows(), openRow({ id: "fine" })]),
+    ).toContain("fine");
+  });
+});
+
+describe("the provider scope also refuses community_only", () => {
+  it.each(TRAIN_ENTRY_POINTS.filter((e) => e.name.includes("provider")))(
+    "$name",
+    async (entry) => {
+      const out = await entry.released(forbiddenRows());
+      expect(out.filter((id) => id.startsWith("community"))).toEqual([]);
+    },
+  );
+});
+
+describe("eval entry points release test-set rows and nothing else", () => {
+  const EVAL_ENTRY_POINTS: EntryPoint[] = [
+    {
+      name: "can-train.canEvaluate",
+      released: (rows) =>
+        rows
+          .filter(
+            (r) => canEvaluate(r, { scope: "internal", purpose: "asr" }).ok,
+          )
+          .map((r) => r.id),
+    },
+    {
+      name: "training-manifest.buildEvalManifest",
+      released: (rows) =>
+        buildEvalManifest(rows, {
+          scope: "internal",
+          purpose: "asr",
+          signedUrl,
+        }).lines.map((l) => l.id),
+    },
+  ];
+  const mixed = () => [
+    openRow({ id: "train" }),
+    licensedRow({ id: "train-licensed" }),
+    openRow({ id: "exam", isTestSet: true }),
+    openRow({
+      id: "exam-frozen",
+      isTestSet: true,
+      prompt: { isHoldout: true, split: "test" },
+    }),
+    openRow({ id: "exam-demo", isTestSet: true, isDemo: true }),
+    openRow({ id: "exam-bad", isTestSet: true, reviewStatus: "bad_audio" }),
+  ];
+
+  it.each(EVAL_ENTRY_POINTS)("$name refuses every non-test row", async (e) => {
+    expect(await e.released(mixed())).toEqual(["exam", "exam-frozen"]);
+  });
+});
+
+/**
+ * Outside audio and withdrawn clips (US-039, US-040): no export entry point
+ * releases a third_party clip whose source is not cleared, or a clip its
+ * speaker withdrew. Same registry, so a new path is covered the day it is added.
+ */
+describe.each(ENTRY_POINTS)("rights guards: $name", (entry) => {
+  const own = entry.name.includes("canExportLicensed") ? licensedRow : openRow;
+  it("refuses outside audio whose source is pending or restricted", async () => {
+    const rows = (["pending", "restricted"] as const).map((rightsStatus) =>
+      own({
+        id: `tp-${rightsStatus}`,
+        sourceType: "third_party",
+        sourceRef: "src-1",
+        rightsStatus,
+      }),
+    );
+    expect(await entry.released(rows)).toEqual([]);
+  });
+
+  it("refuses a clip its speaker withdrew", async () => {
+    expect(
+      await entry.released([own({ id: "gone", reviewStatus: "withdrawn" })]),
+    ).toEqual([]);
+  });
+});
+
+describe("the loop queries select explicit fields, never bytes", () => {
+  it("loadTrainableRows and loadTestSetRows name a select without bytes", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const db = {
+      speechRecording: { findMany },
+      consentGrant: { findMany: vi.fn().mockResolvedValue([]) },
+    } as never;
+    await loadTrainableRows(db);
+    await loadTestSetRows(db);
+    for (const [arg] of findMany.mock.calls) {
+      expect(arg.select).toBeDefined();
+      expect(arg.select).not.toHaveProperty("bytes");
+      expect(arg.select).not.toHaveProperty("quality");
+    }
+    expect(findMany.mock.calls[0][0].where).toMatchObject({ isTestSet: false });
+    expect(findMany.mock.calls[1][0].where).toMatchObject({ isTestSet: true });
+  });
+});
+
 describe("an eligible English clip is released like any other, and bytes never leave", () => {
   it("the manifest line carries the language and no audio or metrics", () => {
     const row = {
@@ -188,6 +351,11 @@ const REGISTERED_FILES = [
   "src/lib/speech/manifest.ts", // buildOpenManifest, the one builder
   "src/app/api/lab/speech/export/route.ts", // the export route
   "src/lib/speech/open-rows.ts", // the shared candidate query (narrowing only)
+  "src/lib/speech/can-train.ts", // the training guard (canTrain, canEvaluate)
+  "src/lib/speech/training-manifest.ts", // the training and eval manifest builders
+  "src/lib/speech/loop-rows.ts", // the training and test-set candidate queries
+  "src/lib/speech/loop-launch.ts", // signs and launches the manifests (entry point above)
+  "src/lib/speech/nightly.ts", // the nightly run: builds manifests only through buildSigned
   "scripts/speech/export-manifest.ts", // the export script
 ];
 
@@ -218,7 +386,7 @@ describe("the entry-point registry is complete", () => {
       .map((f) => relative(web, f))
       .filter((rel) => {
         const src = readFileSync(join(web, rel), "utf8");
-        return /canExportOpen|canExportLicensed|buildOpenManifest|neverLeaves/.test(
+        return /canExportOpen|canExportLicensed|buildOpenManifest|neverLeaves|canTrain|canEvaluate|buildTrainingManifest|buildEvalManifest/.test(
           src,
         );
       })

@@ -88,3 +88,18 @@ describe("consentTextHash", () => {
     expect(w).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+describe("open is permanent, said before the speaker chooses", () => {
+  it("both forms say a published Open recording cannot be taken back in the opening section, ahead of the choice", () => {
+    for (const sections of [WRITTEN_SECTIONS, ORAL_SECTIONS]) {
+      const choiceAt = sections.findIndex((s) => s.id === "choice");
+      expect(choiceAt).toBeGreaterThan(0);
+      const before = sections
+        .slice(0, choiceAt)
+        .map((s) => s.body)
+        .join(" ");
+      expect(before).toMatch(/published under the Open choice/i);
+      expect(before).toMatch(/cannot (pull|take) back/i);
+    }
+  });
+});

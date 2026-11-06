@@ -106,6 +106,13 @@ export function navForRole(
         tag: "researchers only",
         group: "lab",
       });
+      // The nightly loop's dashboard: overnight card, hours, trend, candidates.
+      links.push({
+        href: "/admin/speech",
+        label: "Speech loop",
+        tag: "researchers only",
+        group: "lab",
+      });
     }
     return links;
   }

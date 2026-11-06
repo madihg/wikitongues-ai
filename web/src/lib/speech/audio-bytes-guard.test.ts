@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { OPEN_ROWS_QUERY } from "./open-rows";
+import { TRAINABLE_ROWS_QUERY, TEST_SET_ROWS_QUERY } from "./loop-rows";
 
 /**
  * `bytes` (the audio) and `quality` are columns on SpeechRecording, and
@@ -36,12 +37,22 @@ function callText(src: string, open: number): string {
 }
 
 const AUDIO_ROUTE = "src/app/api/lab/speech/recording/[id]/audio/route.ts";
+// The one-off backfill reads bytes to copy them into the bucket (US-038). It
+// is a local script run by a human, never served, and prints ids and counts.
+const BACKFILL = "scripts/speech/backfill-storage.ts";
 const files = ["src", "scripts"].flatMap((r) => sources(join(web, r)));
 
 describe("audio bytes stay out of every list and export", () => {
   it("the open-manifest query selects explicit fields, never bytes or quality", () => {
     expect(OPEN_ROWS_QUERY.select).not.toHaveProperty("bytes");
     expect(OPEN_ROWS_QUERY.select).not.toHaveProperty("quality");
+  });
+
+  it("the training and test-set queries select explicit fields, never bytes or quality", () => {
+    for (const q of [TRAINABLE_ROWS_QUERY, TEST_SET_ROWS_QUERY]) {
+      expect(q.select).not.toHaveProperty("bytes");
+      expect(q.select).not.toHaveProperty("quality");
+    }
   });
 
   it("every read of speechRecording names a select", () => {
@@ -53,7 +64,12 @@ describe("audio bytes stay out of every list and export", () => {
         reads++;
         const call = callText(src, m.index! + m[0].length - 1);
         // The shared open-manifest query is checked by name above.
-        if (call.trim() === "(OPEN_ROWS_QUERY)") continue;
+        if (
+          ["(OPEN_ROWS_QUERY)", "(TRAINABLE_ROWS_QUERY)", "(TEST_SET_ROWS_QUERY)"].includes(
+            call.trim(),
+          )
+        )
+          continue;
         expect(call, `${relative(web, f)}: ${m[1]} without select`).toMatch(
           /\bselect\s*:/,
         );
@@ -68,7 +84,7 @@ describe("audio bytes stay out of every list and export", () => {
   it("only the audio endpoint selects bytes", () => {
     for (const f of files) {
       const rel = relative(web, f);
-      if (rel === AUDIO_ROUTE) continue;
+      if (rel === AUDIO_ROUTE || rel === BACKFILL) continue;
       const src = readFileSync(f, "utf8");
       expect(src, rel).not.toMatch(/\bbytes\s*:\s*true/);
     }

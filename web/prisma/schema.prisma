@@ -168,23 +168,23 @@ model PromptEdit {
 // ─── Model generations ───────────────────────────────────────
 
 model ModelOutput {
-  id               String      @id @default(cuid())
-  promptId         String
-  model            String // denormalized label e.g. "claude", "gemma"
-  modelId          String // full provider model id
-  candidateModelId String? // arena candidate that produced this (null for legacy/manual)
-  evalRunId        String? // eval run that generated this output
-  bucket           EvalBucket? // denormalized from prompt for fast filtering
-  outputText       String
-  ragContextIds    String[]    @default([])
-  tokenCountIn     Int?
-  tokenCountOut    Int?
-  latencyMs        Int?
-  epochId          String?
-  runId            String?
-  isDemo           Boolean     @default(false) // generated inside a demo/testing session
-  demoSessionId    String?
-  createdAt        DateTime    @default(now())
+  id                  String      @id @default(cuid())
+  promptId            String
+  model               String // denormalized label e.g. "claude", "gemma"
+  modelId             String // full provider model id
+  candidateModelId    String? // arena candidate that produced this (null for legacy/manual)
+  evalRunId           String? // eval run that generated this output
+  bucket              EvalBucket? // denormalized from prompt for fast filtering
+  outputText          String
+  ragContextIds       String[]    @default([])
+  tokenCountIn        Int?
+  tokenCountOut       Int?
+  latencyMs           Int?
+  epochId             String?
+  runId               String?
+  isDemo              Boolean     @default(false) // generated inside a demo/testing session
+  demoSessionId       String?
+  createdAt           DateTime    @default(now())
   // Repair round provenance (audit finding 5/10, tasks/project-audit-2026-09-01.md):
   // when the repair round actually re-asked, the discarded first-pass text and
   // its violations are kept here so the repair round can be evaluated as a
@@ -192,7 +192,7 @@ model ModelOutput {
   // repaired=false and both fields null on every arm that does not run the
   // repair round, and on a clean rag-v4-1 first pass.
   repairFirstPassText String?
-  repaired            Boolean  @default(false)
+  repaired            Boolean     @default(false)
   repairViolations    Json?
 
   prompt           Prompt               @relation(fields: [promptId], references: [id])
@@ -213,7 +213,7 @@ model ModelOutput {
 // ─── Human signal: pairwise, rubric, edits ───────────────────
 
 model PairwiseComparison {
-  id             String     @id @default(cuid())
+  id             String      @id @default(cuid())
   promptId       String
   bucket         EvalBucket?
   modelOutputAId String
@@ -226,14 +226,14 @@ model PairwiseComparison {
   // not schema, so the set can change without a migration. Collected on the
   // both-inadequate path (both sides) and on the LOSING side when a winner is
   // picked; additive to the required written explanation, never a replacement.
-  failureTagsA   String[]   @default([])
-  failureTagsB   String[]   @default([])
+  failureTagsA   String[]    @default([])
+  failureTagsB   String[]    @default([])
   annotatorId    String
   epochId        String?
   evalRunId      String?
-  isDemo         Boolean    @default(false) // collected in a demo/testing session — never exported
+  isDemo         Boolean     @default(false) // collected in a demo/testing session — never exported
   demoSessionId  String?
-  createdAt      DateTime   @default(now())
+  createdAt      DateTime    @default(now())
 
   modelOutputA ModelOutput @relation("ModelA", fields: [modelOutputAId], references: [id])
   modelOutputB ModelOutput @relation("ModelB", fields: [modelOutputBId], references: [id])
@@ -522,42 +522,42 @@ enum EvalTrigger {
 
 // A candidate is a fully-specified, reproducible generation recipe.
 model CandidateModel {
-  id              String        @id @default(cuid())
-  name            String
-  slug            String        @unique
-  family          String // claude, gpt, gemini, gemma, aya, lugha-llama
-  versionLabel    String?
-  kind            CandidateKind
-  language        String        @default("igala")
+  id           String        @id @default(cuid())
+  name         String
+  slug         String        @unique
+  family       String // claude, gpt, gemini, gemma, aya, lugha-llama
+  versionLabel String?
+  kind         CandidateKind
+  language     String        @default("igala")
 
   // config (everything needed to reproduce a generation)
   baseModelId     String // provider model id
-  provider        String        @default("anthropic") // anthropic, openai, google, openai-compatible
+  provider        String  @default("anthropic") // anthropic, openai, google, openai-compatible
   apiEndpoint     String? // null = platform default router
   hfRepo          String?
   adapterUri      String? // LoRA/DPO adapter location, null for full FT
   systemPrompt    String?
-  useSystemPrompt Boolean       @default(false)
-  ragEnabled      Boolean       @default(false)
+  useSystemPrompt Boolean @default(false)
+  ragEnabled      Boolean @default(false)
   ragSnapshotId   String?
   decodingParams  Json? // {temperature, topP, maxTokens}
 
   // lineage / provenance
   fineTuneSource    String?
-  fineTuneJobId     String?         @unique
+  fineTuneJobId     String? @unique
   parentCandidateId String?
 
-  color       String? // viz color
-  isPublic    Boolean  @default(false) // visible on public leaderboard
-  isChampion  Boolean  @default(false)
-  archived    Boolean  @default(false)
+  color         String? // viz color
+  isPublic      Boolean  @default(false) // visible on public leaderboard
+  isChampion    Boolean  @default(false)
+  archived      Boolean  @default(false)
   // Member of the annotation pairing pool (2026-08-20 pivot): pairwise episodes
   // draw ONLY from outputs of pool arms. A DB flag, never a hardcoded slug list
   // in routes/UI (house rule) - membership changes are data edits, not deploys.
-  inPairingPool Boolean @default(false)
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  inPairingPool Boolean  @default(false)
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   fineTuneJob     FineTuneJob?     @relation("JobOutput", fields: [fineTuneJobId], references: [id])
   parent          CandidateModel?  @relation("Lineage", fields: [parentCandidateId], references: [id])
@@ -570,14 +570,14 @@ model CandidateModel {
 }
 
 model FineTuneJob {
-  id                String         @id @default(cuid())
-  method            FineTuneMethod
-  provider          String // openai, together, fireworks, vertex, modal
-  baseModelId       String
-  baseCandidateId   String?
-  language          String         @default("igala")
-  trainingFormat    String // openai-chat, dpo-pairs, raw-text-cpt
-  systemPrompt      String?
+  id              String         @id @default(cuid())
+  method          FineTuneMethod
+  provider        String // openai, together, fireworks, vertex, modal
+  baseModelId     String
+  baseCandidateId String?
+  language        String         @default("igala")
+  trainingFormat  String // openai-chat, dpo-pairs, raw-text-cpt
+  systemPrompt    String?
 
   // data lineage: which collected annotations built the set
   sourcePairwiseIds String[]     @default([])
@@ -725,17 +725,17 @@ model PipelineRun {
 // ─── RAG knowledge base ──────────────────────────────────────
 
 model RagEntry {
-  id                 String                      @id @default(cuid())
-  language           String                      @default("igala")
+  id                 String                       @id @default(cuid())
+  language           String                       @default("igala")
   chunkType          String
   topic              String
   content            String
   source             String
-  verificationStatus String                      @default("seed")
+  verificationStatus String                       @default("seed")
   annotatorId        String?
   embedding          Unsupported("vector(1536)")?
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
 
   history RagEntryHistory[]
 }
@@ -847,6 +847,7 @@ model ConsentGrant {
   crossBorder         Boolean  @default(false)
   voiceCloning        Boolean  @default(false)
   speakerId           Boolean  @default(false)
+  withdrawn           Boolean  @default(false) // a withdrawal row: the speaker's latest grant, all four answers false
 
   consent Consent @relation(fields: [consentId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
@@ -863,6 +864,7 @@ model SpeechRecording {
   storagePath        String // stable clip name ("clips/<id>.<ext>"), never a URL; the audio itself is `bytes`
   language           String         @default("igala") // "igala" | "english": what the speaker said
   bytes              Bytes? // the clip, stored in Postgres; never selected into a list or an export
+  storageKey         String? // object key in the private bucket "igala-speech"; null until the clip is copied there
   quality            Json? // client-side take metrics (lib/speech/analyse.ts), for sorting and filtering
   mimeType           String
   durationMs         Int
@@ -896,11 +898,13 @@ model SpeechRecording {
   consent          Consent?           @relation(fields: [consentId], references: [id])
   comparisonsAsA   SpeechComparison[] @relation("ClipA")
   comparisonsAsB   SpeechComparison[] @relation("ClipB")
+  transcripts      SpeechTranscript[]
 
   @@index([promptId])
   @@index([annotatorId])
   @@index([isDemo])
   @@index([tier])
+  @@index([storageKey])
 }
 
 // Blind A/B judgment of two clips for one prompt, mirroring PairwiseComparison.
@@ -928,4 +932,200 @@ model SpeechComparison {
   @@index([promptId])
   @@index([annotatorId])
   @@index([isDemo])
+}
+
+// ---------------------------------------------------------------------------
+// Speech loop (PR C): training jobs, evaluation results, the nightly run log,
+// candidate models, the loop's pause switch, clip checks, speaker profiles and
+// the third-party audio register. Foreign keys to User and SpeechRecording are
+// plain string columns with indexes (no relation), so this migration alters no
+// existing table.
+// ---------------------------------------------------------------------------
+
+enum SpeechSystem {
+  asr
+  tts
+}
+
+enum SpeechJobStatus {
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+}
+
+model SpeechTrainJob {
+  id              String          @id @default(cuid())
+  system          SpeechSystem
+  provider        String
+  baseModel       String
+  manifestVersion String
+  hyperparameters Json?
+  status          SpeechJobStatus @default(queued)
+  costUsd         Float?
+  gpuSeconds      Int?
+  outputRef       String?
+  error           String?
+  createdById     String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  kind            String? // train_asr | train_tts | evaluate | transcribe: what the worker was asked to do
+  externalId      String? // the worker's call id, read back by the status poll
+  manifestLines   Json? // [{id, speakerPseudonym}] of a training job: ids only, read by the withdrawal check
+
+  evalResults SpeechEvalResult[]
+  candidates  SpeechCandidate[]
+
+  @@index([system, status])
+  @@index([manifestVersion])
+  @@index([createdById])
+}
+
+model SpeechEvalResult {
+  id              String   @id @default(cuid())
+  jobId           String?
+  modelRef        String
+  manifestVersion String
+  cer             Float
+  werStripped     Float
+  werRetained     Float
+  ter             Float
+  perSpeaker      Json
+  perDialect      Json
+  nClips          Int
+  createdAt       DateTime @default(now())
+
+  job        SpeechTrainJob?   @relation(fields: [jobId], references: [id])
+  candidates SpeechCandidate[]
+
+  @@index([jobId])
+  @@index([modelRef])
+}
+
+model SpeechNightlyRun {
+  id         String    @id @default(cuid())
+  runDate    DateTime  @unique @db.Date
+  outcome    String
+  stepLog    Json
+  costUsd    Float     @default(0)
+  startedAt  DateTime
+  finishedAt DateTime?
+}
+
+model SpeechCandidate {
+  id              String       @id @default(cuid())
+  system          SpeechSystem
+  modelRef        String       @unique
+  jobId           String?
+  evalResultId    String?
+  regressed       Boolean      @default(false)
+  retrainRequired Boolean      @default(false) // clips of a speaker who has since withdrawn trained this model
+  promotedAt      DateTime?
+  promotedById    String?
+  promoteReason   String?
+  createdAt       DateTime     @default(now())
+
+  job        SpeechTrainJob?   @relation(fields: [jobId], references: [id])
+  evalResult SpeechEvalResult? @relation(fields: [evalResultId], references: [id])
+
+  @@index([jobId])
+  @@index([evalResultId])
+  @@index([system])
+  @@index([promotedById])
+}
+
+// What a model heard in one clip: written by the worker's transcribe callback.
+// One row per clip and model (modelRef is "base" or a checkpoint path).
+model SpeechTranscript {
+  id          String   @id @default(cuid())
+  recordingId String
+  modelRef    String
+  text        String
+  createdAt   DateTime @default(now())
+
+  recording SpeechRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+
+  @@unique([recordingId, modelRef])
+  @@index([modelRef])
+}
+
+// Singleton row (id 1): the nightly loop's pause switch, last run times and cap.
+model SpeechLoopState {
+  id            Int       @id @default(1)
+  paused        Boolean   @default(false)
+  pausedById    String?
+  pausedAt      DateTime?
+  lastAsrRunAt  DateTime?
+  lastTtsRunAt  DateTime?
+  monthlyCapUsd Float     @default(200)
+}
+
+// One reviewer's verdict on one clip. wrongWordIndex is the position of the
+// word that does not match, when the reviewer says so.
+model SpeechCheck {
+  id             String   @id @default(cuid())
+  recordingId    String
+  reviewerId     String
+  verdict        String // matches | does_not_match | cannot_hear
+  wrongWordIndex Int?
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@unique([recordingId, reviewerId])
+  @@index([reviewerId])
+  @@index([isDemo])
+}
+
+model SpeakerProfile {
+  userId               String   @unique
+  dialect              String?
+  ageBand              String?
+  gender               String?
+  mayShareDemographics Boolean  @default(false)
+  updatedAt            DateTime @updatedAt
+}
+
+model ThirdPartyAudioSource {
+  id            String       @id @default(cuid())
+  name          String
+  sourceRef     String
+  licenseText   String
+  rightsStatus  RightsStatus @default(pending)
+  confirmedById String?
+  confirmedAt   DateTime?
+  notes         String?
+
+  @@index([rightsStatus])
+  @@index([confirmedById])
+}
+
+// A message for the researcher dashboard banner (and one email, when Resend is
+// configured). Ids and numbers only, never clip text. One per kind per night.
+model SpeechAlert {
+  id        String    @id @default(cuid())
+  kind      String // job_failed | frozen_set_missing | regressed | two_skipped_nights | cap_reached
+  message   String
+  runId     String?
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  @@index([kind, createdAt])
+  @@index([readAt])
+}
+
+// Who did what to the loop: a promotion, a pause. Kept apart from stepLog
+// because a human acts on days with no nightly run.
+model SpeechAudit {
+  id          String   @id @default(cuid())
+  action      String // promote | pause | resume
+  subjectType String
+  subjectId   String
+  actorId     String?
+  detail      Json?
+  createdAt   DateTime @default(now())
+
+  @@index([subjectType, subjectId])
+  @@index([actorId])
 }

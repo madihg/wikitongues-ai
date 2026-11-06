@@ -1,0 +1,205 @@
+{
+  "_comment": "Shared by metrics.test.ts and worker/tests/test_metrics.py. Invented words only. Numbers are expected values to 4 decimals. Combining marks are written as \\u escapes so review sees them.",
+  "cases": [
+    {
+      "id": "identical-plain",
+      "note": "identical, no tone marks",
+      "ref": "tava lime sura",
+      "hyp": "tava lime sura",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 0,
+      "ter": 0
+    },
+    {
+      "id": "identical-toned",
+      "note": "identical with tone marks",
+      "ref": "t\u00e1v\u00f2 l\u00edm\u00e9 s\u00f9ra",
+      "hyp": "t\u00e1v\u00f2 l\u00edm\u00e9 s\u00f9ra",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 0,
+      "ter": 0
+    },
+    {
+      "id": "empty-hyp",
+      "note": "empty hypothesis: everything deleted, both marks missing",
+      "ref": "t\u00e1va l\u00ecme",
+      "hyp": "",
+      "cer": 1,
+      "werStripped": 1,
+      "werRetained": 1,
+      "ter": 1
+    },
+    {
+      "id": "empty-ref-empty-hyp",
+      "note": "both empty scores zero",
+      "ref": "",
+      "hyp": "",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 0,
+      "ter": 0
+    },
+    {
+      "id": "empty-ref-nonempty-hyp",
+      "note": "empty reference with a hypothesis scores one",
+      "ref": "",
+      "hyp": "tava",
+      "cer": 1,
+      "werStripped": 1,
+      "werRetained": 1,
+      "ter": 0
+    },
+    {
+      "id": "tones-all-missing",
+      "note": "tone-only difference: every mark dropped",
+      "ref": "t\u00e1va l\u00ecme",
+      "hyp": "tava lime",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 1,
+      "ter": 1
+    },
+    {
+      "id": "tones-half-missing",
+      "note": "tone-only difference: one of two marks dropped",
+      "ref": "t\u00e1va l\u00ecme",
+      "hyp": "t\u00e1va lime",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 0.5,
+      "ter": 0.5
+    },
+    {
+      "id": "tone-changed",
+      "note": "one mark replaced by another",
+      "ref": "t\u00e1va l\u00ecme",
+      "hyp": "t\u00e0va l\u00ecme",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 0.5,
+      "ter": 0.5
+    },
+    {
+      "id": "tones-mixed-four",
+      "note": "two of four marks wrong",
+      "ref": "t\u00e0v\u00e1 l\u00ecm\u00e9",
+      "hyp": "t\u00e0va lim\u00e9",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 1,
+      "ter": 0.5
+    },
+    {
+      "id": "case-and-punctuation",
+      "note": "case, comma and bang are ignored",
+      "ref": "T\u00e1va, L\u00ecme!",
+      "hyp": "t\u00e1va l\u00ecme",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 0,
+      "ter": 0
+    },
+    {
+      "id": "whitespace-and-curly-apostrophe",
+      "note": "extra spaces and a curly apostrophe fold away",
+      "ref": "tava  m\u2019ola",
+      "hyp": "tava m'ola",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 0,
+      "ter": 0
+    },
+    {
+      "id": "letter-substitution",
+      "note": "one wrong letter, no marks",
+      "ref": "tava lime sura",
+      "hyp": "tava lima sura",
+      "cer": 0.0714,
+      "werStripped": 0.3333,
+      "werRetained": 0.3333,
+      "ter": 0
+    },
+    {
+      "id": "word-deleted",
+      "note": "one word missing",
+      "ref": "tava lime sura",
+      "hyp": "tava sura",
+      "cer": 0.3571,
+      "werStripped": 0.3333,
+      "werRetained": 0.3333,
+      "ter": 0
+    },
+    {
+      "id": "word-inserted",
+      "note": "one extra word",
+      "ref": "tava lime",
+      "hyp": "tava lime sura",
+      "cer": 0.5556,
+      "werStripped": 0.5,
+      "werRetained": 0.5,
+      "ter": 0
+    },
+    {
+      "id": "over-one",
+      "note": "more errors than reference words is not clamped",
+      "ref": "tava",
+      "hyp": "tava lime sura",
+      "cer": 2.5,
+      "werStripped": 2,
+      "werRetained": 2,
+      "ter": 0
+    },
+    {
+      "id": "contraction-noop",
+      "note": "an elision variant is not merged while orthography.json is empty",
+      "ref": "tava m'ola",
+      "hyp": "tava mola",
+      "cer": 0.1,
+      "werStripped": 0.5,
+      "werRetained": 0.5,
+      "ter": 0
+    },
+    {
+      "id": "dotted-vowels",
+      "note": "dot-below vowels are letters; one mark dropped (decomposed input)",
+      "ref": "e\u0323\u0301ta o\u0323\u0300ba",
+      "hyp": "e\u0323ta o\u0323\u0300ba",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 0.5,
+      "ter": 0.5
+    },
+    {
+      "id": "tilde-letter-vs-tone",
+      "note": "tilde on n is a letter, tilde on a vowel is a tone mark",
+      "ref": "n\u0303aba a\u0303ba",
+      "hyp": "n\u0303aba aba",
+      "cer": 0,
+      "werStripped": 0,
+      "werRetained": 0.5,
+      "ter": 1
+    },
+    {
+      "id": "toned-vowel-deleted",
+      "note": "a toned vowel is missing from the hypothesis",
+      "ref": "t\u00e0vo",
+      "hyp": "tvo",
+      "cer": 0.25,
+      "werStripped": 1,
+      "werRetained": 1,
+      "ter": 1
+    },
+    {
+      "id": "toned-vowel-substituted",
+      "note": "a toned vowel is replaced by another vowel",
+      "ref": "t\u00e0vo",
+      "hyp": "t\u00e8vo",
+      "cer": 0.25,
+      "werStripped": 1,
+      "werRetained": 1,
+      "ter": 1
+    }
+  ]
+}

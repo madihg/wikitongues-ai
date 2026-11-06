@@ -1,0 +1,8 @@
+{
+  "note": "Invented words and English glosses only. Never real Igala.",
+  "lines": [
+    {"id": "fx-1", "file": "fx-1.wav", "durationMs": 1000, "language": "english", "speakerPseudonym": "spk-a", "dialect": "north", "reference": "the red boat sails", "hypothesis": "the red boat sails"},
+    {"id": "fx-2", "file": "fx-2.wav", "durationMs": 1200, "language": "english", "speakerPseudonym": "spk-a", "dialect": "north", "reference": "abaka", "hypothesis": "abeka"},
+    {"id": "fx-3", "file": "fx-3.wav", "durationMs": 800, "language": "english", "speakerPseudonym": "spk-b", "dialect": "south", "reference": "two small lamps", "hypothesis": "two small lamps"}
+  ]
+}

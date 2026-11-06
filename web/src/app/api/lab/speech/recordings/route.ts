@@ -2,12 +2,17 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
 import { speakerPseudonym } from "@/lib/speech/manifest";
+import { WITHDRAWN_REVIEW_STATUS } from "@/lib/speech/withdrawal";
 import {
   LANGUAGES,
   REVIEW_STATUSES,
   type ReviewStatus,
 } from "@/lib/speech/limits";
-import { sanitizeQuality, verdicts, type VerdictKey } from "@/lib/speech/analyse";
+import {
+  sanitizeQuality,
+  verdicts,
+  type VerdictKey,
+} from "@/lib/speech/analyse";
 import { audioUrl } from "@/lib/speech/storage";
 
 /**
@@ -77,7 +82,10 @@ export async function GET(req: Request) {
     );
   }
   const language = params.get("language");
-  if (language !== null && !(LANGUAGES as readonly string[]).includes(language)) {
+  if (
+    language !== null &&
+    !(LANGUAGES as readonly string[]).includes(language)
+  ) {
     return NextResponse.json(
       { error: "language must be igala or english" },
       { status: 400 },
@@ -121,13 +129,17 @@ export async function GET(req: Request) {
       consentVersion: true,
       reviewStatus: true,
       rightsStatus: true,
+      isTestSet: true,
       createdAt: true,
       prompt: { select: { promptId: true, text: true } },
       coldAuthorAnswer: { select: { answerText: true, englishGloss: true } },
     },
   });
 
-  let items = rows.map((r) => ({ row: r, quality: sanitizeQuality(r.quality) }));
+  let items = rows.map((r) => ({
+    row: r,
+    quality: sanitizeQuality(r.quality),
+  }));
   if (flag) {
     items = items.filter(
       (i) => i.quality && verdicts(i.quality).some((v) => v.key === flag),
@@ -161,6 +173,7 @@ export async function GET(req: Request) {
       consentVersion: r.consentVersion,
       reviewStatus: r.reviewStatus,
       rightsStatus: r.rightsStatus,
+      isTestSet: r.isTestSet,
       createdAt: r.createdAt,
       quality,
       flags: quality ? verdicts(quality).map((v) => v.key) : [],
@@ -196,10 +209,17 @@ export async function PATCH(req: Request) {
 
   const existing = await prisma.speechRecording.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, reviewStatus: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Recording not found" }, { status: 404 });
+  }
+  if (existing.reviewStatus === WITHDRAWN_REVIEW_STATUS) {
+    // The speaker withdrew: no reviewer can put the clip back.
+    return NextResponse.json(
+      { error: "This clip was withdrawn by its speaker." },
+      { status: 409 },
+    );
   }
   const updated = await prisma.speechRecording.update({
     where: { id },
