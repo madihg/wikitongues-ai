@@ -156,7 +156,8 @@ describe("POST check/submit", () => {
     ["does_not_match", "wrong_text"],
     ["cannot_hear", "bad_audio"],
   ])("%s sets reviewStatus %s", async (verdict, status) => {
-    const res = await post({ recordingId: "c1", verdict });
+    const level = verdict === "does_not_match" ? "word" : undefined;
+    const res = await post({ recordingId: "c1", verdict, level });
     expect(res.status).toBe(200);
     expect(mockPrisma.speechRecording.update.mock.calls[0][0]).toMatchObject({
       where: { id: "c1" },
@@ -171,14 +172,14 @@ describe("POST check/submit", () => {
   });
 
   it("stores the wrong word's position, only with does_not_match and inside the answer", async () => {
-    await post({ recordingId: "c1", verdict: "does_not_match", wrongWordIndex: 1 });
+    await post({ recordingId: "c1", verdict: "does_not_match", level: "word", wrongWordIndex: 1 });
     expect(mockPrisma.speechCheck.upsert.mock.calls[0][0].update.wrongWordIndex).toBe(1);
     mockPrisma.speechCheck.upsert.mockClear();
     for (const body of [
       { recordingId: "c1", verdict: "matches", wrongWordIndex: 0 },
-      { recordingId: "c1", verdict: "does_not_match", wrongWordIndex: 3 },
-      { recordingId: "c1", verdict: "does_not_match", wrongWordIndex: -1 },
-      { recordingId: "c1", verdict: "does_not_match", wrongWordIndex: 1.5 },
+      { recordingId: "c1", verdict: "does_not_match", level: "word", wrongWordIndex: 3 },
+      { recordingId: "c1", verdict: "does_not_match", level: "word", wrongWordIndex: -1 },
+      { recordingId: "c1", verdict: "does_not_match", level: "word", wrongWordIndex: 1.5 },
     ]) {
       expect((await post(body)).status).toBe(400);
     }
@@ -190,6 +191,59 @@ describe("POST check/submit", () => {
     expect(mockPrisma.speechCheck.upsert.mock.calls[0][0].where).toEqual({
       recordingId_reviewerId: { recordingId: "c1", reviewerId: "me" },
     });
+  });
+
+  it("does_not_match needs a level, and the level must be a known one", async () => {
+    const res = await post({ recordingId: "c1", verdict: "does_not_match" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Say on what level it does not match.");
+    expect(
+      (await post({ recordingId: "c1", verdict: "does_not_match", level: "dialect" })).status,
+    ).toBe(400);
+    expect(mockPrisma.speechCheck.upsert).not.toHaveBeenCalled();
+  });
+
+  it("a level is refused with any verdict but does_not_match", async () => {
+    for (const verdict of ["matches", "cannot_hear"]) {
+      expect((await post({ recordingId: "c1", verdict, level: "word" })).status).toBe(400);
+    }
+    expect(mockPrisma.speechCheck.upsert).not.toHaveBeenCalled();
+  });
+
+  it("a note over 280 characters is refused", async () => {
+    const res = await post({ recordingId: "c1", verdict: "matches", note: "x".repeat(281) });
+    expect(res.status).toBe(400);
+    expect(mockPrisma.speechCheck.upsert).not.toHaveBeenCalled();
+    expect(
+      (await post({ recordingId: "c1", verdict: "matches", note: "x".repeat(280) })).status,
+    ).toBe(200);
+  });
+
+  it("stores and returns the level and the trimmed note", async () => {
+    const res = await post({
+      recordingId: "c1",
+      verdict: "does_not_match",
+      level: "tone",
+      note: "  second word, rising  ",
+    });
+    expect(res.status).toBe(200);
+    const a = mockPrisma.speechCheck.upsert.mock.calls[0][0];
+    for (const side of [a.create, a.update]) {
+      expect(side).toMatchObject({ level: "tone", note: "second word, rising" });
+    }
+    expect(a.select).toMatchObject({ level: true, note: true });
+    const j = await res.json();
+    expect(j.check).toMatchObject({ level: "tone", note: "second word, rising" });
+  });
+
+  it("a second submit updates the level and note on the same row", async () => {
+    await post({ recordingId: "c1", verdict: "does_not_match", level: "word", note: "first" });
+    await post({ recordingId: "c1", verdict: "matches" });
+    const second = mockPrisma.speechCheck.upsert.mock.calls[1][0];
+    expect(second.where).toEqual({
+      recordingId_reviewerId: { recordingId: "c1", reviewerId: "me" },
+    });
+    expect(second.update).toMatchObject({ verdict: "matches", level: null, note: null });
   });
 
   it("400 on a bad verdict or a missing id", async () => {
@@ -248,7 +302,7 @@ describe("GET check/transcript", () => {
   it("the whole order: next, submit, then transcript, and only the last touches the transcript", async () => {
     mockPrisma.speechRecording.findMany.mockResolvedValue([clip()]);
     await getNext();
-    await post({ recordingId: "c1", verdict: "does_not_match", wrongWordIndex: 1 });
+    await post({ recordingId: "c1", verdict: "does_not_match", level: "word", wrongWordIndex: 1 });
     expect(transcriptRead).not.toHaveBeenCalled();
     mockPrisma.speechCheck.findUnique.mockResolvedValue({ id: "k1" });
     await getTranscript();
