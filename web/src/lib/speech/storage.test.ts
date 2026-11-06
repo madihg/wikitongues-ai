@@ -17,14 +17,22 @@ describe("baseMime and isAllowedAudioMime", () => {
     for (const t of AUDIO_MIME_TYPES) expect(isAllowedAudioMime(t)).toBe(true);
     expect(isAllowedAudioMime("audio/webm;codecs=opus")).toBe(true);
     expect(isAllowedAudioMime("audio/mp4")).toBe(true);
-    for (const t of ["video/webm", "text/html", "application/json", "audio/mpeg", ""])
+    for (const t of [
+      "video/webm",
+      "text/html",
+      "application/json",
+      "audio/mpeg",
+      "",
+    ])
       expect(isAllowedAudioMime(t), t).toBe(false);
   });
 });
 
 describe("recordingPath", () => {
   it("is clips/<id>.<ext> per type, carrying no text", () => {
-    expect(recordingPath("abc", "audio/webm;codecs=opus")).toBe("clips/abc.webm");
+    expect(recordingPath("abc", "audio/webm;codecs=opus")).toBe(
+      "clips/abc.webm",
+    );
     expect(recordingPath("abc", "audio/mp4")).toBe("clips/abc.m4a");
     expect(recordingPath("abc", "audio/ogg")).toBe("clips/abc.ogg");
     expect(recordingPath("abc", "audio/wav")).toBe("clips/abc.wav");
@@ -41,8 +49,12 @@ describe("audioUrl", () => {
   });
 });
 
-/** The bucket is gone: no code path may bring signed URLs or the SDK back. */
-describe("no Supabase Storage left in the Speech Lab", () => {
+/**
+ * US-038 brings the private bucket back behind one module: only
+ * storage-supabase.ts (and its test) may import the SDK or mint a signed URL,
+ * so no component or route can reach the service-role client any other way.
+ */
+describe("Supabase Storage stays behind storage-supabase.ts", () => {
   const root = join(__dirname, "..", "..");
   const files: string[] = [];
   const walk = (dir: string) => {
@@ -56,20 +68,22 @@ describe("no Supabase Storage left in the Speech Lab", () => {
   walk(join(root, "app", "api", "lab"));
   walk(join(root, "components", "lab"));
 
-  it("nothing imports @supabase/supabase-js or mints a signed URL", () => {
+  it("nothing else imports @supabase/supabase-js or mints a signed URL", () => {
     for (const f of files) {
-      if (f.endsWith("storage.test.ts")) continue;
+      if (/storage(-supabase)?\.test\.ts$/.test(f)) continue;
+      if (f.endsWith("storage-supabase.ts")) continue;
       const text = readFileSync(f, "utf8");
       expect(text, f).not.toMatch(/@supabase\/supabase-js/);
-      expect(text, f).not.toMatch(/signedReadUrl|signedUploadUrl|createSignedUrl/);
+      expect(text, f).not.toMatch(
+        /signedReadUrl|signedUploadUrl|createSignedUrl/,
+      );
     }
   });
 
-  it("the dependency is gone from package.json", () => {
-    const pkg = JSON.parse(
-      readFileSync(join(root, "..", "package.json"), "utf8"),
-    );
-    const all = { ...pkg.dependencies, ...pkg.devDependencies };
-    expect(all).not.toHaveProperty("@supabase/supabase-js");
+  it("no component imports the storage module", () => {
+    for (const f of files) {
+      if (!f.includes("/components/")) continue;
+      expect(readFileSync(f, "utf8"), f).not.toMatch(/storage-supabase/);
+    }
   });
 });
