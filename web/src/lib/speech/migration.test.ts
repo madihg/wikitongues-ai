@@ -201,7 +201,9 @@ describe("speech loop migration", () => {
   });
 
   it("is additive: nothing existing is dropped or altered", () => {
-    expect(lUp).not.toMatch(/\bDROP\s|\bDELETE\s+FROM|\bTRUNCATE|\bUPDATE\s+\"/i);
+    expect(lUp).not.toMatch(
+      /\bDROP\s|\bDELETE\s+FROM|\bTRUNCATE|\bUPDATE\s+\"/i,
+    );
     // The only ALTER TABLEs add foreign keys on the new tables.
     for (const m of lUp.matchAll(/ALTER TABLE "(\w+)"/g)) {
       expect(TABLES).toContain(m[1]);
@@ -209,15 +211,19 @@ describe("speech loop migration", () => {
   });
 
   it("down.sql drops each table and enum, referencing tables first", () => {
-    for (const t of TABLES) expect(lDown).toContain(`DROP TABLE IF EXISTS "${t}"`);
-    for (const e of LOOP_ENUMS) expect(lDown).toContain(`DROP TYPE IF EXISTS "${e}"`);
+    for (const t of TABLES)
+      expect(lDown).toContain(`DROP TABLE IF EXISTS "${t}"`);
+    for (const e of LOOP_ENUMS)
+      expect(lDown).toContain(`DROP TYPE IF EXISTS "${e}"`);
     expect(lDown.indexOf('"SpeechCandidate"')).toBeLessThan(
       lDown.indexOf('"SpeechEvalResult"'),
     );
     expect(lDown.indexOf('"SpeechEvalResult"')).toBeLessThan(
       lDown.indexOf('"SpeechTrainJob"'),
     );
-    expect(lDown.indexOf("DROP TABLE")).toBeLessThan(lDown.indexOf("DROP TYPE"));
+    expect(lDown.indexOf("DROP TABLE")).toBeLessThan(
+      lDown.indexOf("DROP TYPE"),
+    );
   });
 
   it("has the unique keys and defaults the loop relies on", () => {
@@ -227,8 +233,12 @@ describe("speech loop migration", () => {
       'CREATE UNIQUE INDEX "SpeechCheck_recordingId_reviewerId_key"',
     );
     expect(lUp).toContain('CREATE UNIQUE INDEX "SpeakerProfile_userId_key"');
-    expect(lUp).toContain('"mayShareDemographics" BOOLEAN NOT NULL DEFAULT false');
-    expect(lUp).toContain('"monthlyCapUsd" DOUBLE PRECISION NOT NULL DEFAULT 200');
+    expect(lUp).toContain(
+      '"mayShareDemographics" BOOLEAN NOT NULL DEFAULT false',
+    );
+    expect(lUp).toContain(
+      '"monthlyCapUsd" DOUBLE PRECISION NOT NULL DEFAULT 200',
+    );
     expect(lUp).toContain('"runDate" DATE NOT NULL');
     expect(lUp).toContain('INSERT INTO "SpeechLoopState" ("id") VALUES (1)');
   });
@@ -264,4 +274,66 @@ describe("speech transcript migration", () => {
     );
     expect(tDown).toContain('DROP TABLE IF EXISTS "SpeechTranscript"');
   });
+});
+
+describe("withdrawal migrations (US-040)", () => {
+  const mdir = join(root, "migrations");
+  const read = (suffix: string, file: string) => {
+    const name = readdirSync(mdir).find((d) => d.endsWith(suffix));
+    return {
+      name,
+      text: name ? readFileSync(join(mdir, name, file), "utf8") : "",
+    };
+  };
+  const cases = [
+    {
+      suffix: "_speech_consent_withdrawn",
+      table: "ConsentGrant",
+      col: "withdrawn",
+    },
+    {
+      suffix: "_speech_retrain_required",
+      table: "SpeechCandidate",
+      col: "retrainRequired",
+    },
+  ];
+
+  for (const c of cases) {
+    describe(c.suffix, () => {
+      const up = read(c.suffix, "migration.sql");
+      const down = read(c.suffix, "down.sql");
+
+      it("exists, sorts after the loop migration, and sets the search path", () => {
+        expect(up.name).toBeDefined();
+        expect(up.name! > "20261105130000_speech_loop").toBe(true);
+        expect(up.text).toContain(
+          'SET search_path TO "wikitongues", "extensions", "public";',
+        );
+        expect(down.text).toContain(
+          'SET search_path TO "wikitongues", "extensions", "public";',
+        );
+      });
+
+      it("adds exactly one boolean column that defaults to false, and nothing else", () => {
+        expect(up.text).toContain(
+          `ALTER TABLE "${c.table}" ADD COLUMN     "${c.col}" BOOLEAN NOT NULL DEFAULT false;`,
+        );
+        expect(up.text.match(/ALTER TABLE/g)).toHaveLength(1);
+        expect(up.text).not.toMatch(/DROP|DELETE|UPDATE|TRUNCATE/i);
+      });
+
+      it("is declared in schema.prisma", () => {
+        expect(schema).toMatch(
+          new RegExp(`${c.col}\\s+Boolean\\s+@default\\(false\\)`),
+        );
+      });
+
+      it("down.sql drops that column only", () => {
+        expect(down.text).toContain(
+          `ALTER TABLE "${c.table}" DROP COLUMN IF EXISTS "${c.col}"`,
+        );
+        expect(down.text).not.toMatch(/DROP TABLE|DROP TYPE/i);
+      });
+    });
+  }
 });
