@@ -16,7 +16,7 @@ import { LLM_CONFIG } from "../../src/lib/speech/llm-config";
  * not a demo row, training consent given, and the answer has at least one
  * tone mark (toneStrip changes it).
  *
- *   npx tsx --env-file=.env.local scripts/speech/eval-tone-restore.ts [--limit N] [--dry-run]
+ *   npx tsx --env-file=.env.local scripts/speech/eval-tone-restore.ts [--offset N] [--limit N] [--dry-run]
  *
  * --dry-run selects and counts, makes no LLM call and writes no cost row.
  *
@@ -66,6 +66,7 @@ export function tonePositionErrors(gold: string, restored: string): [number, num
 
 async function main() {
   const limit = argValue("limit") ? Number(argValue("limit")) : undefined;
+  const offset = argValue("offset") ? Number(argValue("offset")) : 0;
   const dryRun = process.argv.includes("--dry-run");
 
   const rows = await prisma.coldAuthorAnswer.findMany({
@@ -78,10 +79,11 @@ async function main() {
     orderBy: { id: "asc" },
   });
   const marked = rows.filter((r) => r.answerText !== toneStrip(r.answerText));
-  const picked = limit ? marked.slice(0, limit) : marked;
+  const picked = marked.slice(offset, limit ? offset + limit : undefined);
 
   console.log(`answers_considered=${rows.length}`);
   console.log(`answers_with_tone_marks=${marked.length}`);
+  console.log(`answers_offset=${offset}`);
   console.log(`answers_selected=${picked.length}`);
   console.log(`model=${LLM_CONFIG.toneRestore}`);
   if (dryRun) {
