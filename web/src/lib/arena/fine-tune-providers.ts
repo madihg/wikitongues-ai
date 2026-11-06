@@ -140,7 +140,13 @@ export async function buildTrainingJsonl(job: FineTuneJob): Promise<string> {
           select: {
             outputText: true,
             prompt: {
-              select: { id: true, text: true, isHoldout: true, bucket: true },
+              select: {
+                id: true,
+                text: true,
+                isHoldout: true,
+                split: true,
+                bucket: true,
+              },
             },
           },
         },
@@ -160,6 +166,7 @@ export async function buildTrainingJsonl(job: FineTuneJob): Promise<string> {
           : c.modelOutputA.outputText,
         bucket: c.bucket ?? c.modelOutputA.prompt.bucket,
         isHoldout: c.modelOutputA.prompt.isHoldout,
+        split: c.modelOutputA.prompt.split,
       };
     });
     const examples = buildDpoExamples(rows, filters);
