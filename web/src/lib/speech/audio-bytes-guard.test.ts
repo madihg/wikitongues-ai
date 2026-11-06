@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { OPEN_ROWS_QUERY } from "./open-rows";
+import { TRAINABLE_ROWS_QUERY, TEST_SET_ROWS_QUERY } from "./loop-rows";
 
 /**
  * `bytes` (the audio) and `quality` are columns on SpeechRecording, and
@@ -47,6 +48,13 @@ describe("audio bytes stay out of every list and export", () => {
     expect(OPEN_ROWS_QUERY.select).not.toHaveProperty("quality");
   });
 
+  it("the training and test-set queries select explicit fields, never bytes or quality", () => {
+    for (const q of [TRAINABLE_ROWS_QUERY, TEST_SET_ROWS_QUERY]) {
+      expect(q.select).not.toHaveProperty("bytes");
+      expect(q.select).not.toHaveProperty("quality");
+    }
+  });
+
   it("every read of speechRecording names a select", () => {
     const re = /speechRecording\s*\.\s*(findMany|findFirst|findUnique)\s*\(/g;
     let reads = 0;
@@ -56,7 +64,12 @@ describe("audio bytes stay out of every list and export", () => {
         reads++;
         const call = callText(src, m.index! + m[0].length - 1);
         // The shared open-manifest query is checked by name above.
-        if (call.trim() === "(OPEN_ROWS_QUERY)") continue;
+        if (
+          ["(OPEN_ROWS_QUERY)", "(TRAINABLE_ROWS_QUERY)", "(TEST_SET_ROWS_QUERY)"].includes(
+            call.trim(),
+          )
+        )
+          continue;
         expect(call, `${relative(web, f)}: ${m[1]} without select`).toMatch(
           /\bselect\s*:/,
         );
