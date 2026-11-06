@@ -1,0 +1,82 @@
+import type { PrismaClient } from "@prisma/client";
+import type { LoopRow } from "./training-manifest";
+import { withdrawnSpeakerIds } from "./withdrawal";
+
+/**
+ * The queries that feed the training and exam manifests. Like open-rows.ts,
+ * the WHERE only narrows; canTrain / canEvaluate (inside the builders) are
+ * the rule and re-check every row, including the prompt's frozen status.
+ * The select is explicit and omits `bytes` and `quality`: the worker reads
+ * audio through a signed URL, never through these rows
+ * (audio-bytes-guard.test.ts).
+ */
+const SELECT = {
+  id: true,
+  storagePath: true,
+  storageKey: true,
+  language: true,
+  mimeType: true,
+  durationMs: true,
+  sampleRate: true,
+  annotatorId: true,
+  dialect: true,
+  tier: true,
+  consentId: true,
+  consentVersion: true,
+  fundingSource: true,
+  isTestSet: true,
+  isDemo: true,
+  rightsStatus: true,
+  sourceType: true,
+  sourceRef: true,
+  publishedOpenAt: true,
+  uploadedAt: true,
+  reviewStatus: true,
+  voiceCloningOptIn: true,
+  prompt: { select: { isHoldout: true, split: true, text: true } },
+  coldAuthorAnswer: { select: { answerText: true, englishGloss: true } },
+} as const;
+
+export const TRAINABLE_ROWS_QUERY = {
+  where: {
+    isTestSet: false,
+    isDemo: false,
+    uploadedAt: { not: null },
+    consentId: { not: null },
+    reviewStatus: "keep",
+  },
+  orderBy: { createdAt: "asc" },
+  select: SELECT,
+} as const;
+
+export const TEST_SET_ROWS_QUERY = {
+  where: { isTestSet: true, isDemo: false, uploadedAt: { not: null } },
+  orderBy: { createdAt: "asc" },
+  select: SELECT,
+} as const;
+
+type Db = Pick<PrismaClient, "speechRecording">;
+
+/**
+ * Candidate training rows. Guard them with buildTrainingManifest. Clips of a
+ * speaker whose latest grant is a withdrawal are left out, published or not
+ * (withdrawal.ts). Filtered here in code, not in the WHERE: a NOT IN on the
+ * nullable annotatorId would also drop clips with no speaker.
+ */
+export async function loadTrainableRows(
+  db: Db & Pick<PrismaClient, "consentGrant">,
+): Promise<LoopRow[]> {
+  const [rows, grants] = await Promise.all([
+    db.speechRecording.findMany(TRAINABLE_ROWS_QUERY),
+    db.consentGrant.findMany({
+      select: { userId: true, grantedAt: true, withdrawn: true },
+    }),
+  ]);
+  const gone = new Set(withdrawnSpeakerIds(grants));
+  return rows.filter((r) => !r.annotatorId || !gone.has(r.annotatorId));
+}
+
+/** The exam clips. Only buildEvalManifest may turn these into a manifest. */
+export async function loadTestSetRows(db: Db): Promise<LoopRow[]> {
+  return db.speechRecording.findMany(TEST_SET_ROWS_QUERY);
+}

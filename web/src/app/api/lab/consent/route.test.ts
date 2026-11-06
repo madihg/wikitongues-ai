@@ -198,3 +198,35 @@ describe("GET /api/lab/consent", () => {
     expect((await (await GET()).json()).needsConsent).toBe(true);
   });
 });
+
+describe("GET /api/lab/consent after a withdrawal", () => {
+  it("needs consent again when the latest grant is a withdrawal, even for the current version", async () => {
+    mockPrisma.consentGrant.findFirst.mockResolvedValue({
+      id: "g2",
+      grantedAt: new Date("2026-11-06T00:00:00Z"),
+      commercialLicensing: false,
+      crossBorder: false,
+      voiceCloning: false,
+      speakerId: false,
+      withdrawn: true,
+      consent: { version: CONSENT_VERSION, method: "written" },
+    });
+    const body = await (await GET()).json();
+    expect(body.needsConsent).toBe(true);
+    expect(body.withdrawn).toBe(true);
+  });
+
+  it("does not need consent for a current, un-withdrawn grant", async () => {
+    mockPrisma.consentGrant.findFirst.mockResolvedValue({
+      id: "g1",
+      grantedAt: new Date("2026-11-06T00:00:00Z"),
+      commercialLicensing: false,
+      crossBorder: false,
+      voiceCloning: false,
+      speakerId: false,
+      withdrawn: false,
+      consent: { version: CONSENT_VERSION, method: "written" },
+    });
+    expect((await (await GET()).json()).needsConsent).toBe(false);
+  });
+});

@@ -254,6 +254,21 @@ describe("PATCH /api/lab/speech/recordings", () => {
     expect((await patch("not json")).status).toBe(400);
   });
 
+  it("409: a clip its speaker withdrew cannot be flagged back, and withdrawn is not a choice", async () => {
+    mockPrisma.speechRecording.findUnique.mockResolvedValue({
+      id: "rec-1",
+      reviewStatus: "withdrawn",
+    });
+    expect((await patch({ id: "rec-1", reviewStatus: "keep" })).status).toBe(
+      409,
+    );
+    expect(mockPrisma.speechRecording.update).not.toHaveBeenCalled();
+    mockPrisma.speechRecording.findUnique.mockResolvedValue({ id: "rec-1" });
+    expect(
+      (await patch({ id: "rec-1", reviewStatus: "withdrawn" })).status,
+    ).toBe(400);
+  });
+
   it("404 for an unknown clip", async () => {
     mockPrisma.speechRecording.findUnique.mockResolvedValue(null);
     expect((await patch({ id: "nope", reviewStatus: "keep" })).status).toBe(
