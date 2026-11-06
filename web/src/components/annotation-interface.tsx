@@ -20,6 +20,7 @@ import { IGALA_DIALECTS, DIALECT_STORAGE_KEY, isDialect } from "@/lib/dialects";
 import { InfoTip } from "@/components/info-tip";
 import { SayItBlock } from "@/components/lab/say-it-block";
 import { useSpeechLayer } from "@/components/lab/use-speech-layer";
+import { canProbeSpeech } from "@/lib/lab-flags";
 import { ToneKeyboard } from "@/components/tone-keyboard";
 import { SuggestingEditor } from "@/components/suggesting-editor";
 import {
@@ -228,9 +229,11 @@ export function AnnotationInterface() {
   // server decides everything else again for itself.
   const { data: session } = useSession();
   const researcher = canUseDemoSwitch(session?.user?.role);
-  // The speech layer: researchers only, and only while the Lab flag is on.
-  // An annotator's episode never shows the block and never asks the server.
-  const speechLayer = useSpeechLayer(researcher);
+  // The speech layer: researchers while the Lab flag is on, and annotators
+  // only while SPEECH_LAYER_ANNOTATORS is also on. The server decides; with
+  // the layer flag unset an annotator is told false and the episode renders
+  // exactly as it always has, with no /api/lab/speech request.
+  const speechLayer = useSpeechLayer(canProbeSpeech(session?.user?.role));
   // True between locking the answer and continuing to the AI outputs, while
   // the optional "Say it" block is open. Never persisted: a reload skips it.
   const [sayIt, setSayIt] = useState(false);
@@ -757,7 +760,7 @@ export function AnnotationInterface() {
 
   function revealModels() {
     setColdLocked(true);
-    // A researcher with the speech layer on and an answer written gets the
+    // A speaker with the speech layer on and an answer written gets the
     // optional "Say it" block first; everyone else goes straight to the
     // outputs. The block never blocks: Skip continues.
     if (speechLayer && coldAnswer.trim()) {

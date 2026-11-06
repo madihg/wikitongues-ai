@@ -1,6 +1,7 @@
 /**
- * Audio types and clip naming for the Speech Lab. There is no bucket: a clip
- * is stored in Postgres as `bytes` on its SpeechRecording row, uploaded as the
+ * Audio types and clip naming for the Speech Lab. A clip is stored in Postgres
+ * as `bytes` on its SpeechRecording row (and, with SPEECH_STORAGE=1, also in
+ * the private bucket: see storage-supabase.ts), uploaded as the
  * request body of PUT /api/lab/speech/recording/[id]/audio and served by the
  * GET beside it, both researcher-only. Nothing here talks to a network or a
  * database, so it is safe in a client component and in a test.

@@ -19,3 +19,35 @@ export function speechLabEnabled(): boolean {
 export function canUseLab(role?: string | null): boolean {
   return role === "RESEARCHER";
 }
+
+/**
+ * True only when SPEECH_LAYER_ANNOTATORS is exactly "1". Read per call. It
+ * means nothing without the lab flag: it only widens who may use the speaker
+ * side of the lab (recording, checking, listening) to annotators.
+ */
+export function speechLayerAnnotatorsEnabled(): boolean {
+  return process.env.SPEECH_LAYER_ANNOTATORS === "1";
+}
+
+/**
+ * Who may use the speaker side of the lab: a researcher when the lab is on,
+ * an annotator only when the lab AND the annotator layer are both on. Learners
+ * never. Researcher-only surfaces (recordings, export, freeze, jobs,
+ * candidates, loop, ledger, dashboard) keep canUseLab.
+ */
+export function canUseSpeech(
+  role: string | null | undefined,
+  flags: { lab: boolean; layer: boolean },
+): boolean {
+  if (!flags.lab) return false;
+  if (role === "RESEARCHER") return true;
+  return role === "ANNOTATOR" && flags.layer;
+}
+
+/**
+ * Roles that may ask the server whether the speech layer is on. Anyone else
+ * (a learner, nobody) never makes the request.
+ */
+export function canProbeSpeech(role: string | null | undefined): boolean {
+  return role === "RESEARCHER" || role === "ANNOTATOR";
+}

@@ -126,6 +126,7 @@ const ITEM: RecordingItem = {
   consentVersion: "2026-10-19-v1",
   reviewStatus: null,
   rightsStatus: "pending",
+  isTestSet: false,
   url: "/api/lab/speech/recording/rec-1/audio",
 };
 
@@ -509,6 +510,13 @@ describe("Recordings", () => {
       onQuery={noop}
       onFlag={noop}
       onExport={noop}
+      selected={[]}
+      confirmingFreeze={false}
+      freezing={false}
+      onToggle={noop}
+      onFreezeAsk={noop}
+      onFreezeConfirm={noop}
+      onFreezeCancel={noop}
     />,
   );
 
@@ -529,6 +537,86 @@ describe("Recordings", () => {
     ]) {
       expect(html).toContain(label);
     }
+  });
+
+  it("offers Freeze into test set only once something is selected", () => {
+    expect(html).not.toContain("Freeze into test set");
+    const withSelection = renderToStaticMarkup(
+      <RecordingsView
+        items={[ITEM]}
+        query={DEFAULT_QUERY}
+        exporting={false}
+        message={null}
+        onQuery={noop}
+        onFlag={noop}
+        onExport={noop}
+        selected={["rec-1"]}
+        confirmingFreeze={false}
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
+      />,
+    );
+    expect(withSelection).toContain("1 selected");
+    expect(withSelection).toContain(">Freeze into test set<");
+    expect(withSelection).not.toContain("Confirm freeze");
+  });
+
+  it("asks for a confirm before freezing, and says it cannot be undone", () => {
+    const confirming = renderToStaticMarkup(
+      <RecordingsView
+        items={[ITEM]}
+        query={DEFAULT_QUERY}
+        exporting={false}
+        message="Not frozen: one speaker still has kept clips."
+        onQuery={noop}
+        onFlag={noop}
+        onExport={noop}
+        selected={["rec-1"]}
+        confirmingFreeze
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
+      />,
+    );
+    expect(confirming).toContain("Confirm freeze");
+    expect(confirming).toContain(">Cancel<");
+    expect(confirming).toContain("cannot be undone");
+    expect(confirming).toContain("Not frozen: one speaker");
+  });
+
+  it("a frozen clip wears a Test set badge and cannot be selected again", () => {
+    const frozen = renderToStaticMarkup(
+      <RecordingsView
+        items={[{ ...ITEM, isTestSet: true }]}
+        query={DEFAULT_QUERY}
+        exporting={false}
+        message={null}
+        onQuery={noop}
+        onFlag={noop}
+        onExport={noop}
+        selected={[]}
+        confirmingFreeze={false}
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
+      />,
+    );
+    expect(frozen).toContain(">Test set<");
+    expect(frozen).not.toContain('type="checkbox"');
+    expect(html).not.toContain(">Test set<");
+  });
+
+  it("the interface never offers to unfreeze", () => {
+    expect(sourceOf("recordings-interface.tsx").toLowerCase()).not.toContain(
+      "unfreeze",
+    );
   });
 
   it("says plainly that only OPEN, cleared clips are exported", () => {
@@ -616,6 +704,13 @@ describe("44px minimum targets", () => {
         onQuery={noop}
         onFlag={noop}
         onExport={noop}
+        selected={[]}
+        confirmingFreeze={false}
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
       />,
     ),
     (() => {
@@ -827,13 +922,13 @@ describe("the episode's Say it block", () => {
     expect(html).toContain("Optional");
   });
 
-  it("never blocks: Skip for now is there before anything is recorded", () => {
+  it("never blocks: Skip, no recording is there before anything is recorded", () => {
     const html = block("what it means");
     const skip = tagsOf(html, "button").find((t) =>
       t.includes('data-testid="say-it-continue"'),
     )!;
     expect(skip).not.toMatch(DISABLED);
-    expect(html).toContain(">Skip for now<");
+    expect(html).toContain(">Skip, no recording<");
   });
 
   it("reads the locked English meaning when there is one", () => {
@@ -850,9 +945,9 @@ describe("the episode's Say it block", () => {
     );
   });
 
-  it("is wired only for researchers with the flag on, after the lock and before the outputs", () => {
+  it("is wired for any speaker the server allows, after the lock and before the outputs", () => {
     const src = readFileSync(join(dir, "..", "annotation-interface.tsx"), "utf8");
-    expect(src).toContain("useSpeechLayer(researcher)");
+    expect(src).toContain("useSpeechLayer(canProbeSpeech(");
     expect(src).toMatch(/if \(speechLayer && coldAnswer\.trim\(\)\) \{\s*setSayIt\(true\);\s*return;/);
     // The block renders inside the locked first step, not in the pairwise step.
     const first = src.indexOf("<SayItBlock");
@@ -861,9 +956,9 @@ describe("the episode's Say it block", () => {
     expect(src.match(/<SayItBlock/g)).toHaveLength(1);
   });
 
-  it("the hook asks the server only for researchers", () => {
+  it("the hook asks the server only for eligible roles", () => {
     const src = sourceOf("use-speech-layer.ts");
-    expect(src).toContain("if (!researcher)");
+    expect(src).toContain("if (!eligible)");
     expect(src).toContain("/api/lab/flags");
   });
 
@@ -963,6 +1058,13 @@ describe("Recordings: language, take metrics, filters and sort", () => {
       onQuery={noop}
       onFlag={noop}
       onExport={noop}
+      selected={[]}
+      confirmingFreeze={false}
+      freezing={false}
+      onToggle={noop}
+      onFreezeAsk={noop}
+      onFreezeConfirm={noop}
+      onFreezeCancel={noop}
     />,
   );
 
@@ -989,6 +1091,13 @@ describe("Recordings: language, take metrics, filters and sort", () => {
         onQuery={noop}
         onFlag={noop}
         onExport={noop}
+        selected={[]}
+        confirmingFreeze={false}
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
       />,
     );
     expect(orphan).toContain("No transcript attached.");

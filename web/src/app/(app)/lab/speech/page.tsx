@@ -2,7 +2,7 @@ import { requireLabPage } from "@/lib/speech/page-gate";
 import { RecordInterface } from "@/components/lab/record-interface";
 
 export default async function RecordPage() {
-  await requireLabPage();
+  await requireLabPage({ annotatorRedirect: "/speak" });
   return (
     <div>
       <h1 className="text-2xl font-semibold text-text-primary">Record</h1>

@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 
 /**
- * "Today: 6 clips kept, 2 re-recorded, 3 community-only, 3 licensed", under
- * the Lab header. Computed server-side from the researcher's own rows
- * (GET /api/lab/speech/today), so there is no new table; the browser only
- * says when "today" began (its local midnight). It refreshes when a clip is
+ * "You added 12 minutes today. The pool is at 41.5 hours.", under the Lab and
+ * Speak headers. Computed server-side from the caller's own rows and the
+ * pool (GET /api/lab/speech/today), so there is no new table; the browser
+ * only says when "today" began (its local midnight). It refreshes when a clip is
  * saved anywhere on the page ("lab:clip-saved"). Quiet when it cannot load.
  */
 export function SessionLine() {

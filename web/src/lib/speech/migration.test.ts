@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -80,9 +80,13 @@ describe("speech lab 2 migration", () => {
   it("adds language, bytes and quality to SpeechRecording and axes to SpeechComparison", () => {
     expect(up2).toContain('ALTER TABLE "SpeechRecording"');
     expect(up2).toContain('ADD COLUMN     "bytes" BYTEA');
-    expect(up2).toContain(`ADD COLUMN     "language" TEXT NOT NULL DEFAULT 'igala'`);
+    expect(up2).toContain(
+      `ADD COLUMN     "language" TEXT NOT NULL DEFAULT 'igala'`,
+    );
     expect(up2).toContain('ADD COLUMN     "quality" JSONB');
-    expect(up2).toContain('ALTER TABLE "SpeechComparison" ADD COLUMN     "axes" JSONB');
+    expect(up2).toContain(
+      'ALTER TABLE "SpeechComparison" ADD COLUMN     "axes" JSONB',
+    );
     expect(schema).toMatch(/bytes\s+Bytes\?/);
     expect(schema).toMatch(/language\s+String\s+@default\("igala"\)/);
     expect(schema).toMatch(/quality\s+Json\?/);
@@ -112,8 +116,120 @@ describe("speech lab 2 migration", () => {
       ["SpeechRecording", "language"],
       ["SpeechRecording", "bytes"],
     ]) {
-      expect(down2).toContain(`ALTER TABLE "${table}" DROP COLUMN IF EXISTS "${col}"`);
+      expect(down2).toContain(
+        `ALTER TABLE "${table}" DROP COLUMN IF EXISTS "${col}"`,
+      );
     }
     expect(down2).not.toMatch(/DROP TABLE|DROP TYPE/i);
+  });
+});
+
+describe("speech storage migration", () => {
+  const sdir = join(root, "migrations");
+  const name = readdirSync(sdir).find((d) => d.endsWith("_speech_storage"));
+  const sUp = name
+    ? readFileSync(join(sdir, name, "migration.sql"), "utf8")
+    : "";
+  const sDown = name ? readFileSync(join(sdir, name, "down.sql"), "utf8") : "";
+
+  it("exists, sorts after the speech lab migrations, and sets the search path", () => {
+    expect(name).toBeDefined();
+    expect(name! > "20261026120000_speech_lab_2").toBe(true);
+    expect(sUp).toContain(
+      'SET search_path TO "wikitongues", "extensions", "public";',
+    );
+    expect(sDown).toContain(
+      'SET search_path TO "wikitongues", "extensions", "public";',
+    );
+  });
+
+  it("adds one nullable storageKey column and an index, nothing destructive", () => {
+    expect(sUp).toMatch(
+      /ALTER TABLE "SpeechRecording" ADD COLUMN\s+"storageKey" TEXT/,
+    );
+    expect(sUp).not.toMatch(/NOT NULL/);
+    expect(sUp).toMatch(/CREATE INDEX "SpeechRecording_storageKey_idx"/);
+    expect(sUp).not.toMatch(/DROP\s|DELETE\s|UPDATE\s/i);
+    expect(schema).toMatch(/storageKey\s+String\?/);
+    expect(schema).toContain("@@index([storageKey])");
+  });
+
+  it("down.sql reverses exactly that and keeps bytes", () => {
+    expect(sDown).toContain(
+      'DROP INDEX IF EXISTS "SpeechRecording_storageKey_idx"',
+    );
+    expect(sDown).toContain('DROP COLUMN IF EXISTS "storageKey"');
+    expect(sDown).not.toContain('"bytes"');
+  });
+});
+
+/**
+ * The speech loop migration (PR C): eight tables and two enums, all new.
+ */
+describe("speech loop migration", () => {
+  const dirL = join(root, "migrations", "20261105130000_speech_loop");
+  const lUp = readFileSync(join(dirL, "migration.sql"), "utf8");
+  const lDown = readFileSync(join(dirL, "down.sql"), "utf8");
+  const TABLES = [
+    "SpeechTrainJob",
+    "SpeechEvalResult",
+    "SpeechNightlyRun",
+    "SpeechCandidate",
+    "SpeechLoopState",
+    "SpeechCheck",
+    "SpeakerProfile",
+    "ThirdPartyAudioSource",
+  ];
+  const LOOP_ENUMS = ["SpeechSystem", "SpeechJobStatus"];
+
+  it("starts with the search_path line", () => {
+    expect(lUp).toMatch(
+      /^SET search_path TO "wikitongues", "extensions", "public";$/m,
+    );
+    expect(lDown).toMatch(/^SET search_path TO "wikitongues"/m);
+  });
+
+  it("creates every table and enum the schema declares", () => {
+    for (const t of TABLES) {
+      expect(schema).toContain(`model ${t} {`);
+      expect(lUp).toContain(`CREATE TABLE "${t}"`);
+    }
+    for (const e of LOOP_ENUMS) {
+      expect(schema).toContain(`enum ${e} {`);
+      expect(lUp).toContain(`CREATE TYPE "${e}"`);
+    }
+  });
+
+  it("is additive: nothing existing is dropped or altered", () => {
+    expect(lUp).not.toMatch(/\bDROP\s|\bDELETE\s+FROM|\bTRUNCATE|\bUPDATE\s+\"/i);
+    // The only ALTER TABLEs add foreign keys on the new tables.
+    for (const m of lUp.matchAll(/ALTER TABLE "(\w+)"/g)) {
+      expect(TABLES).toContain(m[1]);
+    }
+  });
+
+  it("down.sql drops each table and enum, referencing tables first", () => {
+    for (const t of TABLES) expect(lDown).toContain(`DROP TABLE IF EXISTS "${t}"`);
+    for (const e of LOOP_ENUMS) expect(lDown).toContain(`DROP TYPE IF EXISTS "${e}"`);
+    expect(lDown.indexOf('"SpeechCandidate"')).toBeLessThan(
+      lDown.indexOf('"SpeechEvalResult"'),
+    );
+    expect(lDown.indexOf('"SpeechEvalResult"')).toBeLessThan(
+      lDown.indexOf('"SpeechTrainJob"'),
+    );
+    expect(lDown.indexOf("DROP TABLE")).toBeLessThan(lDown.indexOf("DROP TYPE"));
+  });
+
+  it("has the unique keys and defaults the loop relies on", () => {
+    expect(lUp).toContain('CREATE UNIQUE INDEX "SpeechNightlyRun_runDate_key"');
+    expect(lUp).toContain('CREATE UNIQUE INDEX "SpeechCandidate_modelRef_key"');
+    expect(lUp).toContain(
+      'CREATE UNIQUE INDEX "SpeechCheck_recordingId_reviewerId_key"',
+    );
+    expect(lUp).toContain('CREATE UNIQUE INDEX "SpeakerProfile_userId_key"');
+    expect(lUp).toContain('"mayShareDemographics" BOOLEAN NOT NULL DEFAULT false');
+    expect(lUp).toContain('"monthlyCapUsd" DOUBLE PRECISION NOT NULL DEFAULT 200');
+    expect(lUp).toContain('"runDate" DATE NOT NULL');
+    expect(lUp).toContain('INSERT INTO "SpeechLoopState" ("id") VALUES (1)');
   });
 });
