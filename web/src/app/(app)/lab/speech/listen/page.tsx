@@ -2,7 +2,7 @@ import { requireLabPage } from "@/lib/speech/page-gate";
 import { ListenInterface } from "@/components/lab/listen-interface";
 
 export default async function ListenPage() {
-  await requireLabPage();
+  await requireLabPage({ annotatorRedirect: "/speak/listen" });
   return (
     <div>
       <h1 className="text-2xl font-semibold text-text-primary">Listen</h1>

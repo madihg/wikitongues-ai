@@ -27,6 +27,50 @@ describe("buildOpenManifest", () => {
     expect(line.speaker).toMatch(/^spk_[0-9a-f]{12}$/);
   });
 
+  describe("speaker profile", () => {
+    const profile = (over: Record<string, unknown> = {}) => ({
+      dialect: "profile-dialect",
+      ageBand: "30-44",
+      gender: "woman",
+      mayShareDemographics: false,
+      ...over,
+    });
+
+    it("omits ageBand and gender unless the speaker allowed sharing", () => {
+      const [off] = buildOpenManifest([openRow({ speakerProfile: profile() })]);
+      expect(off).not.toHaveProperty("ageBand");
+      expect(off).not.toHaveProperty("gender");
+      expect(JSON.stringify(off)).not.toContain("30-44");
+      const [none] = buildOpenManifest([openRow()]);
+      expect(none).not.toHaveProperty("ageBand");
+    });
+
+    it("includes them when mayShareDemographics is true, and skips a field left unset", () => {
+      const [on] = buildOpenManifest([
+        openRow({ speakerProfile: profile({ mayShareDemographics: true }) }),
+      ]);
+      expect(on).toMatchObject({ ageBand: "30-44", gender: "woman" });
+      const [partial] = buildOpenManifest([
+        openRow({
+          speakerProfile: profile({ mayShareDemographics: true, gender: null }),
+        }),
+      ]);
+      expect(partial.ageBand).toBe("30-44");
+      expect(partial).not.toHaveProperty("gender");
+    });
+
+    it("dialect reaches the manifest: the clip's own first, else the profile's", () => {
+      const [own] = buildOpenManifest([
+        openRow({ dialect: "clip-dialect", speakerProfile: profile() }),
+      ]);
+      expect(own.dialect).toBe("clip-dialect");
+      const [fallback] = buildOpenManifest([
+        openRow({ dialect: null, speakerProfile: profile() }),
+      ]);
+      expect(fallback.dialect).toBe("profile-dialect");
+    });
+  });
+
   it("an Igala clip's transcript is the locked answer and says igala", () => {
     const [line] = buildOpenManifest([
       openRow({

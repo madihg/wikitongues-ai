@@ -58,7 +58,12 @@ export interface NavLink {
 
 /** Server-derived switches that change the nav. Passed in so navForRole stays pure. */
 export interface NavOptions {
-  /** The Speech Lab is on for this account (flag on AND a researcher). */
+  /**
+   * The speech layer is on for this account: the lab flag AND either a
+   * researcher, or an annotator with the annotator layer flag on (the server
+   * decides, via /api/lab/flags, and answers false for an annotator while the
+   * layer flag is unset, so an annotator's nav is unchanged until then).
+   */
   lab?: boolean;
 }
 
@@ -106,6 +111,12 @@ export function navForRole(
         tag: "researchers only",
         group: "lab",
       });
+      // Researchers check clips on the same screen annotators use.
+      links.push({
+        href: "/speak/check",
+        label: "Check",
+        group: "lab",
+      });
     }
     return links;
   }
@@ -114,12 +125,24 @@ export function navForRole(
   // separate lane made "fix it" a different errand from "judge it", and the
   // errand never got run. /annotator/corrections redirects annotators into
   // the annotate flow; the API routes and researcher lane stay.
-  return [
+  const annotatorLinks: NavLink[] = [
     { href: "/annotator", label: "Dashboard" },
     { href: "/annotator/annotate", label: "Annotate" },
     { href: "/annotator/history", label: "My Work" },
     { href: "/annotator/rubric", label: "Rubric" },
   ];
+  // Speech is a normal part of an annotator's work once the layer is on:
+  // Speak, Listen and Check sit right after Annotate. Off, nothing changes.
+  if (options.lab && role === "ANNOTATOR") {
+    annotatorLinks.splice(
+      2,
+      0,
+      { href: "/speak", label: "Speak" },
+      { href: "/speak/listen", label: "Listen" },
+      { href: "/speak/check", label: "Check" },
+    );
+  }
+  return annotatorLinks;
 }
 
 /**

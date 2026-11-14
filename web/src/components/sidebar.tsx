@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { useSpeechLayer } from "@/components/lab/use-speech-layer";
+import { canProbeSpeech } from "@/lib/lab-flags";
 import {
   navForRole,
   activeNavHref,
@@ -12,36 +13,12 @@ import {
   PERSONAS,
 } from "@/lib/personas";
 
-/**
- * Whether the Speech Lab link shows. The flag is a server env var and this is
- * a client component, so researchers ask /api/lab/flags once on mount. Off
- * until the answer arrives, and off on any failure: a lab link must never
- * appear by accident.
- */
-function useSpeechLab(researcher: boolean): boolean {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    if (!researcher) return;
-    let cancelled = false;
-    fetch("/api/lab/flags")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!cancelled) setOn(j?.speech === true);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [researcher]);
-  return researcher && on;
-}
-
 export function Sidebar() {
   const { data: session } = useSession();
   const pathname = usePathname();
-  const labOn = useSpeechLab(
-    isResearcher(session?.user?.role, session?.user?.email),
-  );
+  // Researchers and annotators ask the server once on mount; the answer is
+  // false for an annotator until SPEECH_LAYER_ANNOTATORS is set.
+  const labOn = useSpeechLayer(canProbeSpeech(session?.user?.role));
 
   if (!session) return null;
 

@@ -11,7 +11,10 @@ import type { ManifestRow } from "./manifest";
 
 // The export ROUTE is an entry point too: drive it with the database mocked.
 const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
-  mockPrisma: { speechRecording: { findMany: vi.fn() } },
+  mockPrisma: {
+    speechRecording: { findMany: vi.fn() },
+    speakerProfile: { findMany: vi.fn().mockResolvedValue([]) },
+  },
   mockRequireResearcher: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));

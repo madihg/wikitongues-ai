@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
   mockPrisma: {
     speechRecording: { findMany: vi.fn() },
-    speechComparison: { findMany: vi.fn() },
+    speechComparison: { findMany: vi.fn(), count: vi.fn() },
+    speechCandidate: { findFirst: vi.fn() },
   },
   mockRequireResearcher: vi.fn(),
 }));
@@ -27,6 +28,7 @@ const clip = (over: Record<string, unknown> = {}) => ({
   annotatorId: `speaker-${t}`,
   modelOutputId: null,
   sourceType: "contributor",
+  sourceRef: null,
   createdAt: new Date(2026, 9, 1, 0, 0, t),
   prompt: { promptId: "code_001", text: "Say hello." },
   ...over,
@@ -43,6 +45,8 @@ beforeEach(() => {
   });
   mockPrisma.speechRecording.findMany.mockResolvedValue([]);
   mockPrisma.speechComparison.findMany.mockResolvedValue([]);
+  mockPrisma.speechComparison.count.mockResolvedValue(0);
+  mockPrisma.speechCandidate.findFirst.mockResolvedValue(null);
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -233,5 +237,66 @@ describe("GET /api/lab/speech/listen/next", () => {
     await get();
     const sel = mockPrisma.speechRecording.findMany.mock.calls[0][0].select;
     expect(sel).not.toHaveProperty("bytes");
+  });
+});
+
+describe("next-day exposure (a promoted TTS candidate)", () => {
+  const ids = (b: { task: { clipA: { id: string }; clipB: { id: string } } }) =>
+    [b.task.clipA.id, b.task.clipB.id].sort();
+
+  // Prompt p-1 has two humans; prompt p-2 has a derived clip of the promoted
+  // model and one human. The first normal pair would be on p-1.
+  const seed = () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      clip({ id: "h1", promptId: "p-1", annotatorId: "s1" }),
+      clip({ id: "h2", promptId: "p-1", annotatorId: "s2" }),
+      clip({ id: "h3", promptId: "p-2", annotatorId: "s3", prompt: { promptId: "code_002", text: "x" } }),
+      clip({
+        id: "d1",
+        promptId: "p-2",
+        annotatorId: null,
+        sourceType: "derived",
+        sourceRef: "tts-model-1",
+        modelOutputId: null,
+        prompt: { promptId: "code_002", text: "x" },
+      }),
+    ]);
+  };
+
+  it("with no promoted candidate nothing changes and nothing extra is read", async () => {
+    seed();
+    const body = await (await get()).json();
+    expect(ids(body)).toEqual(["h1", "h2"]);
+    expect(mockPrisma.speechComparison.count).not.toHaveBeenCalled();
+  });
+
+  it("with one, the first episode of the day pairs a derived clip against a human clip", async () => {
+    seed();
+    mockPrisma.speechCandidate.findFirst.mockResolvedValue({ modelRef: "tts-model-1" });
+    const body = await (await get()).json();
+    expect(ids(body)).toEqual(["d1", "h3"]);
+    expect(mockPrisma.speechCandidate.findFirst.mock.calls[0][0].where).toEqual({
+      system: "tts",
+      promotedAt: { not: null },
+    });
+    // Blind, as ever: no model ref, tier or speaker in the response.
+    expect(JSON.stringify(body)).not.toMatch(/tts-model-1|sourceRef|annotatorId/);
+  });
+
+  it("not on a day the caller has already judged, and not for a derived clip of another model", async () => {
+    seed();
+    mockPrisma.speechCandidate.findFirst.mockResolvedValue({ modelRef: "tts-model-1" });
+    mockPrisma.speechComparison.count.mockResolvedValue(1);
+    expect(ids(await (await get()).json())).toEqual(["h1", "h2"]);
+    mockPrisma.speechComparison.count.mockResolvedValue(0);
+    mockPrisma.speechCandidate.findFirst.mockResolvedValue({ modelRef: "other" });
+    expect(ids(await (await get()).json())).toEqual(["h1", "h2"]);
+  });
+
+  it("demo mode never reads the candidate", async () => {
+    seed();
+    mockPrisma.speechCandidate.findFirst.mockResolvedValue({ modelRef: "tts-model-1" });
+    await get("?demo=d1");
+    expect(mockPrisma.speechCandidate.findFirst).not.toHaveBeenCalled();
   });
 });

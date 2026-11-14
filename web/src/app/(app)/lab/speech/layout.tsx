@@ -19,7 +19,10 @@ export default async function SpeechLabLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireLabPage();
+  // An annotator (layer on) passes to the page, which redirects to /speak;
+  // they never see the lab band.
+  const who = await requireLabPage({ allowSpeakers: true });
+  if (who === "speaker") return <>{children}</>;
 
   return (
     <div className="-m-8 min-h-full">

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 
 const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
-  mockPrisma: { speechRecording: { findMany: vi.fn() } },
+  mockPrisma: { speechRecording: { findMany: vi.fn(), aggregate: vi.fn() } },
   mockRequireResearcher: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
@@ -30,6 +30,9 @@ beforeEach(() => {
     role: "RESEARCHER",
   });
   mockPrisma.speechRecording.findMany.mockResolvedValue([]);
+  mockPrisma.speechRecording.aggregate.mockResolvedValue({
+    _sum: { durationMs: null },
+  });
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -58,18 +61,22 @@ describe("GET /api/lab/speech/today", () => {
       isDemo: false,
       uploadedAt: { not: null },
     });
-    expect(arg.select).toEqual({ tier: true, quality: true });
+    expect(arg.select).toEqual({ tier: true, quality: true, durationMs: true });
   });
 
-  it("tallies kept, re-recorded and tiers into the session line", async () => {
+  it("tallies kept, re-recorded and tiers, and writes the minutes and pool line", async () => {
+    const d = 30_000;
     mockPrisma.speechRecording.findMany.mockResolvedValue([
-      { tier: "community_only", quality: q(1) },
-      { tier: "community_only", quality: q(0) },
-      { tier: "community_only", quality: null },
-      { tier: "licensed", quality: q(1) },
-      { tier: "licensed", quality: q() },
-      { tier: "licensed", quality: q() },
+      { tier: "community_only", quality: q(1), durationMs: d },
+      { tier: "community_only", quality: q(0), durationMs: d },
+      { tier: "community_only", quality: null, durationMs: d },
+      { tier: "licensed", quality: q(1), durationMs: d },
+      { tier: "licensed", quality: q(), durationMs: d },
+      { tier: "licensed", quality: q(), durationMs: d },
     ]);
+    mockPrisma.speechRecording.aggregate.mockResolvedValue({
+      _sum: { durationMs: 41.5 * 3_600_000 },
+    });
     const body = await (await get()).json();
     expect(body.counts).toEqual({
       kept: 6,
@@ -78,9 +85,40 @@ describe("GET /api/lab/speech/today", () => {
       licensed: 3,
       open: 0,
     });
+    expect(body.minutesToday).toBe(3);
+    expect(body.poolHours).toBe(41.5);
     expect(body.line).toBe(
-      "Today: 6 clips kept, 2 re-recorded, 3 community-only, 3 licensed",
+      "You added 3 minutes today. The pool is at 41.5 hours.",
     );
+  });
+
+  it("empty: no clips today and an empty pool read as zero, not null", async () => {
+    const body = await (await get()).json();
+    expect(body).toMatchObject({ minutesToday: 0, poolHours: 0 });
+    expect(body.line).toBe(
+      "You added 0 minutes today. The pool is at 0 hours.",
+    );
+  });
+
+  it("demo clips never count: both queries exclude them", async () => {
+    await get();
+    expect(mockPrisma.speechRecording.findMany.mock.calls[0][0].where).toMatchObject({
+      isDemo: false,
+    });
+    expect(mockPrisma.speechRecording.aggregate.mock.calls[0][0].where).toMatchObject({
+      isDemo: false,
+      uploadedAt: { not: null },
+      consentId: { not: null },
+    });
+  });
+
+  it("rejected clips stay out of the pool: bad_audio and wrong_text are excluded", async () => {
+    await get();
+    const where = mockPrisma.speechRecording.aggregate.mock.calls[0][0].where;
+    expect(where.OR).toEqual([
+      { reviewStatus: null },
+      { reviewStatus: { notIn: ["bad_audio", "wrong_text"] } },
+    ]);
   });
 
   it("clamps `since` to the last 36 hours and ignores junk or a future time", async () => {
