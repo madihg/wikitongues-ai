@@ -174,6 +174,12 @@ export interface SpeechMeasureData {
   auto: AutoMeasureRow[];
   /** False while the worker's measure table is not in the database yet. */
   autoTableReady: boolean;
+  /**
+   * False when what listeners decided was not loaded at all: the reader is
+   * not a research lead. listen, checks and toneAnswers are then empty, and
+   * the page must not read "empty" as "nobody has judged yet".
+   */
+  humanLoaded: boolean;
 }
 
 // ─── pure helpers ───────────────────────────────────────────────────────────
@@ -342,7 +348,16 @@ type Db = Pick<
   | "speechAutoMeasure"
 >;
 
-export async function loadSpeechMeasure(db: Db): Promise<SpeechMeasureData> {
+export async function loadSpeechMeasure(
+  db: Db,
+  /**
+   * `human: false` leaves out everything listeners decided (Listen
+   * judgments, Check verdicts, tone pair answers). Those say how a voice is
+   * doing against a person, and the people who rate must not see that while
+   * they rate, so only a research lead's page loads them.
+   */
+  options: { human: boolean } = { human: true },
+): Promise<SpeechMeasureData> {
   const [clips, evals, candidates, comparisons, checks, answers, auto] =
     await Promise.all([
       db.speechRecording.findMany({
@@ -397,37 +412,43 @@ export async function loadSpeechMeasure(db: Db): Promise<SpeechMeasureData> {
           evalResultId: true,
         },
       }),
-      db.speechComparison.findMany({
-        where: { isDemo: false },
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          promptId: true,
-          annotatorId: true,
-          recordingAId: true,
-          recordingBId: true,
-          winner: true,
-          axes: true,
-          isDemo: true,
-          createdAt: true,
-          recordingA: { select: SYSTEM_FIELDS },
-          recordingB: { select: SYSTEM_FIELDS },
-        },
-      }),
-      db.speechCheck.findMany({
-        where: { isDemo: false },
-        select: {
-          recordingId: true,
-          reviewerId: true,
-          verdict: true,
-          level: true,
-          isDemo: true,
-        },
-      }),
-      db.speechMinimalPairAnswer.findMany({
-        where: { isDemo: false },
-        select: { recordingId: true, heard: true, isDemo: true },
-      }),
+      options.human
+        ? db.speechComparison.findMany({
+            where: { isDemo: false },
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              promptId: true,
+              annotatorId: true,
+              recordingAId: true,
+              recordingBId: true,
+              winner: true,
+              axes: true,
+              isDemo: true,
+              createdAt: true,
+              recordingA: { select: SYSTEM_FIELDS },
+              recordingB: { select: SYSTEM_FIELDS },
+            },
+          })
+        : [],
+      options.human
+        ? db.speechCheck.findMany({
+            where: { isDemo: false },
+            select: {
+              recordingId: true,
+              reviewerId: true,
+              verdict: true,
+              level: true,
+              isDemo: true,
+            },
+          })
+        : [],
+      options.human
+        ? db.speechMinimalPairAnswer.findMany({
+            where: { isDemo: false },
+            select: { recordingId: true, heard: true, isDemo: true },
+          })
+        : [],
       loadAutoMeasures(db),
     ]);
 
@@ -488,5 +509,6 @@ export async function loadSpeechMeasure(db: Db): Promise<SpeechMeasureData> {
     }),
     auto: auto.rows,
     autoTableReady: auto.ready,
+    humanLoaded: options.human,
   };
 }

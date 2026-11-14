@@ -112,7 +112,7 @@ export default async function TodayPage({
           <NeedsYouBlock work={work} />
         </Suspense>
         <Suspense fallback={<Skeleton rows={3} tall />}>
-          <ModelsBlock speech={speech} />
+          <ModelsBlock speech={speech} lead={who.lead} />
         </Suspense>
         {who.lead && (
           <Suspense fallback={<Skeleton rows={4} />}>

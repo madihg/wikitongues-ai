@@ -390,3 +390,22 @@ export function SpeechMeasureHuman({
     </section>
   );
 }
+
+/**
+ * What a researcher who is not a research lead sees in place of the human
+ * half: one plain sentence, and nothing about how any voice is doing.
+ */
+export function HumanHalfForLeads() {
+  return (
+    <section aria-labelledby="human-half" className={card}>
+      <h2 id="human-half" className={eyebrow}>
+        Human
+      </h2>
+      <p className="mt-3 text-sm text-text-secondary">
+        What listeners decided is shown to research leads only. The people who
+        listen and rate must not see how a voice is doing while they rate it, so
+        that their next judgment is their own.
+      </p>
+    </section>
+  );
+}

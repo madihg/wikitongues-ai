@@ -142,6 +142,10 @@ describe("isLabResearcher", () => {
     expect(page).not.toContain(">Speak</h1>");
     // Listen keeps the researcher blocks, for researchers only.
     const listen = readFileSync(join(dir, "listen/page.tsx"), "utf8");
-    expect(listen).toMatch(/\{researcher && \(\s*<div[^>]*>\s*<DecisionCards \/>/);
+    expect(listen).toMatch(/\{researcher && \(\s*<div[^>]*>/);
+    expect(listen).toContain("<MinimalPairMarker />");
+    // The ranking card is for research leads only: a rater must not see it.
+    expect(listen).toMatch(/\{lead && <DecisionCards \/>\}/);
+    expect(listen).not.toMatch(/[^{&]\s<DecisionCards \/>/);
   });
 });

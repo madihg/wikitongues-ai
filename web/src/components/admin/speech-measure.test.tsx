@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SpeechMeasureAuto } from "./speech-measure-auto";
-import { SpeechMeasureHuman } from "./speech-measure-human";
+import { HumanHalfForLeads, SpeechMeasureHuman } from "./speech-measure-human";
 import { SpeechVersions } from "./speech-versions";
 import {
   AUTO_LEVELS,
@@ -52,6 +52,7 @@ const EMPTY_DATA: SpeechMeasureData = {
   toneAnswers: [],
   auto: [],
   autoTableReady: false,
+  humanLoaded: true,
 };
 
 const ev = (over: Partial<EvalRow> = {}): EvalRow => ({
@@ -127,14 +128,18 @@ function page(data: SpeechMeasureData, params: MeasureParams = {}) {
     />,
   );
   const humanHtml = renderToStaticMarkup(
-    <SpeechMeasureHuman
-      half={view.human}
-      checks={view.checks}
-      tone={view.tone}
-    />,
+    view.human ? (
+      <SpeechMeasureHuman
+        half={view.human.half}
+        checks={view.human.checks}
+        tone={view.human.tone}
+      />
+    ) : (
+      <HumanHalfForLeads />
+    ),
   );
   const versionsHtml = renderToStaticMarkup(
-    <SpeechVersions rows={view.versions} />,
+    <SpeechVersions rows={view.versions} listeners={view.human !== null} />,
   );
   return {
     view,
@@ -522,7 +527,7 @@ describe("buildMeasureView: which version is on screen", () => {
     expect(v.system).toBe("asr");
     expect(v.recognition.selected).toBe("asr-2");
     // The human half is always about a voice.
-    expect(v.human.modelRef).toBe("tts-1");
+    expect(v.human!.half.modelRef).toBe("tts-1");
   });
 
   it("takes the version asked for, and ignores one that does not exist", () => {
@@ -582,5 +587,55 @@ describe("the quality check measures, it never decides", () => {
     // Defined in one file and used by nothing in the app: the gate cannot
     // block a save, hide a clip or drop it from a list.
     expect(users).toEqual(["/lib/speech/quality-gates.ts"]);
+  });
+});
+
+describe("a researcher who is not a research lead: nothing listeners decided is on the page", () => {
+  // Listeners have judged, 31 times for the model. This reader rates, and
+  // must not learn that.
+  const judged: SpeechMeasureData = {
+    ...EMPTY_DATA,
+    listen: [...rounds(31, "a"), ...rounds(9, "b")],
+    auto: [
+      auto({
+        kind: "tts_round_trip",
+        modelRef: "tts-1",
+        nClips: 72,
+        values: { systemCer: m(0.426), humanCer: m(0.418) },
+      }),
+    ],
+  };
+  // What the loader hands a non-lead: the same automatic rows, no judgment.
+  const forRater: SpeechMeasureData = {
+    ...judged,
+    listen: [],
+    checks: [],
+    toneAnswers: [],
+    humanLoaded: false,
+  };
+
+  it("a lead sees the choice, the counts and the listeners column", () => {
+    const p = page(judged, { system: "tts" });
+    expect(p.human).toContain("31 of 40");
+    expect(p.human).toContain("Chose the person 9.");
+    expect(p.versions).toContain("Listeners chose it");
+    expect(p.versions).toContain("31 of 40 (Early)");
+  });
+
+  it("the rater's page says the half is for leads, and carries no count, share or tier", () => {
+    const p = page(forRater, { system: "tts" });
+    expect(p.view.human).toBeNull();
+    expect(p.human).toContain(
+      "What listeners decided is shown to research leads only.",
+    );
+    expect(p.human).not.toMatch(/\d/);
+    expect(p.human).not.toContain("tts-1");
+    expect(p.human).not.toContain("No listener has compared");
+    expect(p.versions).not.toContain("Listeners chose it");
+    for (const row of p.view.versions) expect(row.listeners).toBeNull();
+    // The automatic half is unchanged for them.
+    expect(p.auto).toContain(
+      "72 sentences, each said by the model and by a person.",
+    );
   });
 });

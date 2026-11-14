@@ -86,11 +86,13 @@ export function SpeechTile({ headline }: { headline: SpeechHeadline | null }) {
           ) : (
             <p className="mt-3 text-base text-text-primary">{headline.empty}</p>
           )}
-          <p className="mt-2 text-sm text-text-secondary">
-            {headline.listeners
-              ? `Listeners chose the model in ${headline.listeners.chosen} of ${headline.listeners.rounds} rounds. Sample: ${headline.listeners.tier}.`
-              : "No listener has compared a model with a person yet."}
-          </p>
+          {headline.humanLoaded && (
+            <p className="mt-2 text-sm text-text-secondary">
+              {headline.listeners
+                ? `Listeners chose the model in ${headline.listeners.chosen} of ${headline.listeners.rounds} rounds. Sample: ${headline.listeners.tier}.`
+                : "No listener has compared a model with a person yet."}
+            </p>
+          )}
           <p className="mt-2 text-sm text-text-tertiary">
             We hold {headline.held.clips} clips,{" "}
             {Math.round(headline.held.minutes * 10) / 10} minutes.

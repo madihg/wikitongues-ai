@@ -88,6 +88,7 @@ const EMPTY_DATA: SpeechMeasureData = {
   toneAnswers: [],
   auto: [],
   autoTableReady: false,
+  humanLoaded: true,
 };
 
 describe("recognitionBlock", () => {

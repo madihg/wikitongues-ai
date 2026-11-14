@@ -32,11 +32,18 @@ export async function NeedsYouBlock({ work }: { work: Promise<TodayWork> }) {
  * The models. One call to computeAnnotationInsights, one to
  * computeMethodMetrics, and the speech measures when speech is on.
  */
-export async function ModelsBlock({ speech }: { speech: boolean }) {
+export async function ModelsBlock({
+  speech,
+  lead,
+}: {
+  speech: boolean;
+  /** What listeners decided is loaded for a research lead only. */
+  lead: boolean;
+}) {
   const [insights, metrics, measure] = await Promise.all([
     computeAnnotationInsights(prisma),
     computeMethodMetrics(prisma),
-    speech ? loadSpeechMeasure(prisma) : null,
+    speech ? loadSpeechMeasure(prisma, { human: lead }) : null,
   ]);
   return (
     <section aria-labelledby="the-models">

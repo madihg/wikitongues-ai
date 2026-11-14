@@ -23,6 +23,7 @@ import {
   WeekWorkBlock,
 } from "./today-sections";
 import { BenchmarkBars } from "@/components/arena/benchmark-bars";
+import { PromptsLeftTable } from "@/components/admin/prompts-left-table";
 import type { CandidateScore } from "@/lib/method-metrics";
 import type { TodayWork } from "@/lib/admin/today-data";
 import {
@@ -148,6 +149,7 @@ const EMPTY_MEASURE = {
   toneAnswers: [],
   auto: [],
   autoTableReady: false,
+  humanLoaded: true,
 };
 
 beforeEach(() => {
@@ -189,14 +191,16 @@ describe("Needs you", () => {
 
 describe("The models", () => {
   it("makes one call to each computation, and none from the browser", async () => {
-    await ModelsBlock({ speech: true });
+    await ModelsBlock({ speech: true, lead: true });
     expect(insights).toHaveBeenCalledTimes(1);
     expect(metrics).toHaveBeenCalledTimes(1);
     expect(measure).toHaveBeenCalledTimes(1);
   });
 
   it("does not read the speech tables when speech is off, and says so", async () => {
-    const html = renderToStaticMarkup(await ModelsBlock({ speech: false }));
+    const html = renderToStaticMarkup(
+      await ModelsBlock({ speech: false, lead: true }),
+    );
     expect(measure).not.toHaveBeenCalled();
     expect(text(html)).toContain("Speech is switched off on this server.");
     expect(html).not.toContain('href="/admin/speech"');
@@ -204,7 +208,7 @@ describe("The models", () => {
 
   it("the agreement tile shows the number the Benchmark tab highlights", async () => {
     const tile = text(
-      renderToStaticMarkup(await ModelsBlock({ speech: true })),
+      renderToStaticMarkup(await ModelsBlock({ speech: true, lead: true })),
     );
     const bars = renderToStaticMarkup(
       <BenchmarkBars
@@ -222,7 +226,7 @@ describe("The models", () => {
 
   it("the verdict tile is the Verdict tab's own headline card", async () => {
     const tile = text(
-      renderToStaticMarkup(await ModelsBlock({ speech: true })),
+      renderToStaticMarkup(await ModelsBlock({ speech: true, lead: true })),
     );
     expect(tile).toContain("191");
     expect(tile).toContain("51");
@@ -231,7 +235,7 @@ describe("The models", () => {
 
   it("before any speech model is scored, the speech tile says so and still counts the clips", async () => {
     const tile = text(
-      renderToStaticMarkup(await ModelsBlock({ speech: true })),
+      renderToStaticMarkup(await ModelsBlock({ speech: true, lead: true })),
     );
     expect(tile).toContain("No speech model has been scored yet.");
     expect(tile).toContain(
@@ -262,15 +266,33 @@ describe("The models", () => {
       ],
     });
     const tile = text(
-      renderToStaticMarkup(await ModelsBlock({ speech: true })),
+      renderToStaticMarkup(await ModelsBlock({ speech: true, lead: true })),
     );
     expect(tile).toContain("35.1 of 100 letters wrong");
     expect(tile).toContain("72 clips, not a locked exam. Sample: Smoke test.");
     expect(tile).not.toContain("exam clips");
   });
 
+  it("for a researcher who is not a lead, listeners' judgments are not loaded and the tile says nothing about them", async () => {
+    measure.mockResolvedValue({ ...EMPTY_MEASURE, humanLoaded: false });
+    const tile = text(
+      renderToStaticMarkup(await ModelsBlock({ speech: true, lead: false })),
+    );
+    expect(measure).toHaveBeenCalledWith(expect.anything(), { human: false });
+    expect(tile).not.toContain("Listeners chose the model");
+    expect(tile).not.toContain("No listener has compared");
+    expect(tile).toContain("We hold 131 clips, 16.2 minutes.");
+    // A lead's tile is loaded with them.
+    await ModelsBlock({ speech: true, lead: true });
+    expect(measure).toHaveBeenLastCalledWith(expect.anything(), {
+      human: true,
+    });
+  });
+
   it("links each tile to its view", async () => {
-    const html = renderToStaticMarkup(await ModelsBlock({ speech: true }));
+    const html = renderToStaticMarkup(
+      await ModelsBlock({ speech: true, lead: true }),
+    );
     for (const href of [
       "/admin/arena/verdict",
       "/admin/arena/eval",
@@ -330,5 +352,31 @@ describe("What we hold", () => {
     expect(t).toContain("1,996 +41 this week answers written");
     expect(t).toContain("2,183 +60 this week comparisons");
     expect(t).toContain("16.2 +11 this week minutes of speech recorded");
+  });
+});
+
+describe("People: prompts left, the one column no other table has", () => {
+  it("lists each person once, fewest prompts first, with the Running low badge", () => {
+    const html = renderToStaticMarkup(<PromptsLeftTable people={people} />);
+    const t = text(html);
+    expect(t.indexOf("Bea")).toBeLessThan(t.indexOf("Ada"));
+    expect(t.indexOf("Ada")).toBeLessThan(t.indexOf("Cy"));
+    expect(t.match(/Running low/g)).toHaveLength(2);
+    expect(html).toContain('href="/admin/annotations?annotator=b"');
+    // Hours, submissions, edits and recordings are in the hours table only.
+    for (const column of [
+      "Submissions",
+      "Edits",
+      "Recordings",
+      "Listen and Check",
+    ]) {
+      expect(t).not.toContain(column);
+    }
+  });
+
+  it("says so when nobody has worked lately", () => {
+    expect(
+      text(renderToStaticMarkup(<PromptsLeftTable people={[]} />)),
+    ).toContain("Nobody has recorded any work in the last 30 days.");
   });
 });

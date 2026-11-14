@@ -29,3 +29,19 @@ export async function requireLead(): Promise<
   }
   return { error: null, userId: user.id };
 }
+
+/**
+ * For a server page that shows one block to research leads only: is the
+ * signed-in account a researcher and a lead? False for anyone else, and for
+ * nobody. The block is then not rendered at all, so its data is not in the
+ * page a rater receives.
+ */
+export async function sessionIsLead(): Promise<boolean> {
+  const session = await getServerSession(authOptions);
+  const user = session?.user;
+  return (
+    !!user?.id &&
+    isResearcher(user.role, user.email) &&
+    isResearchLead(user.email)
+  );
+}

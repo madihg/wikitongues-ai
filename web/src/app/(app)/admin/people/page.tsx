@@ -1,15 +1,14 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireLeadPage } from "@/lib/admin/page-gate";
 import { loadPeople } from "@/lib/admin/people-data";
-import { weekRows, weekTotals } from "@/lib/admin/today";
-import { weekOf, type Week } from "@/lib/admin/week";
+import { recentlyActive } from "@/lib/admin/today";
+import { weekOf } from "@/lib/admin/week";
 import { speechLabEnabled } from "@/lib/lab-flags";
 import { loadQueueInputs } from "@/lib/queue-input";
 import { AnnotatorActivity } from "@/components/admin/annotator-activity";
+import { PromptsLeftTable } from "@/components/admin/prompts-left-table";
 import { TimeSpent } from "@/components/admin/time-spent";
-import { WeekWorkTable } from "@/components/admin/week-work-table";
 
 /**
  * People: who worked, for how many hours, and who is running out of prompts.
@@ -17,41 +16,29 @@ import { WeekWorkTable } from "@/components/admin/week-work-table";
  * Research leads only (the owner and RESEARCH_LEADS): this is pay and people
  * data. Another researcher gets the forbidden page and nothing is read.
  *
- * Three blocks. The week's work, one row per person, with the prompts each
- * person has left (the same rows Today shows). Then the hours table, which
- * belongs to the time work and is only given a home here: it shows the
- * measured hours beside the recounted estimate and the frozen old estimate.
- * Then activity since the start, the card that used to sit on the Researcher
- * Dashboard.
+ * Three blocks. Prompts left, the one thing no other table has: what the
+ * Annotate page would still serve each person, fewest first. Then the hours
+ * table, which belongs to the time work and is only given a home here: the
+ * week's hours (measured, recounted, and the frozen old estimate) with
+ * submissions, edits and recordings, week by week, and its CSV. Then
+ * activity since the start.
  */
 export const dynamic = "force-dynamic";
 
 const heading = "font-mono text-xs uppercase tracking-widest text-text-muted";
 
-async function WeekBlock({ week, speech }: { week: Week; speech: boolean }) {
-  const people = await loadPeople(prisma, week, {
-    speech,
+async function PromptsLeftBlock() {
+  const now = new Date();
+  const people = await loadPeople(prisma, weekOf(now), {
+    speech: speechLabEnabled(),
     queuePrompts: loadQueueInputs().then((q) => q.queuePrompts),
   });
-  const rows = weekRows(people);
-  return (
-    <WeekWorkTable rows={rows} totals={weekTotals(rows)} speech={speech} />
-  );
+  // The working team: anyone with work on record in the last 30 days.
+  return <PromptsLeftTable people={recentlyActive(people, now)} />;
 }
 
-export default async function PeoplePage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ w?: string }>;
-}) {
+export default async function PeoplePage() {
   await requireLeadPage();
-  const sp = (await searchParams) ?? {};
-  // Weeks back from this one: 0 is this week, 1 is last week. Never forward.
-  const back = Math.min(Math.max(parseInt(sp.w ?? "0", 10) || 0, 0), 520);
-  const week = weekOf(new Date(), -back);
-  const speech = speechLabEnabled();
-  const step =
-    "rounded border border-border px-2.5 py-1 text-sm text-text-secondary transition-colors hover:bg-surface-sunken";
 
   return (
     <div>
@@ -63,42 +50,21 @@ export default async function PeoplePage({
       </div>
 
       <div className="space-y-10">
-        <section aria-labelledby="people-week">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 id="people-week" className={heading}>
-              {week.label}
-            </h2>
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/admin/people?w=${back + 1}`}
-                className={step}
-                aria-label="The week before"
-              >
-                &larr;
-              </Link>
-              {back > 0 && (
-                <Link
-                  href={
-                    back === 1 ? "/admin/people" : `/admin/people?w=${back - 1}`
-                  }
-                  className={step}
-                  aria-label="The week after"
-                >
-                  &rarr;
-                </Link>
-              )}
-            </div>
-          </div>
+        <section aria-labelledby="people-prompts">
+          <h2 id="people-prompts" className={heading}>
+            Prompts left
+          </h2>
           <p className="mb-3 mt-1 text-sm text-text-tertiary">
-            Monday to Sunday, Lagos time. Demo sessions are left out. Click a
-            name to open that person&apos;s answers in Data.
+            Questions each person can still be given on the Annotate page,
+            fewest first. Everyone who worked in the last 30 days. Click a name
+            to open that person&apos;s answers in Data.
           </p>
           <Suspense
             fallback={
-              <div className="h-32 animate-pulse rounded-lg bg-surface-sunken" />
+              <div className="h-32 max-w-xl animate-pulse rounded-lg bg-surface-sunken" />
             }
           >
-            <WeekBlock week={week} speech={speech} />
+            <PromptsLeftBlock />
           </Suspense>
         </section>
 

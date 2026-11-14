@@ -54,6 +54,10 @@ import PeoplePage from "@/app/(app)/admin/people/page";
 import { GET as hours } from "@/app/api/admin/time-spent/route";
 import { GET as activity } from "@/app/api/admin/activity/route";
 import { GET as leadProbe } from "@/app/api/admin/lead/route";
+import { GET as decision } from "@/app/api/lab/speech/listen/decision/route";
+import SpeakListenPage from "@/app/(app)/speak/listen/page";
+import { sessionIsLead } from "./lead-route";
+import { renderToStaticMarkup } from "react-dom/server";
 
 /**
  * Who sees pay and people data. Agnes and Salem hold the RESEARCHER role so
@@ -152,7 +156,7 @@ describe("the page gate", () => {
 });
 
 describe("the People page", () => {
-  const open = () => PeoplePage({ searchParams: Promise.resolve({}) });
+  const open = () => PeoplePage();
 
   it("a researcher who is not a lead gets the forbidden page, and nothing is read", async () => {
     as(researcher(RESEARCHER));
@@ -338,5 +342,104 @@ describe("Today for a researcher who is not a lead: no person is loaded", () => 
       queuePrompts: [],
     });
     expect(personReads).toContain("user.findMany");
+  });
+});
+
+describe("which system is ahead: research leads only", () => {
+  const labWas = process.env.SPEECH_LAB_ENABLED;
+  beforeEach(() => {
+    process.env.SPEECH_LAB_ENABLED = "1";
+  });
+  afterEach(() => {
+    if (labWas === undefined) delete process.env.SPEECH_LAB_ENABLED;
+    else process.env.SPEECH_LAB_ENABLED = labWas;
+  });
+
+  it("GET /api/lab/speech/listen/decision: 403 for a researcher who is not a lead, and no judgment is read", async () => {
+    as(researcher(RESEARCHER));
+    const res = await decision();
+    expect(res.status).toBe(403);
+    const body = await res.text();
+    expect(JSON.parse(body)).toEqual({ error: "Forbidden" });
+    // No system name, no count, no threshold: only the refusal.
+    expect(body).not.toMatch(/cards|strength|judgments|toneAccuracy|human/);
+    expect(touched.reads).toEqual([]);
+  });
+
+  it("the same route: 403 for an annotator, 401 signed out, nothing read", async () => {
+    as({ id: "a", role: "ANNOTATOR", email: "a@example.org" });
+    expect((await decision()).status).toBe(403);
+    as(null);
+    expect([401, 403]).toContain((await decision()).status);
+    expect(touched.reads).toEqual([]);
+  });
+
+  it("the same route: a lead gets past the gate and the judgments are read", async () => {
+    as(researcher(LEAD));
+    await expect(decision()).rejects.toThrow(/read before the lead check/);
+    expect(touched.reads[0]).toBe("speechComparison.findMany");
+  });
+
+  it("sessionIsLead: a lead and the owner, never another researcher, an annotator or nobody", async () => {
+    as(researcher(LEAD));
+    expect(await sessionIsLead()).toBe(true);
+    as(researcher(OWNER));
+    expect(await sessionIsLead()).toBe(true);
+    as(researcher(RESEARCHER));
+    expect(await sessionIsLead()).toBe(false);
+    as({ id: "a", role: "ANNOTATOR", email: LEAD });
+    expect(await sessionIsLead()).toBe(false);
+    as(null);
+    expect(await sessionIsLead()).toBe(false);
+  });
+
+  /** The components the Listen page puts on screen, by name. */
+  const parts = async () => {
+    const tree = await SpeakListenPage();
+    const names: string[] = [];
+    const walk = (node: unknown) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== "object") return;
+      const el = node as { type?: unknown; props?: { children?: unknown } };
+      if (typeof el.type === "function")
+        names.push((el.type as { name: string }).name);
+      walk(el.props?.children);
+    };
+    walk(tree);
+    return names;
+  };
+
+  it("the Listen page: a researcher who is not a lead gets the rounds and the tone pair card, and no ranking card", async () => {
+    as(researcher(RESEARCHER));
+    expect(await parts()).toEqual(["ListenInterface", "MinimalPairMarker"]);
+  });
+
+  it("the Listen page: a lead also gets the ranking card", async () => {
+    as(researcher(LEAD));
+    expect(await parts()).toEqual([
+      "ListenInterface",
+      "DecisionCards",
+      "MinimalPairMarker",
+    ]);
+  });
+
+  it("the Listen page: an annotator gets the rounds only", async () => {
+    process.env.SPEECH_LAYER_ANNOTATORS = "1";
+    as({ id: "a", role: "ANNOTATOR", email: "a@example.org" });
+    try {
+      expect(await parts()).toEqual(["ListenInterface"]);
+    } finally {
+      delete process.env.SPEECH_LAYER_ANNOTATORS;
+    }
+  });
+
+  it("the page a rater receives carries no system name, win rate or count", async () => {
+    as(researcher(RESEARCHER));
+    // The server render of the page: the client blocks render their empty
+    // first state, and nothing in it comes from a judgment.
+    const html = renderToStaticMarkup(await SpeakListenPage());
+    expect(html).not.toContain("Which voice is better");
+    expect(html).not.toMatch(/judgments? between|strength|leader/i);
+    expect(touched.reads).toEqual([]);
   });
 });

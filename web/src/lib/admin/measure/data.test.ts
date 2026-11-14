@@ -114,6 +114,32 @@ describe("loadSpeechMeasure: what it reads", () => {
   });
 });
 
+describe("loadSpeechMeasure for a reader who is not a research lead", () => {
+  it("reads no Listen judgment, no Check verdict and no tone answer", async () => {
+    const { db, calls } = fakeDb({
+      speechComparison: [{ id: "should-never-be-read" }],
+    });
+    const d = await loadSpeechMeasure(db, { human: false });
+    expect(Object.keys(calls).sort()).toEqual([
+      "speechAutoMeasure",
+      "speechCandidate",
+      "speechEvalResult",
+      "speechRecording",
+    ]);
+    expect(d.humanLoaded).toBe(false);
+    expect(d.listen).toEqual([]);
+    expect(d.checks).toEqual([]);
+    expect(d.toneAnswers).toEqual([]);
+  });
+
+  it("loads them by default, for a lead", async () => {
+    const { db, calls } = fakeDb();
+    const d = await loadSpeechMeasure(db);
+    expect(d.humanLoaded).toBe(true);
+    expect(Object.keys(calls)).toContain("speechComparison");
+  });
+});
+
 describe("loadSpeechMeasure: what it returns", () => {
   const clip = (id: string, over: Record<string, unknown> = {}) => ({
     id,

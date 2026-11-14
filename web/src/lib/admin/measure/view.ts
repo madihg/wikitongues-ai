@@ -75,9 +75,15 @@ export interface MeasureView {
     block: VoiceBlock | null;
   };
   levels: LevelsBlock;
-  human: HumanHalf;
-  checks: { person: CheckColumn; model: CheckColumn };
-  tone: { person: TonePairs; model: TonePairs | null };
+  /**
+   * What listeners decided. Null when it was not loaded: the reader is not a
+   * research lead, and nothing about how a voice is doing is on their page.
+   */
+  human: {
+    half: HumanHalf;
+    checks: { person: CheckColumn; model: CheckColumn };
+    tone: { person: TonePairs; model: TonePairs | null };
+  } | null;
   versions: VersionSummary[];
 }
 
@@ -189,12 +195,16 @@ export function buildMeasureView(
     levels: levelsBlock(data),
     // Listeners judge the voice. The human half is always about a voice
     // version: the one chosen, or the one the view opens on.
-    human: humanHalf(data.listen, tts),
-    checks: checkTable(data.checks, tts),
-    tone: {
-      person: tonePairs(data.toneAnswers, HUMAN_SYSTEM),
-      model: tts ? tonePairs(data.toneAnswers, tts) : null,
-    },
+    human: data.humanLoaded
+      ? {
+          half: humanHalf(data.listen, tts),
+          checks: checkTable(data.checks, tts),
+          tone: {
+            person: tonePairs(data.toneAnswers, HUMAN_SYSTEM),
+            model: tts ? tonePairs(data.toneAnswers, tts) : null,
+          },
+        }
+      : null,
     versions: summaries,
   };
 }

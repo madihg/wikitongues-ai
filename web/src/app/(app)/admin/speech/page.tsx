@@ -5,7 +5,12 @@ import { loadSpeechMeasure } from "@/lib/admin/measure/data";
 import { buildMeasureView, type MeasureParams } from "@/lib/admin/measure/view";
 import { SpeechAlerts } from "@/components/admin/speech-alerts";
 import { SpeechMeasureAuto } from "@/components/admin/speech-measure-auto";
-import { SpeechMeasureHuman } from "@/components/admin/speech-measure-human";
+import {
+  HumanHalfForLeads,
+  SpeechMeasureHuman,
+} from "@/components/admin/speech-measure-human";
+import { DecisionCards } from "@/components/lab/decision-card";
+import { sessionIsLead } from "@/lib/admin/lead-route";
 import { SpeechVersions } from "@/components/admin/speech-versions";
 import { InfoTip } from "@/components/info-tip";
 
@@ -34,11 +39,16 @@ export default async function SpeechMeasurePage({
   searchParams?: Promise<MeasureParams>;
 }) {
   await requireLabPage();
+  // What listeners decided, and which system is ahead, is for research leads
+  // (the owner and RESEARCH_LEADS). The people who rate hold the researcher
+  // role too, and must not see how a voice is doing while they rate it. For
+  // them it is not loaded, so it is not in the page they receive.
+  const lead = await sessionIsLead();
   const params = (await searchParams) ?? {};
   const now = new Date();
   const threeDaysAgo = new Date(now.getTime() - 3 * 86_400_000);
   const [data, alerts] = await Promise.all([
-    loadSpeechMeasure(prisma),
+    loadSpeechMeasure(prisma, { human: lead }),
     // The banner the Loop tab shows: unread alerts of the last three days.
     prisma.speechAlert.findMany({
       where: {
@@ -168,15 +178,24 @@ export default async function SpeechMeasurePage({
           held={view.held}
           autoTableReady={view.autoTableReady}
         />
-        <SpeechMeasureHuman
-          half={view.human}
-          checks={view.checks}
-          tone={view.tone}
-        />
+        {view.human ? (
+          <div className="space-y-6">
+            <SpeechMeasureHuman
+              half={view.human.half}
+              checks={view.human.checks}
+              tone={view.human.tone}
+            />
+            {/* Which system is ahead, the same card the Listen page shows a
+                lead. Its route refuses anyone who is not one. */}
+            <DecisionCards />
+          </div>
+        ) : (
+          <HumanHalfForLeads />
+        )}
       </div>
 
       <div className="mt-8">
-        <SpeechVersions rows={view.versions} />
+        <SpeechVersions rows={view.versions} listeners={view.human !== null} />
       </div>
     </div>
   );

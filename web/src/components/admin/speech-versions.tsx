@@ -16,7 +16,14 @@ import {
  * matches, and the page never draws a line between two that do not.
  * Promotion stays on the Loop tab, where the candidates and the switch are.
  */
-export function SpeechVersions({ rows }: { rows: VersionSummary[] }) {
+export function SpeechVersions({
+  rows,
+  listeners = true,
+}: {
+  rows: VersionSummary[];
+  /** Show the "Listeners chose it" column. Off for a reader who is not a research lead. */
+  listeners?: boolean;
+}) {
   return (
     <section aria-labelledby="speech-versions" className={card}>
       <h2 id="speech-versions" className={eyebrow}>
@@ -39,7 +46,7 @@ export function SpeechVersions({ rows }: { rows: VersionSummary[] }) {
                 <th className={th}>Letters wrong</th>
                 <th className={th}>Tone marks wrong</th>
                 <th className={th}>Round trip gap</th>
-                <th className={th}>Listeners chose it</th>
+                {listeners && <th className={th}>Listeners chose it</th>}
                 <th className={th}>Status</th>
               </tr>
             </thead>
@@ -77,11 +84,13 @@ export function SpeechVersions({ rows }: { rows: VersionSummary[] }) {
                       ? ""
                       : `${signed(r.roundTripGapPoints)} points`}
                   </td>
-                  <td className={td}>
-                    {r.listeners
-                      ? `${r.listeners.chosen} of ${r.listeners.decided} (${r.listeners.tier})`
-                      : ""}
-                  </td>
+                  {listeners && (
+                    <td className={td}>
+                      {r.listeners
+                        ? `${r.listeners.chosen} of ${r.listeners.decided} (${r.listeners.tier})`
+                        : ""}
+                    </td>
+                  )}
                   <td className={td}>
                     {[
                       r.promoted && "Promoted",

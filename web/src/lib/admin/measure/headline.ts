@@ -30,13 +30,15 @@ export interface SpeechHeadline {
     locked: boolean;
     tier: ExamTier;
   } | null;
-  /** Null until a listener has compared a model with a person. */
+  /** Null until a listener has compared a model with a person, and for a reader who is not a research lead. */
   listeners: {
     modelRef: string;
     chosen: number;
     rounds: number;
     tier: HumanTier;
   } | null;
+  /** False when what listeners decided was not loaded (not a research lead). */
+  humanLoaded: boolean;
   held: { clips: number; minutes: number };
   /** The sentence to show when both halves are null. */
   empty: string;
@@ -71,6 +73,7 @@ export function speechHeadline(data: SpeechMeasureData): SpeechHeadline {
             tier: pref.tier,
           }
         : null,
+    humanLoaded: data.humanLoaded,
     held: { clips: data.held.clips, minutes: data.held.minutes },
     empty: EMPTY.noModel,
   };
