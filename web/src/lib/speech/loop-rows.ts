@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { LoopRow } from "./training-manifest";
+import { withdrawnSpeakerIds } from "./withdrawal";
 
 /**
  * The queries that feed the training and exam manifests. Like open-rows.ts,
@@ -27,6 +28,7 @@ const SELECT = {
   isDemo: true,
   rightsStatus: true,
   sourceType: true,
+  sourceRef: true,
   publishedOpenAt: true,
   uploadedAt: true,
   reviewStatus: true,
@@ -55,9 +57,23 @@ export const TEST_SET_ROWS_QUERY = {
 
 type Db = Pick<PrismaClient, "speechRecording">;
 
-/** Candidate training rows. Guard them with buildTrainingManifest. */
-export async function loadTrainableRows(db: Db): Promise<LoopRow[]> {
-  return db.speechRecording.findMany(TRAINABLE_ROWS_QUERY);
+/**
+ * Candidate training rows. Guard them with buildTrainingManifest. Clips of a
+ * speaker whose latest grant is a withdrawal are left out, published or not
+ * (withdrawal.ts). Filtered here in code, not in the WHERE: a NOT IN on the
+ * nullable annotatorId would also drop clips with no speaker.
+ */
+export async function loadTrainableRows(
+  db: Db & Pick<PrismaClient, "consentGrant">,
+): Promise<LoopRow[]> {
+  const [rows, grants] = await Promise.all([
+    db.speechRecording.findMany(TRAINABLE_ROWS_QUERY),
+    db.consentGrant.findMany({
+      select: { userId: true, grantedAt: true, withdrawn: true },
+    }),
+  ]);
+  const gone = new Set(withdrawnSpeakerIds(grants));
+  return rows.filter((r) => !r.annotatorId || !gone.has(r.annotatorId));
 }
 
 /** The exam clips. Only buildEvalManifest may turn these into a manifest. */

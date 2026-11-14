@@ -48,7 +48,12 @@ export function canTrain(row: ExportableRow, ctx: TrainContext): TrainVerdict {
   if (ctx.scope === "provider" && row.tier === "community_only") {
     return no("community_only_provider");
   }
-  if (row.sourceType === "third_party" && row.rightsStatus !== "cleared") {
+  // Outside audio trains only once its source in the register is cleared
+  // (the PATCH copies the status onto the clips) and the clip names that source.
+  if (
+    row.sourceType === "third_party" &&
+    (row.rightsStatus !== "cleared" || row.sourceRef === null)
+  ) {
     return no("third_party_uncleared");
   }
   // Last, so a more specific reason above wins: only a reviewed "keep" trains.

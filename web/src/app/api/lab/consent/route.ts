@@ -45,13 +45,17 @@ export async function GET() {
       crossBorder: true,
       voiceCloning: true,
       speakerId: true,
+      withdrawn: true,
       consent: { select: { version: true, method: true } },
     },
   });
 
   return NextResponse.json({
     currentVersion: CONSENT_VERSION,
-    needsConsent: !grant || grant.consent.version !== CONSENT_VERSION,
+    // A speaker whose latest grant is a withdrawal must consent again.
+    needsConsent:
+      !grant || grant.withdrawn || grant.consent.version !== CONSENT_VERSION,
+    withdrawn: grant?.withdrawn ?? false,
     grant: grant
       ? {
           id: grant.id,

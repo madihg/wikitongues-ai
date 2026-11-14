@@ -847,6 +847,7 @@ model ConsentGrant {
   crossBorder         Boolean  @default(false)
   voiceCloning        Boolean  @default(false)
   speakerId           Boolean  @default(false)
+  withdrawn           Boolean  @default(false) // a withdrawal row: the speaker's latest grant, all four answers false
 
   consent Consent @relation(fields: [consentId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
@@ -1010,16 +1011,17 @@ model SpeechNightlyRun {
 }
 
 model SpeechCandidate {
-  id            String       @id @default(cuid())
-  system        SpeechSystem
-  modelRef      String       @unique
-  jobId         String?
-  evalResultId  String?
-  regressed     Boolean      @default(false)
-  promotedAt    DateTime?
-  promotedById  String?
-  promoteReason String?
-  createdAt     DateTime     @default(now())
+  id              String       @id @default(cuid())
+  system          SpeechSystem
+  modelRef        String       @unique
+  jobId           String?
+  evalResultId    String?
+  regressed       Boolean      @default(false)
+  retrainRequired Boolean      @default(false) // clips of a speaker who has since withdrawn trained this model
+  promotedAt      DateTime?
+  promotedById    String?
+  promoteReason   String?
+  createdAt       DateTime     @default(now())
 
   job        SpeechTrainJob?   @relation(fields: [jobId], references: [id])
   evalResult SpeechEvalResult? @relation(fields: [evalResultId], references: [id])
