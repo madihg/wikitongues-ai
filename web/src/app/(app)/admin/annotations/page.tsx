@@ -2,6 +2,7 @@ import { AnnotationsReview } from "@/components/admin/annotations-review";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
 import { isAnnotationType } from "@/lib/annotations-query";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
  * Researcher annotation-review surface. Lives under the admin layout, so the
@@ -17,6 +18,7 @@ export default async function AnnotationsPage({
 }: {
   searchParams: Promise<{ annotator?: string; type?: string }>;
 }) {
+  await requireResearcherPage();
   const sp = await searchParams;
   const initialAnnotator =
     typeof sp.annotator === "string" && sp.annotator.length > 0

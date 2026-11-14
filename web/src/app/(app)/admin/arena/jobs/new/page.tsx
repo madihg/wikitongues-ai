@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { TrainingBuilder } from "@/components/arena/training-builder";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
-export default function NewJobPage() {
+export default async function NewJobPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8 flex items-start justify-between gap-4">

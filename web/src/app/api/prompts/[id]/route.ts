@@ -12,6 +12,12 @@ export async function GET(
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Researchers only. The page that calls this is hidden from other roles in
+  // the browser, but anyone can register an account, so the role is checked
+  // here, on the server, before anything is read or written.
+  if (session.user.role !== "RESEARCHER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
 
@@ -40,6 +46,12 @@ export async function PUT(
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Researchers only. The page that calls this is hidden from other roles in
+  // the browser, but anyone can register an account, so the role is checked
+  // here, on the server, before anything is read or written.
+  if (session.user.role !== "RESEARCHER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;
@@ -123,6 +135,12 @@ export async function DELETE(
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Researchers only. The page that calls this is hidden from other roles in
+  // the browser, but anyone can register an account, so the role is checked
+  // here, on the server, before anything is read or written.
+  if (session.user.role !== "RESEARCHER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;
