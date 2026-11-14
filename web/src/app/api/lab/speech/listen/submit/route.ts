@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
 import { sanitizeAxes } from "@/lib/speech/speech-axes";
+import { scoreAnswer } from "@/lib/speech/minimal-pairs";
 import {
   MAX_NOTE_CHARS,
   REASON_KEYS,
@@ -17,13 +18,16 @@ import {
  * Body: { promptId (the public code), recordingAId, recordingBId,
  * winner: a | b | tie | both_unusable, reasonTags, note?, axes?,
  * demoSessionId? }. `axes` is the optional provisional speech rubric
- * (lib/speech/speech-axes.ts): integer 0 to 5 or "na" per axis, scored on the
- * winner (on both when it is a tie); a both_unusable verdict takes none.
+ * (lib/speech/speech-axes.ts), `{ a: {...}, b: {...} }`: integer 0 to 5 or
+ * "na" per axis, scored on BOTH clips for a, b and tie, whichever won, per
+ * the linguist's Oct 13 ask ("to see systematic errors we need both"). Either
+ * side may be partial or empty; a both_unusable verdict takes none.
  *
  *   400  bad winner; no recognised reason tag (one is REQUIRED, unknown keys
  *        are dropped, as in the text route, so a stale client cannot 500);
  *        the same clip on both sides; clips in different languages; a note
- *        over 500 characters; malformed axes
+ *        over 500 characters; malformed axes (the old flat one-clip shape
+ *        included)
  *   404  unknown prompt, or a clip that is not a confirmed, unrejected clip
  *        of this prompt
  *   403  frozen prompt, no detail
@@ -31,12 +35,20 @@ import {
  *        this language (one per researcher, prompt and language, whatever
  *        the pair; matches the text route after its 2026-10-09 fix)
  *
+ * `toneAnswers` (optional, [{recordingId, heardSpelling | null}]) answers
+ * "Which word did you hear?" for a prompt that has a tone minimal pair, one
+ * answer per side at most; null means not sure. Each is scored against the
+ * pair (minimal-pairs.ts) and stored beside the judgment. A spelling that is
+ * neither of the pair's, or a clip that is not A or B, is a 400; on a prompt
+ * without a pair the answers are ignored. Answers do not change the
+ * one-judgment-per-prompt rule.
+ *
  * A demo submission (`demoSessionId`) is stored with isDemo true and neither
  * blocks nor is blocked by the one-per-prompt rule.
  */
 
 export async function POST(req: Request) {
-  const gate = await labGate();
+  const gate = await labGate({ audience: "speaker" });
   if (gate.error) return gate.error;
   const annotatorId = gate.userId;
 
@@ -87,7 +99,9 @@ export async function POST(req: Request) {
 
   const axes = sanitizeAxes(b.axes, winner);
   if (axes === "invalid") {
-    return bad("axes must score the five speech axes 0 to 5 or na.");
+    return bad(
+      "axes must be { a, b }, each scoring the five speech axes 0 to 5 or na.",
+    );
   }
 
   const demoSessionId =
@@ -95,6 +109,28 @@ export async function POST(req: Request) {
       ? b.demoSessionId
       : null;
   const isDemo = demoSessionId !== null;
+
+  let toneAnswers: Array<{ recordingId: string; heardSpelling: string | null }> = [];
+  if (b.toneAnswers !== undefined) {
+    const raw = b.toneAnswers;
+    const sides: unknown[] = [b.recordingAId, b.recordingBId];
+    if (
+      !Array.isArray(raw) ||
+      raw.length > 2 ||
+      !raw.every(
+        (x) =>
+          x &&
+          typeof x === "object" &&
+          sides.includes((x as { recordingId?: unknown }).recordingId) &&
+          ((x as { heardSpelling?: unknown }).heardSpelling === null ||
+            typeof (x as { heardSpelling?: unknown }).heardSpelling === "string"),
+      ) ||
+      new Set(raw.map((x) => (x as { recordingId: string }).recordingId)).size !== raw.length
+    ) {
+      return bad("toneAnswers must answer clip A and clip B at most once each");
+    }
+    toneAnswers = raw as typeof toneAnswers;
+  }
 
   const prompt = await prisma.prompt.findUnique({
     where: { promptId: b.promptId },
@@ -157,6 +193,24 @@ export async function POST(req: Request) {
     }
   }
 
+  // Score the tone answers before anything is written, so a bad one is a clean 400.
+  const scored: Array<{ recordingId: string; heard: string }> = [];
+  let pairId: string | null = null;
+  if (toneAnswers.length > 0) {
+    const pair = await prisma.speechMinimalPair.findUnique({
+      where: { promptId: prompt.id },
+      select: { id: true, targetSpelling: true, foilSpelling: true },
+    });
+    if (pair) {
+      pairId = pair.id;
+      for (const a of toneAnswers) {
+        const r = scoreAnswer(pair, a.heardSpelling);
+        if (r === "invalid") return bad("That is not one of the two spellings.");
+        scored.push({ recordingId: a.recordingId, heard: r.heard });
+      }
+    }
+  }
+
   const row = await prisma.speechComparison.create({
     data: {
       promptId: prompt.id,
@@ -172,5 +226,17 @@ export async function POST(req: Request) {
     },
     select: { id: true },
   });
+  if (pairId && scored.length > 0) {
+    await prisma.speechMinimalPairAnswer.createMany({
+      data: scored.map((a) => ({
+        pairId: pairId!,
+        recordingId: a.recordingId,
+        annotatorId,
+        heard: a.heard,
+        isDemo,
+      })),
+      skipDuplicates: true,
+    });
+  }
   return NextResponse.json({ id: row.id }, { status: 201 });
 }

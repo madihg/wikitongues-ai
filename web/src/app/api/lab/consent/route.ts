@@ -32,7 +32,7 @@ import {
 const FLAG_KEYS = CONSENT_QUESTIONS.map((q) => q.key);
 
 export async function GET() {
-  const gate = await labGate();
+  const gate = await labGate({ audience: "speaker" });
   if (gate.error) return gate.error;
 
   const grant = await prisma.consentGrant.findFirst({
@@ -45,13 +45,17 @@ export async function GET() {
       crossBorder: true,
       voiceCloning: true,
       speakerId: true,
+      withdrawn: true,
       consent: { select: { version: true, method: true } },
     },
   });
 
   return NextResponse.json({
     currentVersion: CONSENT_VERSION,
-    needsConsent: !grant || grant.consent.version !== CONSENT_VERSION,
+    // A speaker whose latest grant is a withdrawal must consent again.
+    needsConsent:
+      !grant || grant.withdrawn || grant.consent.version !== CONSENT_VERSION,
+    withdrawn: grant?.withdrawn ?? false,
     grant: grant
       ? {
           id: grant.id,
@@ -72,7 +76,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const gate = await labGate();
+  const gate = await labGate({ audience: "speaker" });
   if (gate.error) return gate.error;
 
   const body = await req.json().catch(() => null);
