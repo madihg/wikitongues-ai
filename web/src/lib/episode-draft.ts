@@ -104,7 +104,16 @@ export function planDraftRestore<D extends ColdDraft & { step: DraftStep }>(
 // per kind of work, so it lasts for the sitting (the tab) and survives a
 // reload, and is replaced by the next submit.
 
-export type LastSavedType = "pairwise" | "cold" | "edit" | "listen";
+export type LastSavedType = "pairwise" | "cold" | "edit" | "listen" | "tone";
+
+/** The kinds the edit drawer opens. A tone item is reopened on its own
+ *  screen instead, so it is not one of them. */
+export type DrawerSavedType = Exclude<LastSavedType, "tone">;
+export function isDrawerSaved(
+  saved: LastSaved | null,
+): saved is LastSaved & { type: DrawerSavedType } {
+  return saved !== null && saved.type !== "tone";
+}
 
 export interface LastSaved {
   type: LastSavedType;
@@ -122,6 +131,7 @@ const LAST_SAVED_TYPES: readonly string[] = [
   "cold",
   "edit",
   "listen",
+  "tone",
 ];
 
 /** Storage is untrusted: anything that is not a well-formed entry is null. */

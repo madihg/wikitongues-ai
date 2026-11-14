@@ -26,8 +26,7 @@ import {
  * marking it, or what they wrote. A person is never served an item twice.
  */
 
-export const TONE_INSTRUCTION =
-  "Pass 2: add tone marks. This is a second pass over answers that are already done. Some are yours, some are from other people. Add tone marks only. The first version stays saved.";
+export { TONE_INSTRUCTION } from "@/lib/tone/tone-copy";
 
 export const MAX_TONE_CHARS = 20000;
 export const MAX_TONE_NOTE_CHARS = 500;

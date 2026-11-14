@@ -37,6 +37,7 @@ import {
   type ReasonMap,
 } from "@/lib/edit-segments";
 import {
+  isDrawerSaved,
   lastSavedKey,
   parseLastSaved,
   type LastSaved,
@@ -1397,7 +1398,7 @@ export function AnnotationInterface() {
     />
   ) : null;
   const savedDrawer =
-    lastSaved && editingSaved ? (
+    isDrawerSaved(lastSaved) && editingSaved ? (
       <AnswerEditorDrawer
         target={{ type: lastSaved.type, id: lastSaved.id }}
         onClose={() => setEditingSaved(false)}
