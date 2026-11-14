@@ -22,6 +22,11 @@ type Case = {
 
 const REFUSALS: Case[] = [
   {
+    reason: "derived",
+    row: openRow({ sourceType: "derived" }),
+    ctx: internalAsr,
+  },
+  {
     reason: "test_set",
     row: openRow({ isTestSet: true }),
     ctx: internalAsr,
@@ -87,6 +92,7 @@ describe("canTrain refuses, with a reason", () => {
       [
         "community_only_provider",
         "demo",
+        "derived",
         "frozen_prompt",
         "no_cloning_opt_in",
         "no_consent",
@@ -132,6 +138,76 @@ describe("canTrain accepts", () => {
     expect(canTrain(row, internalAsr)).toEqual({
       ok: false,
       reason: "test_set",
+    });
+  });
+});
+
+/**
+ * A synthesised clip with every other flag as favourable as it can be: a
+ * consent record, a chosen tier, rights cleared, uploaded, a Check verdict of
+ * keep, the cloning opt-in, a train-side prompt. It is still not a person's
+ * recording, and that alone refuses it.
+ */
+describe("a synthesised clip never trains, whatever else is true of it", () => {
+  const favourable = (over: Partial<ManifestRow> = {}) =>
+    licensedRow({
+      sourceType: "derived",
+      consentId: "consent-1",
+      consentVersion: "2026-10-19-v1",
+      rightsStatus: "cleared",
+      reviewStatus: "keep",
+      voiceCloningOptIn: true,
+      uploadedAt: new Date("2026-11-13T00:00:00Z"),
+      isTestSet: false,
+      isDemo: false,
+      prompt: { isHoldout: false, split: "train" },
+      ...over,
+    });
+  const contexts: TrainContext[] = (["internal", "provider"] as const).flatMap(
+    (scope) =>
+      (["asr", "tts", "cloning"] as const).map((purpose) => ({ scope, purpose })),
+  );
+
+  it("the same row as a person's recording does train (the control)", () => {
+    for (const ctx of contexts) {
+      expect(canTrain(favourable({ sourceType: "contributor" }), ctx)).toEqual({
+        ok: true,
+      });
+    }
+  });
+
+  it.each(contexts)("refused on $scope for $purpose, reason derived", (ctx) => {
+    expect(canTrain(favourable(), ctx)).toEqual({ ok: false, reason: "derived" });
+  });
+
+  it.each(["open", "licensed", "community_only"] as const)(
+    "refused on every tier: %s",
+    (tier) => {
+      expect(canTrain(favourable({ tier }), internalAsr)).toEqual({
+        ok: false,
+        reason: "derived",
+      });
+    },
+  );
+
+  it("the reason does not depend on the consent check, or on any later rule", () => {
+    // With consent and without: the answer and the reason are the same.
+    for (const consentId of ["consent-1", null]) {
+      expect(canTrain(favourable({ consentId }), internalAsr)).toEqual({
+        ok: false,
+        reason: "derived",
+      });
+    }
+    // Derived is named before the test set, the demo flag and the review.
+    const worst = favourable({ isTestSet: true, isDemo: true, reviewStatus: "bad_audio" });
+    expect(canTrain(worst, internalAsr)).toEqual({ ok: false, reason: "derived" });
+  });
+
+  it("it is not an exam clip either", () => {
+    const exam = favourable({ isTestSet: true });
+    expect(canEvaluate(exam, internalAsr)).toEqual({ ok: false, reason: "derived" });
+    expect(canEvaluate({ ...exam, sourceType: "contributor" }, internalAsr)).toEqual({
+      ok: true,
     });
   });
 });
