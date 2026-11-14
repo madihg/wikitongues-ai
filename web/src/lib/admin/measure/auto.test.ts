@@ -314,6 +314,9 @@ describe("voiceBlock: what the voice loses on the way back", () => {
     // No stored gap for tones: it is the model's number minus the person's.
     expect(b.tones!.gapPoints).toBe(3.4);
     expect(b.tones!.range).toBeNull();
+    // 41.8 of 100 letters wrong on people: the ruler cannot judge a voice.
+    expect(b.rulerTooBlurry).toBe(true);
+    expect(b.rulerLettersWrongPer100).toBe(41.8);
   });
 });
 

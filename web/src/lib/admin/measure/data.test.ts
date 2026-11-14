@@ -15,12 +15,13 @@ type Args = {
 
 function fakeDb(
   over: Record<string, unknown[]> = {},
-  raw: () => Promise<unknown> = async () => [],
+  autoFails: unknown = null,
 ) {
   const calls: Record<string, Args> = {};
   const model = (name: string) => ({
     findMany: vi.fn(async (args: Args) => {
       calls[name] = args;
+      if (name === "speechAutoMeasure" && autoFails) throw autoFails;
       return over[name] ?? [];
     }),
   });
@@ -33,7 +34,7 @@ function fakeDb(
       speechComparison: model("speechComparison"),
       speechCheck: model("speechCheck"),
       speechMinimalPairAnswer: model("speechMinimalPairAnswer"),
-      $queryRaw: vi.fn(raw),
+      speechAutoMeasure: model("speechAutoMeasure"),
     } as never,
   };
 }
@@ -75,6 +76,7 @@ describe("loadSpeechMeasure: what it reads", () => {
       }
     }
     expect(Object.keys(calls).sort()).toEqual([
+      "speechAutoMeasure",
       "speechCandidate",
       "speechCheck",
       "speechComparison",
@@ -131,9 +133,7 @@ describe("loadSpeechMeasure: what it returns", () => {
       code: "P2010",
       meta: { code: "42P01" },
     });
-    const { db } = fakeDb({}, async () => {
-      throw missing;
-    });
+    const { db } = fakeDb({}, missing);
     const d = await loadSpeechMeasure(db);
     expect(d.held).toEqual({
       clips: 0,
@@ -150,9 +150,7 @@ describe("loadSpeechMeasure: what it returns", () => {
   });
 
   it("a real database error is not swallowed", async () => {
-    const { db } = fakeDb({}, async () => {
-      throw new Error("connection refused");
-    });
+    const { db } = fakeDb({}, new Error("connection refused"));
     await expect(loadSpeechMeasure(db)).rejects.toThrow("connection refused");
   });
 
@@ -227,6 +225,20 @@ describe("loadSpeechMeasure: what it returns", () => {
       speechMinimalPairAnswer: [
         { recordingId: "m1", heard: "target", isDemo: false },
       ],
+      speechAutoMeasure: [
+        {
+          kind: "tts_round_trip",
+          modelRef: "tts-1",
+          rulerRef: "the-recogniser",
+          manifestVersion: "exam-1",
+          nClips: 72,
+          values: {
+            systemCer: { value: 0.426, n: 72 },
+            humanCer: { value: 0.418, n: 72 },
+          },
+          createdAt: new Date("2026-11-13T21:00:00Z"),
+        },
+      ],
     });
     const d = await loadSpeechMeasure(db);
     expect(d.held.clips).toBe(1);
@@ -251,6 +263,17 @@ describe("loadSpeechMeasure: what it returns", () => {
       { system: "tts-1", heard: "target", isDemo: false },
     ]);
     expect(d.autoTableReady).toBe(true);
+    expect(d.auto[0]).toMatchObject({
+      kind: "tts_round_trip",
+      modelRef: "tts-1",
+      nClips: 72,
+    });
+    expect(d.auto[0].values.humanCer).toEqual({
+      value: 0.418,
+      lo: null,
+      hi: null,
+      n: 72,
+    });
   });
 });
 

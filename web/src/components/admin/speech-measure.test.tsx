@@ -318,7 +318,58 @@ describe("the automatic half with a score", () => {
     expect(p.auto).toContain("+19.2 points");
     expect(p.auto).toContain("15.1 to 23.6");
     expect(p.auto).toContain("model 61.0%, person 41.8%");
+    // The recogniser gets 41.8 of 100 letters wrong on people: too blurry.
+    expect(p.auto).toContain(
+      "This number cannot tell a voice from a person yet.",
+    );
+    expect(p.auto).toContain(
+      "The recogniser gets 41.8 of 100 letters wrong on people's own clips, so a voice in another language can land in the same place.",
+    );
+    expect(p.auto).toContain("It is not a pass.");
+    expect(p.auto).not.toMatch(/passes|passed the gate/i);
+  });
+
+  it("with a sharp recogniser and enough sentences, the gap is read as a gap", () => {
+    const p = page(
+      {
+        ...EMPTY_DATA,
+        auto: [
+          auto({
+            kind: "tts_round_trip",
+            modelRef: "tts-1",
+            rulerRef: "the-recogniser",
+            nClips: 60,
+            values: {
+              systemCer: m(0.21),
+              humanCer: m(0.116),
+              cerGap: m(0.094, 0.04, 0.15),
+            },
+          }),
+        ],
+        autoTableReady: true,
+      },
+      { system: "tts" },
+    );
     expect(p.auto).toContain("Read the gap, not the two numbers.");
+    expect(p.auto).not.toContain("cannot tell a voice from a person");
+    // Too few sentences is blurry too.
+    const few = page(
+      {
+        ...EMPTY_DATA,
+        auto: [
+          auto({
+            kind: "tts_round_trip",
+            modelRef: "tts-1",
+            nClips: 21,
+            values: { systemCer: m(0.21), humanCer: m(0.116) },
+          }),
+        ],
+      },
+      { system: "tts" },
+    );
+    expect(few.auto).toContain(
+      "This number cannot tell a voice from a person yet.",
+    );
   });
 });
 

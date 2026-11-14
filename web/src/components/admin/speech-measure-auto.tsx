@@ -184,10 +184,21 @@ function Voice({ block }: { block: VoiceBlock }) {
         {block.sentences} sentences, each said by the model and by a person.
         Heard back by {block.ruler}. Measured on {day(block.scoredAt)}.
       </p>
-      <p className="mt-2 text-sm text-text-tertiary">
-        Read the gap, not the two numbers. The recogniser misreads people too,
-        so only the difference between the voice and a person means something.
-      </p>
+      {block.rulerTooBlurry ? (
+        <p className="mt-3 rounded-md border border-warning bg-warning-subtle px-4 py-3 text-sm text-text-primary">
+          This number cannot tell a voice from a person yet.{" "}
+          {block.rulerLettersWrongPer100 !== null
+            ? `The recogniser gets ${block.rulerLettersWrongPer100} of 100 letters wrong on people's own clips, so a voice in another language can land in the same place.`
+            : "The recogniser's score on people's own clips is not stored."}{" "}
+          It is not a pass. Only a listener can say whether the voice speaks
+          Igala.
+        </p>
+      ) : (
+        <p className="mt-2 text-sm text-text-tertiary">
+          Read the gap, not the two numbers. The recogniser misreads people too,
+          so only the difference between the voice and a person means something.
+        </p>
+      )}
       <table className="mt-4 w-full text-sm">
         <thead>
           <tr className="border-b border-border">

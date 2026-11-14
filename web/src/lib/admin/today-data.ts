@@ -1,3 +1,4 @@
+import { allLimited } from "./limited";
 import type { PrismaClient } from "@prisma/client";
 import type { QueuePrompt } from "@/lib/pairing";
 import { loadPeople } from "./people-data";
@@ -82,60 +83,66 @@ export async function loadTodayWork(
     alerts,
     loop,
     spend,
-  ] = await Promise.all([
-    loadPeople(db, week, { speech, queuePrompts: options.queuePrompts }),
-    db.promptFlag.count({ where: { resolved: false } }),
-    db.promptFlag.findFirst({
-      where: { resolved: false },
-      orderBy: { createdAt: "asc" },
-      select: { createdAt: true },
-    }),
-    db.coldAuthorAnswer.count({ where: real }),
-    db.coldAuthorAnswer.count({ where: { ...real, ...inWeek } }),
-    db.pairwiseComparison.count({ where: real }),
-    db.pairwiseComparison.count({ where: { ...real, ...inWeek } }),
-    db.outputEdit.count({ where: real }),
-    db.outputEdit.count({ where: { ...real, ...inWeek } }),
-    speech
-      ? db.speechRecording.aggregate({
-          where: KEPT_CLIP,
-          _sum: { durationMs: true },
-        })
-      : null,
-    speech
-      ? db.speechRecording.aggregate({
-          where: { ...KEPT_CLIP, ...inWeek },
-          _sum: { durationMs: true },
-        })
-      : null,
-    speech ? db.speechRecording.count({ where: UNCHECKED_CLIP }) : null,
-    speech
-      ? db.speechAlert.findMany({
-          where: {
-            readAt: null,
-            createdAt: { gte: new Date(now.getTime() - 3 * DAY) },
-          },
-          orderBy: { createdAt: "desc" },
-          take: 5,
-          select: { id: true, message: true },
-        })
-      : [],
-    speech
-      ? db.speechLoopState.findUnique({
-          where: { id: 1 },
-          select: { monthlyCapUsd: true },
-        })
-      : null,
-    speech
-      ? db.costEntry.aggregate({
-          _sum: { amountUsd: true },
-          where: {
-            category: "finetune",
-            refType: "speech_train_job",
-            createdAt: { gte: monthStart },
-          },
-        })
-      : null,
+  ] = await allLimited([
+    () => loadPeople(db, week, { speech, queuePrompts: options.queuePrompts }),
+    () => db.promptFlag.count({ where: { resolved: false } }),
+    () =>
+      db.promptFlag.findFirst({
+        where: { resolved: false },
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true },
+      }),
+    () => db.coldAuthorAnswer.count({ where: real }),
+    () => db.coldAuthorAnswer.count({ where: { ...real, ...inWeek } }),
+    () => db.pairwiseComparison.count({ where: real }),
+    () => db.pairwiseComparison.count({ where: { ...real, ...inWeek } }),
+    () => db.outputEdit.count({ where: real }),
+    () => db.outputEdit.count({ where: { ...real, ...inWeek } }),
+    () =>
+      speech
+        ? db.speechRecording.aggregate({
+            where: KEPT_CLIP,
+            _sum: { durationMs: true },
+          })
+        : null,
+    () =>
+      speech
+        ? db.speechRecording.aggregate({
+            where: { ...KEPT_CLIP, ...inWeek },
+            _sum: { durationMs: true },
+          })
+        : null,
+    () => (speech ? db.speechRecording.count({ where: UNCHECKED_CLIP }) : null),
+    () =>
+      speech
+        ? db.speechAlert.findMany({
+            where: {
+              readAt: null,
+              createdAt: { gte: new Date(now.getTime() - 3 * DAY) },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 5,
+            select: { id: true, message: true },
+          })
+        : [],
+    () =>
+      speech
+        ? db.speechLoopState.findUnique({
+            where: { id: 1 },
+            select: { monthlyCapUsd: true },
+          })
+        : null,
+    () =>
+      speech
+        ? db.costEntry.aggregate({
+            _sum: { amountUsd: true },
+            where: {
+              category: "finetune",
+              refType: "speech_train_job",
+              createdAt: { gte: monthStart },
+            },
+          })
+        : null,
   ]);
 
   const rows = weekRows(people);

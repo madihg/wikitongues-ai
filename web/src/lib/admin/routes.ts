@@ -58,6 +58,13 @@ export const RESEARCH_VIEWS: ResearchLink[] = [
 
 export const SPEECH_MODEL_HREF = "/admin/speech";
 
+/**
+ * The tone marks pass 2 admin page. It arrives with the annotator release,
+ * not with this change: the Data view links to it from Disagreements, where
+ * its subject lives, and owns it in the sidebar.
+ */
+export const TONE_PASS_HREF = "/admin/tone";
+
 export const MORE_LINK: ResearchLink = {
   href: "/admin/more",
   label: "More",
@@ -107,7 +114,8 @@ export const DATA_TABS: ViewTab[] = [
   {
     href: "/admin/data/disagreements",
     label: "Disagreements",
-    hint: "Where two speakers chose or wrote differently, and corrections waiting for a second reader.",
+    hint: "Where two speakers chose or wrote differently, corrections waiting for a second reader, and the tone marks pass.",
+    owns: [TONE_PASS_HREF],
   },
   {
     href: "/admin/data/prompts",
@@ -259,6 +267,7 @@ export function activeResearchHref(pathname: string): string | null {
   if (
     under(pathname, "/admin/annotations") ||
     under(pathname, "/admin/data") ||
+    under(pathname, TONE_PASS_HREF) ||
     under(pathname, "/annotator/prompts")
   ) {
     return "/admin/annotations";

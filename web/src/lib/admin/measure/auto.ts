@@ -291,8 +291,21 @@ export interface VoiceBlock {
   sentences: number;
   letters: GapNumber | null;
   tones: GapNumber | null;
+  /**
+   * True when the recogniser misreads people's own clips too often to
+   * measure a voice with: 30 of 100 letters wrong or more, or fewer than 50
+   * sentences. Then the gap cannot tell a voice from a person, and the page
+   * must say so instead of showing a pass.
+   */
+  rulerTooBlurry: boolean;
+  /** Letters the recogniser gets wrong on people's clips, out of 100. Null when not stored. */
+  rulerLettersWrongPer100: number | null;
   scoredAt: string;
 }
+
+/** The ruler is trusted under this share of letters wrong on people's clips. */
+export const RULER_MAX_CER = 0.3;
+export const ROUND_TRIP_MIN_SENTENCES = 50;
 
 function gap(
   values: AutoMeasureRow["values"],
@@ -326,12 +339,19 @@ export function voiceBlock(
       (r) => r.kind === AUTO_KINDS.roundTrip && r.modelRef === modelRef,
     ) ?? null;
   if (!row) return null;
+  const person = pick(row.values, "cerPerson")?.value ?? null;
   return {
     modelRef,
     ruler: row.rulerRef,
     sentences: row.nClips,
     letters: gap(row.values, "cerModel", "cerPerson", "cerGap"),
     tones: gap(row.values, "terModel", "terPerson"),
+    rulerTooBlurry:
+      person === null ||
+      person >= RULER_MAX_CER ||
+      row.nClips < ROUND_TRIP_MIN_SENTENCES,
+    rulerLettersWrongPer100:
+      person === null ? null : Math.round(person * 1000) / 10,
     scoredAt: row.createdAt,
   };
 }

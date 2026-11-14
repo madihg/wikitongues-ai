@@ -1,3 +1,4 @@
+import { allLimited } from "./limited";
 import type { PrismaClient } from "@prisma/client";
 import { computeQueueState, type QueuePrompt } from "@/lib/pairing";
 import type { PersonWeek } from "./today";
@@ -173,88 +174,103 @@ export async function loadPeople(
     done,
     flags,
     queuePrompts,
-  ] = await Promise.all([
-    db.user.findMany({
-      where: { role: { in: ["ANNOTATOR", "RESEARCHER"] } },
-      select: { id: true, name: true, email: true, role: true },
-    }),
-    db.pairwiseComparison
-      .groupBy({ by: ["annotatorId"], where: { ...real, ...inWeek }, ...agg })
-      .then(grouped),
-    db.coldAuthorAnswer
-      .groupBy({ by: ["annotatorId"], where: { ...real, ...inWeek }, ...agg })
-      .then(grouped),
-    db.outputEdit
-      .groupBy({ by: ["annotatorId"], where: { ...real, ...inWeek }, ...agg })
-      .then(grouped),
-    options.speech
-      ? db.speechRecording
-          .groupBy({
-            by: ["annotatorId"],
-            where: { ...clip, ...inWeek },
-            ...agg,
-            _sum: { durationMs: true },
-          })
-          .then((rows) =>
-            rows.map((r) => ({
-              id: r.annotatorId,
-              n: r._count._all,
-              ms: r._sum.durationMs ?? 0,
-              last: r._max.createdAt,
-            })),
-          )
-      : empty,
-    options.speech
-      ? db.speechComparison
-          .groupBy({
-            by: ["annotatorId"],
-            where: { ...real, ...inWeek },
-            ...agg,
-          })
-          .then(grouped)
-      : empty,
-    options.speech
-      ? db.speechCheck
-          .groupBy({
-            by: ["reviewerId"],
-            where: { ...real, ...inWeek },
-            ...agg,
-          })
-          .then(grouped)
-      : empty,
-    db.pairwiseComparison
-      .groupBy({ by: ["annotatorId"], where: real, ...agg })
-      .then(grouped),
-    db.coldAuthorAnswer
-      .groupBy({ by: ["annotatorId"], where: real, ...agg })
-      .then(grouped),
-    db.outputEdit
-      .groupBy({ by: ["annotatorId"], where: real, ...agg })
-      .then(grouped),
-    options.speech
-      ? db.speechRecording
-          .groupBy({ by: ["annotatorId"], where: clip, ...agg })
-          .then(grouped)
-      : empty,
-    options.speech
-      ? db.speechComparison
-          .groupBy({ by: ["annotatorId"], where: real, ...agg })
-          .then(grouped)
-      : empty,
-    options.speech
-      ? db.speechCheck
-          .groupBy({ by: ["reviewerId"], where: real, ...agg })
-          .then(grouped)
-      : empty,
+  ] = await allLimited([
+    () =>
+      db.user.findMany({
+        where: { role: { in: ["ANNOTATOR", "RESEARCHER"] } },
+        select: { id: true, name: true, email: true, role: true },
+      }),
+    () =>
+      db.pairwiseComparison
+        .groupBy({ by: ["annotatorId"], where: { ...real, ...inWeek }, ...agg })
+        .then(grouped),
+    () =>
+      db.coldAuthorAnswer
+        .groupBy({ by: ["annotatorId"], where: { ...real, ...inWeek }, ...agg })
+        .then(grouped),
+    () =>
+      db.outputEdit
+        .groupBy({ by: ["annotatorId"], where: { ...real, ...inWeek }, ...agg })
+        .then(grouped),
+    () =>
+      options.speech
+        ? db.speechRecording
+            .groupBy({
+              by: ["annotatorId"],
+              where: { ...clip, ...inWeek },
+              ...agg,
+              _sum: { durationMs: true },
+            })
+            .then((rows) =>
+              rows.map((r) => ({
+                id: r.annotatorId,
+                n: r._count._all,
+                ms: r._sum.durationMs ?? 0,
+                last: r._max.createdAt,
+              })),
+            )
+        : empty,
+    () =>
+      options.speech
+        ? db.speechComparison
+            .groupBy({
+              by: ["annotatorId"],
+              where: { ...real, ...inWeek },
+              ...agg,
+            })
+            .then(grouped)
+        : empty,
+    () =>
+      options.speech
+        ? db.speechCheck
+            .groupBy({
+              by: ["reviewerId"],
+              where: { ...real, ...inWeek },
+              ...agg,
+            })
+            .then(grouped)
+        : empty,
+    () =>
+      db.pairwiseComparison
+        .groupBy({ by: ["annotatorId"], where: real, ...agg })
+        .then(grouped),
+    () =>
+      db.coldAuthorAnswer
+        .groupBy({ by: ["annotatorId"], where: real, ...agg })
+        .then(grouped),
+    () =>
+      db.outputEdit
+        .groupBy({ by: ["annotatorId"], where: real, ...agg })
+        .then(grouped),
+    () =>
+      options.speech
+        ? db.speechRecording
+            .groupBy({ by: ["annotatorId"], where: clip, ...agg })
+            .then(grouped)
+        : empty,
+    () =>
+      options.speech
+        ? db.speechComparison
+            .groupBy({ by: ["annotatorId"], where: real, ...agg })
+            .then(grouped)
+        : empty,
+    () =>
+      options.speech
+        ? db.speechCheck
+            .groupBy({ by: ["reviewerId"], where: real, ...agg })
+            .then(grouped)
+        : empty,
     // The same two reads /api/annotator/summary makes for one person, for all.
-    db.pairwiseComparison.findMany({
-      where: real,
-      select: { annotatorId: true, promptId: true },
-    }),
-    db.promptFlag.findMany({
-      select: { annotatorId: true, prompt: { select: { promptId: true } } },
-    }),
-    options.queuePrompts,
+    () =>
+      db.pairwiseComparison.findMany({
+        where: real,
+        select: { annotatorId: true, promptId: true },
+      }),
+    () =>
+      db.promptFlag.findMany({
+        select: { annotatorId: true, prompt: { select: { promptId: true } } },
+      }),
+    () => options.queuePrompts,
   ]);
 
   return assemblePeople({

@@ -1,5 +1,7 @@
 import { AgreementStats } from "@/components/admin/agreement-stats";
+import Link from "next/link";
 import { ContestedItems } from "@/components/arena/contested-items";
+import { TONE_PASS_HREF } from "@/lib/admin/routes";
 import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
@@ -23,6 +25,22 @@ export default async function DisagreementsPage() {
           second one is where the work is.
         </p>
       </div>
+      <Link
+        href={TONE_PASS_HREF}
+        className="mb-8 flex flex-wrap items-baseline justify-between gap-2 rounded-lg border border-border bg-surface px-5 py-4 transition-colors hover:bg-surface-sunken"
+      >
+        <span>
+          <span className="text-sm font-semibold text-text-primary">
+            Tone marks, pass 2
+          </span>
+          <span className="ml-3 text-sm text-text-tertiary">
+            Where two speakers marked the tones of the same answer, how often
+            they agree, and the choice between them.
+          </span>
+        </span>
+        <span className="text-sm font-medium text-accent-text">Open</span>
+      </Link>
+
       <div className="space-y-10">
         <AgreementStats />
         <ContestedItems />

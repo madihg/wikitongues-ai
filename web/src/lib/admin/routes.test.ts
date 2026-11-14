@@ -26,6 +26,7 @@ import {
   OLD_ROUTES,
   RESEARCH_VIEWS,
   SPEECH_MODEL_TABS,
+  TONE_PASS_HREF,
   TOOLS,
   activeResearchHref,
   isViewTabActive,
@@ -275,6 +276,17 @@ describe("the archive", () => {
         f,
       ).toBe(true);
     }
+  });
+});
+
+describe("the tone marks pass, arriving with the annotator release", () => {
+  it("is linked from Data, Disagreements, and belongs to the Data view", () => {
+    const src = readFileSync(pageFor("/admin/data/disagreements")!, "utf8");
+    expect(src).toContain("href={TONE_PASS_HREF}");
+    expect(TONE_PASS_HREF).toBe("/admin/tone");
+    expect(activeResearchHref("/admin/tone")).toBe("/admin/annotations");
+    const tab = DATA_TABS.find((t) => t.href === "/admin/data/disagreements")!;
+    expect(isViewTabActive("/admin/tone", tab)).toBe(true);
   });
 });
 

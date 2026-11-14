@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { systemOf } from "@/lib/speech/decision";
 import { sanitizeQuality, THRESHOLDS } from "@/lib/speech/analyse";
 import { WITHDRAWN_REVIEW_STATUS } from "@/lib/speech/withdrawal";
@@ -10,15 +10,15 @@ import type { CheckRow, ListenRow } from "./human";
  * no transcript, no audio bytes, no account name. Every recording read names
  * its select. Demo rows are left out in the WHERE clause.
  *
- * This file is an adapter, on purpose. The tables it reads today are the
- * ones on main: SpeechEvalResult (the recogniser on the exam), SpeechCandidate
- * (versions), SpeechRecording.quality (levels at recording time),
- * SpeechComparison (Listen), SpeechCheck, SpeechMinimalPairAnswer. The speech
- * work is adding two tables for what the worker measures (SpeechAutoMeasure,
- * SpeechClipMeasure). They are read here by name, tolerantly: until their
- * migration is applied the read answers "not there yet" and the page says
- * "Not measured yet". When their row shapes are final, the key names at the
- * top of this file are the only thing to adjust.
+ * This file is an adapter, on purpose. It reads SpeechEvalResult (the
+ * recogniser against the locked text), SpeechCandidate (versions),
+ * SpeechRecording.quality (levels at recording time), SpeechComparison
+ * (Listen), SpeechCheck, SpeechMinimalPairAnswer, and SpeechAutoMeasure (what
+ * the worker measured: levels before and after cleaning, the recogniser with
+ * its ranges, the round trip of a voice). The row shapes of that last table
+ * are documented by the speech work; the key names at the top of this file
+ * are the only thing to adjust if they change. A database where that table
+ * is not there yet gives "Not measured yet", not an error.
  */
 
 // ─── key names in SpeechAutoMeasure.values: adjust here, nowhere else ───────
@@ -286,25 +286,22 @@ export function isTableNotReady(e: unknown): boolean {
 }
 
 async function loadAutoMeasures(
-  db: Pick<PrismaClient, "$queryRaw">,
+  db: Pick<PrismaClient, "speechAutoMeasure">,
 ): Promise<{ rows: AutoMeasureRow[]; ready: boolean }> {
   try {
-    const rows = await db.$queryRaw<
-      Array<{
-        kind: string;
-        modelRef: string;
-        rulerRef: string;
-        manifestVersion: string;
-        nClips: number;
-        values: unknown;
-        createdAt: Date;
-      }>
-    >(Prisma.sql`
-      SELECT "kind", "modelRef", "rulerRef", "manifestVersion", "nClips", "values", "createdAt"
-      FROM "SpeechAutoMeasure"
-      ORDER BY "createdAt" DESC
-      LIMIT 300
-    `);
+    const rows = await db.speechAutoMeasure.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 300,
+      select: {
+        kind: true,
+        modelRef: true,
+        rulerRef: true,
+        manifestVersion: true,
+        nClips: true,
+        values: true,
+        createdAt: true,
+      },
+    });
     return {
       ready: true,
       rows: rows.map((r) => ({
@@ -312,12 +309,15 @@ async function loadAutoMeasures(
         modelRef: r.modelRef,
         rulerRef: r.rulerRef,
         manifestVersion: r.manifestVersion,
-        nClips: Number(r.nClips),
+        nClips: r.nClips,
         values: readMeasuredValues(r.values),
-        createdAt: new Date(r.createdAt).toISOString(),
+        createdAt: r.createdAt.toISOString(),
       })),
     };
   } catch (e) {
+    // The table is new. On a database where its migration has not been
+    // applied, or the app role has not been granted it yet, the page says
+    // "not in the database yet" instead of failing.
     if (isTableNotReady(e)) return { rows: [], ready: false };
     throw e;
   }
@@ -339,7 +339,7 @@ type Db = Pick<
   | "speechComparison"
   | "speechCheck"
   | "speechMinimalPairAnswer"
-  | "$queryRaw"
+  | "speechAutoMeasure"
 >;
 
 export async function loadSpeechMeasure(db: Db): Promise<SpeechMeasureData> {
