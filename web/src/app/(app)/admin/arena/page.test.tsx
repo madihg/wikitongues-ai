@@ -192,6 +192,18 @@ vi.mock("@/lib/prisma", () => {
   };
 });
 
+// The page checks the researcher on the server first (page-gate.test.tsx
+// covers that). Here a researcher is signed in, so the render is under test.
+vi.mock("@/lib/admin/page-gate", () => ({
+  requireResearcherPage: vi.fn(async () => ({
+    id: "u1",
+    name: "R",
+    email: "r@example.org",
+    role: "RESEARCHER",
+    owner: false,
+  })),
+}));
+
 import ArenaPage from "./page";
 
 async function renderPage(): Promise<string> {

@@ -12,12 +12,14 @@ import { ExportPanel } from "@/components/admin/export-panel";
 import { HelpButton } from "@/components/help-button";
 import { PUBLIC_HOW_IT_WORKS_URL } from "@/lib/personas";
 import { InfoTip } from "@/components/info-tip";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /** The benchmark card is computed from the database per request - the house
  * rule: no hardcoded counts or scores anywhere in the UI. */
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
+  await requireResearcherPage();
   const metrics = await computeMethodMetrics(prisma);
 
   return (

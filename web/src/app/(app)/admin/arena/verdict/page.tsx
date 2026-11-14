@@ -3,12 +3,14 @@ import { computeAnnotationInsights } from "@/lib/annotation-insights";
 import { SpeakersVerdict } from "@/components/arena/speakers-verdict";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /** Every number on this page is computed from the database per request - the
  * house rule: no hardcoded counts or scores anywhere in the UI. */
 export const dynamic = "force-dynamic";
 
 export default async function VerdictPage() {
+  await requireResearcherPage();
   const insights = await computeAnnotationInsights(prisma);
 
   return (

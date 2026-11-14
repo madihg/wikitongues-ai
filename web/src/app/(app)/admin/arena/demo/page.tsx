@@ -1,7 +1,9 @@
 import { DemoLauncher } from "@/components/arena/demo-launcher";
 import { InfoTip } from "@/components/info-tip";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
-export default function DemoPage() {
+export default async function DemoPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8">

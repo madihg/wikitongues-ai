@@ -8,6 +8,12 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Researchers only. The page that calls this is hidden from other roles in
+  // the browser, but anyone can register an account, so the role is checked
+  // here, on the server, before anything is read or written.
+  if (session.user.role !== "RESEARCHER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const [
     pending,
