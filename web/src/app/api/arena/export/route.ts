@@ -42,7 +42,13 @@ export async function GET(req: Request) {
           select: {
             outputText: true,
             prompt: {
-              select: { id: true, text: true, isHoldout: true, bucket: true },
+              select: {
+                id: true,
+                text: true,
+                isHoldout: true,
+                split: true,
+                bucket: true,
+              },
             },
           },
         },
@@ -64,6 +70,7 @@ export async function GET(req: Request) {
           c.modelOutputA?.prompt?.bucket ??
           null) as EvalBucket | null,
         isHoldout: c.modelOutputA?.prompt?.isHoldout ?? false,
+        split: c.modelOutputA?.prompt?.split ?? null,
       };
     });
 

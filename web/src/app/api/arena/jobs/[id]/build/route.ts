@@ -54,7 +54,13 @@ export async function POST(
           select: {
             outputText: true,
             prompt: {
-              select: { id: true, text: true, isHoldout: true, bucket: true },
+              select: {
+                id: true,
+                text: true,
+                isHoldout: true,
+                split: true,
+                bucket: true,
+              },
             },
           },
         },
@@ -77,6 +83,7 @@ export async function POST(
         bucket: c.bucket ?? c.modelOutputA.prompt.bucket,
         // Carry the REAL held-out flag so the builder can hard-exclude it.
         isHoldout: c.modelOutputA.prompt.isHoldout,
+        split: c.modelOutputA.prompt.split,
       };
     });
 
