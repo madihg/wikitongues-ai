@@ -9,9 +9,9 @@ import { WAITING_COPY, type WaitingCounts } from "@/lib/waiting";
 const zero: WaitingCounts = {
   annotate: 0, record: 0, listen: 0, check: 0, tone: 0, fix: 0, fixTotal: 0,
 };
-const render = (counts: WaitingCounts | undefined, researcher = false, placeholder = "…") =>
+const render = (counts: WaitingCounts | undefined, placeholder = "…") =>
   renderToStaticMarkup(
-    <WaitingBlock counts={counts} researcher={researcher} placeholder={placeholder} />,
+    <WaitingBlock counts={counts} placeholder={placeholder} />,
   );
 
 describe("WaitingBlock", () => {

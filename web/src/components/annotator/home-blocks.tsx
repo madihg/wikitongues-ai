@@ -56,32 +56,27 @@ export function StatCard({
 
 export function WaitingBlock({
   counts,
-  researcher,
   placeholder,
   children,
 }: {
   /** Undefined while loading or when the numbers could not be loaded. */
   counts: WaitingCounts | undefined;
-  researcher: boolean;
   /** What a number shows while there is none: "…" loading, "Not available" on error. */
   placeholder: string;
   /** Extra cards after the waiting ones (the researcher-only cards). */
   children?: React.ReactNode;
 }) {
-  const cards = counts
-    ? waitingCards(counts, { researcher })
-    : waitingCards(
-        {
-          annotate: 0,
-          record: 0,
-          listen: 0,
-          check: 0,
-          tone: 0,
-          fix: 0,
-          fixTotal: 0,
-        },
-        { researcher },
-      );
+  const cards = waitingCards(
+    counts ?? {
+      annotate: 0,
+      record: 0,
+      listen: 0,
+      check: 0,
+      tone: 0,
+      fix: 0,
+      fixTotal: 0,
+    },
+  );
   return (
     <section aria-labelledby="waiting-heading">
       <h2

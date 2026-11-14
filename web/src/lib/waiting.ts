@@ -1,19 +1,34 @@
 import { prisma } from "@/lib/prisma";
 import { REJECTED_REVIEW_STATUSES } from "@/lib/speech/limits";
+import { countRecordWaiting } from "@/lib/speech/record-queue";
+import {
+  nextListenRound,
+  restrictedClipIds,
+} from "@/lib/speech/listen-rounds";
+import { staleRecordingIds } from "@/lib/answer-edit";
+import { needsFix } from "@/lib/answer-revisions";
+import { toneCount } from "@/lib/tone/tone-pass";
 
 /**
  * "Waiting for you" on the annotator Dashboard (annotator experience spec,
  * section 4.2): how much of each kind of work is waiting for this person.
  *
  * The rule the page lives by: every number equals the length of the queue
- * its card opens. So each count here asks the database the SAME question its
- * queue route asks (the `where` objects below are copies of the routes', and
- * waiting.test.ts fails if either side drifts), and counts the answer the
- * way the route does.
+ * its card opens. So each count here either calls the queue's own loader or
+ * asks the database the SAME question its queue route asks (the `where`
+ * objects below are copies of the routes', and waiting.test.ts fails if
+ * either side drifts), and counts the answer the way the route does.
  *
- *   Record  -> GET /api/lab/speech/next         (own answers with no clip)
- *   Listen  -> GET /api/lab/speech/listen/next  (progress.remaining)
- *   Check   -> GET /api/lab/speech/check/next   (progress.remaining)
+ *   Record  -> GET /api/lab/speech/next         (the Record queue's own
+ *              loader: own answers with no clip, plus own answers that
+ *              still miss the English clip)
+ *   Listen  -> GET /api/lab/speech/listen/next  (progress.remaining: the
+ *              person's open assigned rounds first, then the open queue)
+ *   Check   -> GET /api/lab/speech/check/next   (progress.remaining, which
+ *              leaves out a clip whose text changed after it was recorded)
+ *   Tone    -> GET /api/annotator/tone/count    (waiting: items given to
+ *              this person and not yet marked)
+ *   Fix     -> GET /api/annotator/history?filter=fix (the same needsFix rule)
  *   Annotate comes from computeQueueState in the summary route, as before.
  */
 
@@ -21,35 +36,14 @@ import { REJECTED_REVIEW_STATUSES } from "@/lib/speech/limits";
 const NOT_FROZEN = { isHoldout: false, split: { not: "test" as const } };
 
 // ─── Record ──────────────────────────────────────────────────────────────
-
-export const recordedWhere = (annotatorId: string) => ({
-  annotatorId,
-  isDemo: false,
-  language: "igala",
-});
-
-export const ownAnswersToRecordWhere = (
-  annotatorId: string,
-  recordedIds: string[],
-) => ({
-  annotatorId,
-  isDemo: false,
-  prompt: {
-    ...NOT_FROZEN,
-    language: "igala",
-    id: { notIn: recordedIds },
-    promptId: { notIn: [] as string[] },
-  },
-});
-
-/** Own answers with no Igala clip yet: one per prompt, as the queue serves them. */
-export function recordRemaining(answers: { promptId: string }[]): number {
-  return new Set(answers.map((a) => a.promptId)).size;
-}
+// The Record queue and this count share one loader (loadRecordQueue in
+// lib/speech/record-queue.ts), so there is no second copy of the question.
 
 // ─── Listen ──────────────────────────────────────────────────────────────
 
-export const listenClipsWhere = () => ({
+export const listenClipsWhere = (restricted: string[] = []) => ({
+  // The synthetic clips of assigned rounds never enter the open queue.
+  ...(restricted.length > 0 ? { id: { notIn: restricted } } : {}),
   uploadedAt: { not: null },
   prompt: NOT_FROZEN,
   OR: [{ isDemo: false }],
@@ -129,17 +123,23 @@ export const checkClipsWhere = (reviewerId: string, checkedByMe: string[]) => ({
   prompt: NOT_FROZEN,
 });
 
-/** Clips from other speakers still to check: those whose answer has text. */
+/**
+ * Clips from other speakers still to check: those whose answer has text and
+ * whose text did not change after the clip was recorded (`stale`).
+ */
 export function checkRemaining(
-  clips: { coldAuthorAnswer: { answerText: string } | null }[],
+  clips: { id?: string; coldAuthorAnswer: { answerText: string } | null }[],
+  stale: Set<string> = new Set(),
 ): number {
-  return clips.filter((c) => c.coldAuthorAnswer?.answerText.trim()).length;
+  return clips.filter(
+    (c) =>
+      c.coldAuthorAnswer?.answerText.trim() &&
+      !(c.id !== undefined && stale.has(c.id)),
+  ).length;
 }
 
 // ─── Your answers to fix ─────────────────────────────────────────────────
 
-/** A reason shorter than this needs more (decision 6, the recommended rule). */
-export const SHORT_REASON_CHARS = 20;
 /**
  * The Dashboard never opens to hundreds (decision 6): measured on 13 Nov
  * 2026, annotators had between 3 and 263 answers to fix. The card shows at
@@ -147,23 +147,23 @@ export const SHORT_REASON_CHARS = 20;
  */
 export const FIX_HOME_CAP = 20;
 
-const stored = (s: string | null | undefined) =>
-  (s ?? "").normalize("NFC").trim();
-
 /**
  * Own answers that need more: an answer with no English meaning, or a
- * correction with no reason or a reason under 20 characters. The same rule
- * as needsFix in the EDIT lane's lib/answer-revisions.ts, which My Work's
- * filter uses.
+ * correction with no reason or a reason under 20 characters. One rule,
+ * needsFix in lib/answer-revisions.ts, which My Work's filter also uses, so
+ * the card's number is the length of the list it opens.
  */
 export function fixTotal(
   answers: { englishGloss: string | null }[],
   corrections: { rationale: string | null }[],
 ): number {
   return (
-    answers.filter((a) => stored(a.englishGloss) === "").length +
-    corrections.filter((c) => stored(c.rationale).length < SHORT_REASON_CHARS)
-      .length
+    answers.filter((a) =>
+      needsFix({ kind: "cold", englishGloss: a.englishGloss }),
+    ).length +
+    corrections.filter((c) =>
+      needsFix({ kind: "edit", rationale: c.rationale }),
+    ).length
   );
 }
 
@@ -174,7 +174,10 @@ export interface WaitingCounts {
   record: number;
   listen: number;
   check: number;
-  /** Pass 2, tone marks. Zero until the tone pass is switched on. */
+  /**
+   * Pass 2, tone marks: items given to this person and not yet marked. Zero
+   * for anyone who was given none, so the card never shows an empty queue.
+   */
   tone: number;
   /** Answers to fix, capped at FIX_HOME_CAP. */
   fix: number;
@@ -191,15 +194,24 @@ export async function loadWaiting(
   userId: string,
   on: { speech: boolean; editing: boolean },
 ): Promise<Omit<WaitingCounts, "annotate">> {
-  const speech = async () => {
-    if (!on.speech) return { record: 0, listen: 0, check: 0 };
-    const [recorded, clips, done, mine] = await Promise.all([
+  const listen = async (): Promise<number> => {
+    // Assigned rounds come first, exactly as the Listen queue serves them:
+    // while one is open and its prompt is not frozen, the queue's figure is
+    // the number of open rounds.
+    const assigned = await nextListenRound(prisma, userId);
+    if (assigned) {
+      const prompt = await prisma.prompt.findUnique({
+        where: { id: assigned.round.promptId },
+        select: { isHoldout: true, split: true },
+      });
+      if (prompt && !prompt.isHoldout && prompt.split !== "test") {
+        return assigned.remaining;
+      }
+    }
+    const restricted = await restrictedClipIds(prisma);
+    const [clips, done] = await Promise.all([
       prisma.speechRecording.findMany({
-        where: recordedWhere(userId),
-        select: { promptId: true },
-      }),
-      prisma.speechRecording.findMany({
-        where: listenClipsWhere(),
+        where: listenClipsWhere(restricted),
         select: {
           id: true,
           promptId: true,
@@ -214,31 +226,38 @@ export async function loadWaiting(
         where: listenDoneWhere(userId),
         select: { promptId: true, recordingA: { select: { language: true } } },
       }),
-      prisma.speechCheck.findMany({
-        where: checkedByMeWhere(userId),
-        select: { recordingId: true },
-      }),
     ]);
-    const recordedIds = [...new Set(recorded.map((r) => r.promptId))];
-    const [answers, toCheck] = await Promise.all([
-      prisma.coldAuthorAnswer.findMany({
-        where: ownAnswersToRecordWhere(userId, recordedIds),
-        select: { promptId: true },
-      }),
-      prisma.speechRecording.findMany({
-        take: CHECK_MAX_CANDIDATES,
-        where: checkClipsWhere(
-          userId,
-          mine.map((c) => c.recordingId),
-        ),
-        select: { coldAuthorAnswer: { select: { answerText: true } } },
-      }),
+    return listenRemaining(clips, done);
+  };
+  const check = async (): Promise<number> => {
+    const mine = await prisma.speechCheck.findMany({
+      where: checkedByMeWhere(userId),
+      select: { recordingId: true },
+    });
+    const toCheck = await prisma.speechRecording.findMany({
+      take: CHECK_MAX_CANDIDATES,
+      where: checkClipsWhere(
+        userId,
+        mine.map((c) => c.recordingId),
+      ),
+      select: {
+        id: true,
+        coldAuthorAnswerId: true,
+        language: true,
+        createdAt: true,
+        coldAuthorAnswer: { select: { answerText: true } },
+      },
+    });
+    return checkRemaining(toCheck, await staleRecordingIds(toCheck));
+  };
+  const speech = async () => {
+    if (!on.speech) return { record: 0, listen: 0, check: 0 };
+    const [record, listenCount, checkCount] = await Promise.all([
+      countRecordWaiting(userId),
+      listen(),
+      check(),
     ]);
-    return {
-      record: recordRemaining(answers),
-      listen: listenRemaining(clips, done),
-      check: checkRemaining(toCheck),
-    };
+    return { record, listen: listenCount, check: checkCount };
   };
   const fix = async () => {
     if (!on.editing) return 0;
@@ -254,10 +273,16 @@ export async function loadWaiting(
     ]);
     return fixTotal(answers, corrections);
   };
-  const [s, total] = await Promise.all([speech(), fix()]);
+  // Tone items are given to named people, speech on or off. Nobody else has
+  // any, and toneCount answers zero before its tables exist.
+  const [s, total, tone] = await Promise.all([
+    speech(),
+    fix(),
+    toneCount(userId),
+  ]);
   return {
     ...s,
-    tone: 0,
+    tone: tone.waiting,
     fix: Math.min(total, FIX_HOME_CAP),
     fixTotal: total,
   };
@@ -284,16 +309,11 @@ export const WAITING_COPY = {
 /**
  * The cards, in the order of the spec. A card shows only when its number is
  * above zero, except Annotate, which always shows so the page is never
- * empty. Researchers reach Record and Listen through the Lab paths they
- * already know; annotators through /speak. All of them keep resolving.
+ * empty. Record and Listen open the tabs of the one Speech link (/speak),
+ * for researchers and annotators alike; the old Lab paths redirect there.
  */
-export function waitingCards(
-  counts: WaitingCounts,
-  role: { researcher: boolean },
-): WaitingCard[] {
-  const speak = role.researcher
-    ? { record: "/lab/speech", listen: "/lab/speech/listen" }
-    : { record: "/speak", listen: "/speak/listen" };
+export function waitingCards(counts: WaitingCounts): WaitingCard[] {
+  const speak = { record: "/speak", listen: "/speak/listen" };
   const all: WaitingCard[] = [
     {
       key: "annotate",

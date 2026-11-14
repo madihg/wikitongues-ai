@@ -102,7 +102,6 @@ export default function AnnotatorDashboard() {
 
       <WaitingBlock
         counts={loading || error ? undefined : summary?.waiting}
-        researcher={researcher}
         placeholder={placeholder}
       >
         {/* Researcher-only cards, as before. Corrections Waiting has been
