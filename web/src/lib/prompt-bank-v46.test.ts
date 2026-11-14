@@ -14,6 +14,7 @@ import {
   sameDeclaredPair,
   speechCoverage,
   speechYield,
+  v46ServingOrder,
   v46SpeechEnglish,
 } from "./prompt-bank-v46";
 import { V45_PROMPTS } from "./prompt-bank-v45";
@@ -270,5 +271,62 @@ describe("the v4.6 speech set", () => {
     expect(y.igalaMinutes).toBeLessThan(25);
     expect(y.totalMinutes).toBeCloseTo(y.igalaMinutes * 2, 5);
     expect(speechYield(text)).toEqual({ prompts: 0, clips: 0, igalaMinutes: 0, totalMinutes: 0 });
+  });
+});
+
+describe("the v4.6 serving order", () => {
+  const order = v46ServingOrder();
+  const pos = new Map(order.map((p, i) => [p.promptId, i]));
+  const textOrder = order.filter((p) => !isSpeechPrompt(p));
+
+  it("holds every prompt exactly once", () => {
+    expect(order).toHaveLength(320);
+    expect(new Set(order.map((p) => p.promptId)).size).toBe(320);
+  });
+
+  it("puts everyday and vocabulary families first and idioms and cultural values last", () => {
+    expect(isSpeechPrompt(order[0])).toBe(false);
+    expect(order[0].family).toBe("lexi");
+    const first40 = new Set(textOrder.slice(0, 40).map((p) => p.family));
+    for (const f of first40) expect(["lexi", "formu", "engl", "spell", "numb", "neigh", "names", "vari"]).toContain(f);
+    const last14 = textOrder.slice(-14).map((p) => p.family);
+    expect(new Set(last14)).toEqual(new Set(["idiom", "cult"]));
+    const firstIdiom = Math.min(...textOrder.map((p, i) => (p.family === "idiom" || p.family === "cult" ? i : Infinity)));
+    expect(firstIdiom).toBe(186);
+    // Every vocabulary prompt comes before every idiom.
+    const lastLexi = Math.max(...order.filter((p) => p.family === "lexi").map((p) => pos.get(p.promptId)!));
+    const firstIdiomAll = Math.min(...order.filter((p) => p.family === "idiom").map((p) => pos.get(p.promptId)!));
+    expect(lastLexi).toBeLessThan(firstIdiomAll);
+  });
+
+  it("spreads the speech set through the queue instead of leaving it at the end", () => {
+    // Any window of 16 items holds 5 to 7 speech prompts (the share is 120 of 320).
+    for (let i = 0; i + 16 <= order.length; i++) {
+      const n = order.slice(i, i + 16).filter(isSpeechPrompt).length;
+      expect(n, `window at ${i}`).toBeGreaterThanOrEqual(5);
+      expect(n, `window at ${i}`).toBeLessThanOrEqual(7);
+    }
+    // Never three speech prompts in a row, never more than two text prompts between them.
+    let run = 0;
+    for (const p of order) {
+      run = isSpeechPrompt(p) ? run + 1 : 0;
+      expect(run).toBeLessThanOrEqual(2);
+    }
+    // Given sentences come before the ones the speaker makes herself.
+    const speechOrder = order.filter(isSpeechPrompt);
+    expect(new Set(speechOrder.slice(0, 40).map((p) => p.family))).toEqual(new Set(["spnum", "spcar", "spname", "speng"]));
+  });
+
+  it("keeps the order inside a family and takes turns between families", () => {
+    for (const f of Object.keys(FAMILY_COUNTS)) {
+      const ids = order.filter((p) => p.family === f).map((p) => p.promptId);
+      expect(ids).toEqual([...ids].sort());
+    }
+    for (let i = 1; i < 40; i++) expect(textOrder[i].family).not.toBe(textOrder[i - 1].family);
+  });
+
+  it("is a pure function of the bank", () => {
+    expect(v46ServingOrder().map((p) => p.promptId)).toEqual(order.map((p) => p.promptId));
+    expect(v46ServingOrder(V46_PROMPTS.filter((p) => !isSpeechPrompt(p)))).toHaveLength(200);
   });
 });
