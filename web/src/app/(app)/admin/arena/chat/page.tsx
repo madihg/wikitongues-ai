@@ -4,6 +4,7 @@ import { approachLabel } from "@/lib/method-metrics";
 import { ModelChat, type ChatCandidate } from "@/components/arena/model-chat";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
  * Talk to the candidates. The surface that exists because the metrics cannot
@@ -52,7 +53,8 @@ async function ChatSurface() {
   return <ModelChat candidates={list} />;
 }
 
-export default function ArenaChatPage() {
+export default async function ArenaChatPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-6">

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { JobMonitor } from "@/components/arena/job-monitor";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
-export default function JobsPage() {
+export default async function JobsPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8 flex items-start justify-between gap-4">

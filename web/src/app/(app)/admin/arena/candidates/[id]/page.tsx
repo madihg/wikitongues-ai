@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { CandidateDetail } from "@/components/arena/candidate-detail";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 export default async function CandidateDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireResearcherPage();
   const { id } = await params;
 
   return (

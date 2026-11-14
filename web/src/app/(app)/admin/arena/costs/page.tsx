@@ -1,7 +1,9 @@
 import { CostLedger } from "@/components/arena/cost-ledger";
 import { InfoTip } from "@/components/info-tip";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
-export default function CostsPage() {
+export default async function CostsPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8">

@@ -1,6 +1,7 @@
 import { AutoEval } from "@/components/arena/auto-eval";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
  * The AUTOMATIC eval surface. Kept separate from the human leaderboard on
@@ -9,7 +10,8 @@ import { InfoTip } from "@/components/info-tip";
  * One is evidence about quality; the other is a fast proxy whose reliability is
  * itself measured on this page.
  */
-export default function ArenaEvalPage() {
+export default async function ArenaEvalPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-6">

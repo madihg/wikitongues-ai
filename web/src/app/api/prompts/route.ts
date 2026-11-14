@@ -28,6 +28,12 @@ export async function GET(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Researchers only. The page that calls this is hidden from other roles in
+  // the browser, but anyone can register an account, so the role is checked
+  // here, on the server, before anything is read or written.
+  if (session.user.role !== "RESEARCHER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const bucket = searchParams.get("bucket");
@@ -75,6 +81,12 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Researchers only. The page that calls this is hidden from other roles in
+  // the browser, but anyone can register an account, so the role is checked
+  // here, on the server, before anything is read or written.
+  if (session.user.role !== "RESEARCHER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await req.json();
