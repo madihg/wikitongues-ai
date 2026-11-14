@@ -653,6 +653,7 @@ describe("speechHeadline: the Today tile shows the Speech model view's own numbe
       modelRef: "asr-1",
       lettersWrongPer100: 31.2,
       examClips: block.exam.clips,
+      locked: true,
       tier: block.exam.tier,
     });
     expect(h.recognition!.lettersWrongPer100).toBeCloseTo(

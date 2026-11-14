@@ -26,6 +26,8 @@ export interface SpeechHeadline {
     /** Letters wrong out of 100, one decimal. */
     lettersWrongPer100: number;
     examClips: number;
+    /** False when the clips scored are not the locked exam. */
+    locked: boolean;
     tier: ExamTier;
   } | null;
   /** Null until a listener has compared a model with a person. */
@@ -56,6 +58,7 @@ export function speechHeadline(data: SpeechMeasureData): SpeechHeadline {
           modelRef: scored.modelRef,
           lettersWrongPer100: Math.round(scored.cer * 1000) / 10,
           examClips: scored.nClips,
+          locked: scored.onLockedExam,
           tier: examTier(scored.nClips, scored.speakers, scored.onLockedExam),
         }
       : null,

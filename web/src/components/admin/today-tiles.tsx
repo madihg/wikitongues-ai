@@ -80,8 +80,7 @@ export function SpeechTile({ headline }: { headline: SpeechHeadline | null }) {
                 </span>
               </p>
               <p className="mt-1 text-sm text-text-tertiary">
-                {headline.recognition.examClips} exam clips. Sample:{" "}
-                {headline.recognition.tier}.
+                {`${headline.recognition.examClips} ${headline.recognition.locked ? "exam clips" : "clips, not a locked exam"}. Sample: ${headline.recognition.tier}.`}
               </p>
             </>
           ) : (

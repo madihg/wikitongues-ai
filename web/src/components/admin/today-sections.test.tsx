@@ -240,6 +240,35 @@ describe("The models", () => {
     expect(tile).toContain("We hold 131 clips, 16.2 minutes.");
   });
 
+  it("a score run on clips that are not a locked exam is never called an exam on the tile", async () => {
+    measure.mockResolvedValue({
+      ...EMPTY_MEASURE,
+      evals: [
+        {
+          id: "e1",
+          modelRef: "recogniser",
+          manifestVersion: "m",
+          cer: 0.351,
+          werStripped: 0.9,
+          werRetained: 0.94,
+          ter: 0.2,
+          nClips: 72,
+          speakers: 2,
+          terPooled: 1,
+          markedVowels: 365,
+          onLockedExam: false,
+          createdAt: "2026-11-13T22:00:00.000Z",
+        },
+      ],
+    });
+    const tile = text(
+      renderToStaticMarkup(await ModelsBlock({ speech: true })),
+    );
+    expect(tile).toContain("35.1 of 100 letters wrong");
+    expect(tile).toContain("72 clips, not a locked exam. Sample: Smoke test.");
+    expect(tile).not.toContain("exam clips");
+  });
+
   it("links each tile to its view", async () => {
     const html = renderToStaticMarkup(await ModelsBlock({ speech: true }));
     for (const href of [
