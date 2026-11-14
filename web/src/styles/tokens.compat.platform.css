@@ -7,12 +7,6 @@
  */
 
 :root {
-  /* [step 2: type] The stacks globals.css declares today. No web font loads
-     in production, so these resolve to the device's own fonts. */
-  --wt-font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --wt-font-display: "Fraunces", Georgia, serif;
-  --wt-font-mono: "JetBrains Mono", ui-monospace, monospace;
-
   /* [step 3: colour] Text and edges that fail AA today. */
   --wt-ink-3: #7d7064;
   --wt-ink-disabled: #b6aa9c;

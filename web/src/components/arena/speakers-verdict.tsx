@@ -252,7 +252,7 @@ function RecentExamples({ recent }: { recent: AnnotationInsights["recent"] }) {
                   a speaker chose this
                 </span>
               </div>
-              <p className="font-mono text-sm whitespace-pre-wrap text-text-primary">
+              <p className="igala text-sm whitespace-pre-wrap text-text-primary">
                 {r.winnerOutput}
               </p>
             </div>
@@ -262,7 +262,7 @@ function RecentExamples({ recent }: { recent: AnnotationInsights["recent"] }) {
                   {r.loserName}
                 </span>
               </div>
-              <p className="font-mono text-sm whitespace-pre-wrap text-text-primary">
+              <p className="igala text-sm whitespace-pre-wrap text-text-primary">
                 {r.loserOutput}
               </p>
               {r.loserTags.length > 0 && (

@@ -95,7 +95,7 @@ function HistoryRowDetail({ row }: { row: HistoryRow }) {
         )}
         <div className="grid gap-3 sm:grid-cols-2">
           <div
-            className={`rounded-md border p-3 text-sm font-mono leading-relaxed ${
+            className={`rounded-md border p-3 text-sm igala leading-relaxed ${
               row.winner === "a"
                 ? "border-accent bg-surface"
                 : "border-border bg-surface"
@@ -109,7 +109,7 @@ function HistoryRowDetail({ row }: { row: HistoryRow }) {
             </div>
           </div>
           <div
-            className={`rounded-md border p-3 text-sm font-mono leading-relaxed ${
+            className={`rounded-md border p-3 text-sm igala leading-relaxed ${
               row.winner === "b"
                 ? "border-accent bg-surface"
                 : "border-border bg-surface"
@@ -133,7 +133,7 @@ function HistoryRowDetail({ row }: { row: HistoryRow }) {
         <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
           Your answer
         </div>
-        <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-text-primary">
+        <p lang="ig" className="whitespace-pre-wrap igala text-sm leading-relaxed text-text-primary">
           {row.answerText}
         </p>
         <div className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
@@ -152,7 +152,7 @@ function HistoryRowDetail({ row }: { row: HistoryRow }) {
         <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
           Original
         </div>
-        <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-text-secondary">
+        <p className="whitespace-pre-wrap igala text-sm leading-relaxed text-text-secondary">
           {row.originalText}
         </p>
       </div>
@@ -160,7 +160,7 @@ function HistoryRowDetail({ row }: { row: HistoryRow }) {
         <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
           Your correction
         </div>
-        <p className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-text-primary">
+        <p className="whitespace-pre-wrap igala text-sm leading-relaxed text-text-primary">
           {row.correctedText}
         </p>
       </div>

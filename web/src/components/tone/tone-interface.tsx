@@ -88,7 +88,7 @@ export function OtherChanges({
   return (
     <p
       data-testid="tone-other-changes"
-      className="whitespace-pre-wrap break-words rounded bg-surface p-3 font-mono text-sm leading-relaxed"
+      className="whitespace-pre-wrap break-words rounded bg-surface p-3 igala text-sm leading-relaxed"
     >
       {wordDiff(stripTone(firstVersion).trim(), stripTone(text).trim()).map(
         (seg, i) =>
@@ -128,7 +128,7 @@ export function ToneView(p: ToneViewProps) {
         </p>
         <p
           data-testid="tone-first-version"
-          className="mt-1 whitespace-pre-wrap rounded-md border border-border bg-surface-sunken p-3 font-mono text-sm leading-relaxed text-text-secondary"
+          className="mt-1 whitespace-pre-wrap rounded-md border border-border bg-surface-sunken p-3 igala text-sm leading-relaxed text-text-secondary"
         >
           {p.task.firstVersion}
         </p>
@@ -148,7 +148,7 @@ export function ToneView(p: ToneViewProps) {
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
-          className="mt-1 w-full rounded-md border border-border-strong bg-surface px-3 py-2 font-mono text-base leading-relaxed text-text-primary focus-visible:border-accent"
+          className="mt-1 w-full rounded-md border border-border-strong bg-surface px-3 py-2 igala text-base leading-relaxed text-text-primary focus-visible:border-accent"
         />
         <ToneKeyboard
           targetRef={boxRef}
@@ -180,7 +180,7 @@ export function ToneView(p: ToneViewProps) {
                   type="button"
                   aria-pressed={p.unsure.includes(i)}
                   onClick={() => p.onToggleUnsure(i)}
-                  className={`min-h-[44px] cursor-pointer rounded-md border px-3 font-mono text-base ${
+                  className={`min-h-[44px] cursor-pointer rounded-md border px-3 igala text-base ${
                     p.unsure.includes(i)
                       ? "border-warning bg-warning-subtle text-text-primary"
                       : "border-border-strong bg-surface text-text-primary hover:bg-surface-sunken"

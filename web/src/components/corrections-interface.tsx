@@ -514,7 +514,7 @@ export function CorrectionsInterface() {
         <div className="text-xs font-medium text-text-tertiary">
           The AI answer
         </div>
-        <div className="mt-2 whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-text-primary">
+        <div className="mt-2 whitespace-pre-wrap break-words igala text-sm leading-relaxed text-text-primary">
           {task.output.text}
         </div>
 
@@ -533,7 +533,7 @@ export function CorrectionsInterface() {
               {task.verdict.failureTags.map((t) => (
                 <span
                   key={t}
-                  className="rounded-full border border-border-strong bg-surface px-2 py-0.5 text-[11px] text-text-secondary"
+                  className="rounded-full border border-border-strong bg-surface px-2 py-0.5 text-xs text-text-secondary"
                 >
                   {failureTagLabel(t)}
                 </span>

@@ -1427,7 +1427,7 @@ export function AnnotationInterface() {
 
   if (!task) return null;
 
-  const textFont = "font-mono"; // renders Igala tone diacritics cleanly
+  const textFont = "igala"; // renders Igala tone diacritics cleanly
 
   // Persistent numbered step bar. The three-state machine (prompt/pairwise/score)
   // maps onto four plain-English stages; on the pairwise screen the highlight
@@ -1574,7 +1574,7 @@ export function AnnotationInterface() {
               }`}
             >
               <span
-                className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
+                className={`flex h-4 w-4 items-center justify-center rounded-full text-xs font-semibold ${
                   current
                     ? "bg-accent-contrast text-accent"
                     : done
@@ -1650,7 +1650,7 @@ export function AnnotationInterface() {
                     className="flex items-start gap-2 text-xs leading-snug"
                   >
                     <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded font-mono text-[11px] font-semibold ${chip}`}
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded font-mono text-xs font-semibold ${chip}`}
                     >
                       {an.score}
                     </span>
@@ -1865,7 +1865,7 @@ export function AnnotationInterface() {
                   <span className="font-medium text-text-secondary">
                     Your locked answer:
                   </span>{" "}
-                  <span className={textFont}>{coldAnswer}</span>
+                  <span lang="ig" className={textFont}>{coldAnswer}</span>
                   {englishGloss.trim() && (
                     <p className="mt-2 text-text-secondary">
                       <span className="font-medium">Means:</span> {englishGloss}
@@ -2039,7 +2039,7 @@ export function AnnotationInterface() {
               <span className="font-medium text-text-secondary">
                 Your locked answer:
               </span>{" "}
-              <span className={textFont}>{coldAnswer}</span>
+              <span lang="ig" className={textFont}>{coldAnswer}</span>
             </div>
           )}
 

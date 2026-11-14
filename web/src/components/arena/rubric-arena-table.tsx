@@ -430,7 +430,7 @@ function Matrix({ data, slice }: { data: RubricArenaData; slice: EraView }) {
                             {!cell.distinguishable && (
                               <span
                                 title="Not statistically distinguishable at this sample size. It is an absence of evidence, not a tie."
-                                className="font-mono text-[10px] text-text-muted"
+                                className="font-mono text-xs text-text-muted"
                               >
                                 ns
                               </span>
@@ -454,7 +454,7 @@ function Matrix({ data, slice }: { data: RubricArenaData; slice: EraView }) {
                       >
                         {row.overall.strength.toFixed(0)}
                         {!row.overall.distinguishable && (
-                          <span className="ml-1 text-[10px] text-text-muted">
+                          <span className="ml-1 text-xs text-text-muted">
                             ns
                           </span>
                         )}

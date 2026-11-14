@@ -1,7 +1,17 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 @import "../styles/tokens.css";
 @import "../styles/tokens.compat.platform.css";
+
+/* Inter, one file: Latin, Latin Extended, Latin Extended Additional and the
+   combining marks together, so an Igala letter and its tone mark are always
+   drawn by the same font. SIL Open Font License: public/fonts/Inter-LICENSE.txt */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/InterVariable-wt.woff2") format("woff2");
+}
 
 /* ─── Wikitongues AI Design System ─────────────────────────────
    Warm, humanist, community-first. Ochre accent on warm ink.
@@ -69,9 +79,10 @@
   --color-text-muted: var(--text-muted);
 
   /* Typography */
-  --font-display: "Fraunces", Georgia, serif;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: var(--wt-font-sans);
+  --font-sans: var(--wt-font-sans);
+  --font-igala: var(--wt-font-igala);
+  --font-mono: var(--wt-font-mono);
 
   --radius-sm: 4px;
   --radius: 8px;
@@ -103,20 +114,30 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-family: var(--wt-font-sans);
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--text-primary);
 }
 
-/* Igala tone diacritics render in the mono slot */
+/* Igala text is set in the sans, never in a mono: the face that draws every
+   letter and tone mark. lang="ig" gets the same result with no class. The
+   size stays whatever the component sets. */
+.igala,
+[lang="ig"] {
+  font-family: var(--wt-font-igala);
+  line-height: var(--wt-lh-igala);
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
+/* Mono is for a code, a count or a timer. System fonts only. */
 code,
 kbd,
 samp,
-.font-mono,
-.igala {
-  font-family: var(--font-mono);
-  font-feature-settings: "ss01";
+.font-mono {
+  font-family: var(--wt-font-mono);
 }
 
 a {
