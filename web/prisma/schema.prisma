@@ -1167,3 +1167,32 @@ model SpeechMinimalPairAnswer {
   @@index([annotatorId])
   @@index([isDemo])
 }
+
+// ---------------------------------------------------------------------------
+// Answer revisions (annotator edit, Nov 13): every edit an author (or a
+// researcher, for answer text) makes to a submitted row writes one row here
+// per changed field, with the exact before and after. Append-only. The parent
+// row is still updated as before, so every screen and export keeps reading
+// it. Plain string keys, like the loop tables above, so no existing table is
+// altered. Column contract: out/edit/CONTRACT.md in the Nov 13 program notes,
+// mirrored in src/lib/answer-revisions.ts.
+// ---------------------------------------------------------------------------
+
+model AnswerRevision {
+  id          String   @id @default(cuid())
+  saveId      String // one value per press of "Save changes"
+  targetType  String // cold | edit | pairwise | listen
+  targetId    String // id of the parent row
+  field       String // the column that changed on the parent row
+  before      String? // exact value before the save, NFC; null = empty
+  after       String? // exact value after the save, NFC; null = cleared
+  editorId    String // User.id of the person who saved
+  authorId    String // annotatorId of the parent row at the time of the save
+  afterReveal Boolean // the author had seen AI outputs for this prompt
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([targetType, targetId, createdAt])
+  @@index([editorId, createdAt])
+  @@index([saveId])
+}
