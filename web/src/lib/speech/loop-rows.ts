@@ -34,8 +34,11 @@ const SELECT = {
   reviewStatus: true,
   voiceCloningOptIn: true,
   studioText: true,
+  spokenText: true,
   prompt: { select: { isHoldout: true, split: true, text: true } },
-  coldAuthorAnswer: { select: { answerText: true, englishGloss: true } },
+  coldAuthorAnswer: {
+    select: { answerText: true, englishGloss: true, englishTranslation: true },
+  },
 } as const;
 
 export const TRAINABLE_ROWS_QUERY = {

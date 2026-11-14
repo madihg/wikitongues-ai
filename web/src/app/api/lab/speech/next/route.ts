@@ -11,12 +11,16 @@ import { NOT_FROZEN, loadRecordQueue } from "@/lib/speech/record-queue";
  *   1. prompts the researcher has an OWN written answer for and no recording
  *      of yet (the answer rides along: they read it aloud), oldest answer
  *      first;
- *   2. then prompts they have no answer for, in prompt-code order (they
+ *   2. then prompts they have an own answer AND an Igala clip for, but no
+ *      English clip yet (`igalaDone: true`): the English clip is part of
+ *      finishing a prompt on the Record page, so these come back at the end
+ *      of the speaker's own answers with the Igala part shown as done;
+ *   3. then prompts they have no answer for, in prompt-code order (they
  *      write the answer first, then record it).
- * Frozen prompts (isHoldout or split "test") never appear, in either step:
- * the filter is in the query itself, not applied after the fact. Prompts the
- * researcher already recorded in Igala (non-demo) are done; the English clip
- * of an answer is optional and does not keep a prompt in the queue. `?exclude=a,b` skips
+ * Frozen prompts (isHoldout or split "test") never appear, in any step: the
+ * filter is in the query itself, not applied after the fact. A prompt is done
+ * once it has the speaker's Igala clip and English clip (non-demo). The
+ * answer carries its short English translation when one was typed. `?exclude=a,b` skips
  * prompts the screen has dismissed this visit. Demo mode (`?demo=<id>`)
  * ignores recording history, as the text queue does, so a live walkthrough
  * always has something to show.
@@ -43,10 +47,11 @@ export async function GET(req: Request) {
   // Step 1: own answers with no recording, oldest answer first. One row per
   // prompt (the latest answer if there are several). The same loader counts
   // what is waiting for the sidebar (lib/speech/record-queue.ts).
-  const { recordedIds, waiting: withAnswer } = await loadRecordQueue(
-    annotatorId,
-    { isDemo, exclude },
-  );
+  const {
+    recordedIds,
+    waiting: withAnswer,
+    englishMissing,
+  } = await loadRecordQueue(annotatorId, { isDemo, exclude });
 
   const progress = { recorded: recordedIds.length };
 
@@ -80,9 +85,15 @@ export async function GET(req: Request) {
     );
   };
 
-  if (withAnswer.length > 0) {
+  // Steps 1 and 2: an own answer that waits for a clip. Step 1 (no clip at
+  // all) is served before step 2 (the English clip is missing).
+  for (const [answers, igalaDone] of [
+    [withAnswer, false],
+    [englishMissing, true],
+  ] as const) {
+    if (answers.length === 0) continue;
     const ranked = await rankPrompts(
-      withAnswer.map((a) => ({ id: a.prompt.id, a })),
+      answers.map((a) => ({ id: a.prompt.id, a })),
     );
     const a = ranked[0].a;
     return NextResponse.json({
@@ -100,14 +111,18 @@ export async function GET(req: Request) {
           id: a.id,
           text: a.answerText,
           englishGloss: a.englishGloss,
+          englishTranslation: a.englishTranslation,
           dialect: a.dialect,
         },
         source: "own_answer" as const,
+        // True when the Igala clip is already saved and only the English
+        // clip is missing.
+        igalaDone,
       },
     });
   }
 
-  // Step 2: prompts with no answer of mine and no recording.
+  // Step 3: prompts with no answer of mine and no recording.
   const candidates = await prisma.prompt.findMany({
     take: 500,
     where: {

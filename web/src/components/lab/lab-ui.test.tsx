@@ -977,18 +977,23 @@ describe("the episode's Say it block", () => {
     expect(html).toContain(">Skip, no recording<");
   });
 
-  it("reads the locked English meaning when there is one", () => {
+  it("shows the locked English meaning as a reminder, and asks for a short translation to say", () => {
     const html = block("what it means");
+    expect(html).toContain("Your English meaning:");
     expect(html).toContain("what it means");
-    expect(html).toContain("Now say what it means, in English.");
+    expect(html).toContain("Short English translation");
+    // The new label (2026-11-13): the old one made speakers say "... means ...".
+    expect(html).toContain("Now say the same thing in English.");
+    expect(html).not.toContain("Now say what it means");
   });
 
-  it("with no meaning, shows the English prompt to read and says so", () => {
+  it("with no meaning the reminder is left out, and the English question is never read", () => {
     const html = block("   ");
-    expect(html).toContain("Say hello.");
-    expect(html).toContain(
-      "You wrote no English meaning, so read the English question instead.",
-    );
+    expect(html).not.toContain("Your English meaning:");
+    expect(html).toContain("Short English translation");
+    // The old fallback is gone: the speaker types the translation instead.
+    expect(html).not.toContain("read the English question instead");
+    expect(html).not.toContain("Say hello.");
   });
 
   it("is wired for any speaker the server allows, after the lock and before the outputs", () => {

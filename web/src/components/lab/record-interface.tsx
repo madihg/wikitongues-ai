@@ -6,17 +6,25 @@ import { ClipChoiceCard } from "./tier-default";
 import { AnswerBox } from "./record-parts";
 import { RecordClip, type ClipAnswerRef } from "./record-clip";
 import { useLabConsent } from "./use-lab-consent";
+import {
+  ENGLISH_CLIP_LABEL,
+  EnglishTranslationField,
+  TRANSLATION_OFF_REASON,
+} from "./english-translation";
+import { cleanTranslation, translationReady } from "@/lib/speech/limits";
 
 /**
  * The Record page, the catch-up place for past answers. One column, mobile
  * first:
  *   1. the prompt, then the researcher's own answer (or a box to write and
  *      lock one first);
- *   2. two clips of that answer, each a RecordClip: the Igala answer, then
- *      its English meaning (the answer's locked meaning, or the English
- *      question when no meaning was written, and the page says so). The
- *      English clip is optional; a prompt is done once its Igala clip is
- *      saved.
+ *   2. two clips of that answer, each a RecordClip: the Igala answer, then a
+ *      short English translation the speaker types in a few words and then
+ *      says. The longer English meaning shows above the box as a reminder
+ *      and is never what the clip reads. Both clips are needed to finish a
+ *      prompt here: "Next prompt" shows once both are saved, and "Skip this
+ *      prompt" stays. A prompt whose Igala clip is already saved comes back
+ *      with that part shown as done.
  * Recording is disabled until the consent for the current text version is on
  * record. Everything inside a clip (feedback, Keep, tier, save) is
  * record-clip.tsx; the Episode's "Say it" block uses the same component.
@@ -28,9 +36,13 @@ interface QueueTask {
     id: string;
     text: string;
     englishGloss?: string | null;
+    /** The short English translation, once typed and saved. */
+    englishTranslation?: string | null;
     dialect: string | null;
   } | null;
   source: "own_answer" | "no_answer";
+  /** The Igala clip is already saved: only the English clip is missing. */
+  igalaDone?: boolean;
 }
 
 type QueueState =
@@ -66,6 +78,11 @@ export function RecordInterface() {
   // so the second clip attaches to it instead of making another.
   const [createdAnswerId, setCreatedAnswerId] = useState<string | null>(null);
   const [savedIgala, setSavedIgala] = useState(false);
+  const [savedEnglish, setSavedEnglish] = useState(false);
+  // The short English translation as typed, and whether the English clip is
+  // holding a take (the words must not change under a take).
+  const [translation, setTranslation] = useState("");
+  const [englishHasTake, setEnglishHasTake] = useState(false);
   const [busy, setBusy] = useState({ igala: false, english: false });
   // Bumped to remount the clips for the next prompt.
   const [round, setRound] = useState(0);
@@ -143,11 +160,24 @@ export function RecordInterface() {
         : null;
 
   const gloss = task?.ownAnswer?.englishGloss?.trim() ?? "";
+  // The words the English clip reads: the translation already saved with the
+  // answer, or the one being typed. Never the longer meaning.
+  const savedTranslation = task?.ownAnswer?.englishTranslation?.trim() ?? "";
+  const englishText = savedTranslation || cleanTranslation(translation);
+  const englishOffReason =
+    offReason ?? (translationReady(englishText) ? null : TRANSLATION_OFF_REASON);
+  // The Igala part is done when it was saved before (the prompt came back for
+  // its English clip) or just now.
+  const igalaDone = task?.igalaDone === true || savedIgala;
+  const promptDone = igalaDone && savedEnglish;
   const nextPrompt = () => {
     setDraft("");
     setLockedText(null);
     setCreatedAnswerId(null);
     setSavedIgala(false);
+    setSavedEnglish(false);
+    setTranslation("");
+    setEnglishHasTake(false);
     setBusy({ igala: false, english: false });
     setRound((r) => r + 1);
     void loadNext();
@@ -255,47 +285,64 @@ export function RecordInterface() {
 
       {task && (
         <div key={`${task.prompt.promptId}-${round}`} className="space-y-4">
-          <RecordClip
-            language="igala"
-            promptCode={task.prompt.promptId}
-            textToRead={answerText ?? "Your answer appears here once it is locked."}
-            textLabel="Read your answer out loud."
-            textIsIgala
-            syllableText={answerText ?? ""}
-            answer={answerRef}
-            dialect={task.ownAnswer?.dialect}
-            demoSessionId={demoRef.current}
-            consentOk={consentOk}
-            offReason={offReason}
-            licensedAllowed={licensedAllowed}
-            cloningAllowed={cloningAllowed}
-            rememberedChoice={rememberedChoice}
-            onRememberChoice={saveClipChoice}
-            rememberError={choiceError}
-            blocked={busy.english}
-            onBusyChange={(b) => setBusy((s) => (s.igala === b ? s : { ...s, igala: b }))}
-            onConsentRequired={needAgain}
-            onSaved={(c) => {
-              setSavedIgala(true);
-              if (c.coldAuthorAnswerId) setCreatedAnswerId(c.coldAuthorAnswerId);
-            }}
-          />
+          {task.igalaDone ? (
+            <p
+              data-testid="igala-done"
+              className="rounded-lg border border-success bg-success-subtle p-4 text-sm text-text-primary"
+            >
+              Your Igala clip is saved. One more: the English.
+            </p>
+          ) : (
+            <RecordClip
+              language="igala"
+              promptCode={task.prompt.promptId}
+              textToRead={answerText ?? "Your answer appears here once it is locked."}
+              textLabel="Read your answer out loud."
+              textIsIgala
+              syllableText={answerText ?? ""}
+              answer={answerRef}
+              dialect={task.ownAnswer?.dialect}
+              demoSessionId={demoRef.current}
+              consentOk={consentOk}
+              offReason={offReason}
+              licensedAllowed={licensedAllowed}
+              cloningAllowed={cloningAllowed}
+              rememberedChoice={rememberedChoice}
+              onRememberChoice={saveClipChoice}
+              rememberError={choiceError}
+              blocked={busy.english}
+              onBusyChange={(b) => setBusy((s) => (s.igala === b ? s : { ...s, igala: b }))}
+              onConsentRequired={needAgain}
+              onSaved={(c) => {
+                setSavedIgala(true);
+                if (c.coldAuthorAnswerId) setCreatedAnswerId(c.coldAuthorAnswerId);
+              }}
+            />
+          )}
           <RecordClip
             language="english"
             promptCode={task.prompt.promptId}
-            textToRead={gloss || task.prompt.text}
-            textLabel={
-              gloss
-                ? "Now say what it means, in English (optional)."
-                : "No English meaning was written for this answer, so read the English question instead (optional)."
-            }
+            textToRead={englishText}
+            textLabel={ENGLISH_CLIP_LABEL}
             textIsIgala={false}
-            syllableText={gloss || task.prompt.text}
+            syllableText={englishText}
+            englishTranslation={englishText}
+            onTakeChange={setEnglishHasTake}
+            before={
+              <EnglishTranslationField
+                id="record-translation"
+                meaning={gloss}
+                value={translation}
+                onChange={setTranslation}
+                saved={savedTranslation || null}
+                locked={englishHasTake || busy.english || savedEnglish}
+              />
+            }
             answer={answerRef}
             dialect={task.ownAnswer?.dialect}
             demoSessionId={demoRef.current}
             consentOk={consentOk}
-            offReason={offReason}
+            offReason={englishOffReason}
             licensedAllowed={licensedAllowed}
             cloningAllowed={cloningAllowed}
             rememberedChoice={rememberedChoice}
@@ -305,10 +352,11 @@ export function RecordInterface() {
             onBusyChange={(b) => setBusy((s) => (s.english === b ? s : { ...s, english: b }))}
             onConsentRequired={needAgain}
             onSaved={(c) => {
+              setSavedEnglish(true);
               if (c.coldAuthorAnswerId) setCreatedAnswerId(c.coldAuthorAnswerId);
             }}
           />
-          {savedIgala && !anyBusy && (
+          {promptDone && !anyBusy && (
             <button type="button" onClick={nextPrompt} className={NEXT_BUTTON}>
               Next prompt
             </button>
@@ -316,7 +364,7 @@ export function RecordInterface() {
         </div>
       )}
 
-      {task && !savedIgala && !anyBusy && (
+      {task && !promptDone && !anyBusy && (
         <button
           type="button"
           onClick={skip}

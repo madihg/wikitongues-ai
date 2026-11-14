@@ -5,8 +5,13 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
   mockPrisma: {
     prompt: { findUnique: vi.fn() },
     consentGrant: { findFirst: vi.fn() },
-    coldAuthorAnswer: { findFirst: vi.fn(), create: vi.fn() },
+    coldAuthorAnswer: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      updateMany: vi.fn(),
+    },
     speechRecording: { create: vi.fn() },
+    $transaction: vi.fn(),
   },
   mockRequireResearcher: vi.fn(),
 }));
@@ -62,6 +67,10 @@ beforeEach(() => {
   mockPrisma.coldAuthorAnswer.create.mockResolvedValue({ id: "ans-new" });
   mockPrisma.speechRecording.create.mockImplementation(
     async ({ data }: { data: { id: string } }) => ({ id: data.id }),
+  );
+  mockPrisma.coldAuthorAnswer.updateMany.mockResolvedValue({ count: 1 });
+  mockPrisma.$transaction.mockImplementation((ops: Promise<unknown>[]) =>
+    Promise.all(ops),
   );
 });
 afterEach(() => {
@@ -371,5 +380,108 @@ describe("POST /api/lab/speech/recording: happy path", () => {
       isDemo: true,
       demoSessionId: "sess-1",
     });
+  });
+});
+
+describe("POST /api/lab/speech/recording: the short English translation", () => {
+  const english = {
+    ...valid,
+    language: "english",
+    coldAuthorAnswerId: "ans-1",
+    englishTranslation: "  Good   morning, elder ",
+  };
+  const clipData = () => mockPrisma.speechRecording.create.mock.calls[0][0].data;
+
+  it("stores the words the clip read on the clip, cleaned", async () => {
+    const res = await post(english);
+    expect(res.status).toBe(201);
+    expect(clipData().spokenText).toBe("Good morning, elder");
+    expect(clipData().language).toBe("english");
+  });
+
+  it("saves it on the speaker's own answer, only while that answer has none, in one transaction with the clip", async () => {
+    await post(english);
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.coldAuthorAnswer.updateMany).toHaveBeenCalledTimes(1);
+    const upd = mockPrisma.coldAuthorAnswer.updateMany.mock.calls[0][0];
+    expect(upd.data).toEqual({ englishTranslation: "Good morning, elder" });
+    expect(upd.where).toEqual({
+      id: "ans-1",
+      annotatorId: "r1",
+      OR: [{ englishTranslation: null }, { englishTranslation: "" }],
+    });
+    // The answer was checked to be the caller's own, for this prompt, first.
+    expect(mockPrisma.coldAuthorAnswer.findFirst.mock.calls[0][0].where).toEqual({
+      id: "ans-1",
+      annotatorId: "r1",
+      promptId: "p-1",
+    });
+  });
+
+  it("saves it on an answer locked in the same call", async () => {
+    const { coldAuthorAnswerId: _drop, ...rest } = english;
+    void _drop;
+    const res = await post({ ...rest, answerText: "a stand-in answer" });
+    expect(res.status).toBe(201);
+    expect(mockPrisma.coldAuthorAnswer.updateMany.mock.calls[0][0].where.id).toBe(
+      "ans-new",
+    );
+  });
+
+  it("an unattached clip (the episode's Say it block) keeps the words; no answer is written", async () => {
+    const { coldAuthorAnswerId: _drop, ...rest } = english;
+    void _drop;
+    const res = await post(rest);
+    expect(res.status).toBe(201);
+    expect(clipData().spokenText).toBe("Good morning, elder");
+    expect(mockPrisma.coldAuthorAnswer.updateMany).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("a clip without a translation is saved exactly as before", async () => {
+    for (const body of [valid, { ...valid, language: "english" }]) {
+      vi.clearAllMocks();
+      mockPrisma.prompt.findUnique.mockResolvedValue(PROMPT);
+      mockPrisma.consentGrant.findFirst.mockResolvedValue(GRANT);
+      mockPrisma.speechRecording.create.mockImplementation(
+        async ({ data }: { data: { id: string } }) => ({ id: data.id }),
+      );
+      expect((await post(body)).status).toBe(201);
+      expect("spokenText" in clipData()).toBe(false);
+      expect(mockPrisma.coldAuthorAnswer.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    }
+  });
+
+  it("400 on an Igala clip, on text that is too short or too long, or that is not text", async () => {
+    for (const body of [
+      { ...english, language: "igala" },
+      { ...valid, englishTranslation: "good morning" }, // igala by default
+      { ...english, englishTranslation: " a " },
+      { ...english, englishTranslation: "x".repeat(201) },
+      { ...english, englishTranslation: 7 },
+    ]) {
+      expect((await post(body)).status, JSON.stringify(body).slice(0, 80)).toBe(400);
+    }
+    expect(created()).toBe(0);
+    expect(mockPrisma.coldAuthorAnswer.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("a studio clip never reads it", async () => {
+    const res = await post({
+      ...valid,
+      studioSessionId: "sess_12345678",
+      studioText: "a script line",
+      englishTranslation: "good morning",
+    });
+    expect(res.status).toBe(201);
+    expect("spokenText" in clipData()).toBe(false);
+  });
+
+  it("still refuses a clip with no tier", async () => {
+    const { tier: _t, ...noTier } = english;
+    void _t;
+    expect((await post(noTier)).status).toBe(400);
+    expect(created()).toBe(0);
   });
 });

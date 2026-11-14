@@ -211,18 +211,19 @@ describe("GET /api/lab/speech/next", () => {
     });
   });
 
-  it("leaves out prompts already recorded for real in Igala (an English clip alone does not finish a prompt)", async () => {
+  it("leaves out of the first step prompts already recorded for real in Igala", async () => {
     mockPrisma.speechRecording.findMany.mockResolvedValue([
-      { promptId: "p-1" },
-      { promptId: "p-1" },
-      { promptId: "p-2" },
+      { promptId: "p-1", language: "igala" },
+      { promptId: "p-1", language: "igala" },
+      { promptId: "p-2", language: "igala" },
+      { promptId: "p-2", language: "english" },
     ]);
     const body = await (await get()).json();
     expect(body.progress.recorded).toBe(2);
+    // One read of the speaker's own real clips, both languages.
     expect(mockPrisma.speechRecording.findMany.mock.calls[0][0].where).toEqual({
       annotatorId: "r1",
       isDemo: false,
-      language: "igala",
     });
     expect(
       mockPrisma.coldAuthorAnswer.findMany.mock.calls[0][0].where.prompt.id,
@@ -231,6 +232,121 @@ describe("GET /api/lab/speech/next", () => {
     });
     expect(mockPrisma.prompt.findMany.mock.calls[0][0].where.id).toEqual({
       notIn: ["p-1", "p-2"],
+    });
+  });
+
+  describe("the English clip is part of finishing a prompt (decision 2, 2026-11-13)", () => {
+    /** Own clips: p-1 has both, p-2 has Igala only. */
+    const clips = [
+      { promptId: "p-1", language: "igala" },
+      { promptId: "p-1", language: "english" },
+      { promptId: "p-2", language: "igala" },
+    ];
+    const answersBy = (rows: Record<string, unknown>[]) =>
+      mockPrisma.coldAuthorAnswer.findMany.mockImplementation(
+        async (args: {
+          where: {
+            prompt: {
+              id: { in?: string[]; notIn?: string[] };
+              promptId: { notIn: string[] };
+            };
+          };
+        }) => {
+          const { id: ids, promptId: codes } = args.where.prompt;
+          return rows.filter(
+            (r) =>
+              !codes.notIn.includes((r.prompt as { promptId: string }).promptId) &&
+              (ids.in
+                ? ids.in.includes(r.promptId as string)
+                : !ids.notIn?.includes(r.promptId as string)),
+          );
+        },
+      );
+    const row = (n: number, over: Record<string, unknown> = {}) =>
+      answerRow({
+        id: `ans-${n}`,
+        promptId: `p-${n}`,
+        createdAt: new Date(Date.UTC(2026, 9, n)),
+        prompt: {
+          id: `p-${n}`,
+          promptId: `code_00${n}`,
+          text: "Say hello.",
+          bucket: "orthography",
+        },
+        ...over,
+      });
+
+    it("a prompt with an Igala clip and no English clip comes back, with the Igala part done", async () => {
+      mockPrisma.speechRecording.findMany.mockResolvedValue(clips);
+      answersBy([row(1), row(2)]);
+      const body = await (await get()).json();
+      expect(body.complete).toBe(false);
+      expect(body.task.prompt.promptId).toBe("code_002");
+      expect(body.task.igalaDone).toBe(true);
+      expect(body.task.source).toBe("own_answer");
+      // Asked only about the prompts missing their English clip.
+      expect(
+        mockPrisma.coldAuthorAnswer.findMany.mock.calls[1][0].where.prompt.id,
+      ).toEqual({ in: ["p-2"] });
+      // The no-answer step is not consulted while an own answer waits.
+      expect(mockPrisma.prompt.findMany).not.toHaveBeenCalled();
+    });
+
+    it("a prompt with both clips is done and never comes back", async () => {
+      mockPrisma.speechRecording.findMany.mockResolvedValue(clips.slice(0, 2));
+      answersBy([row(1)]);
+      const body = await (await get()).json();
+      expect(body.complete).toBe(true);
+      // Nothing is missing English, so that query is not even made.
+      expect(mockPrisma.coldAuthorAnswer.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it("answers with no clip at all are served first, English-missing ones after them", async () => {
+      mockPrisma.speechRecording.findMany.mockResolvedValue(clips);
+      answersBy([row(1), row(2), row(3)]);
+      const first = await (await get()).json();
+      expect(first.task.prompt.promptId).toBe("code_003");
+      expect(first.task.igalaDone).toBe(false);
+      // Once that one is skipped, the English-missing prompt is next.
+      const second = await (await get("?exclude=code_003")).json();
+      expect(second.task.prompt.promptId).toBe("code_002");
+      expect(second.task.igalaDone).toBe(true);
+    });
+
+    it("the English-missing step honours ?exclude and the frozen filter, and never serves a demo answer", async () => {
+      mockPrisma.speechRecording.findMany.mockResolvedValue(clips);
+      await get("?exclude=code_002");
+      const where = mockPrisma.coldAuthorAnswer.findMany.mock.calls[1][0].where;
+      expect(where.annotatorId).toBe("r1");
+      expect(where.isDemo).toBe(false);
+      expect(where.prompt.promptId).toEqual({ notIn: ["code_002"] });
+      expect(where.prompt.isHoldout).toBe(false);
+      expect(where.prompt.split).toEqual({ not: "test" });
+    });
+
+    it("the answer rides along with its short English translation", async () => {
+      mockPrisma.speechRecording.findMany.mockResolvedValue(clips);
+      answersBy([row(2, { englishTranslation: "good morning" })]);
+      const body = await (await get()).json();
+      expect(body.task.ownAnswer).toEqual({
+        id: "ans-2",
+        text: "an english stand-in answer",
+        englishGloss: "what it means in english",
+        englishTranslation: "good morning",
+        dialect: null,
+      });
+      expect(
+        mockPrisma.coldAuthorAnswer.findMany.mock.calls[0][0].select
+          .englishTranslation,
+      ).toBe(true);
+    });
+
+    it("demo mode has no English-missing step: it ignores recording history", async () => {
+      mockPrisma.speechRecording.findMany.mockResolvedValue(clips);
+      answersBy([row(2)]);
+      const body = await (await get("?demo=s1")).json();
+      expect(body.task.igalaDone).toBe(false);
+      expect(mockPrisma.coldAuthorAnswer.findMany).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -29,11 +29,19 @@ export interface ManifestRow extends ExportableRow {
   language?: string;
   /** The script line a studio clip read (PR H); its transcript when set. */
   studioText?: string | null;
+  /**
+   * The exact English words an English clip read: the short translation as
+   * typed at the time. Null for clips made before the translation existed
+   * (they read the meaning, or the English question).
+   */
+  spokenText?: string | null;
   /** The speaker's locked answer for this clip, tone-retained as written. */
   coldAuthorAnswer?: {
     answerText: string;
-    /** The locked English meaning: the transcript of an English clip. */
+    /** The locked English meaning: what older English clips read. */
     englishGloss?: string | null;
+    /** The short English translation of the answer, when one was typed. */
+    englishTranslation?: string | null;
   } | null;
   /**
    * The speaker's profile (SpeakerProfile), joined in by loadOpenRows.
@@ -64,11 +72,18 @@ export interface ManifestLine {
   sampleRate: number;
   /**
    * What was said, in the clip's language: the Igala answer as locked
-   * (tone-retained) for an Igala clip; the locked English meaning for an
-   * English clip (the English prompt text when the speaker had no meaning to
-   * read); null if nothing is attached.
+   * (tone-retained) for an Igala clip. For an English clip, the words it
+   * read: the short translation when the clip recorded one, else (older
+   * clips) the locked English meaning, else the English prompt text; null if
+   * nothing is attached.
    */
   transcript: string | null;
+  /**
+   * The answer's short English translation, on Igala and English lines alike,
+   * so the Igala audio is paired with it. The key is absent when the speaker
+   * typed none.
+   */
+  englishTranslation?: string;
   /** The same text with tone marks removed by the shared normaliser (Igala
    * clips; an English transcript has no tone marks to strip). */
   transcriptToneStripped: string | null;
@@ -109,9 +124,19 @@ export function transcriptFor(
   if (language === "igala") {
     return r.coldAuthorAnswer?.answerText.normalize("NFC") ?? null;
   }
+  // The clip's own record of what it read wins. It is exact, and it stays
+  // right if the answer's translation or meaning is edited later.
+  const spoken = r.spokenText?.trim();
+  if (spoken) return spoken.normalize("NFC");
   const gloss = r.coldAuthorAnswer?.englishGloss?.trim();
   if (gloss) return gloss.normalize("NFC");
   return r.prompt?.text?.trim() || null;
+}
+
+/** The answer's short English translation, or nothing. */
+function shortTranslation(r: ManifestRow): { englishTranslation?: string } {
+  const t = r.coldAuthorAnswer?.englishTranslation?.trim();
+  return t ? { englishTranslation: t.normalize("NFC") } : {};
 }
 
 /** ageBand and gender, only for a speaker who allowed sharing them. */
@@ -140,6 +165,7 @@ export function buildOpenManifest(rows: ManifestRow[]): ManifestLine[] {
       transcript,
       transcriptToneStripped:
         transcript === null ? null : toneStrip(transcript),
+      ...shortTranslation(r),
       speaker: speakerPseudonym(r.annotatorId),
       dialect: r.dialect ?? r.speakerProfile?.dialect ?? null,
       ...sharedDemographics(r),

@@ -5,13 +5,20 @@ import { ConsentGate } from "./consent-gate";
 import { ClipChoiceCard } from "./tier-default";
 import { RecordClip } from "./record-clip";
 import { useLabConsent } from "./use-lab-consent";
+import {
+  ENGLISH_CLIP_LABEL,
+  EnglishTranslationField,
+  TRANSLATION_OFF_REASON,
+} from "./english-translation";
+import { cleanTranslation, translationReady } from "@/lib/speech/limits";
 
 /**
  * The "Say it" block: the speech layer inside the text episode, shown to
  * researchers, and to annotators while SPEECH_LAYER_ANNOTATORS is on, right
- * after the cold answer is locked and before the pairwise step. Two optional clips: the Igala answer, and its
- * English meaning (the locked englishGloss; when that is empty, the English
- * prompt text to read instead, and the block says so). Each has its own
+ * after the cold answer is locked and before the pairwise step. Two optional
+ * clips: the Igala answer, and a short English translation the speaker types
+ * in a few words and then says (the locked English meaning shows above the
+ * box as a reminder and is never what the clip reads). Each has its own
  * record control, the same RecordClip as the Record page.
  *
  * The block never blocks the episode: "Skip, no recording" goes straight on to
@@ -19,13 +26,15 @@ import { useLabConsent } from "./use-lab-consent";
  * answer is already locked and the AI outputs are still unseen, so nothing
  * recorded here can be influenced by them. The clips are created unattached
  * (the answer row does not exist until the episode is submitted); the parent
- * attaches them after submit through /api/lab/speech/attach. A speaker
+ * attaches them after submit through /api/lab/speech/attach, which also
+ * gives the new answer the translation the English clip read. A speaker
  * who has not given consent is shown the consent screen here, and may skip it.
  */
 
 export interface SayItBlockProps {
   promptCode: string;
-  promptText: string;
+  /** The English question. No longer read aloud: the speaker types a translation instead. */
+  promptText?: string;
   igalaText: string;
   /** The locked English meaning; empty when the speaker wrote none. */
   glossText: string;
@@ -39,7 +48,6 @@ export interface SayItBlockProps {
 
 export function SayItBlock({
   promptCode,
-  promptText,
   igalaText,
   glossText,
   dialect,
@@ -60,6 +68,9 @@ export function SayItBlock({
   } = useLabConsent();
   const [saved, setSaved] = useState(0);
   const [busy, setBusy] = useState({ igala: false, english: false });
+  const [translation, setTranslation] = useState("");
+  const [englishHasTake, setEnglishHasTake] = useState(false);
+  const [savedEnglish, setSavedEnglish] = useState(false);
 
   const consentOk = consent.status === "granted";
   // Asked once, straight after consent (the same card as the Record page).
@@ -80,6 +91,10 @@ export function SayItBlock({
   const cloningAllowed =
     consent.status === "granted" ? consent.grant.voiceCloning : false;
   const gloss = glossText.trim();
+  // The English clip reads the typed translation, never the longer meaning.
+  const englishText = cleanTranslation(translation);
+  const englishOffReason =
+    offReason ?? (translationReady(englishText) ? null : TRANSLATION_OFF_REASON);
   const anyBusy = busy.igala || busy.english;
 
   return (
@@ -91,7 +106,8 @@ export function SayItBlock({
       <div>
         <h3 className="text-sm font-semibold text-text-primary">Say it</h3>
         <p className="mt-1 text-sm text-text-secondary">
-          Optional. Record your answer out loud, and what it means in English.
+          Optional. Record your answer out loud, then a short English
+          translation of it.
           Your answer stays locked, and you have not seen the AI outputs yet.
         </p>
       </div>
@@ -148,19 +164,26 @@ export function SayItBlock({
       <RecordClip
         language="english"
         promptCode={promptCode}
-        textToRead={gloss || promptText}
-        textLabel={
-          gloss
-            ? "Now say what it means, in English."
-            : "You wrote no English meaning, so read the English question instead."
-        }
+        textToRead={englishText}
+        textLabel={ENGLISH_CLIP_LABEL}
         textIsIgala={false}
-        syllableText={gloss || promptText}
+        syllableText={englishText}
+        englishTranslation={englishText}
+        onTakeChange={setEnglishHasTake}
+        before={
+          <EnglishTranslationField
+            id="say-it-translation"
+            meaning={gloss}
+            value={translation}
+            onChange={setTranslation}
+            locked={englishHasTake || busy.english || savedEnglish}
+          />
+        }
         answer={null}
         dialect={dialect}
         demoSessionId={demoSessionId}
         consentOk={consentOk}
-        offReason={offReason}
+        offReason={englishOffReason}
         licensedAllowed={licensedAllowed}
         cloningAllowed={cloningAllowed}
         rememberedChoice={rememberedChoice}
@@ -171,6 +194,7 @@ export function SayItBlock({
         onConsentRequired={needAgain}
         onSaved={(c) => {
           setSaved((n) => n + 1);
+          setSavedEnglish(true);
           onClipSaved(c.id);
         }}
       />

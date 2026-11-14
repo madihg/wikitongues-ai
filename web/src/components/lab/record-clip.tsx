@@ -58,8 +58,21 @@ export interface ClipAnswerRef {
 export interface RecordClipProps {
   language: SpeechLanguage;
   promptCode: string;
-  /** The words to say, shown above the record button. */
+  /** The words to say, shown above the record button. Empty: nothing shows. */
   textToRead: string;
+  /**
+   * Rendered under the heading, before the label and the words: the English
+   * clip's short translation box (english-translation.tsx).
+   */
+  before?: React.ReactNode;
+  /**
+   * English clips only: the short English translation the speaker typed and
+   * is reading. Sent with the clip, stored as the words it read, and saved on
+   * the answer the first time.
+   */
+  englishTranslation?: string | null;
+  /** A take exists (recorded or saving): the words being read must not change. */
+  onTakeChange?: (hasTake: boolean) => void;
   /** Shown above the words (for example "Your answer" or the no-meaning note). */
   textLabel: string;
   /** Igala text renders in the Igala face. */
@@ -158,6 +171,9 @@ export function RecordClip(props: RecordClipProps) {
     textLabel,
     textIsIgala,
     syllableText,
+    before,
+    englishTranslation,
+    onTakeChange,
     answer,
     dialect,
     demoSessionId,
@@ -220,6 +236,16 @@ export function RecordClip(props: RecordClipProps) {
 
   // Analyse each new take as soon as the recorder hands it over.
   const take = recorder.state === "recorded" ? recorder.take : null;
+  // Tell the parent while words are being read or a take is held, through a
+  // ref for the same reason as onBusyChange above.
+  const onTakeChangeRef = useRef(onTakeChange);
+  useEffect(() => {
+    onTakeChangeRef.current = onTakeChange;
+  });
+  const holdsTake = recorder.state !== "idle";
+  useEffect(() => {
+    onTakeChangeRef.current?.(holdsTake);
+  }, [holdsTake]);
   useEffect(() => {
     if (!take) return;
     let live = true;
@@ -304,6 +330,9 @@ export function RecordClip(props: RecordClipProps) {
               : answer?.answerText
                 ? { answerText: answer.answerText }
                 : {}),
+            ...(language === "english" && englishTranslation
+              ? { englishTranslation }
+              : {}),
             ...(dialect ? { dialect } : {}),
             ...(demoSessionId ? { demoSessionId } : {}),
           },
@@ -339,12 +368,16 @@ export function RecordClip(props: RecordClipProps) {
       <h3 className="text-sm font-semibold text-text-primary">
         Say it in {label}
       </h3>
+      {before && <div className="mt-3">{before}</div>}
       <p className="mt-2 text-xs text-text-tertiary">{textLabel}</p>
-      <p
-        className={`${textIsIgala ? "igala " : ""}mt-1 text-base text-text-primary`}
-      >
-        {textToRead}
-      </p>
+      {textToRead && (
+        <p
+          data-testid="text-to-read"
+          className={`${textIsIgala ? "igala " : ""}mt-1 text-base text-text-primary`}
+        >
+          {textToRead}
+        </p>
+      )}
 
       <div className="mt-4">
         {upload.status === "uploading" ? (

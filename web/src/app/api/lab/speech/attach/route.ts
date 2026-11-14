@@ -16,6 +16,12 @@ import { labGate } from "@/lib/speech/lab-route";
  * Body: { promptId (public code), recordingIds: string[] (at most 4) }
  *   400  bad body
  *   404  unknown prompt, or the caller has no answer for it
+ * An English clip recorded in the block carries the short English
+ * translation it read (`spokenText`). The answer did not exist then, so the
+ * translation reaches it here: once the clip is attached, an answer with no
+ * translation yet takes the clip's. An answer that already has one is left
+ * alone.
+ *
  * Returns { attached: n }. Never touches tier, consent or rights.
  */
 
@@ -56,7 +62,7 @@ export async function POST(req: Request) {
       promptId: prompt.id,
       coldAuthorAnswerId: null,
     },
-    select: { id: true, isDemo: true },
+    select: { id: true, isDemo: true, language: true, spokenText: true },
   });
 
   let attached = 0;
@@ -74,6 +80,25 @@ export async function POST(req: Request) {
       data: { coldAuthorAnswerId: answer.id },
     });
     attached += r.count;
+
+    // An English clip's words become the answer's translation, if the
+    // answer has none.
+    const spoken = clips
+      .filter(
+        (c) => c.isDemo === isDemo && c.language === "english" && c.spokenText,
+      )
+      .map((c) => c.spokenText as string)
+      .pop();
+    if (spoken && r.count > 0) {
+      await prisma.coldAuthorAnswer.updateMany({
+        where: {
+          id: answer.id,
+          annotatorId: gate.userId,
+          OR: [{ englishTranslation: null }, { englishTranslation: "" }],
+        },
+        data: { englishTranslation: spoken },
+      });
+    }
   }
   if (attached === 0 && clips.length > 0) {
     return NextResponse.json({ error: "Answer not found" }, { status: 404 });

@@ -29,6 +29,8 @@ export interface RecordingItem {
   promptText: string;
   answerText: string | null;
   englishGloss?: string | null;
+  /** The exact words an English clip read; absent on older clips. */
+  spokenText?: string | null;
   language: SpeechLanguage;
   quality: QualityMetrics | null;
   flags: VerdictKey[];
@@ -159,7 +161,9 @@ export function RecordingCard({
         )
       ) : (
         <p className="mt-2 text-sm text-text-secondary">
-          {item.englishGloss?.trim() || item.promptText}
+          {item.spokenText?.trim() ||
+            item.englishGloss?.trim() ||
+            item.promptText}
         </p>
       )}
       <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-tertiary">
