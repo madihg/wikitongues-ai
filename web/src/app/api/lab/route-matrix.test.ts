@@ -212,6 +212,47 @@ const ROUTES: Route[] = [
         m.POST(json("POST", "speech/freeze")),
       ),
   },
+  {
+    name: "POST consent/withdraw",
+    file: "consent/withdraw/route.ts",
+    audience: "speaker",
+    call: async () => () =>
+      load<{ POST: (r: Request) => Promise<Response> }>("./consent/withdraw/route").then((m) =>
+        m.POST(json("POST", "consent/withdraw")),
+      ),
+  },
+  {
+    name: "GET speech/listen/decision",
+    file: "speech/listen/decision/route.ts",
+    audience: "researcher",
+    call: async () =>
+      (await load<{ GET: () => Promise<Response> }>("./speech/listen/decision/route")).GET,
+  },
+  {
+    name: "POST speech/minimal-pairs",
+    file: "speech/minimal-pairs/route.ts",
+    audience: "researcher",
+    call: async () => () =>
+      load<{ POST: (r: Request) => Promise<Response> }>("./speech/minimal-pairs/route").then((m) =>
+        m.POST(json("POST", "speech/minimal-pairs")),
+      ),
+  },
+  {
+    name: "GET speech/minimal-pairs",
+    file: "speech/minimal-pairs/route.ts",
+    audience: "researcher",
+    call: async () =>
+      (await load<{ GET: () => Promise<Response> }>("./speech/minimal-pairs/route")).GET,
+  },
+  {
+    name: "GET speech/studio",
+    file: "speech/studio/route.ts",
+    audience: "researcher",
+    call: async () => () =>
+      load<{ GET: (r: Request) => Promise<Response> }>("./speech/studio/route").then((m) =>
+        m.GET(new Request(url("speech/studio"))),
+      ),
+  },
 ];
 
 type Who = "researcher" | "annotator" | "learner" | "signed-out";

@@ -16,11 +16,12 @@ import { withdrawSpeaker } from "@/lib/speech/withdrawal";
  * speaker's clips that are not yet published as withdrawn, in one transaction
  * (withdrawal.ts). Published open clips are untouched: open data is permanent.
  *
- * Only the caller's own account is ever withdrawn. When PR G widens the
- * speaker routes to annotators (canUseSpeech), this route moves with them.
+ * Only the caller's own account is ever withdrawn. The audience is "speaker",
+ * the same as the consent route: an annotator who can grant consent with
+ * SPEECH_LAYER_ANNOTATORS on can also withdraw it.
  */
 export async function POST(req: Request) {
-  const gate = await labGate();
+  const gate = await labGate({ audience: "speaker" });
   if (gate.error) return gate.error;
 
   const body = await req.json().catch(() => null);
