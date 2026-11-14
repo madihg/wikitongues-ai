@@ -1,6 +1,8 @@
 import { ContestedItems } from "@/components/arena/contested-items";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
-export default function ContestedPage() {
+export default async function ContestedPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8">
