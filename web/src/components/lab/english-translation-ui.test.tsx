@@ -298,9 +298,9 @@ describe("the export carries the translation as its own column", () => {
   });
 });
 
-describe("migration 20261113151000_english_translation", () => {
+describe("migration 20261113161000_english_translation", () => {
   const root = join(dir, "..", "..", "..", "prisma");
-  const mdir = join(root, "migrations", "20261113151000_english_translation");
+  const mdir = join(root, "migrations", "20261113161000_english_translation");
   const up = readFileSync(join(mdir, "migration.sql"), "utf8");
   const down = readFileSync(join(mdir, "down.sql"), "utf8");
   const schema = readFileSync(join(root, "schema.prisma"), "utf8");

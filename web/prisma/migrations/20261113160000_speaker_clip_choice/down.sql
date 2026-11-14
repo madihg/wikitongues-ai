@@ -1,4 +1,4 @@
--- Reverses 20261113150000_speaker_clip_choice. Destroys every speaker's
+-- Reverses 20261113160000_speaker_clip_choice. Destroys every speaker's
 -- remembered clip choice (they are asked again). Recordings keep their own
 -- tier and are not touched.
 SET search_path TO "wikitongues", "extensions", "public";

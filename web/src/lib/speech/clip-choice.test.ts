@@ -177,9 +177,9 @@ describe("the titles are the ones the cards have always carried", () => {
   });
 });
 
-describe("migration 20261113150000_speaker_clip_choice", () => {
+describe("migration 20261113160000_speaker_clip_choice", () => {
   const root = join(__dirname, "..", "..", "..", "prisma");
-  const dir = join(root, "migrations", "20261113150000_speaker_clip_choice");
+  const dir = join(root, "migrations", "20261113160000_speaker_clip_choice");
   const up = readFileSync(join(dir, "migration.sql"), "utf8");
   const down = readFileSync(join(dir, "down.sql"), "utf8");
   const schema = readFileSync(join(root, "schema.prisma"), "utf8");
