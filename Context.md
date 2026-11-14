@@ -2514,3 +2514,27 @@ non-publishable.
 - Queue state on Nov 13 (`scripts/check-queue-servable.ts`): 299 servable prompts; remaining per active speaker 0, 3, 61, 126. The two who ran out get about 35 hours each from the 200 text prompts at the measured 10.3 to 10.6 minutes a prompt. A 70 hour contract needs a second batch or the 165 unserved long-form prompts.
 - Word strength has no tag. The ladders (family `inten`) make it countable; a "too strong or too weak" tag and a "word order" tag are proposed in the gap analysis, section 6.
 - Speech coverage figures are expected from published word forms, not heard. Recount after the clips exist.
+
+## Session State (2026-11-13, Fable 5.2) - SPEECH IN PRODUCTION, ANNOTATOR RELEASE, DASHBOARD, SITE REBUILD (multi-agent program)
+
+Task (Halim, Nov 13): first speech model rated by speakers; speakers recording; clean the voices; text and voice as one annotator experience; speech out of beta into production; measure the model automatically and by ratings; simplify the researcher dashboard; merge the marketing site and How it works with an animated diagram; update the design language; humanize the copy; new prompts; a PRD; then email Agnes with a 5-slide deck.
+
+The orchestrator's full running log, briefs and every agent report live outside the repo in ~/wt-clones/program-nov13/ (PROGRAM.md, BRIEFS.md, BRIEFS-WAVE2.md, DECISIONS.md, STATE.md, out/<lane>/). Read STATE.md first when picking this up.
+
+Live in production on Nov 13 (main at 372eb27 or later):
+- Speech stack (#94 carrying #83 to #93). Env set: SUPABASE_URL, NEXT_PUBLIC_SUPABASE_URL, SPEECH_PSEUDONYM_SALT, SPEECH_STORAGE. All 131 clips in bucket igala-speech, bytes also kept. SPEECH_LOOP_ENABLED and SPEECH_LAYER_ANNOTATORS stay unset: the speaker side reaches RESEARCHER accounts only (Agnes, Salem).
+- Annotator release (#108 carrying #96, #97, #101, #103): edit your own answers with revisions, activity-beat time, one Speech link, clip choice once, short English translation, level bar and room check, tone pass 2 built and not loaded.
+- Security: researcher pages and routes gated on the server (#99); learner tutor needs a session and has a budget (#107). Registration is still open.
+- Speech measures (#100), Listen publish hardening (#104), synthetic clips never train or leave (#106), design tokens step 1 (#102), prompt bank v4.6 code (#95) and explicit queue order (#98).
+- Migrations applied by hand on Nov 13 (Supabase apply_migration, GRANT ALL to wikitongues_app, ledger row via speech-doc/build/ledger/insert-ledger.ts): speech_measures, answer_revision, activity_ping, tone_pass, time_note, speaker_clip_choice, english_translation.
+- Listen batch proto-nov13-a published for Agnes: 9 blind rounds, unadapted Yoruba MMS voice. Withdraw: web/scripts/speech/withdraw-listen-batch.ts --batch proto-nov13-a --apply.
+- Email to Agnes sent Nov 13 in thread 1a1b24ede2548687 with the 5-slide PDF (source ~/wt-clones/program-nov13/out/agnes/).
+
+Not done, and why:
+- No Igala voice is trained: zero clips are cleared for voice training (no Check verdicts, Agnes's tier unchosen). Path: her tier answer, Check by a second speaker, tone-marked texts, about 150 clips. The Yoruba MMS weights are CC BY-NC: internal prototype only.
+- Prompt bank v4.6 is NOT seeded: waits for Halim's "yes seed" (about $45 of model answers, option B). Commands in out/prompts/prompts-report.md under "Seeded".
+- Dashboard PR #105 open (essential dashboard, measurement view, RESEARCH_LEADS). Marketing site rebuilt on web repo PR #7 (branch site/one-page, preview only, sign-offs pending). Design rollout steps 2 to 6 and a phone sidebar not started.
+
+Open questions for Halim are listed in STATE.md and in the PRD Doc "[prd] wikitongues ai" (1R8F77_Xfdr3qnEIyuoT46pAiHUE8mEebaLu4GUPfXJE), tab open questions.
+
+Test commands (from web/): pnpm typecheck ; pnpm lint ; pnpm exec vitest run --pool=forks --poolOptions.forks.singleFork --no-file-parallelism
