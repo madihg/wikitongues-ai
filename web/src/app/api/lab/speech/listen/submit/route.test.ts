@@ -8,6 +8,8 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
     speechComparison: { findFirst: vi.fn(), create: vi.fn() },
     speechMinimalPair: { findUnique: vi.fn() },
     speechMinimalPairAnswer: { createMany: vi.fn() },
+    // Assigned rounds (route-rounds.test.ts): none in these tests.
+    speechListenRound: { findMany: vi.fn(), updateMany: vi.fn() },
   },
   mockRequireResearcher: vi.fn(),
 }));
@@ -72,6 +74,7 @@ beforeEach(() => {
   mockPrisma.speechComparison.findFirst.mockResolvedValue(null);
   mockPrisma.speechComparison.create.mockResolvedValue({ id: "cmp-1" });
   mockPrisma.speechMinimalPair.findUnique.mockResolvedValue(null);
+  mockPrisma.speechListenRound.findMany.mockResolvedValue([]);
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;

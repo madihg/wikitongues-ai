@@ -9,7 +9,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 0,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 0
     },
     {
       "id": "identical-toned",
@@ -19,7 +20,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 0,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 0
     },
     {
       "id": "empty-hyp",
@@ -29,7 +31,8 @@
       "cer": 1,
       "werStripped": 1,
       "werRetained": 1,
-      "ter": 1
+      "ter": 1,
+      "cerRetained": 1
     },
     {
       "id": "empty-ref-empty-hyp",
@@ -39,7 +42,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 0,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 0
     },
     {
       "id": "empty-ref-nonempty-hyp",
@@ -49,7 +53,8 @@
       "cer": 1,
       "werStripped": 1,
       "werRetained": 1,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 1
     },
     {
       "id": "tones-all-missing",
@@ -59,7 +64,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 1,
-      "ter": 1
+      "ter": 1,
+      "cerRetained": 0.2222
     },
     {
       "id": "tones-half-missing",
@@ -69,7 +75,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 0.5,
-      "ter": 0.5
+      "ter": 0.5,
+      "cerRetained": 0.1111
     },
     {
       "id": "tone-changed",
@@ -79,7 +86,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 0.5,
-      "ter": 0.5
+      "ter": 0.5,
+      "cerRetained": 0.1111
     },
     {
       "id": "tones-mixed-four",
@@ -89,7 +97,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 1,
-      "ter": 0.5
+      "ter": 0.5,
+      "cerRetained": 0.2222
     },
     {
       "id": "case-and-punctuation",
@@ -99,7 +108,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 0,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 0
     },
     {
       "id": "whitespace-and-curly-apostrophe",
@@ -109,7 +119,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 0,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 0
     },
     {
       "id": "letter-substitution",
@@ -119,7 +130,8 @@
       "cer": 0.0714,
       "werStripped": 0.3333,
       "werRetained": 0.3333,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 0.0714
     },
     {
       "id": "word-deleted",
@@ -129,7 +141,8 @@
       "cer": 0.3571,
       "werStripped": 0.3333,
       "werRetained": 0.3333,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 0.3571
     },
     {
       "id": "word-inserted",
@@ -139,7 +152,8 @@
       "cer": 0.5556,
       "werStripped": 0.5,
       "werRetained": 0.5,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 0.5556
     },
     {
       "id": "over-one",
@@ -149,7 +163,8 @@
       "cer": 2.5,
       "werStripped": 2,
       "werRetained": 2,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 2.5
     },
     {
       "id": "contraction-noop",
@@ -159,7 +174,8 @@
       "cer": 0.1,
       "werStripped": 0.5,
       "werRetained": 0.5,
-      "ter": 0
+      "ter": 0,
+      "cerRetained": 0.1
     },
     {
       "id": "dotted-vowels",
@@ -169,7 +185,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 0.5,
-      "ter": 0.5
+      "ter": 0.5,
+      "cerRetained": 0.1111
     },
     {
       "id": "tilde-letter-vs-tone",
@@ -179,7 +196,8 @@
       "cer": 0,
       "werStripped": 0,
       "werRetained": 0.5,
-      "ter": 1
+      "ter": 1,
+      "cerRetained": 0.125
     },
     {
       "id": "toned-vowel-deleted",
@@ -189,7 +207,8 @@
       "cer": 0.25,
       "werStripped": 1,
       "werRetained": 1,
-      "ter": 1
+      "ter": 1,
+      "cerRetained": 0.25
     },
     {
       "id": "toned-vowel-substituted",
@@ -199,7 +218,8 @@
       "cer": 0.25,
       "werStripped": 1,
       "werRetained": 1,
-      "ter": 1
+      "ter": 1,
+      "cerRetained": 0.25
     }
   ]
 }

@@ -42,6 +42,18 @@ def cer(ref: str, hyp: str) -> float:
     return float(jiwer.cer(r, h))
 
 
+def cer_tone_retained(ref: str, hyp: str) -> float:
+    """CER with tone marks kept, on NFC code points (metrics.ts cerToneRetained)."""
+    r = normalise_for_scoring(ref, tones="keep")
+    h = normalise_for_scoring(hyp, tones="keep")
+    edge = _empty_ref(r, h)
+    if edge is not None:
+        return edge
+    if not h:
+        return 1.0
+    return float(jiwer.cer(r, h))
+
+
 def _wer(ref: str, hyp: str, tones: str) -> float:
     r = normalise_for_scoring(ref, tones=tones)
     h = normalise_for_scoring(hyp, tones=tones)
@@ -108,7 +120,9 @@ def _align(ref: list[str], hyp: list[str]) -> list[int]:
     return match
 
 
-def ter(ref: str, hyp: str) -> float:
+def ter_counts(ref: str, hyp: str) -> tuple[int, int]:
+    """(wrong, marked): reference vowels that carry a tone mark, and how many
+    of them the hypothesis got wrong. ter() is wrong / marked."""
     r = _units(normalise_for_scoring(ref, tones="keep"))
     h = _units(normalise_for_scoring(hyp, tones="keep"))
     match = _align([k for k, _ in r], [k for k, _ in h])
@@ -119,7 +133,19 @@ def ter(ref: str, hyp: str) -> float:
         marked += 1
         if match[i] < 0 or h[match[i]][1] != tone:
             wrong += 1
+    return wrong, marked
+
+
+def ter(ref: str, hyp: str) -> float:
+    wrong, marked = ter_counts(ref, hyp)
     return wrong / marked if marked else 0.0
+
+
+def score_three_ways(ref: str, hyp: str) -> dict[str, float]:
+    """The three ASR scores of Nov 13 for one clip: tones kept (cerRetained,
+    werRetained), tone marks stripped with underdots kept (cer, werStripped),
+    and the tone error rate (ter)."""
+    return {**score_all(ref, hyp), "cerRetained": cer_tone_retained(ref, hyp)}
 
 
 def score_all(ref: str, hyp: str) -> dict[str, float]:

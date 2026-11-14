@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
+import { markRoundJudged, roundForSubmission } from "@/lib/speech/listen-rounds";
 import { sanitizeAxes } from "@/lib/speech/speech-axes";
 import { scoreAnswer } from "@/lib/speech/minimal-pairs";
 import {
@@ -42,6 +43,14 @@ import {
  * neither of the pair's, or a clip that is not A or B, is a 400; on a prompt
  * without a pair the answers are ignored. Answers do not change the
  * one-judgment-per-prompt rule.
+ *
+ * An assigned round (lib/speech/listen-rounds.ts): when A and B are this
+ * rater's open round, on the sides it was served, the judgment is stored
+ * like any other and closes the round. The one-per-prompt rule does not
+ * apply to it: a repeat round asks the same sentence again on purpose, and a
+ * second system on the same sentence is its own round. A synthetic clip that
+ * belongs to a round cannot be judged any other way (404): not by another
+ * rater, not on other sides, not after the round is closed, not in demo mode.
  *
  * A demo submission (`demoSessionId`) is stored with isDemo true and neither
  * blocks nor is blocked by the one-per-prompt rule.
@@ -172,7 +181,17 @@ export async function POST(req: Request) {
     return bad("A and B must be in the same language");
   }
 
-  if (!isDemo) {
+  const assigned = await roundForSubmission(
+    prisma,
+    annotatorId,
+    b.recordingAId,
+    b.recordingBId,
+  );
+  if (assigned.kind === "restricted" || (assigned.kind === "round" && isDemo)) {
+    return NextResponse.json({ error: "Clip not found" }, { status: 404 });
+  }
+
+  if (!isDemo && assigned.kind !== "round") {
     const existing = await prisma.speechComparison.findFirst({
       where: {
         annotatorId,
@@ -226,6 +245,9 @@ export async function POST(req: Request) {
     },
     select: { id: true },
   });
+  if (assigned.kind === "round") {
+    await markRoundJudged(prisma, assigned.round.id, row.id);
+  }
   if (pairId && scored.length > 0) {
     await prisma.speechMinimalPairAnswer.createMany({
       data: scored.map((a) => ({

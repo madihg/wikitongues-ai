@@ -116,3 +116,34 @@ first real run.
 | First fine-tune, 5000 steps | A100-80GB | 1.5 s per step, 10 min setup | about $5.60 | $29.98 (12 h) |
 | TTS training | A10G | 6 h | about $6.60 | $26.44 (24 h) |
 | Synthesize, 20 sentences | A10G | 2 min | about $0.04 | $1.10 (1 h) |
+
+## The first-model batch (`first_model.py`, run by hand, never deployed)
+
+`first_model.py` is a second Modal app, `wikitongues-speech-first-model`. It is
+started with `modal run` and stops when the stage ends. It does not change the
+deployed worker above and holds no secret: it reads a manifest and clips that
+a researcher put on the checkpoints volume, and writes only to
+`/checkpoints/batch-nov13/`.
+
+| Stage | What it does | GPU |
+| --- | --- | --- |
+| `prepare` | Measures every clip (`igala_speech/quality.py`) and makes its cleaning derivative (`clean.py`): DeepFilterNet3, the pitch check (`f0.py`), -23 LUFS under a -1 dBFS true peak, copies at 24 and 16 kHz. The raw clip is never changed. | none |
+| `asr` | One Omnilingual ASR model card on a list of clips, with `igl_Latn`. Clips over 38 s are cut at a quiet point first. | A10G |
+| `asr-fetch` | Downloads a model card's checkpoint on a CPU container, with retries. | none |
+| `tts-anchor` | `facebook/mms-tts-yor` as published, reading Igala text through `tts_text.py`. No training. | A10G |
+| `tts-finetune` | The `finetune-hf-vits` recipe. It refuses a plan that did not come through the app's training guard: build one with `web/scripts/speech/first-model-plan.ts`. | A10G |
+
+Rules that are code, not convention:
+
+- Gates: `igala_speech/quality_gates.py` mirrors
+  `web/src/lib/speech/quality-gates.json`; `tests/test_quality_gates.py` fails
+  when they differ, and both test suites read the same fixture.
+- Everything under `tts/` descends from CC BY-NC 4.0 weights. Each folder
+  carries a `PROTOTYPE.json` that says "internal prototype, not for release".
+- The scores (`batch_score.py`, `roundtrip.py`) run locally on the results
+  files; they need no GPU.
+
+Versions that ran green on 2026-11-13: `omnilingual-asr==0.2.0` (torch 2.8.0,
+pyarrow 20.0.0), `deepfilternet==0.5.6` (torch 2.0.1, CPU),
+`transformers==4.36.2` with `datasets==2.16.1`, `pandas==2.1.4`,
+`pyarrow==15.0.2`.

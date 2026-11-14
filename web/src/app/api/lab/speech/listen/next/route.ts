@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { abSwap, assignedPair } from "@/lib/pairing";
 import { labGate } from "@/lib/speech/lab-route";
 import { REJECTED_REVIEW_STATUSES } from "@/lib/speech/limits";
+import {
+  nextListenRound,
+  restrictedClipIds,
+  roundSides,
+} from "@/lib/speech/listen-rounds";
 import { optionsFor } from "@/lib/speech/minimal-pairs";
 import { audioUrl } from "@/lib/speech/storage";
 
@@ -35,6 +40,13 @@ import { audioUrl } from "@/lib/speech/storage";
  * two runs of one TTS model on a prompt are one voice, not two. A prompt with
  * a tone minimal pair (an Igala pair) carries `minimalPair.options`: the two
  * spellings in an order fixed per listener, never saying which is the target.
+ *
+ * Assigned rounds (lib/speech/listen-rounds.ts) come first. A listener who
+ * has an open round, a synthetic clip against the person's clip of the same
+ * sentence, is served it before anything else, on the side the round fixed.
+ * The synthetic clips of those rounds never enter the open queue below, so
+ * only the raters a round names ever hear them. The response has the same
+ * shape as any other pair and names no model. Demo mode skips rounds.
  *
  * A (prompt, language) is done for a researcher once they have a counted
  * (non-demo) SpeechComparison on a pair in that language. Demo mode (`?demo=<id>`) ignores that history and
@@ -85,8 +97,45 @@ export async function GET(req: Request) {
   const demoSessionId = new URL(req.url).searchParams.get("demo");
   const isDemo = !!demoSessionId;
 
+  if (!isDemo) {
+    const assigned = await nextListenRound(prisma, annotatorId);
+    if (assigned) {
+      const { aId, bId } = roundSides(assigned.round);
+      const prompt = await prisma.prompt.findUnique({
+        where: { id: assigned.round.promptId },
+        select: { id: true, promptId: true, text: true, isHoldout: true, split: true },
+      });
+      // A frozen prompt is never served, round or not: fall through to the queue.
+      if (prompt && !prompt.isHoldout && prompt.split !== "test") {
+        const pair =
+          assigned.round.language === "igala"
+            ? await prisma.speechMinimalPair.findUnique({
+                where: { promptId: prompt.id },
+                select: { targetSpelling: true, foilSpelling: true },
+              })
+            : null;
+        return NextResponse.json({
+          complete: false,
+          demo: false,
+          progress: { completed: assigned.completed, remaining: assigned.remaining },
+          task: {
+            ...(pair
+              ? { minimalPair: { options: optionsFor(pair, annotatorId, prompt.promptId) } }
+              : {}),
+            prompt: { id: prompt.id, promptId: prompt.promptId, text: prompt.text },
+            language: assigned.round.language,
+            clipA: { id: aId, url: audioUrl(aId) },
+            clipB: { id: bId, url: audioUrl(bId) },
+          },
+        });
+      }
+    }
+  }
+  const restricted = await restrictedClipIds(prisma);
+
   const clips = await prisma.speechRecording.findMany({
     where: {
+      ...(restricted.length > 0 ? { id: { notIn: restricted } } : {}),
       uploadedAt: { not: null },
       prompt: { isHoldout: false, split: { not: "test" } },
       OR: [{ isDemo: false }, ...(isDemo ? [{ demoSessionId }] : [])],

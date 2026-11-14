@@ -7,6 +7,7 @@ import { canTrain, canEvaluate } from "./can-train";
 import { buildTrainingManifest, buildEvalManifest } from "./training-manifest";
 import { loadTrainableRows, loadTestSetRows } from "./loop-rows";
 import { buildSigned } from "./loop-launch";
+import { buildFirstModelPlan } from "./first-model-plan";
 import { mockProvider } from "./train-providers";
 import { licensedRow, openRow } from "./fixtures";
 import type { ManifestRow } from "./manifest";
@@ -229,6 +230,46 @@ describe.each(TRAIN_ENTRY_POINTS)("training entry point: $name", (entry) => {
   });
 });
 
+/**
+ * The first voice model's plan is a training path too, and the narrowest one:
+ * the cloning purpose (the clip's own opt-in), one voice, and the Open tier
+ * held back until its speaker confirms the choice.
+ */
+describe("training entry point: first-model-plan.buildFirstModelPlan (voice cloning)", () => {
+  const released = (rows: ManifestRow[]) => {
+    const plan = buildFirstModelPlan(rows, { signedUrl });
+    return [...plan.train, ...plan.heldOut].map((l) => l.id).sort();
+  };
+  const cloning = (id: string, over: Partial<ManifestRow> = {}) =>
+    licensedRow({ id, voiceCloningOptIn: true, ...over });
+
+  it("releases none of the forbidden rows", () => {
+    expect(released(forbiddenRows())).toEqual([]);
+  });
+
+  it("refuses test, frozen, demo, rejected and unchecked clips even with the cloning opt-in", () => {
+    const rows = [
+      cloning("testset", { isTestSet: true }),
+      cloning("frozen", { prompt: { isHoldout: true, split: "test" } }),
+      cloning("demo", { isDemo: true }),
+      cloning("bad", { reviewStatus: "bad_audio" }),
+      cloning("unchecked", { reviewStatus: null }),
+      cloning("no-consent", { consentId: null }),
+      cloning("fine"),
+    ];
+    expect(released(rows)).toEqual(["fine"]);
+  });
+
+  it("refuses a clip without the cloning opt-in and holds the Open tier", () => {
+    const rows = [
+      licensedRow({ id: "no-optin" }),
+      openRow({ id: "open-optin", voiceCloningOptIn: true }),
+      cloning("fine"),
+    ];
+    expect(released(rows)).toEqual(["fine"]);
+  });
+});
+
 describe("the provider scope also refuses community_only", () => {
   it.each(TRAIN_ENTRY_POINTS.filter((e) => e.name.includes("provider")))(
     "$name",
@@ -361,6 +402,8 @@ const REGISTERED_FILES = [
   "src/lib/speech/nightly.ts", // the nightly run: builds manifests only through buildSigned
   "scripts/speech/export-manifest.ts", // the export script
   "src/lib/speech/tts-job.ts", // the TTS launch: buildTrainingManifest, purpose tts
+  "src/lib/speech/first-model-plan.ts", // the first voice model's plan: buildTrainingManifest, purpose cloning (entry point below)
+  "scripts/speech/first-model-plan.ts", // its script: writes only what buildFirstModelPlan returns
 ];
 
 function sourceFiles(dir: string): string[] {
