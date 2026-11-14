@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { signalBusy } from "@/lib/activity-signal";
 import { MAX_DURATION_MS } from "@/lib/speech/limits";
 import { pickRecorderMime } from "@/lib/speech/recorder";
 
@@ -54,6 +55,7 @@ export function useRecorder(opts: { raw?: boolean } = {}) {
   }, []);
 
   const release = useCallback(() => {
+    signalBusy("recording", false); // honest time: the take is over
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -115,6 +117,7 @@ export function useRecorder(opts: { raw?: boolean } = {}) {
       recorderRef.current = rec;
       startedAtRef.current = performance.now();
       rec.start();
+      signalBusy("recording", true); // honest time: recording counts as work
       setState("recording");
       timerRef.current = setInterval(() => {
         const e = performance.now() - startedAtRef.current;

@@ -4,10 +4,14 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
+import { useActivity } from "@/components/use-activity";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const router = useRouter();
+  // Honest time: count the minutes this person is really working, on every
+  // page of the app. It sees that something happened, never what.
+  useActivity(session?.user?.id);
 
   useEffect(() => {
     if (status === "loading") return;
