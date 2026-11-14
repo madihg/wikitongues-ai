@@ -127,7 +127,11 @@ type Db = Pick<
 export async function loadPeople(
   db: Db,
   week: Week,
-  options: { speech: boolean; queuePrompts: QueuePrompt[] },
+  options: {
+    speech: boolean;
+    /** May still be loading: it is awaited beside the queries, not before them. */
+    queuePrompts: QueuePrompt[] | Promise<QueuePrompt[]>;
+  },
 ): Promise<PersonWeek[]> {
   const inWeek = { createdAt: { gte: week.start, lt: week.end } };
   const real = { isDemo: false };
@@ -168,6 +172,7 @@ export async function loadPeople(
     lastChecks,
     done,
     flags,
+    queuePrompts,
   ] = await Promise.all([
     db.user.findMany({
       where: { role: { in: ["ANNOTATOR", "RESEARCHER"] } },
@@ -249,6 +254,7 @@ export async function loadPeople(
     db.promptFlag.findMany({
       select: { annotatorId: true, prompt: { select: { promptId: true } } },
     }),
+    options.queuePrompts,
   ]);
 
   return assemblePeople({
@@ -262,7 +268,7 @@ export async function loadPeople(
       ...lastListen,
       ...lastChecks,
     ],
-    queuePrompts: options.queuePrompts,
+    queuePrompts,
     done,
     skipped: flags.map((f) => ({
       annotatorId: f.annotatorId,

@@ -26,8 +26,10 @@ export const dynamic = "force-dynamic";
 const heading = "font-mono text-xs uppercase tracking-widest text-text-muted";
 
 async function WeekBlock({ week, speech }: { week: Week; speech: boolean }) {
-  const { queuePrompts } = await loadQueueInputs();
-  const people = await loadPeople(prisma, week, { speech, queuePrompts });
+  const people = await loadPeople(prisma, week, {
+    speech,
+    queuePrompts: loadQueueInputs().then((q) => q.queuePrompts),
+  });
   const rows = weekRows(people);
   return (
     <WeekWorkTable rows={rows} totals={weekTotals(rows)} speech={speech} />

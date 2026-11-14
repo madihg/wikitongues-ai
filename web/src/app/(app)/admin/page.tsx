@@ -60,9 +60,13 @@ export default async function TodayPage({
 
   // Started once, awaited by three blocks. The queue is the same load the
   // Annotate page makes, so "Prompts left" is what a person would be served.
-  const work = loadQueueInputs().then(({ queuePrompts }) =>
-    loadTodayWork(prisma, { now, week, speech, queuePrompts }),
-  );
+  // It runs beside the other queries, not before them.
+  const work = loadTodayWork(prisma, {
+    now,
+    week,
+    speech,
+    queuePrompts: loadQueueInputs().then((q) => q.queuePrompts),
+  });
   // A block that never renders must not leave a rejection unhandled.
   work.catch(() => undefined);
 

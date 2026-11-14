@@ -56,7 +56,7 @@ export async function loadTodayWork(
     now: Date;
     week: Week;
     speech: boolean;
-    queuePrompts: QueuePrompt[];
+    queuePrompts: QueuePrompt[] | Promise<QueuePrompt[]>;
   },
 ): Promise<TodayWork> {
   const { now, week, speech } = options;
