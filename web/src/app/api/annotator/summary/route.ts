@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { isResearcher } from "@/lib/personas";
 import { computeQueueState } from "@/lib/pairing";
 import { loadCorrectionInputs, loadQueueInputs } from "@/lib/queue-input";
+import { addWeeks, lagosDate, weekFigure, weekStartOf } from "@/lib/hours";
+import { loadHours } from "@/lib/hours-data";
 
 /**
  * Real numbers for the annotator dashboard. Everything here is scoped to the
@@ -124,7 +126,29 @@ export async function GET() {
       date: createdAt.toISOString(),
     }));
 
+  // Time worked, this week and last (annotator experience spec 10.3). The
+  // SAME loader and row builder as the researcher's hours table, so the
+  // figure here is this person's row there.
+  const thisWeek = weekStartOf(new Date());
+  const lastWeek = addWeeks(thisWeek, -1);
+  const hours = await loadHours({
+    weeks: [thisWeek, lastWeek],
+    from: lastWeek,
+    to: addWeeks(thisWeek, 1),
+    userId: annotatorId,
+  });
+  const rowFor = (week: Date) =>
+    hours.rows.find(
+      (r) => r.userId === annotatorId && r.weekStart === lagosDate(week),
+    );
+  const time = {
+    thisWeek: weekFigure(rowFor(thisWeek)),
+    lastWeek: weekFigure(rowFor(lastWeek)),
+    measuredSince: hours.measuredSince?.toISOString() ?? null,
+  };
+
   return NextResponse.json({
+    time,
     pending,
     correctionsWaiting,
     completed,

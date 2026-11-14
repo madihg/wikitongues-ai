@@ -1173,8 +1173,8 @@ model SpeechMinimalPairAnswer {
 // seconds a person was active in one minute on one kind of work, sent by the
 // browser beat (src/lib/activity.ts). No content is stored: no keys, no text,
 // no screen. At most 60 seconds per person per minute are ever counted.
-// Plain string keys, like the speech loop tables, so no existing table is
-// altered.
+// TimeNote is the annotator's own "this looks wrong" note on a week. Plain
+// string keys, like the speech loop tables, so no existing table is altered.
 // ---------------------------------------------------------------------------
 
 model ActivityPing {
@@ -1190,4 +1190,16 @@ model ActivityPing {
   @@unique([userId, minute, surface, isDemo])
   @@index([userId, minute])
   @@index([minute])
+}
+
+model TimeNote {
+  id        String   @id @default(cuid())
+  userId    String
+  weekStart DateTime // Monday 00:00 Lagos time of the week the note is about, as a UTC instant
+  day       String // the annotator's answer to "Which day?", free text
+  note      String // the annotator's answer to "What did you work on?"
+  createdAt DateTime @default(now())
+
+  @@index([userId, weekStart])
+  @@index([weekStart])
 }

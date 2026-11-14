@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { HelpButton } from "@/components/help-button";
+import {
+  TimeWorked,
+  type TimeSummary,
+} from "@/components/annotator/time-worked";
 import { isResearcher } from "@/lib/personas";
 
 interface RecentItem {
@@ -22,6 +26,7 @@ interface Summary {
   promptsInCatalogue: number;
   pendingReviews: number;
   recent: RecentItem[];
+  time?: TimeSummary;
 }
 
 function StatCard({
@@ -171,6 +176,10 @@ export default function AnnotatorDashboard() {
             />
           </>
         )}
+      </div>
+
+      <div className="mt-8">
+        <TimeWorked time={error ? null : summary?.time} />
       </div>
 
       <div className="mt-8">

@@ -18,6 +18,11 @@ const MIGRATIONS = [
     model: "ActivityPing",
     columns: ["userId", "minute", "surface", "activeSeconds", "isDemo", "createdAt", "updatedAt"],
   },
+  {
+    dir: "20261113151000_time_note",
+    model: "TimeNote",
+    columns: ["userId", "weekStart", "day", "note", "createdAt"],
+  },
 ];
 
 describe.each(MIGRATIONS)("migration $dir", ({ dir, model, columns }) => {
