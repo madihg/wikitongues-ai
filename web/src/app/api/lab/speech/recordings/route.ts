@@ -56,8 +56,10 @@ const FLAG_KEYS: readonly VerdictKey[] = [
   "no_speech",
   "too_short",
   "too_quiet",
+  "a_little_quiet",
   "too_loud",
   "clipped",
+  "noisy_room",
   "cut_short",
   "long_pause_start",
   "long_pause_end",
@@ -139,6 +141,7 @@ export async function GET(req: Request) {
       isTestSet: true,
       createdAt: true,
       prompt: { select: { promptId: true, text: true } },
+      spokenText: true,
       coldAuthorAnswer: { select: { answerText: true, englishGloss: true } },
     },
   });
@@ -171,6 +174,8 @@ export async function GET(req: Request) {
       promptText: r.prompt.text,
       answerText: r.coldAuthorAnswer?.answerText ?? null,
       englishGloss: r.coldAuthorAnswer?.englishGloss ?? null,
+      // The exact words an English clip read (the short translation).
+      spokenText: r.spokenText ?? null,
       language: r.language,
       speaker: speakerPseudonym(r.annotatorId),
       dialect: r.dialect,

@@ -169,8 +169,9 @@ describe("Speaker profile form", () => {
 });
 
 describe("Speak band", () => {
-  it("has Speak, Listen, Check and Profile, and highlights the right one", () => {
-    expect(SPEAK_TABS.map((t) => t.label)).toEqual(["Speak", "Listen", "Check", "Profile"]);
+  it("has Record, Listen, Check and Profile, and highlights the right one", () => {
+    // The first tab is Record, not Speak (decision 5, 2026-11-13).
+    expect(SPEAK_TABS.map((t) => t.label)).toEqual(["Record", "Listen", "Check", "Profile"]);
     expect(activeSpeakTab("/speak")).toBe("/speak");
     expect(activeSpeakTab("/speak/check")).toBe("/speak/check");
     expect(activeSpeakTab("/speak/check/extra")).toBe("/speak/check");

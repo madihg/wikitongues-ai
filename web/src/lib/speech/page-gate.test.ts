@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-import { requireLabPage, requireSpeakPage } from "./page-gate";
+import { isLabResearcher, requireLabPage, requireSpeakPage } from "./page-gate";
 
 const was = {
   lab: process.env.SPEECH_LAB_ENABLED,
@@ -115,5 +115,33 @@ describe("every /speak page asks for the gate itself", () => {
         "await requireSpeakPage()",
       );
     }
+  });
+});
+
+describe("isLabResearcher", () => {
+  it("is true for a researcher only", async () => {
+    as("RESEARCHER");
+    expect(await isLabResearcher()).toBe(true);
+    for (const role of ["ANNOTATOR", "LEARNER", null]) {
+      as(role);
+      expect(await isLabResearcher(), String(role)).toBe(false);
+    }
+  });
+
+  it("the /speak layout asks it only after the gate, and the heading is Record", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const dir = join(process.cwd(), "src/app/(app)/speak");
+    const layout = readFileSync(join(dir, "layout.tsx"), "utf8");
+    expect(layout.indexOf("await isLabResearcher()")).toBeGreaterThan(
+      layout.indexOf("await requireSpeakPage()"),
+    );
+    expect(layout).toContain("<SpeakBand researcher={researcher} />");
+    const page = readFileSync(join(dir, "page.tsx"), "utf8");
+    expect(page).toContain(">Record</h1>");
+    expect(page).not.toContain(">Speak</h1>");
+    // Listen keeps the researcher blocks, for researchers only.
+    const listen = readFileSync(join(dir, "listen/page.tsx"), "utf8");
+    expect(listen).toMatch(/\{researcher && \(\s*<div[^>]*>\s*<DecisionCards \/>/);
   });
 });

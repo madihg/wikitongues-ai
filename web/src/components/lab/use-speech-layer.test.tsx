@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { probeSpeechLayer, useSpeechLayer } from "./use-speech-layer";
+import {
+  fetchSpeechWaiting,
+  probeSpeechLayer,
+  useSpeechLayer,
+  useSpeechWaiting,
+} from "./use-speech-layer";
 
 /**
  * Parity with the annotator layer flag unset: the hook reads false for an
@@ -60,5 +65,46 @@ describe("probeSpeechLayer", () => {
         vi.fn().mockRejectedValue(new Error("down")) as unknown as typeof fetch,
       ),
     ).toBe(false);
+  });
+});
+
+describe("the Speech waiting number", () => {
+  const answer = (body: unknown, ok = true) =>
+    vi.fn().mockResolvedValue({ ok, json: async () => body });
+
+  function Waiting({ on }: { on: boolean }) {
+    return <span data-n={String(useSpeechWaiting(on))} />;
+  }
+
+  it("makes no request and shows nothing while speech is off or on first paint", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    expect(renderToStaticMarkup(<Waiting on={false} />)).toContain(
+      'data-n="undefined"',
+    );
+    expect(renderToStaticMarkup(<Waiting on />)).toContain('data-n="undefined"');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("reads the count from /api/lab/speech/waiting", async () => {
+    const f = answer({ speech: 310 });
+    expect(await fetchSpeechWaiting(f as unknown as typeof fetch)).toBe(310);
+    expect(f.mock.calls[0][0]).toBe("/api/lab/speech/waiting");
+    expect(
+      await fetchSpeechWaiting(answer({ speech: 0 }) as unknown as typeof fetch),
+    ).toBe(0);
+  });
+
+  it("a failure or a non-number is not known, never zero", async () => {
+    for (const f of [
+      answer({ speech: 4 }, false),
+      answer({ speech: "4" }),
+      answer(null),
+      vi.fn().mockRejectedValue(new Error("down")),
+    ]) {
+      expect(
+        await fetchSpeechWaiting(f as unknown as typeof fetch),
+      ).toBeUndefined();
+    }
   });
 });

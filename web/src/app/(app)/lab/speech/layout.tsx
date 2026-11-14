@@ -3,7 +3,9 @@ import { LabBand } from "@/components/lab/lab-band";
 import { SessionLine } from "@/components/lab/session-line";
 
 /**
- * Gate and frame for the Speech Lab pages. Flag off: notFound, so a dark lab
+ * Gate and frame for the researcher-only Speech pages (Recordings, Studio,
+ * Rights), under the same band as /speak. The old Record and Listen paths
+ * here are redirects to /speak. Flag off: notFound, so a dark lab
  * looks absent. Flag on but not a researcher (an annotator, a learner, or
  * nobody): 403. The API routes enforce the same rules independently; this is
  * the page-level half. The ink band bleeds out of the app shell's padding

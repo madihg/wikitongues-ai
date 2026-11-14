@@ -1,5 +1,6 @@
 import { requireSpeakPage } from "@/lib/speech/page-gate";
 import { ProfileForm } from "@/components/lab/profile-form";
+import { YourClips } from "@/components/lab/tier-default";
 
 export default async function SpeakProfilePage() {
   await requireSpeakPage();
@@ -14,6 +15,7 @@ export default async function SpeakProfilePage() {
       <div className="mt-6">
         <ProfileForm />
       </div>
+      <YourClips />
     </div>
   );
 }

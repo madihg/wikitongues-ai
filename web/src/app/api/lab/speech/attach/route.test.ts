@@ -5,7 +5,7 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
   mockPrisma: {
     prompt: { findUnique: vi.fn() },
     speechRecording: { findMany: vi.fn(), updateMany: vi.fn() },
-    coldAuthorAnswer: { findFirst: vi.fn() },
+    coldAuthorAnswer: { findFirst: vi.fn() , updateMany: vi.fn() },
   },
   mockRequireResearcher: vi.fn(),
 }));
@@ -118,5 +118,59 @@ describe("POST /api/lab/speech/attach", () => {
     const res = await post({ promptId: "code_001", recordingIds: ["theirs"] });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ attached: 0 });
+  });
+
+  describe("the short English translation reaches the new answer", () => {
+    const clip = (over: Record<string, unknown> = {}) => ({
+      id: "c-en",
+      isDemo: false,
+      language: "english",
+      spokenText: "good morning",
+      ...over,
+    });
+
+    it("an answer with no translation takes the words its English clip read", async () => {
+      mockPrisma.speechRecording.findMany.mockResolvedValue([
+        { id: "c-ig", isDemo: false, language: "igala", spokenText: null },
+        clip(),
+      ]);
+      const res = await post({ promptId: "code_001", recordingIds: ["c-ig", "c-en"] });
+      expect(await res.json()).toEqual({ attached: 2 });
+      expect(mockPrisma.coldAuthorAnswer.updateMany).toHaveBeenCalledTimes(1);
+      const upd = mockPrisma.coldAuthorAnswer.updateMany.mock.calls[0][0];
+      expect(upd.data).toEqual({ englishTranslation: "good morning" });
+      // Only the caller's own answer, and only while it has no translation.
+      expect(upd.where).toEqual({
+        id: "ans-1",
+        annotatorId: "r1",
+        OR: [{ englishTranslation: null }, { englishTranslation: "" }],
+      });
+    });
+
+    it("an Igala clip alone, or an English clip with no recorded words, writes nothing to the answer", async () => {
+      mockPrisma.speechRecording.findMany.mockResolvedValue([
+        { id: "c-ig", isDemo: false, language: "igala", spokenText: null },
+        clip({ spokenText: null }),
+      ]);
+      await post({ promptId: "code_001", recordingIds: ["c-ig", "c-en"] });
+      expect(mockPrisma.coldAuthorAnswer.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("nothing is written when nothing was attached", async () => {
+      mockPrisma.speechRecording.findMany.mockResolvedValue([clip()]);
+      mockPrisma.speechRecording.updateMany.mockResolvedValue({ count: 0 });
+      await post({ promptId: "code_001", recordingIds: ["c-en"] });
+      expect(mockPrisma.coldAuthorAnswer.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("the clip query reads the language and the words, never the audio", async () => {
+      await post({ promptId: "code_001", recordingIds: ["c1"] });
+      expect(mockPrisma.speechRecording.findMany.mock.calls[0][0].select).toEqual({
+        id: true,
+        isDemo: true,
+        language: true,
+        spokenText: true,
+      });
+    });
   });
 });

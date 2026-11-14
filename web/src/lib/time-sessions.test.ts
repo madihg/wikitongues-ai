@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { sessionize, minutesSince, formatMinutes } from "./time-sessions";
+import {
+  sessionize,
+  sessionizeEvents,
+  longestPossibleMinutes,
+  minutesSince,
+  formatMinutes,
+} from "./time-sessions";
 
 const MIN = 60_000;
 const BASE = new Date("2026-07-01T10:00:00Z").getTime();
@@ -109,5 +115,69 @@ describe("formatMinutes", () => {
 
   it("formats an exact hour with no remainder", () => {
     expect(formatMinutes(120)).toBe("2h");
+  });
+});
+
+describe("sessionizeEvents (the recount: events can have a length)", () => {
+  it("with no lengths it gives exactly what sessionize gives", () => {
+    const stamps = [at(0), at(10), at(25), at(120), at(125), at(400)];
+    expect(sessionizeEvents(stamps.map((t) => ({ at: t })))).toEqual(
+      sessionize(stamps),
+    );
+    expect(sessionizeEvents([])).toEqual(sessionize([]));
+  });
+
+  it("a clip counts for its own length, ending when it was saved", () => {
+    // One 30 second clip saved at minute 10: half a minute of span + lead-in.
+    const one = sessionizeEvents([{ at: at(10), lengthMs: 30_000 }]);
+    expect(one.sessionCount).toBe(1);
+    expect(one.totalMinutes).toBe(6); // 0.5 + 5, rounded
+  });
+
+  it("a long take that starts inside the gap joins the sitting", () => {
+    // Saved 40 minutes after the last event, but it ran for 15 minutes, so
+    // it started 25 minutes after: one sitting, not two.
+    const r = sessionizeEvents([
+      { at: at(0) },
+      { at: at(40), lengthMs: 15 * MIN },
+    ]);
+    expect(r.sessionCount).toBe(1);
+    expect(r.totalMinutes).toBe(45);
+    expect(sessionize([at(0), at(40)]).sessionCount).toBe(2);
+  });
+
+  it("clips between two text sittings bridge them: the day Agnes recorded", () => {
+    const text = [at(0), at(5), at(150), at(155)];
+    const clips = Array.from({ length: 14 }, (_, i) => ({
+      at: at(15 + i * 10),
+      lengthMs: 6_000,
+    }));
+    expect(sessionize(text).totalMinutes).toBe(20); // two sittings of 5 + 5
+    const recount = sessionizeEvents([...text.map((t) => ({ at: t })), ...clips]);
+    expect(recount.sessionCount).toBe(1);
+    expect(recount.totalMinutes).toBe(160);
+  });
+});
+
+describe("longestPossibleMinutes", () => {
+  it("is first to last per day, summed over days, in the zone given", () => {
+    const HOUR = 60;
+    const events = [
+      { at: at(0) }, // 10:00 UTC
+      { at: at(8 * HOUR) }, // 18:00 UTC the same day
+      { at: at(24 * HOUR) }, // next day, one event: 0
+    ];
+    expect(longestPossibleMinutes(events)).toBe(8 * HOUR);
+    expect(longestPossibleMinutes([])).toBe(0);
+  });
+
+  it("uses the local day: 23:30 UTC is already the next day in Lagos", () => {
+    const lateUtc = new Date("2026-11-09T23:30:00Z");
+    const nextMorning = new Date("2026-11-10T08:30:00Z");
+    // In UTC these are two days (0 + 0). In Lagos (UTC+1) both are Nov 10.
+    expect(longestPossibleMinutes([{ at: lateUtc }, { at: nextMorning }])).toBe(0);
+    expect(
+      longestPossibleMinutes([{ at: lateUtc }, { at: nextMorning }], 60 * MIN),
+    ).toBe(9 * 60);
   });
 });

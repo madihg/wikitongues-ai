@@ -10,7 +10,10 @@ import {
   MAX_ANSWER_CHARS,
   MAX_BYTES,
   MAX_DURATION_MS,
+  MAX_TRANSLATION_CHARS,
+  MIN_TRANSLATION_CHARS,
   TIERS,
+  cleanTranslation,
   type SpeechLanguage,
   type Tier,
 } from "@/lib/speech/limits";
@@ -54,6 +57,16 @@ import {
  * speakers' answers), and is set to reviewStatus "keep" only when the speaker
  * sent `studioKeep: true` after the take check. Without a session id none of
  * these fields is read, so every other clip is unchanged.
+ *
+ * An English clip may carry `englishTranslation`: the short English
+ * translation the speaker typed and then read (2 to 200 characters after
+ * trimming; a 400 otherwise, and a 400 on an Igala clip). It is stored on
+ * the clip as `spokenText`, the exact words that clip read. When the clip is
+ * attached to the speaker's own answer and that answer has no translation
+ * yet, it is saved on the answer too, in the same transaction as the clip.
+ * An answer that already has a translation is never overwritten here:
+ * changing it is an edit, and edits go through the answer editor, which
+ * logs them.
  *
  * A clip may attach to the researcher's own locked answer
  * (`coldAuthorAnswerId`, which must be theirs and for this prompt), or carry
@@ -186,6 +199,29 @@ export async function POST(req: Request) {
     return bad("Send either coldAuthorAnswerId or answerText, not both");
   }
 
+  // The short English translation an English clip read.
+  let spokenText: string | null = null;
+  if (
+    !studio &&
+    b.englishTranslation !== undefined &&
+    b.englishTranslation !== null
+  ) {
+    if (typeof b.englishTranslation !== "string") {
+      return bad("englishTranslation must be text");
+    }
+    if (language !== "english") {
+      return bad("englishTranslation belongs to an English clip");
+    }
+    const t = cleanTranslation(b.englishTranslation);
+    if (t.length < MIN_TRANSLATION_CHARS) {
+      return bad("englishTranslation is too short");
+    }
+    if (t.length > MAX_TRANSLATION_CHARS) {
+      return bad("englishTranslation is too long: keep it to a few words");
+    }
+    spokenText = t;
+  }
+
   const demoSessionId =
     typeof b.demoSessionId === "string" && b.demoSessionId
       ? b.demoSessionId
@@ -290,7 +326,7 @@ export async function POST(req: Request) {
     answerId = created.id;
   }
 
-  const row = await prisma.speechRecording.create({
+  const createClip = prisma.speechRecording.create({
     data: {
       id,
       promptId: prompt.id,
@@ -313,6 +349,7 @@ export async function POST(req: Request) {
       isTestSet: false,
       isDemo,
       demoSessionId,
+      ...(spokenText ? { spokenText } : {}),
       ...(studio
         ? {
             studioSessionId: studio.sessionId,
@@ -325,6 +362,25 @@ export async function POST(req: Request) {
     },
     select: { id: true },
   });
+
+  // The translation is saved with the answer the first time it is typed:
+  // only on the speaker's own answer (checked above, or created just now) and
+  // only while that answer has none. One transaction with the clip, so a clip
+  // never claims a translation its answer did not get.
+  const [row] =
+    spokenText && answerId
+      ? await prisma.$transaction([
+          createClip,
+          prisma.coldAuthorAnswer.updateMany({
+            where: {
+              id: answerId,
+              annotatorId,
+              OR: [{ englishTranslation: null }, { englishTranslation: "" }],
+            },
+            data: { englishTranslation: spokenText },
+          }),
+        ])
+      : [await createClip];
 
   return NextResponse.json(
     {

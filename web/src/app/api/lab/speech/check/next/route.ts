@@ -1,3 +1,4 @@
+import { staleRecordingIds } from "@/lib/answer-edit";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
@@ -56,11 +57,19 @@ export async function GET(req: Request) {
       id: true,
       promptId: true,
       dialect: true,
+      coldAuthorAnswerId: true,
+      language: true,
+      createdAt: true,
       prompt: { select: { promptId: true, text: true } },
       coldAuthorAnswer: { select: { answerText: true } },
     },
   });
-  const usable = clips.filter((c) => c.coldAuthorAnswer?.answerText.trim());
+  // A clip whose written answer was edited after it was recorded no longer
+  // says what is on the page: it is left out until it is recorded again.
+  const stale = await staleRecordingIds(clips);
+  const usable = clips.filter(
+    (c) => c.coldAuthorAnswer?.answerText.trim() && !stale.has(c.id),
+  );
 
   const counts = usable.length
     ? await prisma.speechCheck.groupBy({

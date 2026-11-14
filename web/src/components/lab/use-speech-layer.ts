@@ -44,3 +44,49 @@ export function useSpeechLayer(eligible: boolean): boolean {
   // Derived, not stored: an account that stops being eligible reads as off.
   return eligible && on;
 }
+
+/**
+ * How many of the account's own answers wait for a clip (GET
+ * /api/lab/speech/waiting, `speech`). Any failure, or an answer that is not a
+ * number, reads as "not known" (undefined), never as zero.
+ */
+export async function fetchSpeechWaiting(
+  fetchFn: typeof fetch = fetch,
+): Promise<number | undefined> {
+  try {
+    const r = await fetchFn("/api/lab/speech/waiting");
+    if (!r.ok) return undefined;
+    const j = (await r.json()) as { speech?: unknown } | null;
+    return typeof j?.speech === "number" && Number.isFinite(j.speech)
+      ? j.speech
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The number beside "Speech" in the sidebar. Asked only when speech is on for
+ * the account (so an account without speech never makes the request), and
+ * again whenever a clip is saved anywhere on the page ("lab:clip-saved").
+ * While it is not known the sidebar shows no number.
+ */
+export function useSpeechWaiting(on: boolean): number | undefined {
+  const [count, setCount] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (!on) return;
+    let live = true;
+    const load = () => {
+      void fetchSpeechWaiting().then((n) => {
+        if (live && n !== undefined) setCount(n);
+      });
+    };
+    load();
+    window.addEventListener("lab:clip-saved", load);
+    return () => {
+      live = false;
+      window.removeEventListener("lab:clip-saved", load);
+    };
+  }, [on]);
+  return on ? count : undefined;
+}
