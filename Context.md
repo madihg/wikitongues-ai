@@ -2409,3 +2409,27 @@ NOT COVERED (follow-up candidates)
 
 GATES: pnpm typecheck 0, pnpm lint 0, vitest 104 files, 1,612 tests (was
 103 / 1,601). static-leak-check v3, v4, v4.1, v4.2, v4.4, v4.5 all PASS.
+
+## Session State (2026-11-13, prompts) - v4.6 prompt bank authored, checked, NOT seeded
+
+**Task.** Size what the current model (Gemini 3.1 Pro with retrieval v4.4 and v4.5) still gets wrong, and write the next prompt bank from that.
+
+**Done, on branch `prompts/v46-gap-driven`.**
+- `tasks/model-gap-analysis-2026-11.md`: the ranked gaps, measured on production on Nov 13 (484 judged sides, 136 corrections with 352 changed spans, 1,758 train answers, the tone restoration test, 113 clips). Top five: sentence construction, tone marks, fixed formulas, spelling and word choice, word strength (not measurable today).
+- `web/src/lib/prompt-bank-v46.ts`: 320 prompts in 26 families. 200 text prompts under provenance `claude_authored_v46_2026_11_13`, 120 speech prompts under `claude_authored_v46_speech_2026_11_13`. English only, no Igala word quoted.
+- `web/src/lib/prompt-bank-v46.test.ts`: 17 tests. `web/prisma/seed-prompt-bank-v46.ts`: create-only seed with `--check` and `--only text|speech`.
+- `tasks/prompt-bank-v46-evidence-2026-11.md`: generated per-family evidence.
+- Checks run: full suite 2,873 tests pass, typecheck and lint clean, leak check 0 hits on all five files, seed `--check` passes against production (max Jaccard 0.48 train, 0.36 frozen; Scope A pass over 139 strings) and wrote nothing.
+
+**Not done, on purpose.** Nothing is seeded. No model output is generated.
+
+**Next steps, in order.**
+1. Review, then seed the text set: `npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts --only text`.
+2. Fill two pooled arms on it (each run capped at $15): `scripts/train-queue-fill.ts generate gemini-3-1-pro-rag-v4-5 --provenance claude_authored_v46_2026_11_13`, then the same for `gemini-3-1-pro-rag-v4-4`. Then `scripts/check-queue-servable.ts`.
+3. Seed the speech set (`--only speech`). It needs no model output to appear in the Record queue, but it sorts last there: the queue serves a speaker's own unrecorded answers first (about 310 for the one speech annotator). The queue order must put `ig_v46_sp*` first or she will not reach them.
+4. The Record page should show `v46SpeechEnglish(promptId)` as the English line to record for these prompts.
+
+**Open questions.**
+- Queue state on Nov 13 (`scripts/check-queue-servable.ts`): 299 servable prompts; remaining per active speaker 0, 3, 61, 126. The two who ran out get about 35 hours each from the 200 text prompts at the measured 10.3 to 10.6 minutes a prompt. A 70 hour contract needs a second batch or the 165 unserved long-form prompts.
+- Word strength has no tag. The ladders (family `inten`) make it countable; a "too strong or too weak" tag and a "word order" tag are proposed in the gap analysis, section 6.
+- Speech coverage figures are expected from published word forms, not heard. Recount after the clips exist.
