@@ -4,17 +4,39 @@ import { vi } from "vitest";
  * A small in-memory stand-in for the Prisma client, for route tests that
  * need the SAME rows read by two routes (the parity tests). It understands
  * only the `where` shapes the hours loader and the home counts use: equality,
- * { gte, lt }, { not }, { in }, { notIn }. Anything else throws, so a test
- * cannot pass by accident on a filter this file does not understand.
+ * { gte, lt }, { not }, { in }, { notIn }, OR, AND, and a filter on a related
+ * row (prompt: { ... }, matched against row.prompt). Anything else throws,
+ * so a test cannot pass by accident on a filter this file does not
+ * understand.
  */
 type Row = Record<string, unknown>;
 type Where = Record<string, unknown>;
+
+const OPS = ["gte", "lt", "not", "in", "notIn"];
 
 function matches(row: Row, where: Where | undefined): boolean {
   if (!where) return true;
   for (const [key, cond] of Object.entries(where)) {
     const v = row[key];
     if (cond === undefined) continue;
+    if (key === "OR") {
+      if (!(cond as Where[]).some((w) => matches(row, w))) return false;
+      continue;
+    }
+    if (key === "AND") {
+      if (!(cond as Where[]).every((w) => matches(row, w))) return false;
+      continue;
+    }
+    const isOps =
+      cond !== null &&
+      typeof cond === "object" &&
+      !(cond instanceof Date) &&
+      Object.keys(cond).every((k) => OPS.includes(k));
+    if (cond !== null && typeof cond === "object" && !(cond instanceof Date) && !isOps) {
+      // A filter on a related row.
+      if (!matches((v ?? {}) as Row, cond as Where)) return false;
+      continue;
+    }
     if (cond === null || typeof cond !== "object" || cond instanceof Date) {
       const same =
         cond instanceof Date && v instanceof Date
