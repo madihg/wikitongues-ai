@@ -1318,3 +1318,74 @@ model AnswerRevision {
   @@index([editorId, createdAt])
   @@index([saveId])
 }
+
+// ---------------------------------------------------------------------------
+// Tone-mark pass 2 (Nov 2026). A second pass over answers that already exist
+// (pass 1): more than one marker adds tone marks to a copy of the text, and
+// the copies are compared. Pass 1 rows (ColdAuthorAnswer, OutputEdit) are
+// never edited, overwritten or deleted by this feature: these four tables
+// stand beside them. Plain string keys, like the tables above, so no
+// existing table is altered.
+// ---------------------------------------------------------------------------
+
+// One pass-1 answer that belongs to a tone set, with the text exactly as it
+// was when it joined the set.
+model TonePassItem {
+  id                 String   @id @default(cuid())
+  setName            String // e.g. "tone-set-v1"
+  sourceType         String // "cold" (ColdAuthorAnswer) | "edit" (OutputEdit)
+  sourceId           String // id of the pass-1 row
+  promptId           String // Prompt.id
+  sourceTextSnapshot String // the pass-1 text exactly as shown to markers
+  cells              String[] @default([]) // coverage cells this item was chosen for
+  requiredMarkers    Int      @default(2) // 3 proposed for homographs and minimal pairs
+  createdAt          DateTime @default(now())
+
+  @@unique([setName, sourceType, sourceId])
+  @@index([sourceType, sourceId])
+}
+
+// One item served to one marker. An item is never served twice to a person.
+model TonePassAssignment {
+  id          String    @id @default(cuid())
+  itemId      String
+  annotatorId String
+  skippedAt   DateTime? // "Skip this one": it does not come back
+  createdAt   DateTime  @default(now())
+
+  @@unique([itemId, annotatorId])
+  @@index([annotatorId])
+}
+
+// One marker's tone-marked copy of one item.
+model TonePass {
+  id                   String   @id @default(cuid())
+  itemId               String
+  sourceType           String
+  sourceId             String
+  passNumber           Int      @default(2)
+  annotatorId          String
+  toneMarkedText       String // NFC; differs from the snapshot in tone marks only
+  sourceTextSnapshot   String // the pass-1 text exactly as shown
+  note                 String?
+  unsureWords          Int[]    @default([]) // positions of words the marker is not sure about
+  flaggedNonToneChange Boolean  @default(false) // the marker also proposed a correction
+  flagText             String? // the proposed correction, whole; never mixed into toneMarkedText
+  activeSeconds        Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([itemId, annotatorId])
+  @@index([sourceType, sourceId])
+  @@index([annotatorId])
+}
+
+// The agreed pass-2 text of one item.
+model TonePassAgreed {
+  id            String   @id @default(cuid())
+  itemId        String   @unique
+  agreedText    String // NFC
+  method        String // exact | majority | adjudicated
+  adjudicatorId String?
+  agreedAt      DateTime @default(now())
+}

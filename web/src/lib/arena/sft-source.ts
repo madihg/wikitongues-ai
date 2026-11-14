@@ -22,6 +22,8 @@ import type { SftSourceRow } from "./training-export";
 
 /** Decoupled-from-Prisma input shape for a cold author answer (source-free gold). */
 export interface ColdAnswerInput {
+  /** The ColdAuthorAnswer id, when known (lets tone layers find the row). */
+  id?: string;
   promptId: string;
   promptText: string;
   answerText: string;
@@ -44,6 +46,8 @@ export interface ColdAnswerInput {
 
 /** Decoupled-from-Prisma input shape for an annotator edit. */
 export interface EditInput {
+  /** The OutputEdit id, when known (lets tone layers find the row). */
+  id?: string;
   promptId: string;
   promptText: string;
   correctedText: string;
@@ -71,6 +75,7 @@ export function coldAnswersToSftRows(rows: ColdAnswerInput[]): SftSourceRow[] {
     if (!r.consentTraining) continue; // consent guard
     if (!r.answerText?.trim()) continue;
     out.push({
+      ...(r.id ? { source: { type: "cold" as const, id: r.id } } : {}),
       promptId: r.promptId,
       promptText: r.promptText,
       correctedText: r.answerText,
@@ -100,6 +105,7 @@ export function editsToSftRows(rows: EditInput[]): SftSourceRow[] {
     if (!r.consentTraining) continue;
     if (!r.correctedText?.trim()) continue;
     out.push({
+      ...(r.id ? { source: { type: "edit" as const, id: r.id } } : {}),
       promptId: r.promptId,
       promptText: r.promptText,
       correctedText: r.correctedText,
@@ -148,6 +154,7 @@ export async function loadSftSourceRows(job: {
 
   const coldRows = coldAnswersToSftRows(
     cold.map((c) => ({
+      id: c.id,
       promptId: c.promptId,
       promptText: c.prompt.text,
       answerText: c.answerText,
@@ -164,6 +171,7 @@ export async function loadSftSourceRows(job: {
 
   const editRows = editsToSftRows(
     edits.map((e) => ({
+      id: e.id,
       promptId: e.promptId,
       promptText: e.modelOutput.prompt.text,
       correctedText: e.correctedText,

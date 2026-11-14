@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useSpeechLayer } from "@/components/lab/use-speech-layer";
+import { useToneCount } from "@/components/tone/use-tone-count";
 import { canProbeSpeech } from "@/lib/lab-flags";
 import {
   navForRole,
@@ -19,11 +20,13 @@ export function Sidebar() {
   // Researchers and annotators ask the server once on mount; the answer is
   // false for an annotator until SPEECH_LAYER_ANNOTATORS is set.
   const labOn = useSpeechLayer(canProbeSpeech(session?.user?.role));
+  // Tone-mark pass 2: the line shows only for a person who was given items.
+  const tone = useToneCount(canProbeSpeech(session?.user?.role));
 
   if (!session) return null;
 
   const { role, email } = session.user;
-  const links = navForRole(role, email, { lab: labOn });
+  const links = navForRole(role, email, { lab: labOn, tone });
   const mainLinks = links.filter((l) => l.group !== "lab");
   const labLinks = links.filter((l) => l.group === "lab");
   const owner = isOwner(email);
@@ -92,6 +95,11 @@ export function Sidebar() {
               }`}
             >
               {link.label}
+              {link.count !== undefined && (
+                <span className="ml-auto text-xs tabular-nums text-text-tertiary">
+                  {link.count}
+                </span>
+              )}
             </Link>
           );
         })}

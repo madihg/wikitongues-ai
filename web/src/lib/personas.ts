@@ -54,6 +54,8 @@ export interface NavLink {
   group?: "lab";
   /** Small monospace tag beside the label (the lab links say who may see them). */
   tag?: string;
+  /** How many items wait behind this link, shown beside the label. */
+  count?: number;
 }
 
 /** Server-derived switches that change the nav. Passed in so navForRole stays pure. */
@@ -65,6 +67,27 @@ export interface NavOptions {
    * layer flag is unset, so an annotator's nav is unchanged until then).
    */
   lab?: boolean;
+  /**
+   * Tone-mark pass 2: how many items wait for this person. Set only when the
+   * server says the person has been given tone items (waiting or done);
+   * otherwise absent, and the nav has no such line.
+   */
+  tone?: number | null;
+}
+
+/** The Pass 2 line, placed right after Annotate and the speech links. */
+export const TONE_NAV_HREF = "/annotator/tone";
+function withTone(links: NavLink[], options: NavOptions): NavLink[] {
+  if (options.tone === undefined || options.tone === null) return links;
+  const speech = ["/speak", "/speak/listen", "/speak/check"];
+  let at = links.findIndex((l) => l.href === "/annotator/annotate");
+  while (at + 1 < links.length && speech.includes(links[at + 1].href)) at++;
+  const line: NavLink = {
+    href: TONE_NAV_HREF,
+    label: "Pass 2: tone marks",
+    count: options.tone,
+  };
+  return [...links.slice(0, at + 1), line, ...links.slice(at + 1)];
 }
 
 /**
@@ -125,7 +148,7 @@ export function navForRole(
         group: "lab",
       });
     }
-    return links;
+    return withTone(links, options);
   }
   // Pure annotator. NO Corrections tab (2026-08-28 rework, Halim's call):
   // corrections happen inside the episode, right after the A/B verdict - a
@@ -149,7 +172,7 @@ export function navForRole(
       { href: "/speak/check", label: "Check" },
     );
   }
-  return annotatorLinks;
+  return withTone(annotatorLinks, options);
 }
 
 /**

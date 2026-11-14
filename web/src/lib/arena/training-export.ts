@@ -38,7 +38,23 @@ export interface DpoSourceRow {
   split?: string | null;
 }
 
+/**
+ * Tone-mark pass 2 layers of one pass-1 answer (src/lib/tone). Present only
+ * on an answer that got a second pass. The completion that is trained on
+ * stays the pass-1 text; these travel beside it, each named by its layer.
+ */
+export interface ToneLayers {
+  /** Every marker's tone-marked copy. */
+  pass2: { annotatorId: string; text: string }[];
+  /** The agreed pass-2 text, when the markers (or an adjudicator) agreed. */
+  agreed: { text: string; method: string } | null;
+}
+
 export interface SftSourceRow {
+  /** The pass-1 row this completion came from, when the loader knows it. */
+  source?: { type: "cold" | "edit"; id: string };
+  /** Set only for an answer that got a tone-mark second pass. */
+  tone?: ToneLayers;
   promptId: string;
   promptText: string;
   correctedText: string;
@@ -63,6 +79,17 @@ export interface SftExample {
   bucket: EvalBucket | null;
   /** Carried into the JSONL so an exported set is self-auditing. */
   provenance: SftProvenance;
+  /**
+   * Only on an answer that got a tone-mark second pass: the assistant
+   * message above is the pass-1 text (`layer: "pass1"`), then every pass-2
+   * copy with its marker, then the agreed text. An answer with no second
+   * pass has no such key and exports exactly as before.
+   */
+  tone?: {
+    layer: "pass1";
+    pass2: { layer: "pass2"; annotatorId: string; text: string }[];
+    agreed: { layer: "agreed"; text: string; method: string } | null;
+  };
 }
 
 const VERIFICATION_RANK: Record<VerificationStatus, number> = {
@@ -155,6 +182,23 @@ export function buildSftExamples(
       bucket: r.bucket,
       provenance: r.provenance,
     };
+    if (r.tone && r.tone.pass2.length > 0) {
+      example.tone = {
+        layer: "pass1",
+        pass2: r.tone.pass2.map((p) => ({
+          layer: "pass2",
+          annotatorId: p.annotatorId,
+          text: p.text,
+        })),
+        agreed: r.tone.agreed
+          ? {
+              layer: "agreed",
+              text: r.tone.agreed.text,
+              method: r.tone.agreed.method,
+            }
+          : null,
+      };
+    }
     (r.provenance === "edit" ? edits : cold).push(example);
   }
 
