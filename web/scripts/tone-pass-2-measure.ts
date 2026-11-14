@@ -415,8 +415,6 @@ ${table(
       c.available,
       c.examples.join(", "),
     ]);
-    const kind = (prefix: string) =>
-      set.cells.filter((c) => c.cell.startsWith(prefix));
     const setDoc = `# Tone-mark pass 2: proposed representative set (measured ${today})
 
 Step 2 of the tone-mark second pass (hmart task 1549b74a). This is a PROPOSAL. Nothing is loaded and nobody is assigned. It waits for Halim's yes (checkpoint 1), and Lydia and Salem should look at the coverage table first. Made by \`web/scripts/tone-pass-2-measure.ts\`, read-only. Row ids only: no Igala text, no names.
