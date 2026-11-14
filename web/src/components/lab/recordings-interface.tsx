@@ -15,7 +15,10 @@ import type { QualityMetrics, VerdictKey } from "@/lib/speech/analyse";
  * version, review status and language, with the take metrics (level, peak,
  * clipping, pace) and an inline player on the researcher-only audio endpoint.
  * The list filters by review status, language and take warning, and sorts by
- * loudness, length or clipping. One-tap flags: Bad audio, Wrong text, Keep. Export runs the guarded
+ * loudness, length or clipping. One-tap flags: Bad audio, Wrong text, Keep.
+ * Selected cards can be frozen into the test set (confirm first; the server
+ * refuses a speaker who also has kept clips outside the selection, and there
+ * cannot be undone here). A frozen card wears a "Test set" badge. Export runs the guarded
  * export, which releases OPEN clips only (published, rights cleared,
  * consented); LICENSED clips leave only through the future gated delivery.
  */
@@ -36,6 +39,7 @@ export interface RecordingItem {
   consentVersion: string | null;
   reviewStatus: ReviewStatus | null;
   rightsStatus: string;
+  isTestSet: boolean;
   url: string | null;
 }
 
@@ -113,14 +117,35 @@ const FLAGS: { status: ReviewStatus; label: string }[] = [
 
 export function RecordingCard({
   item,
+  selected,
+  onToggle,
   onFlag,
 }: {
   item: RecordingItem;
+  selected: boolean;
+  onToggle: (id: string) => void;
   onFlag: (id: string, status: ReviewStatus | null) => void;
 }) {
   return (
     <li className="rounded-lg border border-border bg-surface p-4">
-      <p className="font-mono text-xs text-text-tertiary">{item.promptId}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-mono text-xs text-text-tertiary">{item.promptId}</p>
+        {item.isTestSet ? (
+          <span className="rounded-full border border-accent bg-accent-subtle px-3 py-1 text-xs font-medium text-accent-text">
+            Test set
+          </span>
+        ) : (
+          <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-text-secondary">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggle(item.id)}
+              className="h-4 w-4"
+            />
+            Select
+          </label>
+        )}
+      </div>
       <p className="mt-1 text-base text-text-primary">{item.promptText}</p>
       {item.language === "igala" ? (
         item.answerText ? (
@@ -236,17 +261,31 @@ export function RecordingsView({
   query,
   exporting,
   message,
+  selected,
+  confirmingFreeze,
+  freezing,
   onQuery,
   onFlag,
   onExport,
+  onToggle,
+  onFreezeAsk,
+  onFreezeConfirm,
+  onFreezeCancel,
 }: {
   items: RecordingItem[];
   query: RecordingsQuery;
   exporting: boolean;
   message: string | null;
+  selected: string[];
+  confirmingFreeze: boolean;
+  freezing: boolean;
   onQuery: (patch: Partial<RecordingsQuery>) => void;
   onFlag: (id: string, status: ReviewStatus | null) => void;
   onExport: () => void;
+  onToggle: (id: string) => void;
+  onFreezeAsk: () => void;
+  onFreezeConfirm: () => void;
+  onFreezeCancel: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -336,6 +375,52 @@ export function RecordingsView({
         The manifest lists only clips chosen Open, published, rights cleared and
         consented. Community-only and test-set clips never leave.
       </p>
+      {selected.length > 0 && !confirmingFreeze && (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-text-secondary">
+            {selected.length} selected
+          </p>
+          <button
+            type="button"
+            onClick={onFreezeAsk}
+            className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-sunken"
+          >
+            Freeze into test set
+          </button>
+        </div>
+      )}
+      {confirmingFreeze && (
+        <div
+          role="alertdialog"
+          aria-label="Confirm freeze"
+          className="space-y-3 rounded-md border border-warning bg-surface p-4"
+        >
+          <p className="text-sm text-text-primary">
+            Freeze {selected.length} clip{selected.length === 1 ? "" : "s"}{" "}
+            into the test set? Frozen clips never train a model, and a speaker
+            in the test set must have no kept clips outside it. This cannot be
+            undone here.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={freezing}
+              onClick={onFreezeConfirm}
+              className="min-h-[44px] cursor-pointer rounded-md border border-accent bg-accent-subtle px-4 py-2 text-sm font-medium text-accent-text disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {freezing ? "Freezing..." : "Confirm freeze"}
+            </button>
+            <button
+              type="button"
+              disabled={freezing}
+              onClick={onFreezeCancel}
+              className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-4 py-2 text-sm text-text-secondary hover:bg-surface-sunken"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <p aria-live="polite" className="text-sm text-text-secondary">
         {message}
       </p>
@@ -346,7 +431,13 @@ export function RecordingsView({
       ) : (
         <ul className="space-y-3">
           {items.map((item) => (
-            <RecordingCard key={item.id} item={item} onFlag={onFlag} />
+            <RecordingCard
+              key={item.id}
+              item={item}
+              selected={selected.includes(item.id)}
+              onToggle={onToggle}
+              onFlag={onFlag}
+            />
           ))}
         </ul>
       )}
@@ -360,6 +451,9 @@ export function RecordingsInterface() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [confirmingFreeze, setConfirmingFreeze] = useState(false);
+  const [freezing, setFreezing] = useState(false);
 
   const load = useCallback(async (q: RecordingsQuery) => {
     setError(null);
@@ -397,6 +491,40 @@ export function RecordingsInterface() {
     if (!res || !res.ok) {
       setItems(before);
       setMessage("Could not save that flag. Try again.");
+    }
+  };
+
+  const toggle = (id: string) =>
+    setSelected((cur) =>
+      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+    );
+
+  const freeze = async () => {
+    setFreezing(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/lab/speech/freeze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordingIds: selected }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error ?? "Could not freeze those clips.");
+      const frozen = new Set<string>(selected);
+      setItems(
+        (cur) =>
+          cur?.map((i) => (frozen.has(i.id) ? { ...i, isTestSet: true } : i)) ??
+          cur,
+      );
+      setSelected([]);
+      setMessage(
+        `Froze ${j.frozen} clip${j.frozen === 1 ? "" : "s"} into the test set.`,
+      );
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not freeze those clips.");
+    } finally {
+      setFreezing(false);
+      setConfirmingFreeze(false);
     }
   };
 
@@ -445,6 +573,13 @@ export function RecordingsInterface() {
         onQuery={(patch) => setQuery((q) => ({ ...q, ...patch }))}
         onFlag={(id, s) => void flag(id, s)}
         onExport={() => void exportManifest()}
+        selected={selected}
+        confirmingFreeze={confirmingFreeze}
+        freezing={freezing}
+        onToggle={toggle}
+        onFreezeAsk={() => setConfirmingFreeze(true)}
+        onFreezeConfirm={() => void freeze()}
+        onFreezeCancel={() => setConfirmingFreeze(false)}
       />
     </div>
   );
