@@ -47,9 +47,33 @@ export const OPEN_ROWS_QUERY = {
   },
 } as const;
 
-/** Load candidate rows for the OPEN export. Guard them with buildOpenManifest. */
+/**
+ * Load candidate rows for the OPEN export, each with its speaker's profile
+ * joined in (the two tables share no relation, so this is a second query by
+ * annotator id). Guard them with buildOpenManifest.
+ */
 export async function loadOpenRows(
-  db: Pick<PrismaClient, "speechRecording">,
+  db: Pick<PrismaClient, "speechRecording" | "speakerProfile">,
 ): Promise<ManifestRow[]> {
-  return db.speechRecording.findMany(OPEN_ROWS_QUERY);
+  const rows = await db.speechRecording.findMany(OPEN_ROWS_QUERY);
+  const ids = [
+    ...new Set(rows.map((r) => r.annotatorId).filter((id): id is string => !!id)),
+  ];
+  const profiles = ids.length
+    ? await db.speakerProfile.findMany({
+        where: { userId: { in: ids } },
+        select: {
+          userId: true,
+          dialect: true,
+          ageBand: true,
+          gender: true,
+          mayShareDemographics: true,
+        },
+      })
+    : [];
+  const byUser = new Map(profiles.map((p) => [p.userId, p]));
+  return rows.map((r) => ({
+    ...r,
+    speakerProfile: r.annotatorId ? (byUser.get(r.annotatorId) ?? null) : null,
+  }));
 }

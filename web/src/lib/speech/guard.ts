@@ -46,6 +46,12 @@ export interface ExportableRow {
   isDemo: boolean;
   rightsStatus: "cleared" | "pending" | "restricted";
   sourceType: "contributor" | "third_party" | "derived";
+  /**
+   * For a third_party clip, the ThirdPartyAudioSource id it came from. Optional
+   * so a caller that does not load it is unchanged; canTrain refuses a
+   * third_party clip whose loaded value is null.
+   */
+  sourceRef?: string | null;
   publishedOpenAt: Date | null;
   /** Set when the client confirmed the upload; a clip with no file is not data. */
   uploadedAt: Date | null;
@@ -57,8 +63,11 @@ export interface ExportableRow {
   prompt?: PromptFreezeFields | null;
 }
 
-/** Review verdicts that keep a clip out of every export. */
-const REJECTED_REVIEWS = new Set(["bad_audio", "wrong_text"]);
+/**
+ * Review verdicts that keep a clip out of every export. "withdrawn" is written
+ * by withdrawSpeaker (withdrawal.ts), never by a reviewer.
+ */
+const REJECTED_REVIEWS = new Set(["bad_audio", "wrong_text", "withdrawn"]);
 
 /**
  * Rows that leave by NO path, whatever else is true of them: COMMUNITY-ONLY

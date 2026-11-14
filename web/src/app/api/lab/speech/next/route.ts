@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
+import { rankByCoverage } from "@/lib/speech/coverage";
 
 /**
- * The Record queue (GET /api/lab/speech/next). Researcher-only, 404 when the
- * lab flag is off. Order, per the lab design:
+ * The Record queue (GET /api/lab/speech/next). For the speaker side of the
+ * lab (researchers; annotators when SPEECH_LAYER_ANNOTATORS is on); 404 when
+ * the lab flag is off. Order, per the lab design:
  *   1. prompts the researcher has an OWN written answer for and no recording
  *      of yet (the answer rides along: they read it aloud), oldest answer
  *      first;
@@ -17,13 +19,18 @@ import { labGate } from "@/lib/speech/lab-route";
  * prompts the screen has dismissed this visit. Demo mode (`?demo=<id>`)
  * ignores recording history, as the text queue does, so a live walkthrough
  * always has something to show.
+ *
+ * Within each step the prompts are ranked by coverage (lib/speech/coverage.ts):
+ * the prompt the pool holds the fewest clips of comes first, a prompt with no
+ * clip ahead of every other, and ties keep the order above. The ranking only
+ * re-orders; it adds and drops nothing.
  */
 
 /** Never serve a frozen prompt: the shared filter for both queue steps. */
 const NOT_FROZEN = { isHoldout: false, split: { not: "test" as const } };
 
 export async function GET(req: Request) {
-  const gate = await labGate();
+  const gate = await labGate({ audience: "speaker" });
   if (gate.error) return gate.error;
   const annotatorId = gate.userId;
 
@@ -78,8 +85,41 @@ export async function GET(req: Request) {
 
   const progress = { recorded: recordedIds.length };
 
+  // The clips the pool holds and the speaker's dialect, for the coverage
+  // ranking. Real, confirmed, unfrozen clips only; ids and dialects, never
+  // the audio.
+  const rankPrompts = async <P extends { id: string }>(prompts: P[]) => {
+    if (prompts.length < 2) return prompts;
+    const [clips, profile] = await Promise.all([
+      prisma.speechRecording.findMany({
+        where: {
+          promptId: { in: prompts.map((p) => p.id) },
+          isDemo: false,
+          uploadedAt: { not: null },
+        },
+        select: { promptId: true, annotatorId: true, dialect: true },
+      }),
+      prisma.speakerProfile.findUnique({
+        where: { userId: annotatorId },
+        select: { dialect: true },
+      }),
+    ]);
+    return rankByCoverage(
+      prompts,
+      clips.map((c) => ({
+        promptId: c.promptId,
+        speakerId: c.annotatorId,
+        dialect: c.dialect,
+      })),
+      { id: annotatorId, dialect: profile?.dialect ?? null },
+    );
+  };
+
   if (withAnswer.length > 0) {
-    const a = withAnswer[0];
+    const ranked = await rankPrompts(
+      withAnswer.map((a) => ({ id: a.prompt.id, a })),
+    );
+    const a = ranked[0].a;
     return NextResponse.json({
       complete: false,
       demo: isDemo,
@@ -103,7 +143,8 @@ export async function GET(req: Request) {
   }
 
   // Step 2: prompts with no answer of mine and no recording.
-  const prompt = await prisma.prompt.findFirst({
+  const candidates = await prisma.prompt.findMany({
+    take: 500,
     where: {
       ...NOT_FROZEN,
       language: "igala",
@@ -114,9 +155,10 @@ export async function GET(req: Request) {
     orderBy: { promptId: "asc" },
     select: { id: true, promptId: true, text: true, bucket: true },
   });
-  if (!prompt) {
+  if (candidates.length === 0) {
     return NextResponse.json({ complete: true, demo: isDemo, progress });
   }
+  const prompt = (await rankPrompts(candidates))[0];
   return NextResponse.json({
     complete: false,
     demo: isDemo,

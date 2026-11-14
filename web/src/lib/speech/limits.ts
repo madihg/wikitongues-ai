@@ -31,10 +31,15 @@ export type Tier = (typeof TIERS)[number];
 export const REVIEW_STATUSES = ["keep", "bad_audio", "wrong_text"] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 
-/** Review verdicts that take a clip out of listening and every export. */
+/**
+ * Review verdicts that take a clip out of listening and every export.
+ * "withdrawn" is not a reviewer choice (REVIEW_STATUSES omits it): the speaker
+ * withdrew consent, see withdrawal.ts.
+ */
 export const REJECTED_REVIEW_STATUSES: readonly string[] = [
   "bad_audio",
   "wrong_text",
+  "withdrawn",
 ];
 
 /** Listen verdicts. Same shape as the text arena plus "both unusable". */
