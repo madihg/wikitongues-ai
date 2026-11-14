@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MyWorkFilter, MyWorkRows, type HistoryRow } from "./my-work-rows";
+import {
+  MyWorkFilter,
+  MyWorkRows,
+  myWorkFilterFromSearch,
+  type HistoryRow,
+} from "./my-work-rows";
+import { FIX_HREF } from "@/lib/waiting";
 
 /**
  * My Work: every row keeps its labels and gains an Edit button; the filter
@@ -101,5 +107,24 @@ describe("My Work filter", () => {
     );
     expect(m).toMatch(/aria-pressed="false"[^>]*>All</);
     expect(m).toMatch(/aria-pressed="true"[^>]*>Needs a meaning or a reason</);
+  });
+});
+
+describe("My Work opens on the filter named in the address", () => {
+  it("?filter=fix turns the fix filter on; anything else shows everything", () => {
+    expect(myWorkFilterFromSearch(new URLSearchParams("filter=fix"))).toBe(
+      "fix",
+    );
+    for (const q of ["", "filter=all", "filter=FIX", "filter=", "other=fix"]) {
+      expect(myWorkFilterFromSearch(new URLSearchParams(q)), q).toBe("all");
+    }
+    expect(myWorkFilterFromSearch(null)).toBe("all");
+    expect(myWorkFilterFromSearch(undefined)).toBe("all");
+  });
+
+  it("the Dashboard's fix card lands on the filtered list", () => {
+    const [path, query] = FIX_HREF.split("?");
+    expect(path).toBe("/annotator/history");
+    expect(myWorkFilterFromSearch(new URLSearchParams(query))).toBe("fix");
   });
 });

@@ -183,6 +183,17 @@ const FILTERS: { value: MyWorkFilterValue; label: string }[] = [
   { value: "fix", label: "Needs a meaning or a reason" },
 ];
 
+/**
+ * The filter My Work opens with, read from the address. The Dashboard's
+ * "Your answers to fix" card links to /annotator/history?filter=fix and must
+ * land on the filtered list. Anything else opens the whole list, as before.
+ */
+export function myWorkFilterFromSearch(
+  params: { get(name: string): string | null } | null | undefined,
+): MyWorkFilterValue {
+  return params?.get("filter") === "fix" ? "fix" : "all";
+}
+
 export function MyWorkFilter({
   value,
   onChange,

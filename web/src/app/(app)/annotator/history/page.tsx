@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { HelpButton } from "@/components/help-button";
 import {
   AnswerEditorDrawer,
@@ -11,12 +12,16 @@ import {
   MyWorkFilter,
   MyWorkRows,
   type HistoryRow,
+  myWorkFilterFromSearch,
   type MyWorkFilterValue,
 } from "@/components/my-work-rows";
 
 const PAGE_SIZE = 20;
 
-export default function HistoryPage() {
+function MyWork() {
+  // ?filter=fix (the Dashboard's "Your answers to fix" card) opens the list
+  // with the fix filter already on.
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -25,7 +30,9 @@ export default function HistoryPage() {
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   // All, or only the rows that need a meaning or a reason.
-  const [filter, setFilter] = useState<MyWorkFilterValue>("all");
+  const [filter, setFilter] = useState<MyWorkFilterValue>(() =>
+    myWorkFilterFromSearch(searchParams),
+  );
   // The row open in the edit drawer, if any.
   const [editing, setEditing] = useState<EditTarget | null>(null);
 
@@ -136,5 +143,14 @@ export default function HistoryPage() {
         description="This page lists everything you've personally submitted: blind comparisons, gold answers you authored before seeing any model, and corrections you made to a winning output. Click a row to see the full detail. Press Edit on a row to change what you wrote: the answer, its meaning, a correction or a reason. The choice you made cannot be changed. This is your own work only - demo sessions and other annotators' work are never shown here."
       />
     </div>
+  );
+}
+
+export default function HistoryPage() {
+  // useSearchParams needs a Suspense boundary to build.
+  return (
+    <Suspense fallback={null}>
+      <MyWork />
+    </Suspense>
   );
 }
