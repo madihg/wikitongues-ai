@@ -1,87 +1,12 @@
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
+@import "../styles/tokens.css";
+@import "../styles/tokens.compat.platform.css";
 
 /* ─── Wikitongues AI Design System ─────────────────────────────
    Warm, humanist, community-first. Ochre accent on warm ink.
    Replaces the Oulipo brutalist system. Light + dark.
    ───────────────────────────────────────────────────────────── */
-
-:root {
-  /* Brand: warm ochre */
-  --wt-ochre-50: #fdf6e9;
-  --wt-ochre-100: #f9e7c2;
-  --wt-ochre-200: #f2cf86;
-  --wt-ochre-300: #ebb84e;
-  --wt-ochre-400: #e0a21f; /* signature accent — confirm vs brand kit */
-  --wt-ochre-500: #c4881a;
-  --wt-ochre-600: #9c6a13; /* accessible accent-as-text on white (AA) */
-  --wt-ochre-700: #744f10;
-
-  /* Ink (warm neutral, not pure black) */
-  --wt-ink-950: #1a1714;
-  --wt-ink-900: #26211c;
-  --wt-ink-800: #3a332c;
-  --wt-ink-700: #544a40;
-  --wt-ink-500: #7d7064;
-  --wt-ink-300: #b6aa9c;
-  --wt-ink-200: #d8cfc4;
-  --wt-ink-100: #ece6dd;
-  --wt-ink-50: #f7f3ec;
-
-  /* Supporting hues (data viz / A-B) */
-  --wt-clay-500: #b5512f;
-  --wt-sage-500: #4f7a5e;
-  --wt-indigo-500: #3f5a8a;
-
-  /* Semantic surfaces / text (light = default) */
-  --background: #fbf8f2;
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
-  --surface-sunken: var(--wt-ink-50);
-  --foreground: var(--wt-ink-900);
-  --text-primary: var(--wt-ink-900);
-  --text-secondary: var(--wt-ink-700);
-  --text-tertiary: var(--wt-ink-500);
-  --text-muted: var(--wt-ink-300);
-  --border: var(--wt-ink-100);
-  --border-strong: var(--wt-ink-200);
-
-  --accent: var(--wt-ochre-400);
-  --accent-hover: var(--wt-ochre-500);
-  --accent-text: var(--wt-ochre-600);
-  --accent-contrast: var(--wt-ink-950);
-  --accent-subtle: var(--wt-ochre-50);
-
-  /* Semantic state */
-  --success: #2f7d54;
-  --success-subtle: #e7f3ec;
-  --warning: #b5790f;
-  --warning-subtle: #fdf2dc;
-  --danger: #b23b32;
-  --danger-subtle: #fbeae8;
-  --info: #3f5a8a;
-  --info-subtle: #eaeff6;
-
-  /* Pairwise A/B + rubric ramp (colorblind-safe pairing) */
-  --pick-a: #3f5a8a;
-  --pick-b: #b5512f;
-  --pick-tie: var(--wt-ink-500);
-  --score-lo: #b23b32;
-  --score-mid: #b5790f;
-  --score-hi: #2f7d54;
-
-  /* Radius / shadow / motion */
-  --radius-sm: 4px;
-  --radius: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --shadow-sm: 0 1px 2px rgba(26, 23, 20, 0.06);
-  --shadow: 0 1px 3px rgba(26, 23, 20, 0.08), 0 1px 2px rgba(26, 23, 20, 0.04);
-  --shadow-md: 0 4px 12px rgba(26, 23, 20, 0.08);
-  --shadow-lg: 0 12px 32px rgba(26, 23, 20, 0.12);
-  --ring: 0 0 0 3px var(--wt-ochre-200);
-  --transition-default: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-}
 
 [data-theme="dark"] {
   --background: #16130f;
