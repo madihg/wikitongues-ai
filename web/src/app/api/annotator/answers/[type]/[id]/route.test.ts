@@ -211,6 +211,35 @@ describe("/api/annotator/answers/[type]/[id]", () => {
       restore();
     });
 
+    it("Re-record opens the Record tab of the one Speech link, for every role; no link with speech off", async () => {
+      as("ann", "ANNOTATOR");
+      delete process.env.SPEECH_LAB_ENABLED;
+      const off = await (
+        await GET(new Request("http://test/x"), ctx("cold", "c-ann"))
+      ).json();
+      expect(off.recordHref).toBeNull();
+
+      process.env.SPEECH_LAB_ENABLED = "1";
+      process.env.SPEECH_LAYER_ANNOTATORS = "1";
+      const annotator = await (
+        await GET(new Request("http://test/x"), ctx("cold", "c-ann"))
+      ).json();
+      expect(annotator.recordHref).toBe("/speak");
+
+      db.coldAuthorAnswer.rows.push({
+        ...db.coldAuthorAnswer.rows[0],
+        id: "c-res",
+        annotatorId: "res",
+      });
+      delete process.env.SPEECH_LAYER_ANNOTATORS;
+      as("res", "RESEARCHER");
+      const researcher = await (
+        await GET(new Request("http://test/x"), ctx("cold", "c-res"))
+      ).json();
+      expect(researcher.recordHref).toBe("/speak");
+      restore();
+    });
+
     it("the author changes the reason; the choice, the chips and the scores are refused; others are refused", async () => {
       seedListen();
       process.env.SPEECH_LAB_ENABLED = "1";

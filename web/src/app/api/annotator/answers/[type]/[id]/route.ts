@@ -65,12 +65,9 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const res = await loadEditEpisode({ type, id, userId: me.userId, withClips });
-  // Where "Re-record" goes: the Record page this person already knows.
-  const recordHref = !withClips
-    ? null
-    : me.role === "RESEARCHER"
-      ? "/lab/speech"
-      : "/speak";
+  // Where "Re-record" goes: the Record tab of the one Speech link, the same
+  // for every role (the old /lab/speech door redirects there).
+  const recordHref = withClips ? "/speak" : null;
   return NextResponse.json(
     res.status === 200 ? { ...res.body, recordHref } : res.body,
     { status: res.status },
