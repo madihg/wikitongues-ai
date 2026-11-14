@@ -15,6 +15,7 @@ import { InfoTip } from "@/components/info-tip";
 import { prisma } from "@/lib/prisma";
 import { computeAnnotationInsights } from "@/lib/annotation-insights";
 import { computeMethodMetrics } from "@/lib/method-metrics";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
  * The Model Arena Overview.
@@ -39,6 +40,7 @@ import { computeMethodMetrics } from "@/lib/method-metrics";
 export const dynamic = "force-dynamic";
 
 export default async function ArenaPage() {
+  await requireResearcherPage();
   const [insights, metrics] = await Promise.all([
     computeAnnotationInsights(prisma),
     computeMethodMetrics(prisma),
