@@ -98,7 +98,7 @@ const view = (over: Partial<Parameters<typeof ListenView>[0]> = {}) =>
       winner="a"
       reasons={["wrong_tone"]}
       note=""
-      axes={{}}
+      axes={{ a: {}, b: {} }}
       busy={false}
       error={null}
       onWinner={noop}

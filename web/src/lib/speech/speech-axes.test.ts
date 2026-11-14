@@ -9,8 +9,9 @@ import {
   SPEECH_AXES,
   activeAxesSet,
   axesSetFor,
-  axesTargetFor,
+  readStoredAxes,
   sanitizeAxes,
+  takesAxes,
 } from "./speech-axes";
 
 describe("speech axes config", () => {
@@ -34,32 +35,51 @@ describe("speech axes config", () => {
   });
 });
 
-describe("axesTargetFor", () => {
-  it("winner side, both on a tie, none when unusable or unknown", () => {
-    expect(axesTargetFor("a")).toBe("a");
-    expect(axesTargetFor("b")).toBe("b");
-    expect(axesTargetFor("tie")).toBe("both");
-    expect(axesTargetFor("both_unusable")).toBeNull();
-    expect(axesTargetFor("x")).toBeNull();
+describe("takesAxes", () => {
+  it("a, b and tie take axes on both clips; both unusable and unknown take none", () => {
+    expect(takesAxes("a")).toBe(true);
+    expect(takesAxes("b")).toBe(true);
+    expect(takesAxes("tie")).toBe(true);
+    expect(takesAxes("both_unusable")).toBe(false);
+    expect(takesAxes("x")).toBe(false);
   });
 });
 
 describe("sanitizeAxes", () => {
-  it("is null when absent or empty", () => {
+  it("is null when absent or both sides are empty", () => {
     expect(sanitizeAxes(undefined, "a")).toBeNull();
     expect(sanitizeAxes(null, "a")).toBeNull();
     expect(sanitizeAxes({}, "a")).toBeNull();
+    expect(sanitizeAxes({ a: {}, b: {} }, "tie")).toBeNull();
   });
-  it("keeps 0 to 5 and na, tagged with version and target", () => {
-    expect(sanitizeAxes({ tone: 0, pace: 5, naturalness: "na" }, "b")).toEqual({
+  it("keeps both sides, 0 to 5 and na, whatever the verdict", () => {
+    const raw = {
+      a: { tone: 0, pace: 5, naturalness: "na" },
+      b: { tone: 2, intelligibility: 4 },
+    };
+    for (const winner of ["a", "b", "tie"]) {
+      expect(sanitizeAxes(raw, winner)).toEqual({
+        version: AXES_VERSION,
+        scores: raw,
+      });
+    }
+  });
+  it("stores no target on new rows", () => {
+    const out = sanitizeAxes({ a: { tone: 3 }, b: { tone: 1 } }, "a");
+    expect(out).not.toHaveProperty("target");
+  });
+  it("accepts one side only, filling the other with an empty set", () => {
+    expect(sanitizeAxes({ b: { pace: 1 } }, "a")).toEqual({
       version: AXES_VERSION,
-      target: "b",
-      scores: { tone: 0, pace: 5, naturalness: "na" },
+      scores: { a: {}, b: { pace: 1 } },
     });
-    expect(sanitizeAxes({ tone: 3 }, "tie")).toMatchObject({ target: "both" });
+    expect(sanitizeAxes({ a: { pace: "na" }, b: {} }, "b")).toEqual({
+      version: AXES_VERSION,
+      scores: { a: { pace: "na" }, b: {} },
+    });
   });
-  it("is invalid for anything else", () => {
-    for (const raw of [
+  it("is invalid for a malformed value or key on either side", () => {
+    for (const side of [
       { tone: 6 },
       { tone: -1 },
       { tone: 1.5 },
@@ -69,13 +89,67 @@ describe("sanitizeAxes", () => {
       [1],
       "x",
       5,
+      null,
     ]) {
+      expect(sanitizeAxes({ a: side }, "a"), JSON.stringify(side)).toBe(
+        "invalid",
+      );
+      expect(
+        sanitizeAxes({ a: { tone: 3 }, b: side }, "tie"),
+        JSON.stringify(side),
+      ).toBe("invalid");
+    }
+    expect(sanitizeAxes({ a: {}, c: { tone: 3 } }, "a")).toBe("invalid");
+    for (const raw of [[1], "x", 5]) {
       expect(sanitizeAxes(raw, "a"), JSON.stringify(raw)).toBe("invalid");
     }
   });
+  it("refuses the flat legacy shape now that the screen sends both sides", () => {
+    expect(sanitizeAxes({ tone: 3 }, "a")).toBe("invalid");
+    expect(sanitizeAxes({ tone: 3, pace: "na" }, "tie")).toBe("invalid");
+  });
   it("a both-unusable verdict takes no axes", () => {
-    expect(sanitizeAxes({ tone: 3 }, "both_unusable")).toBe("invalid");
+    expect(sanitizeAxes({ a: { tone: 3 } }, "both_unusable")).toBe("invalid");
+    expect(sanitizeAxes({ b: { pace: "na" } }, "both_unusable")).toBe(
+      "invalid",
+    );
     expect(sanitizeAxes(undefined, "both_unusable")).toBeNull();
+    expect(sanitizeAxes({ a: {}, b: {} }, "both_unusable")).toBeNull();
+  });
+});
+
+describe("readStoredAxes", () => {
+  it("reads the new two-sided shape as stored", () => {
+    const row = {
+      version: AXES_VERSION,
+      scores: { a: { tone: 3 }, b: { tone: "na" } },
+    };
+    expect(readStoredAxes(row)).toEqual(row);
+  });
+  it("reads an old provisional-1 row onto the side it described", () => {
+    const scores = { tone: 4, pace: "na" };
+    expect(readStoredAxes({ version: "provisional-1", target: "a", scores }))
+      .toEqual({ version: "provisional-1", scores: { a: scores, b: {} } });
+    expect(readStoredAxes({ version: "provisional-1", target: "b", scores }))
+      .toEqual({ version: "provisional-1", scores: { a: {}, b: scores } });
+    expect(
+      readStoredAxes({ version: "provisional-1", target: "both", scores }),
+    ).toEqual({ version: "provisional-1", scores: { a: scores, b: scores } });
+  });
+  it("is null for an empty column or anything unreadable", () => {
+    for (const raw of [
+      null,
+      undefined,
+      "x",
+      [1],
+      {},
+      { version: "provisional-1" },
+      { version: "provisional-1", target: "c", scores: { tone: 1 } },
+      { version: "provisional-1", scores: { a: { tone: 9 }, b: {} } },
+      { scores: { a: {}, b: {} } },
+    ]) {
+      expect(readStoredAxes(raw), JSON.stringify(raw)).toBeNull();
+    }
   });
 });
 
@@ -98,17 +172,37 @@ describe("the axes version mechanism", () => {
     expect(axesSetFor("__proto__")).toBeNull();
   });
   it("scores against the named version and stamps it, so old rows keep theirs", () => {
-    expect(sanitizeAxes({ tone: 4 }, "a", "provisional-1")).toMatchObject({ version: "provisional-1" });
-    expect(sanitizeAxes({ rubric_slot: 2 }, "a", "lydia-1")).toMatchObject({
+    expect(
+      sanitizeAxes({ a: { tone: 4 } }, "a", "provisional-1"),
+    ).toMatchObject({ version: "provisional-1" });
+    expect(
+      sanitizeAxes({ a: { rubric_slot: 2 }, b: {} }, "a", "lydia-1"),
+    ).toEqual({
       version: "lydia-1",
-      scores: { rubric_slot: 2 },
+      scores: { a: { rubric_slot: 2 }, b: {} },
     });
-    // a key from one set is not valid in the other
-    expect(sanitizeAxes({ tone: 4 }, "a", "lydia-1")).toBe("invalid");
-    expect(sanitizeAxes({ rubric_slot: 2 }, "a", "provisional-1")).toBe("invalid");
-    expect(sanitizeAxes({ tone: 4 }, "a", "nope")).toBe("invalid");
+    // a key from one set is not valid in the other, on either side
+    expect(sanitizeAxes({ a: { tone: 4 } }, "a", "lydia-1")).toBe("invalid");
+    expect(sanitizeAxes({ b: { tone: 4 } }, "a", "lydia-1")).toBe("invalid");
+    expect(sanitizeAxes({ a: { rubric_slot: 2 } }, "a", "provisional-1")).toBe(
+      "invalid",
+    );
+    expect(sanitizeAxes({ a: { tone: 4 } }, "a", "nope")).toBe("invalid");
   });
   it("the default is the active version", () => {
-    expect(sanitizeAxes({ tone: 4 }, "a")).toMatchObject({ version: AXES_VERSION });
+    expect(sanitizeAxes({ a: { tone: 4 } }, "a")).toMatchObject({
+      version: AXES_VERSION,
+    });
+  });
+  it("reads a stored row against the rubric it was scored under", () => {
+    const row = { version: "lydia-1", scores: { a: { rubric_slot: 1 }, b: {} } };
+    expect(readStoredAxes(row)).toEqual(row);
+    // provisional keys are not lydia-1 keys, and an unknown version is unreadable
+    expect(
+      readStoredAxes({ version: "lydia-1", scores: { a: { tone: 1 }, b: {} } }),
+    ).toBeNull();
+    expect(
+      readStoredAxes({ version: "lydia-2", scores: { a: {}, b: {} } }),
+    ).toBeNull();
   });
 });

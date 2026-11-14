@@ -9,6 +9,12 @@
  * under (SpeechComparison.axes.version), so rows scored under one set are
  * never read as another. A new rubric is a new entry in AXES_SETS and a flip
  * of LYDIA_RUBRIC_READY; old rows keep their version.
+ *
+ * Both clips are rated on every axis, whichever won, per the linguist's
+ * Oct 13 ask: "to see systematic errors we need both", so the scores show
+ * where a clip fails as well as why the other succeeds. Rows stored before
+ * this change carry a `target` and one set of scores; readStoredAxes reads
+ * both shapes.
  */
 
 export interface AxisDef {
@@ -101,42 +107,40 @@ export type SpeechAxisKey = string;
 export type AxisValue = number | "na";
 export type AxisScores = Partial<Record<SpeechAxisKey, AxisValue>>;
 
-/** Which clip the scores describe: the winner, or both when it is a tie. */
-export type AxesTarget = "a" | "b" | "both";
+/** The two clips of a pair. */
+export type AxisSide = "a" | "b";
 
+/** One set of scores per clip. Either side may be empty. */
+export interface PairScores {
+  a: AxisScores;
+  b: AxisScores;
+}
+
+/** The stored shape: both clips, no target. */
 export interface StoredAxes {
   version: string;
-  target: AxesTarget;
-  scores: AxisScores;
+  scores: PairScores;
 }
 
-/** The target for a verdict, or null when the verdict takes no axes. */
-export function axesTargetFor(winner: string): AxesTarget | null {
-  if (winner === "a") return "a";
-  if (winner === "b") return "b";
-  if (winner === "tie") return "both";
-  return null;
+/** Rows stored under provisional-1 before both sides were rated. */
+type LegacyTarget = "a" | "b" | "both";
+
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** Whether a verdict takes axes: a, b and tie do; both_unusable does not. */
+export function takesAxes(winner: string): boolean {
+  return winner === "a" || winner === "b" || winner === "tie";
 }
 
-/**
- * Validate an axes payload against the verdict. Returns null when there is
- * nothing to store (absent, empty, or a verdict that takes no axes) and the
- * string "invalid" for a malformed value, so the route can answer 400 instead
- * of silently dropping what a client meant.
- */
-export function sanitizeAxes(
+/** One clip's scores: known keys only, integer 0 to 5 or "na". */
+function sanitizeSide(
   raw: unknown,
-  winner: string,
-  version: string = AXES_VERSION,
-): StoredAxes | null | "invalid" {
-  if (raw === undefined || raw === null) return null;
-  const set = axesSetFor(version);
-  if (!set) return "invalid";
-  const keys = set.axes.map((a) => a.key);
-  if (typeof raw !== "object" || Array.isArray(raw)) return "invalid";
-  const target = axesTargetFor(winner);
+  keys: readonly string[],
+): AxisScores | "invalid" {
+  if (!isObject(raw)) return "invalid";
   const scores: AxisScores = {};
-  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+  for (const [k, v] of Object.entries(raw)) {
     if (!keys.includes(k)) return "invalid";
     if (v === "na") {
       scores[k as SpeechAxisKey] = "na";
@@ -151,7 +155,65 @@ export function sanitizeAxes(
       return "invalid";
     }
   }
-  if (Object.keys(scores).length === 0) return null;
-  if (target === null) return "invalid";
-  return { version: set.version, target, scores };
+  return scores;
+}
+
+/**
+ * Validate an axes payload `{ a?: {...}, b?: {...} }` against the verdict
+ * and the rubric named by `version` (the active one by default). Returns null
+ * when there is nothing to store (absent, or both sides empty) and the string
+ * "invalid" for a malformed value (including the old flat one-clip shape, a
+ * key from another rubric, an unknown version, or any score on a
+ * both_unusable verdict), so the route can answer 400 instead of silently
+ * dropping what a client meant.
+ */
+export function sanitizeAxes(
+  raw: unknown,
+  winner: string,
+  version: string = AXES_VERSION,
+): StoredAxes | null | "invalid" {
+  if (raw === undefined || raw === null) return null;
+  const set = axesSetFor(version);
+  if (!set) return "invalid";
+  const keys = set.axes.map((x) => x.key);
+  if (!isObject(raw)) return "invalid";
+  if (Object.keys(raw).some((k) => k !== "a" && k !== "b")) return "invalid";
+  const a = "a" in raw ? sanitizeSide(raw.a, keys) : {};
+  const b = "b" in raw ? sanitizeSide(raw.b, keys) : {};
+  if (a === "invalid" || b === "invalid") return "invalid";
+  if (Object.keys(a).length === 0 && Object.keys(b).length === 0) return null;
+  if (!takesAxes(winner)) return "invalid";
+  return { version: set.version, scores: { a, b } };
+}
+
+/**
+ * Read a stored SpeechComparison.axes value, new shape or old. An old
+ * provisional-1 row (`{ version, target, scores }`) lands on the side it
+ * described, on both for a tie. A row is read against the rubric it was
+ * scored under. Null for an empty or unreadable value, or an unknown version.
+ */
+export function readStoredAxes(raw: unknown): StoredAxes | null {
+  if (!isObject(raw) || typeof raw.version !== "string") return null;
+  const version = raw.version;
+  const set = axesSetFor(version);
+  if (!set) return null;
+  const keys = set.axes.map((x) => x.key);
+  if (!isObject(raw.scores)) return null;
+  if ("target" in raw) {
+    const target = raw.target as LegacyTarget;
+    if (target !== "a" && target !== "b" && target !== "both") return null;
+    const side = sanitizeSide(raw.scores, keys);
+    if (side === "invalid") return null;
+    return {
+      version,
+      scores: {
+        a: target === "b" ? {} : side,
+        b: target === "a" ? {} : side,
+      },
+    };
+  }
+  const a = sanitizeSide(raw.scores.a ?? {}, keys);
+  const b = sanitizeSide(raw.scores.b ?? {}, keys);
+  if (a === "invalid" || b === "invalid") return null;
+  return { version, scores: { a, b } };
 }
