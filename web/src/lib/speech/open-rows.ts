@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { ManifestRow } from "./manifest";
+import { dropChangedTextClips, type RevisionDb } from "./clip-text";
 
 /**
  * The one query that feeds the OPEN export, shared by the export route and
@@ -8,6 +9,8 @@ import type { ManifestRow } from "./manifest";
  * buildOpenManifest (canExportOpen), which re-checks tier, publishedOpenAt,
  * test set, rights, source, consent, review and the prompt's frozen status.
  * Keeping the query here means the two entry points cannot drift apart.
+ * loadOpenRows also leaves out a clip whose text changed after it was
+ * recorded (clip-text.ts).
  * The select is explicit and omits `bytes`: an export never carries audio
  * (audio-bytes-guard.test.ts).
  */
@@ -23,6 +26,9 @@ export const OPEN_ROWS_QUERY = {
   orderBy: { createdAt: "asc" },
   select: {
     id: true,
+    // For the changed-text rule (clip-text.ts).
+    coldAuthorAnswerId: true,
+    createdAt: true,
     storagePath: true,
     language: true,
     mimeType: true,
@@ -56,9 +62,14 @@ export const OPEN_ROWS_QUERY = {
  * annotator id). Guard them with buildOpenManifest.
  */
 export async function loadOpenRows(
-  db: Pick<PrismaClient, "speechRecording" | "speakerProfile">,
+  db: Pick<PrismaClient, "speechRecording" | "speakerProfile"> & RevisionDb,
 ): Promise<ManifestRow[]> {
-  const rows = await db.speechRecording.findMany(OPEN_ROWS_QUERY);
+  // A clip whose text changed after it was recorded never leaves: its
+  // transcript would be the answer's new words, which the clip does not say.
+  const rows = await dropChangedTextClips(
+    db,
+    await db.speechRecording.findMany(OPEN_ROWS_QUERY),
+  );
   const ids = [
     ...new Set(rows.map((r) => r.annotatorId).filter((id): id is string => !!id)),
   ];
