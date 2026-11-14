@@ -5,6 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { HelpButton } from "@/components/help-button";
+import {
+  DoneBlock,
+  StatCard,
+  WaitingBlock,
+} from "@/components/annotator/home-blocks";
+import {
+  TimeWorked,
+  type TimeSummary,
+} from "@/components/annotator/time-worked";
+import type { WaitingCounts } from "@/lib/waiting";
 import { isResearcher } from "@/lib/personas";
 
 interface RecentItem {
@@ -22,46 +32,10 @@ interface Summary {
   promptsInCatalogue: number;
   pendingReviews: number;
   recent: RecentItem[];
-}
-
-function StatCard({
-  title,
-  value,
-  description,
-  href,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  href?: string;
-}) {
-  const content = (
-    <>
-      <h3 className="text-sm font-medium text-text-tertiary">{title}</h3>
-      <p className="mt-2 text-3xl font-semibold text-text-primary">{value}</p>
-      <p className="mt-1 text-sm text-text-tertiary">{description}</p>
-    </>
-  );
-
-  if (!href) {
-    return (
-      <div className="rounded-lg border border-border bg-surface p-6">
-        {content}
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      href={href}
-      className="group relative block cursor-pointer rounded-lg border border-border bg-surface p-6 transition-colors hover:border-accent/40 hover:bg-surface-sunken"
-    >
-      {content}
-      <span className="absolute right-6 top-6 text-text-muted opacity-0 transition-opacity group-hover:opacity-100">
-        &rarr;
-      </span>
-    </Link>
-  );
+  time?: TimeSummary;
+  waiting?: WaitingCounts;
+  speech?: boolean;
+  clips?: number;
 }
 
 /** "Today" / "Yesterday" / "Jul 2" from an ISO timestamp. */
@@ -103,8 +77,10 @@ export default function AnnotatorDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
+  // What a number shows while there is none.
+  const placeholder = loading ? "…" : "Not available";
   const num = (v: number | undefined) =>
-    loading ? "…" : error || v === undefined ? "—" : String(v);
+    loading || error || v === undefined ? placeholder : String(v);
 
   const recent = summary?.recent ?? [];
 
@@ -124,39 +100,23 @@ export default function AnnotatorDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <StatCard
-          title="Queue Remaining"
-          value={num(summary?.pending)}
-          description="Pairwise comparisons still waiting for your input"
-          href="/annotator/annotate"
-        />
-        {/* Researcher-only since the 2026-08-28 rework: annotators correct
-            inside each episode now, and their /annotator/corrections link
-            would just redirect them back to Annotate. Researchers keep the
-            standalone backlog lane this card counts. */}
-        {researcher && (
-          <StatCard
-            title="Corrections Waiting"
-            value={num(summary?.correctionsWaiting)}
-            description="AI answers you already judged, ready for your fixes"
-            href="/annotator/corrections"
-          />
-        )}
-        <StatCard
-          title="Comparisons Completed"
-          value={num(summary?.completed)}
-          description="Blind pairwise judgments you've submitted"
-          href="/annotator/history"
-        />
-        <StatCard
-          title="Gold Answers Written"
-          value={num(summary?.coldAnswers)}
-          description="Your own Igala answers authored before seeing any model"
-          href="/annotator/history"
-        />
+      <WaitingBlock
+        counts={loading || error ? undefined : summary?.waiting}
+        researcher={researcher}
+        placeholder={placeholder}
+      >
+        {/* Researcher-only cards, as before. Corrections Waiting has been
+            researcher-only since the 2026-08-28 rework: annotators correct
+            inside each episode, and their /annotator/corrections link would
+            just redirect them back to Annotate. */}
         {researcher && (
           <>
+            <StatCard
+              title="Corrections Waiting"
+              value={num(summary?.correctionsWaiting)}
+              description="AI answers you already judged, ready for your fixes"
+              href="/annotator/corrections"
+            />
             <StatCard
               title="Reviews Pending"
               value={num(summary?.pendingReviews)}
@@ -171,6 +131,17 @@ export default function AnnotatorDashboard() {
             />
           </>
         )}
+      </WaitingBlock>
+
+      <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2">
+        <TimeWorked time={error ? null : summary?.time} />
+        <DoneBlock
+          completed={loading || error ? undefined : summary?.completed}
+          coldAnswers={loading || error ? undefined : summary?.coldAnswers}
+          clips={loading || error ? undefined : summary?.clips}
+          showClips={!!summary?.speech || (summary?.clips ?? 0) > 0}
+          placeholder={placeholder}
+        />
       </div>
 
       <div className="mt-8">
@@ -188,7 +159,7 @@ export default function AnnotatorDashboard() {
             </div>
           ) : recent.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-text-tertiary">
-              No activity yet. Head to the Annotate tab to begin — your
+              No activity yet. Head to the Annotate tab to begin. Your
               submissions will show up here.
             </div>
           ) : (
@@ -259,7 +230,7 @@ export default function AnnotatorDashboard() {
       </div>
       <HelpButton
         title="Dashboard"
-        description="Your annotation dashboard shows real, up-to-date numbers for your own work. Queue Remaining is how many pairwise comparisons are still waiting for you. Comparisons Completed and Gold Answers Written count what you've already submitted. Recent Activity lists your latest submissions. Demo/testing sessions are never counted here. Use the sidebar to navigate to each task."
+        description="Your dashboard shows real, up-to-date numbers for your own work. Waiting for you shows each kind of work that is waiting, and each card opens that work. This week shows the time you worked. What you have done counts what you have already submitted. Recent Activity lists your latest submissions, clips and edits. Demo sessions are never counted here."
       />
     </div>
   );
