@@ -54,9 +54,9 @@
  *
  * Check, writing nothing:
  *   npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts --check
- * Seed everything:
+ * Seed everything, in serving order (the text and speech sets mixed):
  *   npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts
- * Seed one set:
+ * Seed one set (this loses the mix: the other set then lands after it):
  *   npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts --only text
  *   npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts --only speech
  */
@@ -70,6 +70,7 @@ import {
   isSpeechPrompt,
   provenanceFor,
   speechYield,
+  v46ServingOrder,
 } from "../src/lib/prompt-bank-v46";
 
 const prisma = new PrismaClient();
@@ -89,7 +90,10 @@ function parseArgs(argv: string[]): { check: boolean; only: "text" | "speech" | 
 
 async function main() {
   const { check, only } = parseArgs(process.argv.slice(2));
-  const selected = V46_PROMPTS.filter((p) =>
+  // Rows are written in serving order (v46ServingOrder): everyday families
+  // first, idioms and cultural values last, speech spread through the text.
+  // Seeding one set alone loses the mix, so the full run is the default.
+  const selected = v46ServingOrder().filter((p) =>
     only === null ? true : only === "speech" ? isSpeechPrompt(p) : !isSpeechPrompt(p),
   );
   const OURS = new Set([V46_PROVENANCE, V46_SPEECH_PROVENANCE]);

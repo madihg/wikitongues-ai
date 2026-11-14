@@ -834,6 +834,58 @@ export function speechCoverage(prompts: V46Prompt[] = rows): Map<string, number>
   return cells;
 }
 
+/**
+ * The order the seed writes the rows in, which is the order a speaker meets
+ * them (the queue serves prompts with no speaker answer first, in the order
+ * the database returns them, and rows written one after another come back in
+ * that order).
+ *
+ * Text: everyday and vocabulary families first, then the grammar, tone and
+ * strength families, then idioms and cultural values last (a speaker asked
+ * for vocabulary before proverbs). Inside a tier the families take turns, so
+ * no speaker meets ten prompts of one kind in a row.
+ *
+ * Speech: spread evenly through the text prompts, about three in every eight
+ * items, short given sentences before the ones the speaker makes herself.
+ */
+export const V46_TEXT_TIERS: readonly (readonly string[])[] = [
+  ["lexi", "formu", "engl", "spell", "numb", "neigh", "names", "vari"],
+  ["inten", "tonew", "aspec", "negq", "order", "chain", "concd", "homog"],
+  ["idiom", "cult"],
+];
+export const V46_SPEECH_TIERS: readonly (readonly string[])[] = [
+  ["spnum", "spcar", "spname", "speng"],
+  ["sppair", "spdig", "spvow", "splong"],
+];
+
+function takeTurns(tiers: readonly (readonly string[])[], pool: V46Prompt[]): V46Prompt[] {
+  const out: V46Prompt[] = [];
+  for (const tier of tiers) {
+    const lanes = tier.map((f) => pool.filter((p) => p.family === f));
+    const longest = Math.max(0, ...lanes.map((l) => l.length));
+    for (let i = 0; i < longest; i++) {
+      for (const lane of lanes) if (i < lane.length) out.push(lane[i]);
+    }
+  }
+  return out;
+}
+
+export function v46ServingOrder(prompts: V46Prompt[] = rows): V46Prompt[] {
+  const text = takeTurns(V46_TEXT_TIERS, prompts.filter((p) => !isSpeechPrompt(p)));
+  const speech = takeTurns(V46_SPEECH_TIERS, prompts.filter(isSpeechPrompt));
+  const out: V46Prompt[] = [];
+  const total = text.length + speech.length;
+  let t = 0;
+  let s = 0;
+  for (let i = 0; i < total; i++) {
+    // Even spread: a speech prompt goes in whenever speech has fallen behind its share.
+    const speechDue = speech.length > 0 && s < speech.length && (s + 1) * total <= (i + 1) * speech.length;
+    if ((speechDue || t >= text.length) && s < speech.length) out.push(speech[s++]);
+    else out.push(text[t++]);
+  }
+  return out;
+}
+
 /** Mean minutes per text prompt of the two annotators who ran out of prompts, measured on the v4.5 bank (gaps under 30 minutes between submissions, Oct 9 to Nov 13). */
 export const MEASURED_MINUTES_PER_TEXT_PROMPT = { firstAnnotator: 10.3, secondAnnotator: 10.6 } as const;
 
