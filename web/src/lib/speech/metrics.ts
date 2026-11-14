@@ -11,6 +11,7 @@ import { normaliseForScoring } from "./normalise";
  *
  *   cer             character edit distance / reference characters, on
  *                   tone-stripped text. Spaces count as characters.
+ *   cerToneRetained the same, with tone marks kept (NFC code points).
  *   wer             word edit distance / reference words, tone-stripped.
  *   werToneRetained the same, with tone marks kept: a word whose mark differs
  *                   is a wrong word.
@@ -80,6 +81,19 @@ export function cer(ref: string, hyp: string): number {
   return rate(
     chars(normaliseForScoring(ref, opt)),
     chars(normaliseForScoring(hyp, opt)),
+  );
+}
+
+/**
+ * CER with tone marks kept (the first of the three ASR scores of Nov 13:
+ * tones kept, tones stripped, tone error rate). Counted on NFC code points,
+ * so a wrong or missing mark on a vowel is one wrong character. Not part of
+ * scoreAll, whose four numbers are the stored columns.
+ */
+export function cerToneRetained(ref: string, hyp: string): number {
+  return rate(
+    chars(normaliseForScoring(ref)),
+    chars(normaliseForScoring(hyp)),
   );
 }
 

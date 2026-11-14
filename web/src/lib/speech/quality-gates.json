@@ -1,0 +1,47 @@
+{
+  "_comment": "The one place the clip quality gates live. Read by quality-gates.ts (web) and mirrored in worker/igala_speech/quality_gates.py; quality-gates.fixtures.json proves both agree. Values are the Nov 13 research synthesis and are NOT yet calibrated on Igala phone audio (about 100 hand-labelled clips are needed). Measure only: no gate blocks a save.",
+  "version": "2026-11-13-v1",
+  "calibrated": false,
+  "accept": {
+    "wadaSnrDbMin": 25,
+    "peakDbfsMin": -20,
+    "peakDbfsMax": -1,
+    "clippedShareMax": 0,
+    "dnsmosOvrlMin": 3.0
+  },
+  "warn": {
+    "peakVeryQuietDbfs": -30,
+    "speechOverNoiseDbBelow": 20
+  },
+  "reject": {
+    "wadaSnrDbBelow": 15,
+    "clippedShareAbove": 0.001,
+    "speechShareBelow": 0.5
+  },
+  "clean": {
+    "targetLufs": -23,
+    "truePeakCeilingDbfs": -1,
+    "f0CorrelationMin": 0.9,
+    "f0MedianShiftCentsMax": 50,
+    "f0OctaveJumpShareMax": 0.05,
+    "sampleRates": [
+      24000,
+      16000
+    ]
+  },
+  "meter": {
+    "greenMinDbfs": -12,
+    "greenMaxDbfs": -3,
+    "quietWarnDbfs": -20,
+    "veryQuietDbfs": -30,
+    "clipDbfs": -1,
+    "speechLevelGoodMinDbfs": -28,
+    "speechLevelGoodMaxDbfs": -16,
+    "speechLevelQuietDbfs": -30,
+    "speechLevelLoudDbfs": -14,
+    "noisyRoomSnrDb": 20
+  },
+  "roundTrip": {
+    "maxCerRatioToHuman": 2
+  }
+}

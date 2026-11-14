@@ -1,0 +1,285 @@
+/* Wikitongues AI design tokens, v1 (2026-11-13). Light theme.
+ *
+ * One file for both repos: the platform (wikitongues-ai, web/) and the site
+ * (wikitongues-web-ai). The rulebook is design-language.md; this file holds
+ * the operative values. Read section 4 before deleting anything.
+ *
+ *   1. Colour roles        4. Legacy names (platform)
+ *   2. Type                5. Legacy names (site)
+ *   3. Space, shape, motion
+ *
+ * Every value below was checked by audit/contrast.py (run: python3
+ * contrast.py new). No text colour is under 4.5:1 on any surface it is
+ * allowed on; no control edge or focus ring is under 3:1.
+ *
+ * This is the single set of tokens. There are no variants to choose from.
+ *
+ * Step 1 of the rollout ships this file together with a compat file
+ * (tokens.compat.platform.css or tokens.compat.site.css) that pins every
+ * token whose value differs from today back to today's value. Nothing moves
+ * until a line is deleted from the compat file. See rollout.md.
+ */
+
+:root {
+  /* ── 1. Colour roles ─────────────────────────────────────────── */
+
+  /* Surface */
+  --wt-paper: #fbf8f2; /* the page */
+  --wt-surface: #ffffff; /* a card, a field, a table */
+  --wt-sunken: #f5f0e7; /* a note, a track, a quiet fill */
+  --wt-inverse: #26211c; /* the speech band, the site footer, a toast */
+
+  /* Text. The number is the rank, not a shade. */
+  --wt-ink: #26211c; /* what you read: 15.1 on paper, 14.1 on sunken */
+  --wt-ink-2: #544a40; /* what explains it: 8.2 on paper, 7.6 on sunken */
+  --wt-ink-3: #6b6056; /* a date, a code, a placeholder: 5.8 on paper, 5.4 on sunken */
+  --wt-ink-disabled: #9a8f83; /* disabled only. Never for anything a person must read. */
+  --wt-ink-on-inverse: #fbf8f2; /* 15.1 on inverse */
+  --wt-ink-on-inverse-2: #c8bdac; /* 8.6 on inverse */
+
+  /* Line */
+  --wt-line: #e6dfd4; /* a divider or a card edge. Decoration, so no ratio applies. */
+  --wt-line-control: #8c8073; /* the edge of anything you can press or type in: 3.4 to 3.9 */
+
+  /* Accent. One hue: the violet wikitongues.org already uses. Chosen over
+     the platform's ochre and the site's teal; the reasons and the two
+     alternatives are in design-language.md section 3 and
+     appendix/accent-alternatives.css. */
+  --wt-accent: #3814a5; /* the next action, the selected thing, a link, the focus ring: 10.9 on paper */
+  --wt-accent-hover: #2c0f85;
+  --wt-accent-pressed: #230b6b;
+  --wt-accent-tint: #efeaf9; /* behind a selected item. Ink on it 13.5, accent on it 9.8 */
+  --wt-accent-text: #3814a5; /* accent used as text */
+  --wt-on-accent: #ffffff; /* text on an accent fill: 11.6 */
+
+  /* Focus */
+  --wt-focus: var(--wt-accent);
+  --wt-focus-on-inverse: #fbf8f2;
+  --wt-focus-width: 2px;
+  --wt-focus-offset: 2px;
+
+  /* State. Each has a text colour (also the icon colour) and a tint.
+     A state is never colour alone: it always carries a word or an icon. */
+  --wt-success: #276a47; /* 6.1 on paper, 5.7 on its tint */
+  --wt-success-tint: #e7f3ec;
+  --wt-success-fill: #2f7d54; /* white on it 5.0 */
+  --wt-warning: #8a5a00; /* 5.6 on paper, 5.3 on its tint */
+  --wt-warning-tint: #fdf2dc;
+  --wt-danger: #b23b32; /* 5.6 on paper, 5.1 on its tint */
+  --wt-danger-tint: #fbeae8;
+  --wt-danger-fill: #b23b32; /* white on it 5.9. Also the record button. */
+  --wt-on-state-fill: #ffffff;
+
+  /* Data. Marks, not text: each is 3.3:1 or more on surface. The four differ
+     in lightness as well as hue, so they stay apart under protan, deutan and
+     tritan simulation (smallest CIELAB distance 30; audit/contrast-new.md).
+     A series is still never told apart by colour alone: label it directly. */
+  --wt-data-1: #0b4f8a; /* dark blue */
+  --wt-data-2: #c2500a; /* vermilion */
+  --wt-data-3: #1f9e79; /* green */
+  --wt-data-4: #26211c; /* ink */
+  --wt-data-neutral: #9a8f83; /* every bar that is not the point: 3.2 on surface */
+  --wt-data-highlight: var(--wt-accent); /* the one bar that is the point */
+  --wt-data-track: var(--wt-sunken);
+  --wt-data-a: var(--wt-data-1); /* side A in a blind pair */
+  --wt-data-b: var(--wt-data-2); /* side B */
+  --wt-data-low: var(--wt-danger);
+  --wt-data-mid: var(--wt-warning);
+  --wt-data-high: var(--wt-success);
+
+  /* ── 2. Type ─────────────────────────────────────────────────── */
+
+  /* Inter is self-hosted as one file that holds Latin, Latin Extended,
+     Latin Extended Additional and the combining marks together (see
+     design-language.md, "Igala text"). The fallbacks are what an Android
+     phone already has. */
+  --wt-font-sans:
+    "Inter", Roboto, "Noto Sans", system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  /* Igala is set in the sans, never in the display face or a mono. The name
+     exists so Igala text can be found and retargeted in one place. */
+  --wt-font-igala: var(--wt-font-sans);
+  /* Site headings in English only. */
+  --wt-font-display:
+    "Fraunces", "Iowan Old Style", Palatino, Georgia, serif;
+  /* A prompt code, a hash, a log line. No web font. Never a sentence. */
+  --wt-font-mono:
+    ui-monospace, "Roboto Mono", "Droid Sans Mono", Menlo, Consolas, monospace;
+
+  /* One ramp on whole pixels from a 16px root. The platform stops at page. */
+  --wt-fs-meta: 0.75rem; /* 12  a date, a code, a count. The floor. */
+  --wt-fs-small: 0.875rem; /* 14  a label, a hint, a table cell */
+  --wt-fs-body: 1rem; /* 16  instructions, fields, buttons */
+  --wt-fs-igala: 1.125rem; /* 18  Igala text, and the prompt */
+  --wt-fs-title: 1.25rem; /* 20  a card title; the site's lede */
+  --wt-fs-page: 1.5rem; /* 24  a page title on the platform */
+  --wt-fs-h2: 1.875rem; /* 30  site */
+  --wt-fs-h1: 2.25rem; /* 36  site */
+  --wt-fs-display: 3rem; /* 48  site */
+  --wt-fs-hero: 3.75rem; /* 60  site, wide screens only */
+
+  --wt-lh-tight: 1.2; /* titles */
+  --wt-lh-body: 1.5;
+  --wt-lh-igala: 1.6; /* room for a tone mark above and a dot below */
+
+  --wt-fw-regular: 400;
+  --wt-fw-medium: 500; /* a label, a nav item */
+  --wt-fw-strong: 600; /* a title, the selected item, a button */
+
+  /* ── 3. Space, shape, motion ─────────────────────────────────── */
+
+  --wt-space-1: 0.25rem; /* 4 */
+  --wt-space-2: 0.5rem; /* 8 */
+  --wt-space-3: 0.75rem; /* 12 */
+  --wt-space-4: 1rem; /* 16 */
+  --wt-space-5: 1.5rem; /* 24 */
+  --wt-space-6: 2rem; /* 32 */
+  --wt-space-7: 3rem; /* 48 */
+  --wt-space-8: 4rem; /* 64 */
+  --wt-space-9: 6rem; /* 96  site sections */
+
+  --wt-target: 3rem; /* 48  anything an annotator presses */
+  --wt-target-min: 2.75rem; /* 44  the floor, for a dense researcher table */
+  --wt-gutter: 1rem; /* page edge on a phone */
+  --wt-sidebar: 15rem; /* 240 */
+  --wt-content: 45rem; /* 720  an annotator task */
+  --wt-content-wide: 70rem; /* 1120 a researcher page */
+  --wt-measure: 68ch; /* a line of prose */
+  --wt-header-h: 4rem; /* site sticky header */
+
+  --wt-radius-control: 8px; /* a button, a field, a key */
+  --wt-radius-card: 12px; /* a card, a panel */
+  --wt-radius-pill: 999px; /* a chip, a status, a track */
+
+  --wt-shadow-none: none; /* everything that sits on the page */
+  --wt-shadow-overlay: 0 8px 24px rgba(38, 33, 28, 0.16); /* a menu, a toast: things that float */
+
+  --wt-dur-fast: 120ms; /* hover, press */
+  --wt-dur-base: 200ms; /* a reveal, a step change */
+  --wt-dur-slow: 320ms; /* the site's diagram steps */
+  --wt-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  --wt-z-sticky: 10;
+  --wt-z-overlay: 40;
+  --wt-z-toast: 50;
+}
+
+/* ── 4. Legacy names, platform (web/src/app/globals.css) ─────────────
+ * Every name the platform uses today, pointed at its new role, so no
+ * component has to change in the token PR. Delete a line only when
+ * `grep -rn -- '<name>' web/src` is empty. The --wt-ochre-* and
+ * --wt-ink-NNN scales are kept as plain values: they are primitives with no
+ * role, still read by the ::selection rule and the unused dark block in
+ * globals.css until rollout steps 3 and 4.
+ */
+:root {
+  --wt-ochre-50: #fdf6e9;
+  --wt-ochre-100: #f9e7c2;
+  --wt-ochre-200: #f2cf86;
+  --wt-ochre-300: #ebb84e;
+  --wt-ochre-400: #e0a21f;
+  --wt-ochre-500: #c4881a;
+  --wt-ochre-600: #9c6a13;
+  --wt-ochre-700: #744f10;
+  --wt-ink-950: #1a1714;
+  --wt-ink-900: var(--wt-ink);
+  --wt-ink-800: #3a332c;
+  --wt-ink-700: var(--wt-ink-2);
+  --wt-ink-500: var(--wt-ink-3);
+  --wt-ink-300: var(--wt-ink-disabled);
+  --wt-ink-200: var(--wt-line-control);
+  --wt-ink-100: var(--wt-line);
+  --wt-ink-50: var(--wt-sunken);
+  --wt-clay-500: var(--wt-data-2);
+  --wt-sage-500: var(--wt-data-3);
+  --wt-indigo-500: var(--wt-data-1);
+
+  --background: var(--wt-paper);
+  --surface: var(--wt-surface);
+  --surface-raised: var(--wt-surface);
+  --surface-sunken: var(--wt-sunken);
+  --foreground: var(--wt-ink);
+  --text-primary: var(--wt-ink);
+  --text-secondary: var(--wt-ink-2);
+  --text-tertiary: var(--wt-ink-3);
+  --text-muted: var(--wt-ink-3); /* muted was 2.3:1 and held real text 113 times: it becomes ink-3 */
+  --border: var(--wt-line);
+  --border-strong: var(--wt-line-control);
+
+  --accent: var(--wt-accent);
+  --accent-hover: var(--wt-accent-hover);
+  --accent-text: var(--wt-accent-text);
+  --accent-contrast: var(--wt-on-accent);
+  --accent-subtle: var(--wt-accent-tint);
+
+  --success: var(--wt-success);
+  --success-subtle: var(--wt-success-tint);
+  --warning: var(--wt-warning);
+  --warning-text: var(--wt-warning); /* used once, never defined before */
+  --warning-subtle: var(--wt-warning-tint);
+  --danger: var(--wt-danger);
+  --danger-subtle: var(--wt-danger-tint);
+  --info: var(--wt-ink-2); /* info is not a state: it is a neutral note */
+  --info-subtle: var(--wt-sunken);
+
+  --pick-a: var(--wt-data-a);
+  --pick-b: var(--wt-data-b);
+  --pick-tie: var(--wt-ink-3);
+  --score-lo: var(--wt-data-low);
+  --score-mid: var(--wt-data-mid);
+  --score-hi: var(--wt-data-high);
+
+  --radius-sm: var(--wt-radius-control);
+  --radius: var(--wt-radius-control);
+  --radius-lg: var(--wt-radius-card);
+  --radius-xl: var(--wt-radius-card);
+  --shadow-sm: var(--wt-shadow-none);
+  --shadow: var(--wt-shadow-none);
+  --shadow-md: var(--wt-shadow-overlay);
+  --shadow-lg: var(--wt-shadow-overlay);
+  --ring: 0 0 0 var(--wt-focus-width) var(--wt-focus);
+  --ease: var(--wt-ease); /* used by .animate-rise, never defined before */
+  --transition-default: var(--wt-dur-fast) var(--wt-ease);
+}
+
+/* ── 5. Legacy names, site (app/globals.css) ─────────────────────────
+ * Same rule: delete a line when nothing in app/ or components/ reads it.
+ */
+:root {
+  --color-background: var(--wt-paper);
+  --color-surface: var(--wt-surface);
+  --color-surface-sunken: var(--wt-sunken);
+  --color-text-primary: var(--wt-ink);
+  --color-text-muted: var(--wt-ink-2);
+  --color-border: var(--wt-line);
+  --color-border-strong: var(--wt-line-control);
+  --color-footer-bg: var(--wt-inverse);
+  --color-footer-text: var(--wt-ink-on-inverse);
+  --color-footer-muted: var(--wt-ink-on-inverse-2);
+  --color-danger: var(--wt-danger);
+  --color-accent: var(--wt-accent);
+  --color-accent-hover: var(--wt-accent-hover);
+  --color-accent-pressed: var(--wt-accent-pressed);
+  --color-accent-subtle: var(--wt-accent-tint);
+  --color-accent-on: var(--wt-on-accent);
+  /* The teal sequential scale had two steps under 3:1 on white and two
+     neighbours 1.5:1 apart. It becomes one highlighted bar and neutral bars. */
+  --viz-1: var(--wt-data-highlight);
+  --viz-2: var(--wt-data-1);
+  --viz-3: var(--wt-data-3);
+  --viz-4: var(--wt-data-neutral);
+  --viz-5: var(--wt-data-neutral);
+  --header-h: var(--wt-header-h);
+  --ease-standard: var(--wt-ease);
+  --ease-out: var(--wt-ease);
+}
+
+/* Motion is a courtesy. With reduced motion asked for, nothing animates and
+   anything that revealed itself in steps is simply shown. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --wt-dur-fast: 0.01ms;
+    --wt-dur-base: 0.01ms;
+    --wt-dur-slow: 0.01ms;
+  }
+}

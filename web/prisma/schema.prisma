@@ -1167,3 +1167,89 @@ model SpeechMinimalPairAnswer {
   @@index([annotatorId])
   @@index([isDemo])
 }
+
+// ---------------------------------------------------------------------------
+// Speech measures, cleaning derivatives and assigned Listen rounds (Nov 13).
+// Plain string keys with indexes, like the loop tables above, so this
+// migration alters no existing table. Numbers only: no clip text, no audio,
+// no embedding is stored in any of these four tables.
+// ---------------------------------------------------------------------------
+
+// What one tool measured on one clip: levels and noise (worker quality.py),
+// the recogniser's scores against the locked text, the round trip of a
+// synthetic clip. One row per clip, stage and ruler.
+model SpeechClipMeasure {
+  id          String   @id @default(cuid())
+  clipKey     String // SpeechRecording.id, or "synth:<systemRef>:<promptId>" for a synthetic clip that is not a recording yet
+  recordingId String? // SpeechRecording.id when the clip is one
+  promptId    String // Prompt.id: the sentence
+  language    String   @default("igala")
+  systemRef   String // "human", or the model ref that made the clip
+  stage       String // raw | cleaned | synth
+  rulerRef    String // the tool or model that measured, with its version
+  values      Json
+  createdAt   DateTime @default(now())
+
+  @@unique([clipKey, stage, rulerRef])
+  @@index([recordingId])
+  @@index([promptId])
+  @@index([systemRef, rulerRef])
+}
+
+// One aggregate per (kind, system measured, ruler, set of clips).
+model SpeechAutoMeasure {
+  id              String   @id @default(cuid())
+  kind            String // clip_levels | cleaning_check | asr_three_ways | tts_round_trip
+  modelRef        String // the system measured: a model ref, "human", or "cleaning:<version>"
+  rulerRef        String
+  manifestVersion String
+  nClips          Int
+  values          Json // { key: { value, lo?, hi?, n } }
+  createdAt       DateTime @default(now())
+
+  @@unique([kind, modelRef, rulerRef, manifestVersion])
+  @@index([kind, modelRef])
+}
+
+// A cleaned copy of a clip. The raw upload is never changed; this row names
+// the copies beside it and logs exactly how they were made.
+model SpeechDerivative {
+  id            String   @id @default(cuid())
+  recordingId   String // the raw clip
+  kind          String // clean
+  version       String // clean-v1
+  rawKey        String // the raw object key (or stable clip path) the copies were made from
+  key24k        String? // object key of the 24 kHz copy in the private bucket
+  key16k        String? // object key of the 16 kHz copy
+  usedDenoised  Boolean // false: the pitch check failed and the copies are the raw audio, levelled
+  keptRawReason String?
+  log           Json // tool, version, parameters, pitch check, gain
+  createdAt     DateTime @default(now())
+
+  @@unique([recordingId, kind, version])
+}
+
+// One blind round assigned to one named rater: a synthetic clip against the
+// person's clip of the same sentence. Only that rater is served it, and the
+// model ref never leaves the server. A repeat is the same pair, sides swapped.
+model SpeechListenRound {
+  id                   String    @id @default(cuid())
+  batch                String // one publish run
+  raterId              String // User.id
+  promptId             String // Prompt.id
+  language             String    @default("igala")
+  humanRecordingId     String
+  candidateRecordingId String
+  systemRef            String
+  candidateIsA         Boolean // the randomised side
+  isRepeat             Boolean   @default(false)
+  position             Int // order in the rater's queue
+  comparisonId         String? // the SpeechComparison, once judged
+  judgedAt             DateTime?
+  createdAt            DateTime  @default(now())
+
+  @@unique([raterId, candidateRecordingId, isRepeat])
+  @@index([raterId, comparisonId])
+  @@index([candidateRecordingId])
+  @@index([batch])
+}
