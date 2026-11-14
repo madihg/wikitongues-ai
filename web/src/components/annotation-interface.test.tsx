@@ -401,3 +401,154 @@ describe("a question opened from review, wired (source)", () => {
     expect(src).not.toContain("location.reload");
   });
 });
+
+/**
+ * The footer bar, "Edit previous" and the "Saved" strip (Nov 13, the shared
+ * episode frame). Held at the source like the rest of this file: the first
+ * paint is a loading line. Every label is the one the screen already had;
+ * what moved is where the three controls sit.
+ */
+describe("the episode frame in Annotate (source)", () => {
+  /** The JSX of one step. */
+  const stepSlice = (from: string, to: string) => {
+    const start = src.indexOf(from);
+    const end = to ? src.indexOf(to, start) : src.length;
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return src.slice(start, end);
+  };
+  const promptStep = () =>
+    stepSlice("STEP: prompt / cold-authoring", "STEP: blind pairwise");
+  const pairwiseStep = () => stepSlice("STEP: blind pairwise", "STEP: score");
+  const scoreStep = () => stepSlice("STEP: score", "");
+
+  /** The text of one footer prop, up to the next prop or the close. */
+  const prop = (footer: string, name: string) => {
+    const start = footer.indexOf(`${name}={`);
+    if (start < 0) return "";
+    const next = ["left={", "middle={", "right={", "/>"]
+      .map((n) => footer.indexOf(n, start + name.length + 2))
+      .filter((i) => i > start);
+    return footer.slice(start, Math.min(...next));
+  };
+  const footers = (slice: string) =>
+    slice
+      .split("<EpisodeFooter")
+      .slice(1)
+      .map((f) => f.slice(0, f.lastIndexOf("/>") + 2));
+
+  it("every label is still there, word for word", () => {
+    for (const label of [
+      "Lock my answer & reveal the AI outputs",
+      "Lock my answer &amp; reveal the AI outputs",
+      "Skip & reveal the AI outputs",
+      "Skip - just show me the outputs",
+      "Skip this prompt",
+      "Back to the AI outputs",
+      "&larr; Back\n",
+      "Continue\n",
+      "&larr; Back to comparison",
+      "Submit & next",
+    ]) {
+      expect(src, label).toContain(label);
+    }
+  });
+
+  it("first stage: Edit previous on the left, Skip this prompt in the middle, the lock button on the right", () => {
+    const bar = footers(promptStep()).find((f) =>
+      f.includes("Skip this prompt"),
+    );
+    expect(bar).toBeDefined();
+    expect(prop(bar ?? "", "left")).toContain("Edit previous");
+    expect(prop(bar ?? "", "middle")).toContain("Skip this prompt");
+    expect(prop(bar ?? "", "right")).toContain("reveal the AI outputs");
+    expect(prop(bar ?? "", "right")).not.toContain("Skip this prompt");
+  });
+
+  it("Compare: Back on the left, Continue on the right, no skip", () => {
+    const bars = footers(pairwiseStep());
+    expect(bars).toHaveLength(1);
+    expect(prop(bars[0], "left")).toContain("&larr; Back");
+    expect(prop(bars[0], "right")).toContain("Continue");
+    expect(prop(bars[0], "right")).toContain("proceedToScore");
+    expect(prop(bars[0], "middle")).toBe("");
+  });
+
+  it("Score: Back to comparison on the left, Submit & next on the right", () => {
+    const bars = footers(scoreStep());
+    expect(bars).toHaveLength(1);
+    expect(prop(bars[0], "left")).toContain("&larr; Back to comparison");
+    expect(prop(bars[0], "right")).toContain("Submit & next");
+    expect(prop(bars[0], "right")).toContain("handleSubmit");
+  });
+
+  it("no Back, Skip or main button is left outside a footer bar", () => {
+    const outside = src
+      .split("<EpisodeFooter")
+      .map((part, i) =>
+        i === 0 ? part : part.slice(part.lastIndexOf("/>") + 2),
+      )
+      .join("");
+    // the labels as they are written in the JSX (not in comments or errors)
+    for (const label of [
+      ': "Skip this prompt"}',
+      "&larr; Back",
+      ': "Submit & next"}',
+      '? "Lock my answer & reveal the AI outputs"',
+      "Lock my answer &amp; reveal the AI outputs",
+      "Skip - just show me the outputs",
+      "Back to the AI outputs\n",
+    ]) {
+      expect(src, label).toContain(label);
+      expect(outside, label).not.toContain(label);
+    }
+  });
+
+  it("Edit previous exists once, on the first stage, and only before the answer is locked", () => {
+    expect(src.split("Edit previous\n").length - 1).toBe(1);
+    const step = promptStep();
+    const at = step.indexOf("Edit previous\n");
+    expect(at).toBeGreaterThan(-1);
+    // it sits inside the footer that is rendered only while !coldLocked
+    const gate = step.lastIndexOf("{!coldLocked && (", at);
+    const footerStart = step.lastIndexOf("<EpisodeFooter", at);
+    expect(gate).toBeGreaterThan(-1);
+    expect(footerStart).toBeGreaterThan(gate);
+    expect(pairwiseStep()).not.toContain("Edit previous");
+    expect(scoreStep()).not.toContain("Edit previous");
+  });
+
+  it("opening or closing the drawer touches nothing but its own switch: the draft survives", () => {
+    // The strip, the footer button and the drawer's close each set one flag.
+    const opens = [...src.matchAll(/setEditingSaved\((true|false)\)/g)];
+    expect(opens.map((m) => m[1]).sort()).toEqual(["false", "true", "true"]);
+    const drawer = src.slice(
+      src.indexOf("<AnswerEditorDrawer"),
+      src.indexOf("/>", src.indexOf("<AnswerEditorDrawer")),
+    );
+    expect(drawer).toContain("onClose={() => setEditingSaved(false)}");
+    for (const call of ["clearDraft", "resetEpisode", "fetchNext", "setStep"]) {
+      expect(drawer).not.toContain(call);
+    }
+    // and the flag is not part of what a draft is restored from or saved as
+    expect(src).not.toMatch(/editingSaved[^;\n]*sessionStorage/);
+  });
+
+  it("the Saved strip is remembered from the submit's own answer, per tab", () => {
+    expect(src).toContain('lastSavedKey("annotate")');
+    const submit = src.slice(src.indexOf("async function handleSubmit"));
+    const remember = submit.indexOf("rememberSaved({");
+    expect(remember).toBeGreaterThan(-1);
+    expect(submit.slice(remember, remember + 200)).toContain(
+      "data.comparisonId",
+    );
+    // remembered before the next question is asked for
+    expect(remember).toBeLessThan(submit.indexOf("await fetchNext()"));
+  });
+
+  it("the first-stage lock is as it was: locked answers render read-only", () => {
+    const step = promptStep();
+    expect(step).toContain("{coldLocked ? (");
+    expect(step).toContain("Your answer is locked");
+  });
+});

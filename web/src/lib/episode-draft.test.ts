@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   coldDraftKey,
   coldPartOf,
+  lastSavedKey,
   pairDraftKey,
+  parseLastSaved,
+  savedStripText,
   planDraftRestore,
   type ColdDraft,
   type DraftStep,
@@ -122,5 +125,46 @@ describe("planDraftRestore", () => {
       coldPartOf({ coldAnswer: "edited after seeing outputs", coldLocked: false }),
     );
     expect(plan).toEqual({ kind: "full", draft: locked });
+  });
+});
+
+describe("the last submitted item of the sitting", () => {
+  it("one key per kind of work", () => {
+    expect(lastSavedKey("annotate")).toBe("wt-last-saved-annotate");
+    expect(lastSavedKey("listen")).not.toBe(lastSavedKey("annotate"));
+  });
+
+  it("reads back what was stored", () => {
+    const saved = { type: "pairwise", id: "cmp123", promptText: "A question?" };
+    expect(parseLastSaved(JSON.stringify(saved))).toEqual(saved);
+    expect(parseLastSaved(saved)).toEqual(saved);
+  });
+
+  it("anything malformed is nothing, never a crash", () => {
+    for (const bad of [
+      null,
+      "",
+      "{not json",
+      "[]",
+      JSON.stringify({ type: "rubric", id: "x" }),
+      JSON.stringify({ type: "pairwise" }),
+      JSON.stringify({ type: "pairwise", id: "" }),
+      JSON.stringify({ type: "pairwise", id: "x".repeat(65) }),
+    ]) {
+      expect(parseLastSaved(bad)).toBeNull();
+    }
+  });
+
+  it("the strip text: 40 characters, three dots only when cut", () => {
+    expect(savedStripText("Short one.")).toBe("Short one.");
+    const long = "a".repeat(39) + "bcd";
+    expect(savedStripText(long)).toBe("a".repeat(39) + "b...");
+  });
+
+  it("never cuts a letter from its tone mark", () => {
+    // character 40 is an e with a dot below, followed by a combining acute
+    const text = "x".repeat(39) + "\u1EB9\u0301" + " and more";
+    const out = savedStripText(text);
+    expect(out).toBe("x".repeat(39) + "\u1EB9\u0301" + "...");
   });
 });
