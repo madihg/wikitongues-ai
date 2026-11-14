@@ -91,6 +91,14 @@ describe("examTier: the word next to an automatic number", () => {
     expect(examTier(300, 2)).toBe("Early");
   });
 
+  it("is a smoke test whatever its size when the clips are not a locked exam", () => {
+    expect(examTier(72, 2, false)).toBe("Smoke test");
+    expect(examTier(900, 9, false)).toBe("Smoke test");
+    expect(nextExamTier(72, 2, false)).toBe(
+      "Lock 50 exam clips and score the model on them to reach Early.",
+    );
+  });
+
   it("says how far the next word is", () => {
     expect(nextExamTier(0, 0)).toBe("50 more exam clips to reach Early.");
     expect(nextExamTier(49, 1)).toBe("1 more exam clip to reach Early.");

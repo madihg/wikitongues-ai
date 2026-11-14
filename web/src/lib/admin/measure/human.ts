@@ -400,6 +400,52 @@ export function listenerAgreement(rounds: ModelRound[]): ListenerAgreement {
   };
 }
 
+// ─── the same round asked twice ─────────────────────────────────────────────
+
+export interface AskedAgain {
+  /** Rounds a listener was given a second time (the same two clips). */
+  asked: number;
+  /** Of those, how many got the same answer both times. */
+  same: number;
+}
+
+/**
+ * One listener cannot be checked against another, so they are checked
+ * against themselves: one round in ten is a repeat of an earlier one, sides
+ * swapped. The first judgment of a pair by a listener is the round; a later
+ * judgment of the same pair by the same listener is the repeat. Repeats never
+ * enter the preference, the scores or the agreement: they would count one
+ * opinion twice.
+ */
+export function splitRepeats(rounds: ModelRound[]): {
+  first: ModelRound[];
+  again: AskedAgain;
+} {
+  const sorted = [...rounds].sort((a, b) =>
+    a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0,
+  );
+  const firstBy = new Map<string, ModelRound>();
+  const repeated = new Set<string>();
+  const first: ModelRound[] = [];
+  let asked = 0;
+  let same = 0;
+  for (const r of sorted) {
+    const key = `${r.annotatorId}|${r.pairKey}`;
+    const earlier = firstBy.get(key);
+    if (!earlier) {
+      firstBy.set(key, r);
+      first.push(r);
+      continue;
+    }
+    // Only the first repeat of a round is scored.
+    if (repeated.has(key)) continue;
+    repeated.add(key);
+    asked++;
+    if (earlier.outcome === r.outcome) same++;
+  }
+  return { first, again: { asked, same } };
+}
+
 // ─── the whole half, for one model ──────────────────────────────────────────
 
 export interface HumanHalf {
@@ -407,17 +453,21 @@ export interface HumanHalf {
   preference: Preference;
   axes: AxisTable;
   agreement: ListenerAgreement;
+  again: AskedAgain;
 }
 
 export function humanHalf(
   rows: ListenRow[],
   modelRef: string | null,
 ): HumanHalf {
-  const rounds = modelRef ? roundsAgainstHuman(rows, modelRef) : [];
+  const { first, again } = splitRepeats(
+    modelRef ? roundsAgainstHuman(rows, modelRef) : [],
+  );
   return {
     modelRef,
-    preference: preference(rounds),
-    axes: axisTable(rounds),
-    agreement: listenerAgreement(rounds),
+    preference: preference(first),
+    axes: axisTable(first),
+    agreement: listenerAgreement(first),
+    again,
   };
 }

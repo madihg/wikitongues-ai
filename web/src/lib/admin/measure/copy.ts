@@ -40,7 +40,7 @@ export const AUTO_RECOGNITION = {
     meaning:
       "Out of 100 vowels that carry a tone mark, this many came back with the wrong mark or with none.",
     trust:
-      "At least 1,000 marked vowels in the exam text. That gives about plus or minus 3 points.",
+      "At least 1,000 marked vowels in the exam text. That gives about plus or minus 3 points. The count is printed under the number.",
   },
 } as const satisfies Record<string, Explained>;
 
@@ -106,11 +106,17 @@ export const AUTO_LEVELS = {
     meaning: "Clips where the loudest parts were cut off.",
     trust: "A count, always shown.",
   },
+  rejected: {
+    label: "Clips the quality check turns away",
+    meaning:
+      "Clips too noisy, too clipped or too empty to learn from, by the worker's own rules. The rules are not tuned on Igala phone audio yet.",
+    trust: "A count. Read it as a first sorting, not a verdict.",
+  },
   cleaningCheck: {
     label: "Did cleaning change what the recogniser hears?",
     meaning:
       "Cleaning must not smear the tones. We run the recogniser on the clip before and after cleaning and compare.",
-    trust: "The answer is No when the range of the difference includes 0.",
+    trust: "The answer is No when the two ranges overlap.",
   },
 } as const satisfies Record<string, Explained>;
 
@@ -164,13 +170,24 @@ export const AXIS_LINES: Record<string, string> = {
 /** The empty states, word for word. */
 export const EMPTY = {
   noModel: "No speech model has been scored yet.",
+  noVoice: "No voice has been measured yet.",
   noRounds: "No listener has compared a model with a person yet.",
+  noScores: "No round has been scored on these lines yet.",
   noChecks: "No clip has been checked yet.",
   noModelChecks:
     "No model clip has been checked yet. Check plays people's clips only for now.",
   noTonePairs: "No tone pair has been answered yet.",
   noSecondListener: "Needs a second listener on the same rounds.",
+  noRepeats: "No round has been asked twice yet.",
   oneListener: "One listener so far. This is one person's ear.",
   notMeasured: "Not measured yet",
-  noExam: "No exam is locked yet. Lock exam clips in Data, Speech clips.",
+  workerTableMissing:
+    "The worker's measurements are not in the database yet. They appear here once their table is added.",
 } as const;
+
+/** The voice numbers nobody computes yet. Listed so their absence is stated, not hidden. */
+export const NOT_BUILT_YET = [
+  AUTO_VOICE.predictedScore.label,
+  AUTO_VOICE.sameVoice.label,
+  AUTO_VOICE.pitch.label,
+] as const;

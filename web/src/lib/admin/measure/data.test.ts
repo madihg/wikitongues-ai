@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { loadSpeechMeasure } from "./data";
+import { loadSpeechMeasure, pooledTone } from "./data";
 
 /**
  * The adapter's queries, checked without a database: what each one asks for
@@ -181,7 +181,11 @@ describe("loadSpeechMeasure: what it returns", () => {
           werRetained: 0.9,
           ter: 0.5,
           nClips: 72,
-          perSpeaker: { s1: {}, s2: {} },
+          perSpeaker: {
+            spk_a: { nClips: 60, markedVowels: 348, terPooled: 0.96 },
+            spk_b: { nClips: 12, markedVowels: 17, terPooled: 0.88 },
+          },
+          jobId: null,
           createdAt: new Date("2026-11-13T20:00:00Z"),
         },
       ],
@@ -247,5 +251,28 @@ describe("loadSpeechMeasure: what it returns", () => {
       { system: "tts-1", heard: "target", isDemo: false },
     ]);
     expect(d.autoTableReady).toBe(true);
+  });
+});
+
+describe("pooledTone", () => {
+  it("pools wrong marks over marked vowels across speakers", () => {
+    expect(
+      pooledTone({
+        a: { markedVowels: 300, terPooled: 0.5 },
+        b: { markedVowels: 100, terPooled: 1 },
+      }),
+    ).toEqual({ terPooled: 0.625, markedVowels: 400 });
+  });
+
+  it("is null when the counts were not stored, and never divides by zero", () => {
+    expect(pooledTone({ a: { cer: 0.3 } })).toEqual({
+      terPooled: null,
+      markedVowels: null,
+    });
+    expect(pooledTone({ a: { markedVowels: 0, terPooled: 0 } })).toEqual({
+      terPooled: null,
+      markedVowels: 0,
+    });
+    expect(pooledTone(null)).toEqual({ terPooled: null, markedVowels: null });
   });
 });

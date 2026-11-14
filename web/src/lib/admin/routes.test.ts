@@ -25,6 +25,7 @@ import {
   NEW_ROUTES,
   OLD_ROUTES,
   RESEARCH_VIEWS,
+  SPEECH_MODEL_TABS,
   TOOLS,
   activeResearchHref,
   isViewTabActive,
@@ -192,6 +193,7 @@ describe("the five views and More", () => {
       MORE_LINK.href,
       ...DATA_TABS.map((t) => t.href),
       ...ARENA_TABS.map((t) => t.href),
+      ...SPEECH_MODEL_TABS.map((t) => t.href),
       ...TOOLS.map((t) => t.href),
       ...ARCHIVE.map((a) => a.href),
     ];
@@ -202,6 +204,11 @@ describe("the five views and More", () => {
 
   it("no view has more than five tabs, and the text model has four", () => {
     expect(DATA_TABS.length).toBeLessThanOrEqual(5);
+    expect(SPEECH_MODEL_TABS.map((t) => t.label)).toEqual([
+      "Measure",
+      "Loop",
+      "Rights",
+    ]);
     expect(ARENA_TABS).toHaveLength(4);
   });
 

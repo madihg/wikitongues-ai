@@ -36,14 +36,17 @@ const ev = (over: Partial<EvalRow> = {}): EvalRow => ({
   ter: 0.44,
   nClips: 62,
   speakers: 3,
+  terPooled: null,
+  markedVowels: null,
+  onLockedExam: true,
   createdAt: "2026-11-20T02:00:00.000Z",
   ...over,
 });
 
 const auto = (over: Partial<AutoMeasureRow> = {}): AutoMeasureRow => ({
   kind: "asr_three_ways",
-  modelRef: "asr-1",
-  rulerRef: "omnilingual-ctc-1b",
+  modelRef: "human",
+  rulerRef: "asr-1",
   manifestVersion: EXAM,
   nClips: 62,
   values: {},
@@ -113,21 +116,23 @@ describe("recognitionBlock", () => {
     );
   });
 
-  it("takes the range and the marked-vowel count from the worker's row for the same exam", () => {
+  it("takes the range from the worker's row for the same recogniser and the same clips", () => {
     const b = recognitionBlock(
       {
         evals: [ev()],
         auto: [
           auto({
-            values: {
-              cer: { value: 0.312, lo: 0.27, hi: 0.35, n: 62 },
-              markedVowels: { value: 812, lo: null, hi: null, n: null },
-            },
+            values: { cer: { value: 0.312, lo: 0.27, hi: 0.35, n: 62 } },
           }),
-          // A row for another exam is not this score's range.
+          // A row for other clips is not this score's range.
           auto({
-            manifestVersion: "other-exam",
-            values: { ter: { value: 0.4, lo: 0.1, hi: 0.9, n: 9 } },
+            manifestVersion: "other-clips",
+            values: { werStripped: { value: 0.4, lo: 0.1, hi: 0.9, n: 9 } },
+          }),
+          // A row measured by another recogniser is not either.
+          auto({
+            rulerRef: "asr-0",
+            values: { werRetained: { value: 0.4, lo: 0.1, hi: 0.9, n: 9 } },
           }),
         ],
       },
@@ -135,8 +140,46 @@ describe("recognitionBlock", () => {
       null,
     )!;
     expect(b.numbers[0].range).toEqual({ lo: 0.27, hi: 0.35 });
-    expect(b.numbers[3].range).toBeNull();
-    expect(b.exam.markedVowels).toBe(812);
+    expect(b.numbers[1].range).toBeNull();
+    expect(b.numbers[2].range).toBeNull();
+  });
+
+  it("tone marks wrong is pooled over marked vowels, with the count, not the diluted column", () => {
+    // 58 of 72 texts carry no tone mark and score 0 in the column: 18.8%.
+    // Over the 365 marked vowels the recogniser gets 95.6% wrong.
+    const b = recognitionBlock(
+      {
+        evals: [ev({ ter: 0.1882, terPooled: 0.956, markedVowels: 365 })],
+        auto: [],
+      },
+      "asr-1",
+      null,
+    )!;
+    const tone = b.numbers.find((n) => n.key === "ter")!;
+    expect(tone.value).toBe(0.956);
+    expect(tone.n).toBe(365);
+    expect(tone.note).toBeNull();
+  });
+
+  it("falls back to the column, and says it reads low, when no count was stored", () => {
+    const tone = recognitionBlock({ evals: [ev()], auto: [] }, "asr-1", null)!
+      .numbers[3];
+    expect(tone.value).toBe(0.44);
+    expect(tone.n).toBeNull();
+    expect(tone.note).toMatch(/reads low/);
+  });
+
+  it("a score run by hand on clips that are not the locked exam is a smoke test, whatever its size", () => {
+    const b = recognitionBlock(
+      {
+        evals: [ev({ nClips: 72, speakers: 2, onLockedExam: false })],
+        auto: [],
+      },
+      "asr-1",
+      null,
+    )!;
+    expect(b.exam).toMatchObject({ locked: false, tier: "Smoke test" });
+    expect(b.exam.next).toMatch(/^Lock 50 exam clips/);
   });
 
   it("never compares two versions scored on different exams", () => {
@@ -217,7 +260,7 @@ describe("nameDelta: better, worse, or tied at this size", () => {
   it("names nothing on a smoke test, whatever the ranges say", () => {
     const d = nameDelta("Smoke test", at(0.1, 0.09, 0.11), at(0.9, 0.89, 0.91));
     expect(d.word).toBeNull();
-    expect(d.why).toMatch(/50 exam clips/);
+    expect(d.why).toMatch(/smoke test/);
     expect(d.points).toBe(-80);
   });
 
@@ -236,35 +279,40 @@ describe("voiceBlock: what the voice loses on the way back", () => {
   });
 
   it("leads with the gap to the person's clip, in points", () => {
+    const row = auto({
+      kind: "tts_round_trip",
+      modelRef: "tts-1",
+      rulerRef: "omnilingual-ctc-1b",
+      nClips: 72,
+      values: {
+        systemCer: { value: 0.61, lo: null, hi: null, n: 72 },
+        humanCer: { value: 0.4176, lo: null, hi: null, n: 72 },
+        cerGap: { value: 0.1924, lo: 0.151, hi: 0.236, n: 72 },
+        systemPooledTer: { value: 0.99, lo: null, hi: null, n: 365 },
+        humanPooledTer: { value: 0.956, lo: null, hi: null, n: 365 },
+        passesGate: { value: 1, lo: null, hi: null, n: null },
+      },
+    });
     const b = voiceBlock(
       {
         auto: [
-          auto({
-            kind: "tts_round_trip",
-            modelRef: "tts-1",
-            nClips: 21,
-            values: {
-              cerGap: { value: 0.094, lo: 0.04, hi: 0.15, n: 21 },
-              cerModel: { value: 0.21, lo: null, hi: null, n: 21 },
-              cerHuman: { value: 0.116, lo: null, hi: null, n: 21 },
-              terModel: { value: 0.38, lo: null, hi: null, n: 21 },
-              terHuman: { value: 0.24, lo: null, hi: null, n: 21 },
-            },
-          }),
+          // The same voice against the cleaned human clips: a second view.
+          { ...row, modelRef: "tts-1|human-cleaned" },
+          row,
         ],
       },
       "tts-1",
     )!;
     expect(b.ruler).toBe("omnilingual-ctc-1b");
-    expect(b.sentences).toBe(21);
+    expect(b.sentences).toBe(72);
     expect(b.letters).toEqual({
-      gapPoints: 9.4,
-      range: { lo: 4, hi: 15 },
-      model: 0.21,
-      person: 0.116,
+      gapPoints: 19.2,
+      range: { lo: 15.1, hi: 23.6 },
+      model: 0.61,
+      person: 0.4176,
     });
-    // No stored gap: it is the model's number minus the person's.
-    expect(b.tones!.gapPoints).toBe(14);
+    // No stored gap for tones: it is the model's number minus the person's.
+    expect(b.tones!.gapPoints).toBe(3.4);
     expect(b.tones!.range).toBeNull();
   });
 });
@@ -298,51 +346,105 @@ describe("levelsBlock", () => {
   });
 
   it("uses the worker's before and after once it has run, and answers the cleaning question", () => {
+    const m = (
+      value: number,
+      lo: number | null = null,
+      hi: number | null = null,
+    ) => ({
+      value,
+      lo,
+      hi,
+      n: 131,
+    });
     const b = levelsBlock({
       levels: recorded,
       auto: [
         auto({
           kind: "clip_levels",
-          modelRef: "human",
-          rulerRef: "quality-v1:raw",
+          modelRef: "human|all",
+          rulerRef: "quality-v1+gates-2026-11-13-v1",
           nClips: 131,
-          values: { peakDbfs: -26, snrDb: 19 } as never,
+          values: {
+            peakDbfs: m(-5.1),
+            speechRmsDbfs: m(-23.1),
+            noiseFloorDbfs: m(-57),
+            snrDb: m(33.9),
+            gate_reject: m(20),
+          },
+        }),
+        // Another group of the same clips is not the row for the table.
+        auto({
+          kind: "clip_levels",
+          modelRef: "human|old-oct28",
+          values: { peakDbfs: m(-9) },
         }),
         auto({
           kind: "clip_levels",
-          modelRef: "human",
-          rulerRef: "quality-v1:cleaned",
+          modelRef: "cleaning:clean-v1|all",
+          rulerRef: "quality-v1+gates-2026-11-13-v1",
           nClips: 131,
-          values: { peakDbfs: -2, snrDb: 36 } as never,
+          values: {
+            peakDbfs: m(-1.9),
+            speechRmsDbfs: m(-21),
+            snrDb: m(41),
+            gate_reject: m(3),
+          },
         }),
+        auto({ values: { cer: m(0.4176, 0.38, 0.455), pooledTer: m(0.956) } }),
         auto({
           kind: "cleaning_check",
           modelRef: "cleaning:clean-v1",
-          values: { cerDelta: { value: 0.002, lo: -0.01, hi: 0.014, n: 131 } },
+          values: { cer: m(0.42, 0.383, 0.457), pooledTer: m(0.95) },
         }),
-      ].map((r) => ({ ...r, values: readMeasuredValues(r.values) })),
+      ],
     });
     expect(b.source).toBe("worker");
-    const snr = b.rows.find((r) => r.key === "snr")!;
-    expect(snr).toMatchObject({ before: 19, after: 36 });
+    expect(b.clips).toBe(131);
+    const row = (k: string) => b.rows.find((r) => r.key === k)!;
+    expect(row("peak")).toMatchObject({ before: -5.1, after: -1.9 });
+    expect(row("speech")).toMatchObject({ before: -23.1, after: -21 });
+    expect(row("noise")).toMatchObject({ before: -57, after: null });
+    expect(row("snr")).toMatchObject({ before: 33.9, after: 41 });
+    expect(row("rejected")).toMatchObject({ before: 20, after: 3 });
+    // The recogniser hears the same within its range: letters +0.2 points.
     expect(b.cleaning).toEqual({
-      changed: false,
-      cerPoints: 0.2,
-      terPoints: null,
+      answer: "no",
+      lettersPoints: 0.2,
+      tonesPoints: -0.6,
     });
   });
 
-  it("says cleaning changed what the recogniser hears when the range excludes 0", () => {
+  it("says cleaning made the recogniser hear worse when the two ranges do not overlap", () => {
+    const b = levelsBlock({
+      levels: recorded,
+      auto: [
+        auto({ values: { cer: { value: 0.3, lo: 0.27, hi: 0.33, n: 72 } } }),
+        auto({
+          kind: "cleaning_check",
+          modelRef: "cleaning:clean-v1",
+          values: { cer: { value: 0.4, lo: 0.36, hi: 0.44, n: 72 } },
+        }),
+      ],
+    });
+    expect(b.cleaning).toEqual({
+      answer: "worse",
+      lettersPoints: 10,
+      tonesPoints: null,
+    });
+  });
+
+  it("cannot answer the cleaning question without the raw score on the same clips", () => {
     const b = levelsBlock({
       levels: recorded,
       auto: [
         auto({
           kind: "cleaning_check",
-          values: { terDelta: { value: 0.05, lo: 0.02, hi: 0.08, n: 131 } },
+          modelRef: "cleaning:clean-v1",
+          values: { cer: { value: 0.4, lo: 0.36, hi: 0.44, n: 72 } },
         }),
       ],
     });
-    expect(b.cleaning!.changed).toBe(true);
+    expect(b.cleaning!.answer).toBe("unknown");
   });
 });
 
@@ -417,11 +519,11 @@ describe("the adapter's pure parts", () => {
     expect(readMeasuredValues(null)).toEqual({});
   });
 
-  it("finds a number under any of its known key names", () => {
-    const values = readMeasuredValues({ cerHuman: 0.11, wer: 0.5 });
+  it("finds a number under its stored key name", () => {
+    const values = readMeasuredValues({ humanCer: 0.11, speechRmsDbfs: -23.1 });
     expect(pick(values, "cerPerson")!.value).toBe(0.11);
-    expect(pick(values, "werStripped")!.value).toBe(0.5);
-    expect(pick(values, "ter")).toBeNull();
+    expect(pick(values, "speechDbfs")!.value).toBe(-23.1);
+    expect(pick(values, "pooledTer")).toBeNull();
     expect(pick(undefined, "cer")).toBeNull();
   });
 

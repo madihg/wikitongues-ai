@@ -6,6 +6,7 @@ import {
   listenerAgreement,
   preference,
   roundsAgainstHuman,
+  splitRepeats,
   systemsAgainstHuman,
   tonePairs,
   type CheckRow,
@@ -191,6 +192,7 @@ describe("preference: how often listeners chose the model", () => {
       share: null,
     });
     expect(h.agreement).toEqual({ sharedRounds: 0, alpha: null });
+    expect(h.again).toEqual({ asked: 0, same: 0 });
   });
 });
 
@@ -433,5 +435,51 @@ describe("listenerAgreement", () => {
       sharedRounds: 0,
       alpha: null,
     });
+  });
+});
+
+describe("splitRepeats: the same round asked twice", () => {
+  const twice = (first: string, again: string) => {
+    const a = row({ winner: first, createdAt: "2026-11-20T09:00:00.000Z" });
+    // The repeat: the same two clips, sides swapped, a week later.
+    const b: ListenRow = {
+      ...a,
+      id: `${a.id}-again`,
+      recordingAId: a.recordingBId,
+      recordingBId: a.recordingAId,
+      a: a.b,
+      b: a.a,
+      winner: again,
+      createdAt: "2026-11-27T09:00:00.000Z",
+    };
+    return [b, a]; // out of order on purpose
+  };
+
+  it("keeps the first judgment as the round and scores the repeat against it", () => {
+    const rows = [
+      ...twice("a", "b"), // model, then model again (it now plays on side B)
+      ...twice("a", "a"), // model, then the person
+      ...twice("tie", "tie"),
+      row(),
+    ];
+    const { first, again } = splitRepeats(roundsAgainstHuman(rows, MODEL));
+    expect(first).toHaveLength(4);
+    expect(again).toEqual({ asked: 3, same: 2 });
+  });
+
+  it("a repeat never counts twice in the preference", () => {
+    const h = humanHalf([...twice("a", "b"), ...twice("b", "a")], MODEL);
+    expect(h.preference.rounds).toBe(2);
+    expect(h.preference.model).toBe(1);
+    expect(h.preference.person).toBe(1);
+    expect(h.again).toEqual({ asked: 2, same: 2 });
+  });
+
+  it("two listeners on the same clips are not repeats of each other", () => {
+    const a = row();
+    const b = { ...a, id: "other", annotatorId: "listener2" };
+    const { first, again } = splitRepeats(roundsAgainstHuman([a, b], MODEL));
+    expect(first).toHaveLength(2);
+    expect(again.asked).toBe(0);
   });
 });

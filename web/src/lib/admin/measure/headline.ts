@@ -6,7 +6,12 @@ import {
 } from "./auto";
 import type { SpeechMeasureData } from "./data";
 import { EMPTY } from "./copy";
-import { preference, roundsAgainstHuman, systemsAgainstHuman } from "./human";
+import {
+  preference,
+  roundsAgainstHuman,
+  splitRepeats,
+  systemsAgainstHuman,
+} from "./human";
 import { examTier, type ExamTier, type HumanTier } from "./tiers";
 
 /**
@@ -42,7 +47,7 @@ export function speechHeadline(data: SpeechMeasureData): SpeechHeadline {
   const heard = systemsAgainstHuman(data.listen);
   const voice = defaultVersion(voiceVersions(data, heard));
   const pref = voice
-    ? preference(roundsAgainstHuman(data.listen, voice))
+    ? preference(splitRepeats(roundsAgainstHuman(data.listen, voice)).first)
     : null;
 
   return {
@@ -51,7 +56,7 @@ export function speechHeadline(data: SpeechMeasureData): SpeechHeadline {
           modelRef: scored.modelRef,
           lettersWrongPer100: Math.round(scored.cer * 1000) / 10,
           examClips: scored.nClips,
-          tier: examTier(scored.nClips, scored.speakers),
+          tier: examTier(scored.nClips, scored.speakers, scored.onLockedExam),
         }
       : null,
     listeners:

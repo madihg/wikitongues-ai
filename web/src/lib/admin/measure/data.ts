@@ -22,31 +22,31 @@ import type { CheckRow, ListenRow } from "./human";
  */
 
 // ─── key names in SpeechAutoMeasure.values: adjust here, nowhere else ───────
+//
+// These follow out/speech/DATA.md (Nov 13). `values` is
+// { key: { value, lo?, hi?, n } }.
 
 /** For each number the page shows, the keys it may be stored under, first match wins. */
 export const AUTO_KEYS = {
-  // kind "asr_three_ways": the recogniser on the exam, with ranges
-  cer: ["cer", "cerStripped"],
-  werStripped: ["werStripped", "wer"],
-  werRetained: ["werRetained", "werToneRetained"],
-  ter: ["ter", "toneErrorRate"],
-  markedVowels: ["markedVowels", "toneBearing", "nToneVowels"],
-  // kind "tts_round_trip": the voice heard back by the recogniser
-  cerGap: ["cerGap", "roundTripCerGap"],
-  cerModel: ["cerModel", "cerSynth", "cer"],
-  cerPerson: ["cerHuman", "cerPerson"],
-  terGap: ["terGap", "roundTripTerGap"],
-  terModel: ["terModel", "terSynth", "ter"],
-  terPerson: ["terHuman", "terPerson"],
-  // kind "clip_levels": medians over clips
-  peakDbfs: ["peakDbfs", "samplePeakDbfs"],
-  speechDbfs: ["speechDbfs", "rmsDbfs", "speechLevelDbfs"],
-  noiseDbfs: ["noiseFloorDbfs", "noiseDbfs"],
-  snrDb: ["snrDb", "wadaSnrDb"],
-  clipped: ["clippedClips", "clipped"],
-  // kind "cleaning_check": recogniser on cleaned minus raw, paired
-  cleaningCerDelta: ["cerDelta", "cer"],
-  cleaningTerDelta: ["terDelta", "ter"],
+  // kinds "asr_three_ways" (raw clips) and "cleaning_check" (cleaned copies):
+  // the recogniser against the locked text, mean over clips, 95% bootstrap.
+  cer: ["cer"],
+  werStripped: ["werStripped"],
+  werRetained: ["werRetained"],
+  /** Wrong marks over marked vowels. Its n is the marked vowels. */
+  pooledTer: ["pooledTer"],
+  // kind "tts_round_trip": the voice heard back by the recogniser.
+  cerGap: ["cerGap"],
+  cerModel: ["systemCer"],
+  cerPerson: ["humanCer"],
+  terModel: ["systemPooledTer"],
+  terPerson: ["humanPooledTer"],
+  // kind "clip_levels": the median over clips, lo and hi the range.
+  peakDbfs: ["peakDbfs"],
+  speechDbfs: ["speechRmsDbfs"],
+  noiseDbfs: ["noiseFloorDbfs"],
+  snrDb: ["snrDb"],
+  rejected: ["gate_reject"],
 } as const;
 
 export const AUTO_KINDS = {
@@ -55,6 +55,15 @@ export const AUTO_KINDS = {
   levels: "clip_levels",
   cleaning: "cleaning_check",
 } as const;
+
+/** clip_levels rows: `human|<group>` is raw, `cleaning:<version>|<group>` is cleaned. */
+export const LEVELS_GROUP = "all";
+export const isRawLevels = (modelRef: string) =>
+  modelRef === `human|${LEVELS_GROUP}`;
+export const isCleanedLevels = (modelRef: string) =>
+  modelRef.startsWith("cleaning:") && modelRef.endsWith(`|${LEVELS_GROUP}`);
+/** A round-trip row against the cleaned human clips: a second view, not a second voice. */
+export const isVariantRef = (modelRef: string) => modelRef.includes("|human-");
 
 // ─── shapes ─────────────────────────────────────────────────────────────────
 
@@ -86,8 +95,18 @@ export interface EvalRow {
   werRetained: number;
   ter: number;
   nClips: number;
-  /** Distinct speakers in the exam, from perSpeaker's keys. */
+  /** Distinct speakers in the clip set, from perSpeaker's keys. */
   speakers: number;
+  /**
+   * Wrong tone marks over marked vowels, pooled over speakers. The `ter`
+   * column is a mean over clips where a text with no tone mark scores 0, so
+   * it reads far too low on a set where most texts carry no mark. Null when
+   * the row was stored without the per-speaker counts.
+   */
+  terPooled: number | null;
+  markedVowels: number | null;
+  /** True when this clip set is the locked exam as it stands now. */
+  onLockedExam: boolean;
   createdAt: string;
 }
 
@@ -118,6 +137,29 @@ export interface Held {
   examClips: number;
   examSpeakers: number;
   unchecked: number;
+}
+
+/** Pool the per-speaker tone counts of one SpeechEvalResult.perSpeaker. */
+export function pooledTone(perSpeaker: unknown): {
+  terPooled: number | null;
+  markedVowels: number | null;
+} {
+  if (!isRecord(perSpeaker)) return { terPooled: null, markedVowels: null };
+  let wrong = 0;
+  let marked = 0;
+  let seen = false;
+  for (const v of Object.values(perSpeaker)) {
+    if (!isRecord(v)) continue;
+    const m = num(v.markedVowels);
+    const t = num(v.terPooled);
+    if (m === null || t === null) continue;
+    seen = true;
+    marked += m;
+    wrong += t * m;
+  }
+  if (!seen || marked === 0)
+    return { terPooled: null, markedVowels: seen ? 0 : null };
+  return { terPooled: wrong / marked, markedVowels: marked };
 }
 
 export interface SpeechMeasureData {
@@ -337,6 +379,7 @@ export async function loadSpeechMeasure(db: Db): Promise<SpeechMeasureData> {
           ter: true,
           nClips: true,
           perSpeaker: true,
+          jobId: true,
           createdAt: true,
         },
       }),
@@ -404,6 +447,11 @@ export async function loadSpeechMeasure(db: Db): Promise<SpeechMeasureData> {
       ter: e.ter,
       nClips: e.nClips,
       speakers: isRecord(e.perSpeaker) ? Object.keys(e.perSpeaker).length : 0,
+      ...pooledTone(e.perSpeaker),
+      // The loop's evaluate job only ever scores the locked exam
+      // (buildEvalManifest). A row with no job was run by hand on some other
+      // set of clips: a smoke run, whatever its size.
+      onLockedExam: e.jobId !== null,
       createdAt: e.createdAt.toISOString(),
     })),
     versions: candidates.map((c) => ({

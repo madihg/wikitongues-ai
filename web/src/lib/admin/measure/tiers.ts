@@ -111,24 +111,39 @@ export const EXAM_TIERS = {
 
 export type ExamTier = "Smoke test" | "Early" | "Trustworthy";
 
-export function examTier(clips: number, speakers: number): ExamTier {
+/**
+ * `locked` false means the clips scored are not the locked exam (a run made
+ * by hand on whatever clips exist): a smoke test, whatever its size.
+ */
+export function examTier(
+  clips: number,
+  speakers: number,
+  locked = true,
+): ExamTier {
   const t = EXAM_TIERS;
-  if (clips < t.early) return "Smoke test";
+  if (!locked || clips < t.early) return "Smoke test";
   if (clips >= t.trustworthy && speakers >= t.trustworthySpeakers)
     return "Trustworthy";
   return "Early";
 }
 
 export const EXAM_TIER_MEANING: Record<ExamTier, string> = {
-  "Smoke test": `Fewer than ${EXAM_TIERS.early} exam clips. It shows the pipeline runs. The numbers are in grey and nothing is called better or worse.`,
+  "Smoke test": `Fewer than ${EXAM_TIERS.early} exam clips, or clips that are not a locked exam. It shows the pipeline runs. The numbers are in grey and nothing is called better or worse.`,
   Early: `${EXAM_TIERS.early} to ${EXAM_TIERS.trustworthy - 1} exam clips. A difference is named only when its range leaves no doubt.`,
   Trustworthy: `${EXAM_TIERS.trustworthy} exam clips or more, from ${EXAM_TIERS.trustworthySpeakers} speakers or more who are in no training set.`,
 };
 
-export function nextExamTier(clips: number, speakers: number): string | null {
+export function nextExamTier(
+  clips: number,
+  speakers: number,
+  locked = true,
+): string | null {
   const t = EXAM_TIERS;
-  const tier = examTier(clips, speakers);
+  const tier = examTier(clips, speakers, locked);
   if (tier === "Trustworthy") return null;
+  if (!locked) {
+    return `Lock ${t.early} exam clips and score the model on them to reach Early.`;
+  }
   if (tier === "Smoke test") {
     return `${more(t.early - clips, "exam clip", "exam clips")} to reach Early.`;
   }

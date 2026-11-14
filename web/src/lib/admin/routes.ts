@@ -121,6 +121,25 @@ export const DATA_TABS: ViewTab[] = [
   },
 ];
 
+export const SPEECH_MODEL_TABS: ViewTab[] = [
+  {
+    href: "/admin/speech",
+    label: "Measure",
+    hint: "How good the speech model is: what we can compute alone, and what listeners decided.",
+    exact: true,
+  },
+  {
+    href: "/admin/speech/loop",
+    label: "Loop",
+    hint: "What the nightly run did, the audio we hold, and the pause switch.",
+  },
+  {
+    href: "/admin/speech/rights",
+    label: "Rights",
+    hint: "Outside audio and whether we may use it.",
+  },
+];
+
 /** Whether a tab owns a pathname. */
 export function isViewTabActive(pathname: string, tab: ViewTab): boolean {
   if (pathname === tab.href) return true;
@@ -340,7 +359,7 @@ export const OLD_ROUTES: OldRoute[] = [
     url: "/admin/speech",
     was: "Speech loop",
     now: "same",
-    home: "Speech model",
+    home: "Speech model, Measure. The loop's cards are on the Loop tab",
   },
   // The old arena tabs.
   {
@@ -416,8 +435,9 @@ export const OLD_ROUTES: OldRoute[] = [
   {
     url: "/lab/speech/rights",
     was: "Rights register",
-    now: "same",
-    home: "Speech model",
+    now: "redirect",
+    to: "/admin/speech/rights",
+    home: "Speech model, Rights",
   },
   { url: "/speak", was: "Speak", now: "same", home: "My work" },
   { url: "/speak/listen", was: "Speak, Listen", now: "same", home: "My work" },
@@ -444,6 +464,8 @@ export const NEW_ROUTES: string[] = [
   "/admin/data/disagreements",
   "/admin/data/prompts",
   "/admin/data/export",
+  "/admin/speech/loop",
+  "/admin/speech/rights",
   "/admin/more",
   "/admin/more/legacy",
 ];
