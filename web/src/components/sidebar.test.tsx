@@ -13,7 +13,9 @@ const { state } = vi.hoisted(() => ({
 }));
 vi.mock("next-auth/react", () => ({
   useSession: () => ({
-    data: { user: { id: "u1", role: state.role, email: state.email, name: "A" } },
+    data: {
+      user: { id: "u1", role: state.role, email: state.email, name: "A" },
+    },
     status: "authenticated",
   }),
   signOut: vi.fn(),
@@ -52,7 +54,12 @@ beforeEach(() => {
 describe("Sidebar", () => {
   it("an annotator with speech off sees exactly today's four lines, no divider, no number", () => {
     const html = renderToStaticMarkup(<Sidebar />);
-    expect(labels(html)).toEqual(["Dashboard", "Annotate", "My Work", "Rubric"]);
+    expect(labels(html)).toEqual([
+      "Dashboard",
+      "Annotate",
+      "My Work",
+      "Rubric",
+    ]);
     expect(html).not.toContain('data-testid="research-links"');
     expect(html).not.toContain('data-testid="nav-count"');
   });
@@ -82,7 +89,7 @@ describe("Sidebar", () => {
     }
   });
 
-  it("a researcher gets the same lines first, then a divider and the research links, and no Lab heading", () => {
+  it("a researcher gets the same lines first, then a divider, the research views and More, and no Lab heading", () => {
     Object.assign(state, {
       role: "RESEARCHER",
       email: "r@example.com",
@@ -99,28 +106,49 @@ describe("Sidebar", () => {
     ]);
     const divider = html.indexOf('data-testid="research-links"');
     expect(divider).toBeGreaterThan(html.indexOf(">Rubric<"));
-    for (const label of [
+    // Below the divider: the views, then More. Nothing else. People is for
+    // research leads, and this researcher is not one.
+    expect(labels(html).slice(5)).toEqual([
+      "Today",
+      "Data",
+      "Text model",
+      "Speech model",
+      "More",
+    ]);
+    for (const label of ["Today", "Speech model", "More"]) {
+      expect(html.indexOf(`>${label}<`), label).toBeGreaterThan(divider);
+    }
+    expect(html).toContain(">Research<");
+    // The lines that left the sidebar are under a view or More, not here.
+    for (const gone of [
       "Prompts",
       "Corrections",
       "Review queue",
-      "Annotations",
       "Researcher Dashboard",
-      "Speakers&#x27; Verdict",
       "Model Arena",
       "How it works",
       "Speech loop",
+      "Tone agreement",
+      "View as",
+      "Learner tutor",
     ]) {
-      expect(html.indexOf(`>${label}<`), label).toBeGreaterThan(divider);
+      expect(html, gone).not.toContain(`>${gone}<`);
     }
     expect(html).not.toContain(">Lab<");
     expect(html).not.toContain("researchers only");
-    // The out-link still opens in a new tab.
-    expect(html).toMatch(/<a href="https:[^"]*" target="_blank" rel="noopener noreferrer"/);
   });
 
   it("Speech stays highlighted on its tabs and on the researcher pages", () => {
-    Object.assign(state, { role: "RESEARCHER", email: "r@example.com", lab: true });
-    for (const pathname of ["/speak", "/speak/check", "/lab/speech/recordings"]) {
+    Object.assign(state, {
+      role: "RESEARCHER",
+      email: "r@example.com",
+      lab: true,
+    });
+    for (const pathname of [
+      "/speak",
+      "/speak/check",
+      "/lab/speech/recordings",
+    ]) {
       state.pathname = pathname;
       const html = renderToStaticMarkup(<Sidebar />);
       const active = [...html.matchAll(/<a\b[^>]*bg-accent-subtle[^>]*>/g)];
@@ -144,7 +172,12 @@ describe("Sidebar", () => {
   });
 
   it("a person who was given tone items gets the line after Speech, with what is waiting", () => {
-    Object.assign(state, { role: "ANNOTATOR", lab: true, waiting: 7, tone: 30 });
+    Object.assign(state, {
+      role: "ANNOTATOR",
+      lab: true,
+      waiting: 7,
+      tone: 30,
+    });
     const html = renderToStaticMarkup(<Sidebar />);
     expect(labels(html)).toEqual([
       "Dashboard",
@@ -164,15 +197,40 @@ describe("Sidebar", () => {
     expect(done).not.toContain('data-testid="nav-count"');
   });
 
-  it("researchers reach the tone admin view below the divider, as the last research link; annotators never", () => {
-    Object.assign(state, { role: "RESEARCHER", email: "r@example.com", lab: true });
+  it("Tone agreement is not a sidebar line for anyone: the Data view links to it and lights up on it", () => {
+    Object.assign(state, {
+      role: "RESEARCHER",
+      email: "r@example.com",
+      lab: true,
+      pathname: "/admin/tone",
+    });
     const html = renderToStaticMarkup(<Sidebar />);
-    const all = labels(html);
-    expect(all[all.indexOf("Speech loop") + 1]).toBe("Tone agreement");
-    expect(html.indexOf('href="/admin/tone"')).toBeGreaterThan(
-      html.indexOf('data-testid="research-links"'),
-    );
+    expect(html).not.toContain('href="/admin/tone"');
+    const active = [...html.matchAll(/<a\b[^>]*bg-accent-subtle[^>]*>/g)];
+    expect(active).toHaveLength(1);
+    expect(active[0][0]).toContain('href="/admin/annotations"');
     Object.assign(state, { role: "ANNOTATOR", email: "a@example.com" });
     expect(renderToStaticMarkup(<Sidebar />)).not.toContain("/admin/tone");
+  });
+
+  it("a research page lights exactly one view, whichever tab or archived page it is", () => {
+    Object.assign(state, {
+      role: "RESEARCHER",
+      email: "r@example.com",
+      lab: true,
+    });
+    for (const [pathname, href] of [
+      ["/admin", "/admin"],
+      ["/admin/data/export", "/admin/annotations"],
+      ["/admin/arena/chat", "/admin/arena/verdict"],
+      ["/admin/speech/loop", "/admin/speech"],
+      ["/admin/arena/costs", "/admin/more"],
+    ]) {
+      state.pathname = pathname;
+      const html = renderToStaticMarkup(<Sidebar />);
+      const active = [...html.matchAll(/<a\b[^>]*bg-accent-subtle[^>]*>/g)];
+      expect(active, pathname).toHaveLength(1);
+      expect(active[0][0], pathname).toContain(`href="${href}"`);
+    }
   });
 });

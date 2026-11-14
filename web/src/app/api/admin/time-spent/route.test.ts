@@ -14,6 +14,10 @@ vi.mock("@/lib/prisma", () => ({
   ),
 }));
 vi.mock("@/lib/api-auth", () => ({ requireResearcher: mockRequireResearcher }));
+// The hours route is for research leads (RESEARCH_LEADS): it asks requireLead,
+// which answers here exactly as requireResearcher did. Who is a lead is
+// tested in src/lib/admin/leads.test.ts.
+vi.mock("@/lib/admin/lead-route", () => ({ requireLead: mockRequireResearcher }));
 vi.mock("next-auth", () => ({ getServerSession: mockSession }));
 vi.mock("@/lib/auth", () => ({ authOptions: {} }));
 // The annotator summary's queue numbers are not under test here.

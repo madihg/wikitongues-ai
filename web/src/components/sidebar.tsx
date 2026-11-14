@@ -13,10 +13,10 @@ import {
   navForRole,
   activeNavHref,
   isOwner,
-  isResearcher,
-  PERSONAS,
   type NavLink,
 } from "@/lib/personas";
+import { activeResearchHref, PEOPLE_HREF } from "@/lib/admin/routes";
+import { useResearchLead } from "@/components/admin/use-research-lead";
 
 /** One sidebar line: an in-app link (with its waiting number) or an out-link. */
 function SidebarLink({ link, active }: { link: NavLink; active: boolean }) {
@@ -89,6 +89,14 @@ export function Sidebar() {
   // Tone-mark pass 2: the line shows only for a person who was given items.
   const tone = useToneCount(canProbeSpeech(session?.user?.role));
 
+  // People is for research leads. The owner is one; another researcher asks
+  // the server once. An annotator never asks.
+  const ownerNow = isOwner(session?.user?.email);
+  const askedLead = useResearchLead(
+    session?.user?.role === "RESEARCHER" && !ownerNow,
+  );
+  const lead = ownerNow || askedLead;
+
   if (!session) return null;
 
   const { role, email } = session.user;
@@ -100,9 +108,12 @@ export function Sidebar() {
   // The work links every account shares come first; the researcher tools
   // follow a divider. There is no "Lab" group: Speech is a work link.
   const workLinks = links.filter((l) => !l.group);
-  const researchLinks = links.filter((l) => l.group === "research");
+  // Below the divider. People is for research leads only.
+  const researchLinks = links.filter(
+    (l) => l.group === "research" && (lead || l.href !== PEOPLE_HREF),
+  );
+  const moreLinks = links.filter((l) => l.group === "more");
   const owner = isOwner(email);
-  const researcher = isResearcher(role, email);
 
   const roleLabel = owner
     ? "Owner"
@@ -110,7 +121,11 @@ export function Sidebar() {
 
   // Longest-prefix match so nested links (e.g. Speakers' Verdict under
   // /admin/arena) highlight exactly one entry, never their parent too.
-  const activeHref = activeNavHref(links, pathname);
+  // A research page belongs to exactly one of the views below the divider
+  // (a tab or an archived page lights its view, not a link of its own).
+  const activeHref =
+    (researchLinks.length > 0 ? activeResearchHref(pathname) : null) ??
+    activeNavHref(links, pathname);
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-border bg-surface">
@@ -128,50 +143,46 @@ export function Sidebar() {
           />
         ))}
 
-        {/* Researcher tools: a divider, then the research links. */}
+        {/* Research: a divider, then the views a researcher works from,
+            then More (tools, the owner's "View as" switcher, the archive). */}
         {researchLinks.length > 0 && (
           <div
             data-testid="research-links"
             className="mt-4 space-y-1 border-t border-border pt-4"
           >
-            {researchLinks.map((link) => (
-              <SidebarLink
-                key={link.href}
-                link={link}
-                active={activeHref === link.href}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Owner-only persona switcher: act as any of the three personas. */}
-        {owner && (
-          <div className="mt-6 border-t border-border pt-4">
-            <div className="px-3 pb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-              View as
+            <div className="px-3 pb-1 font-mono text-xs uppercase tracking-widest text-text-muted">
+              Research
             </div>
-            {PERSONAS.map((p) => (
+            {researchLinks.map((link) => (
               <Link
-                key={p.key}
-                href={p.href}
-                className="block rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text-primary"
-                title={p.blurb}
+                key={link.href}
+                href={link.href}
+                title={link.question}
+                aria-current={activeHref === link.href ? "page" : undefined}
+                className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  activeHref === link.href
+                    ? "bg-accent-subtle text-accent-text"
+                    : "text-text-secondary hover:bg-surface-sunken hover:text-text-primary"
+                }`}
               >
-                {p.label}
+                {link.label}
               </Link>
             ))}
-          </div>
-        )}
-
-        {/* Researchers (non-owner) get a quick link to the learner tutor too. */}
-        {researcher && !owner && (
-          <div className="mt-6 border-t border-border pt-4">
-            <Link
-              href="/learner/chat"
-              className="block rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text-primary"
-            >
-              Learner tutor
-            </Link>
+            {moreLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                title={link.question}
+                aria-current={activeHref === link.href ? "page" : undefined}
+                className={`!mt-3 block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  activeHref === link.href
+                    ? "bg-accent-subtle text-accent-text"
+                    : "text-text-tertiary hover:bg-surface-sunken hover:text-text-primary"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
           </div>
         )}
       </nav>

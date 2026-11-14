@@ -10,6 +10,11 @@
  */
 
 import { canUseLab } from "@/lib/lab-flags";
+import {
+  researchLinks,
+  TONE_PASS_HREF,
+  TONE_PASS_LABEL,
+} from "@/lib/admin/routes";
 
 export const OWNER_EMAILS = ["madihalim@gmail.com"];
 
@@ -53,9 +58,12 @@ export interface NavLink {
   /**
    * Sidebar group. No group: the work links every account starts with
    * (Dashboard, Annotate, Speech, My Work, Rubric), in that order. "research":
-   * the researcher tools, rendered after a divider.
+   * the five researcher views, rendered after a divider under their own
+   * heading. "more": the single More entry that closes the list.
    */
-  group?: "research";
+  group?: "research" | "more";
+  /** The one question a research view answers. Shown as the link's tooltip. */
+  question?: string;
   /** What is waiting behind this link. Absent when it is zero or not known. */
   count?: number;
   /**
@@ -87,11 +95,13 @@ export interface NavOptions {
 /** The Pass 2 line. It sits right after Annotate and the Speech link. */
 export const TONE_NAV_HREF = "/annotator/tone";
 
-/** The researcher's view of the tone pass (/admin/tone). */
+/**
+ * The researcher's view of the tone pass (/admin/tone). Not a sidebar line:
+ * it is linked from the Data view, on Disagreements, under this label.
+ */
 export const TONE_ADMIN_LINK: NavLink = {
-  href: "/admin/tone",
-  label: "Tone agreement",
-  group: "research",
+  href: TONE_PASS_HREF,
+  label: TONE_PASS_LABEL,
 };
 
 /** A link with its waiting number, or the bare link when nothing waits. */
@@ -143,49 +153,10 @@ function workLinks(speechOn: boolean, options: NavOptions): NavLink[] {
 }
 
 /**
- * The researcher tools, below the divider. Every label is the one it has
- * always had. The order and grouping here belong to the researcher dashboard
- * work; the work links above do not.
- */
-function researchLinks(speechOn: boolean): NavLink[] {
-  const links: NavLink[] = [
-    { href: "/annotator/prompts", label: "Prompts", group: "research" },
-    // Researchers keep the standalone Corrections lane (the backlog view of
-    // already-judged outputs). Annotators do NOT get it - see below.
-    { href: "/annotator/corrections", label: "Corrections", group: "research" },
-    { href: "/annotator/review", label: "Review queue", group: "research" },
-    { href: "/admin/annotations", label: "Annotations", group: "research" },
-    { href: "/admin", label: "Researcher Dashboard", group: "research" },
-    // First stop for the human-judgment evidence: what speakers decide in
-    // blind matchups, in plain language. Deliberately ahead of Model Arena.
-    { href: "/admin/arena/verdict", label: "Speakers' Verdict", group: "research" },
-    { href: "/admin/arena", label: "Model Arena", group: "research" },
-    // Plain-language project explainer for staff, funders and community
-    // members. Points OUT to the public marketing page (see the constant
-    // above): one telling of the story, publicly readable, live numbers.
-    {
-      href: PUBLIC_HOW_IT_WORKS_URL,
-      label: "How it works",
-      external: true,
-      group: "research",
-    },
-  ];
-  // The nightly loop's dashboard: overnight card, hours, trend, candidates.
-  // Ships dark with the lab (src/lib/lab-flags.ts).
-  if (speechOn) {
-    links.push({ href: "/admin/speech", label: "Speech loop", group: "research" });
-  }
-  // Tone-mark pass 2, the researcher's view: how far the markers agree and
-  // where a decision is needed. Last, so no existing link moves; the
-  // researcher dashboard work decides its final place.
-  links.push(TONE_ADMIN_LINK);
-  return links;
-}
-
-/**
  * Primary sidebar nav for the (app) area. Every account starts with the same
  * work links in the same order. Annotators get only those; researchers (and
- * the owner) get the research tools after them, below a divider.
+ * the owner) get the five research views and More after them, below a
+ * divider.
  *
  * Speech is one link for every role (2026-11-13): Agnes looked for speech
  * next to her other work and did not find it under "Lab". The Lab group, its
@@ -201,7 +172,14 @@ export function navForRole(
     // The lab ships dark: the link exists only when the server says the flag
     // is on and the account holds the researcher role.
     const speechOn = !!options.lab && canUseLab(role);
-    return [...workLinks(speechOn, options), ...researchLinks(speechOn)];
+    // Below the divider: five views and More (src/lib/admin/routes.ts owns
+    // that list). Prompts, Corrections, Review queue, Annotations, Speakers'
+    // Verdict, Model Arena, How it works, the speech loop and Tone agreement
+    // are all still reachable, inside a view or under More.
+    return [
+      ...workLinks(speechOn, options),
+      ...researchLinks({ speech: speechOn }),
+    ];
   }
   // Pure annotator. NO Corrections tab (2026-08-28 rework, Halim's call):
   // corrections happen inside the episode, right after the A/B verdict - a

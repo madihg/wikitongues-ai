@@ -1,123 +1,128 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { computeMethodMetrics } from "@/lib/method-metrics";
-import { BenchmarkBars } from "@/components/arena/benchmark-bars";
-import { Leaderboard } from "@/components/admin/leaderboard";
-import { CategoryBreakdown } from "@/components/admin/category-breakdown";
-import { AgreementStats } from "@/components/admin/agreement-stats";
-import { GapDashboard } from "@/components/admin/gap-dashboard";
-import { AnnotatorActivity } from "@/components/admin/annotator-activity";
-import { TimeSpent } from "@/components/admin/time-spent";
-import { ExportPanel } from "@/components/admin/export-panel";
-import { HelpButton } from "@/components/help-button";
-import { PUBLIC_HOW_IT_WORKS_URL } from "@/lib/personas";
-import { InfoTip } from "@/components/info-tip";
 import { requireResearcherPage } from "@/lib/admin/page-gate";
+import { loadTodayWork } from "@/lib/admin/today-data";
+import { weekOf } from "@/lib/admin/week";
+import { speechLabEnabled } from "@/lib/lab-flags";
+import { loadQueueInputs } from "@/lib/queue-input";
+import {
+  HoldingsBlock,
+  ModelsBlock,
+  NeedsYouBlock,
+  WeekWorkBlock,
+} from "@/components/admin/today-sections";
 
-/** The benchmark card is computed from the database per request - the house
- * rule: no hardcoded counts or scores anywhere in the UI. */
+/**
+ * Today: what changed this week, and what needs me.
+ *
+ * One column, four blocks, no tabs. It replaces the Researcher Dashboard,
+ * which stacked ten cards and made seven requests from the browser after it
+ * loaded. Everything here is rendered on the server in one pass:
+ *
+ *   Needs you         only the lines whose number crossed its threshold
+ *   The models        one tile per model, each a number from its own view
+ *   This week's work  one row per person who worked
+ *   What we hold      the size of the corpus and what the week added
+ *
+ * The cards that left this page are all still reachable: the agreement bars
+ * on Text model, Benchmark; agreement between annotators on Data,
+ * Disagreements; activity and hours on People; the downloads on Data, Export;
+ * the old leaderboard, category scores and gap closure under More, Archive.
+ *
+ * Every number is computed from the database per request.
+ */
 export const dynamic = "force-dynamic";
 
-export default async function AdminDashboard() {
-  await requireResearcherPage();
-  const metrics = await computeMethodMetrics(prisma);
+const Skeleton = ({ rows, tall }: { rows: number; tall?: boolean }) => (
+  <div className="space-y-2" aria-hidden="true">
+    {Array.from({ length: rows }, (_, i) => (
+      <div
+        key={i}
+        className={`animate-pulse rounded-md bg-surface-sunken ${tall ? "h-28" : "h-10"}`}
+        style={{ animationDelay: `${i * 80}ms` }}
+      />
+    ))}
+  </div>
+);
+
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ week?: string }>;
+}) {
+  const who = await requireResearcherPage();
+  const sp = (await searchParams) ?? {};
+  const thisWeek = sp.week !== "last";
+  const now = new Date();
+  const week = weekOf(now, thisWeek ? 0 : -1);
+  const speech = speechLabEnabled();
+
+  // Started once, awaited by three blocks. The queue is the same load the
+  // Annotate page makes, so "Prompts left" is what a person would be served.
+  // It runs beside the other queries, not before them.
+  // People data is for research leads. For another researcher no person is
+  // loaded, and the queue (only needed for "prompts left") is not either.
+  const work = loadTodayWork(prisma, {
+    now,
+    week,
+    speech,
+    lead: who.lead,
+    queuePrompts: who.lead ? loadQueueInputs().then((q) => q.queuePrompts) : [],
+  });
+  // A block that never renders must not leave a rejection unhandled.
+  work.catch(() => undefined);
+
+  const toggle = (label: string, href: string, active: boolean) => (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+        active
+          ? "bg-accent-subtle text-accent-text"
+          : "text-text-tertiary hover:text-text-primary"
+      }`}
+    >
+      {label}
+    </Link>
+  );
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold text-text-primary">
-          Researcher Dashboard
-          <InfoTip width="w-80">
-            The researcher dashboard summarizes annotation progress and model
-            performance for Igala. Each section below explains its own metric.
-          </InfoTip>
-        </h1>
-        <p className="mt-2 text-sm text-text-tertiary">
-          Cross-model comparisons, annotation progress, and benchmark results.
-          All data is read-only.
-        </p>
-      </div>
-
-      <div className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Link
-            href="/admin/annotations"
-            className="group rounded-lg border border-border bg-surface p-6 shadow-sm transition-colors hover:bg-surface-sunken"
-          >
-            <h2 className="text-base font-semibold text-text-primary">
-              Annotations
-            </h2>
-            <p className="mt-1 text-sm text-text-tertiary">
-              Read every annotator&apos;s pairwise picks, cold answers, and
-              edits. Correct and mark reviewed.
-            </p>
-            <span className="mt-3 inline-block text-sm font-medium text-accent-text">
-              Open review surface →
-            </span>
-          </Link>
-          <Link
-            href="/annotator/prompts"
-            className="group rounded-lg border border-border bg-surface p-6 shadow-sm transition-colors hover:bg-surface-sunken"
-          >
-            <h2 className="text-base font-semibold text-text-primary">
-              Prompt Catalogue
-            </h2>
-            <p className="mt-1 text-sm text-text-tertiary">
-              Browse and edit the prompt bank. Changes are audited per field.
-            </p>
-            <span className="mt-3 inline-block text-sm font-medium text-accent-text">
-              Browse and edit →
-            </span>
-          </Link>
-        </div>
-
-        <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-text-primary">
-              Community Agreement Score
-              <InfoTip width="w-80">
-                Leak-free stripped chrF rescaled so that 100 marks how closely
-                one native speaker agrees with another on the same frozen
-                questions. Computed live per request; never capped at 100.
-              </InfoTip>
-            </h2>
-            <a
-              href={PUBLIC_HOW_IT_WORKS_URL}
-              className="text-sm font-medium text-accent-text"
-            >
-              How this score works →
-            </a>
-          </div>
-          <p className="mb-3 mt-1 text-sm text-text-tertiary">
-            The frozen-exam benchmark, drawn the way language models are usually
-            compared.
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-text-primary">Today</h1>
+          <p className="mt-2 text-sm text-text-tertiary">
+            What changed this week, and what needs you. {week.label}, Monday to
+            Sunday, Lagos time.
           </p>
-          <BenchmarkBars
-            candidates={metrics.candidates}
-            ceilingChrf={metrics.agreementCeilingChrf}
-            leakFreePrompts={metrics.benchmark.leakFreePrompts}
-          />
-        </section>
-
-        <Leaderboard />
-        <CategoryBreakdown />
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <AgreementStats />
-          <GapDashboard />
         </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <AnnotatorActivity />
-          <TimeSpent />
+        <div
+          role="group"
+          aria-label="Which week"
+          className="inline-flex rounded-md border border-border bg-surface p-0.5"
+        >
+          {toggle("This week", "/admin", thisWeek)}
+          {toggle("Last week", "/admin?week=last", !thisWeek)}
         </div>
-        <ExportPanel />
       </div>
 
-      <HelpButton
-        title="Researcher Dashboard"
-        description="This screen gives researchers a read-only overview of annotation progress and model performance. The Leaderboard ranks models by aggregate score. Category Breakdown shows performance across linguistic and cultural dimensions. Agreement Stats measure inter-annotator consistency. The Gap Dashboard highlights areas where model knowledge is weakest. Annotator Activity tracks contributor participation. Use Export to download data for offline analysis."
-      />
+      <div className="space-y-10">
+        <Suspense fallback={null}>
+          <NeedsYouBlock work={work} />
+        </Suspense>
+        <Suspense fallback={<Skeleton rows={3} tall />}>
+          <ModelsBlock speech={speech} lead={who.lead} />
+        </Suspense>
+        {who.lead && (
+          <Suspense fallback={<Skeleton rows={4} />}>
+            <WeekWorkBlock work={work} speech={speech} thisWeek={thisWeek} />
+          </Suspense>
+        )}
+        <Suspense fallback={<Skeleton rows={1} tall />}>
+          <HoldingsBlock work={work} thisWeek={thisWeek} />
+        </Suspense>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { forbidden, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isOwner, isResearcher } from "@/lib/personas";
+import { isResearchLead } from "./leads";
 
 /**
  * The server-side gate for the researcher pages.
@@ -19,6 +20,8 @@ export interface ResearcherSession {
   email: string | null;
   role: string;
   owner: boolean;
+  /** May see pay and people data: the owner, or an email in RESEARCH_LEADS. */
+  lead: boolean;
 }
 
 export async function requireResearcherPage(): Promise<ResearcherSession> {
@@ -32,5 +35,17 @@ export async function requireResearcherPage(): Promise<ResearcherSession> {
     email: user.email ?? null,
     role: user.role,
     owner: isOwner(user.email),
+    lead: isResearchLead(user.email),
   };
+}
+
+/**
+ * The gate for pages that show pay and people data (People). A researcher
+ * who is not a lead gets the forbidden page, like an annotator would, and
+ * nothing is read.
+ */
+export async function requireLeadPage(): Promise<ResearcherSession> {
+  const who = await requireResearcherPage();
+  if (!who.lead) forbidden();
+  return who;
 }

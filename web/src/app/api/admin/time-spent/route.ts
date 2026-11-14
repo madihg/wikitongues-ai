@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireResearcher } from "@/lib/api-auth";
+import { requireLead } from "@/lib/admin/lead-route";
 import { addWeeks, lagosDate, parseWeek } from "@/lib/hours";
 import { hoursCsv, hoursCsvFilename } from "@/lib/hours-csv";
 import { loadHours } from "@/lib/hours-data";
@@ -21,7 +21,8 @@ import { loadHours } from "@/lib/hours-data";
 const MAX_WEEKS = 26;
 
 export async function GET(req: Request) {
-  const { error } = await requireResearcher();
+  // Hours per person are pay data: research leads only (RESEARCH_LEADS).
+  const { error } = await requireLead();
   if (error) return error;
 
   const params = new URL(req.url).searchParams;

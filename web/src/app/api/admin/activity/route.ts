@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireLead } from "@/lib/admin/lead-route";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "RESEARCHER") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  // Who did how much, by name: research leads only (RESEARCH_LEADS).
+  const { error } = await requireLead();
+  if (error) return error;
 
   const users = await prisma.user.findMany({
     select: { id: true, name: true, email: true },

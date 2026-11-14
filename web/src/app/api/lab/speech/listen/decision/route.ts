@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
+import { requireLead } from "@/lib/admin/lead-route";
 import {
   MIN_JUDGMENTS,
   MIN_LISTENERS,
@@ -12,16 +13,26 @@ import { toneAccuracy } from "@/lib/speech/minimal-pairs";
 
 /**
  * GET /api/lab/speech/listen/decision: the Bradley-Terry decision cards and
- * tone accuracy per system (PRD US-027, US-011). Researcher-only; 404 when
- * the flag is off. Reads counted (non-demo) judgments and minimal-pair
+ * tone accuracy per system (PRD US-027, US-011). Research leads only (the
+ * owner and RESEARCH_LEADS): a rater must not see which system is ahead. 404
+ * when the flag is off. Reads counted (non-demo) judgments and minimal-pair
  * answers; every speechRecording read names a select, never the audio. A card
  * carries no ranking until its pair has 300 judgments from 5 listeners.
  */
-const SYSTEM_FIELDS = { sourceType: true, sourceRef: true, modelOutputId: true } as const;
+const SYSTEM_FIELDS = {
+  sourceType: true,
+  sourceRef: true,
+  modelOutputId: true,
+} as const;
 
 export async function GET() {
   const gate = await labGate();
   if (gate.error) return gate.error;
+  // Which system is ahead, and by how much, is for research leads only. The
+  // people who rate (they hold the researcher role too) must not see it
+  // while they rate: 403, and nothing is read.
+  const lead = await requireLead();
+  if (lead.error) return lead.error;
 
   const comparisons = await prisma.speechComparison.findMany({
     where: { isDemo: false },

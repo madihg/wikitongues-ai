@@ -11,6 +11,11 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/api-auth", () => ({ requireResearcher: mockRequireResearcher }));
+// The route is for research leads. Here the caller is one; who is a lead,
+// and the 403 for a researcher who is not, are in src/lib/admin/leads.test.ts.
+vi.mock("@/lib/admin/lead-route", () => ({
+  requireLead: async () => ({ error: null, userId: "r1" }),
+}));
 
 import { GET } from "./route";
 

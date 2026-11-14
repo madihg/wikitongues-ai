@@ -2,49 +2,36 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ARENA_TABS, ARENA_EXIT, isTabActive } from "./arena-nav";
+import { ViewTabs } from "@/components/admin/view-tabs";
+import { ARENA_TABS, arenaMorePage } from "./arena-nav";
 
 /**
- * Persistent tab bar across every Model Arena page. Same active-state treatment
- * as the rest of the app's tabs (accent underline + accent text). Scrolls
- * horizontally on narrow screens rather than wrapping into a ragged block.
+ * The bar across every /admin/arena page. On a Text model page it is the four
+ * tabs. On a page that moved under More (costs, demo, fine-tune jobs,
+ * trajectory) it says where the page lives now and how to get back, so no tab
+ * is lit for a page that is not its own.
  */
 export function ArenaTabs() {
   const pathname = usePathname() ?? "";
+  const more = arenaMorePage(pathname);
 
-  return (
-    <div className="mb-6 border-b border-border">
-      <nav
-        aria-label="Model Arena sections"
-        className="-mb-px flex items-stretch gap-1 overflow-x-auto"
-      >
-        {ARENA_TABS.map((tab) => {
-          const active = isTabActive(pathname, tab.href);
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              title={tab.hint}
-              aria-current={active ? "page" : undefined}
-              className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                active
-                  ? "border-accent text-accent-text"
-                  : "border-transparent text-text-tertiary hover:border-border-strong hover:text-text-secondary"
-              }`}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-
-        <Link
-          href={ARENA_EXIT.href}
-          title={ARENA_EXIT.hint}
-          className="ml-auto whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm text-text-muted transition-colors hover:text-text-secondary"
-        >
-          &larr; {ARENA_EXIT.label}
+  if (more) {
+    return (
+      <div className="mb-6 border-b border-border pb-2.5 text-sm text-text-tertiary">
+        <Link href="/admin/more" className="font-medium text-accent-text">
+          &larr; More
         </Link>
-      </nav>
-    </div>
-  );
+        <span className="mx-2" aria-hidden="true">
+          /
+        </span>
+        {more.section}
+        <span className="mx-2" aria-hidden="true">
+          /
+        </span>
+        <span className="text-text-secondary">{more.label}</span>
+      </div>
+    );
+  }
+
+  return <ViewTabs tabs={ARENA_TABS} label="Text model sections" />;
 }

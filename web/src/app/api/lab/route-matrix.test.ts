@@ -280,7 +280,12 @@ type Who = "researcher" | "annotator" | "learner" | "signed-out";
 const asWho = (who: Who) => {
   if (who === "signed-out") return mockSession.mockResolvedValue(null);
   const role = { researcher: "RESEARCHER", annotator: "ANNOTATOR", learner: "LEARNER" }[who];
-  mockSession.mockResolvedValue({ user: { id: `${who}-1`, role } });
+  // The researcher of this matrix is a research lead (RESEARCH_LEADS below),
+  // so the one lead-only lab route answers them like the others. A
+  // researcher who is not a lead is covered in src/lib/admin/leads.test.ts.
+  mockSession.mockResolvedValue({
+    user: { id: `${who}-1`, role, email: `${who}@matrix.example.org` },
+  });
 };
 
 const saved = {
@@ -293,8 +298,14 @@ const setEnv = (lab: boolean, layer: boolean) => {
   if (layer) process.env.SPEECH_LAYER_ANNOTATORS = "1";
   else delete process.env.SPEECH_LAYER_ANNOTATORS;
 };
-beforeEach(() => vi.clearAllMocks());
+const savedLeads = process.env.RESEARCH_LEADS;
+beforeEach(() => {
+  vi.clearAllMocks();
+  process.env.RESEARCH_LEADS = "researcher@matrix.example.org";
+});
 afterEach(() => {
+  if (savedLeads === undefined) delete process.env.RESEARCH_LEADS;
+  else process.env.RESEARCH_LEADS = savedLeads;
   for (const [k, v] of [
     ["SPEECH_LAB_ENABLED", saved.lab],
     ["SPEECH_LAYER_ANNOTATORS", saved.layer],

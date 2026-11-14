@@ -50,7 +50,9 @@ vi.mock("@/lib/prisma", () => ({
           {
             get: (_m, method: string) => () => {
               touched.reads.push(`${model}.${method}`);
-              throw new Error(`database read before the gate: ${model}.${method}`);
+              throw new Error(
+                `database read before the gate: ${model}.${method}`,
+              );
             },
           },
         ),
@@ -92,6 +94,7 @@ describe("requireResearcherPage", () => {
       email: "r@example.org",
       role: "RESEARCHER",
       owner: false,
+      lead: false,
     });
   });
 
@@ -127,9 +130,10 @@ const PAGES = adminPages().filter(
 
 /** The first statement of the page's default export. */
 function firstStatement(src: string): string {
-  const m = /export default (?:async )?function \w+\([^)]*\)[^{]*\{\n([^\n]*)\n/.exec(
-    src,
-  );
+  const m =
+    /export default (?:async )?function \w+\([^)]*\)[^{]*\{\n([^\n]*)\n/.exec(
+      src,
+    );
   return m ? m[1].trim() : "";
 }
 
@@ -182,7 +186,7 @@ describe("every page under /admin checks the visitor on the server", () => {
       it("is a server page whose first statement is the gate", () => {
         expect(src.trimStart().startsWith('"use client"')).toBe(false);
         expect(firstStatement(src)).toMatch(
-          /^await require(ResearcherPage|LabPage)\(/,
+          /^(const \w+ = )?await require(ResearcherPage|LeadPage|LabPage)\(/,
         );
       });
 
