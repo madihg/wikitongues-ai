@@ -5,7 +5,8 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
   mockPrisma: {
     speechRecording: { findMany: vi.fn() },
     coldAuthorAnswer: { findMany: vi.fn() },
-    prompt: { findFirst: vi.fn() },
+    prompt: { findMany: vi.fn() },
+    speakerProfile: { findUnique: vi.fn() },
   },
   mockRequireResearcher: vi.fn(),
 }));
@@ -45,7 +46,8 @@ beforeEach(() => {
   });
   mockPrisma.speechRecording.findMany.mockResolvedValue([]);
   mockPrisma.coldAuthorAnswer.findMany.mockResolvedValue([]);
-  mockPrisma.prompt.findFirst.mockResolvedValue(null);
+  mockPrisma.speakerProfile.findUnique.mockResolvedValue(null);
+  mockPrisma.prompt.findMany.mockResolvedValue([]);
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -79,7 +81,7 @@ describe("GET /api/lab/speech/next", () => {
     });
     expect(body.task.prompt.promptId).toBe("code_001");
     // The no-answer step is not even consulted when an answer exists.
-    expect(mockPrisma.prompt.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.prompt.findMany).not.toHaveBeenCalled();
   });
 
   it("takes the oldest own answer, and the latest answer when a prompt has several", async () => {
@@ -124,16 +126,68 @@ describe("GET /api/lab/speech/next", () => {
   });
 
   it("falls to a prompt with no own answer when none has one, ownAnswer null", async () => {
-    mockPrisma.prompt.findFirst.mockResolvedValue({
-      id: "p-9",
-      promptId: "code_009",
-      text: "Say goodbye.",
-      bucket: "orthography",
-    });
+    mockPrisma.prompt.findMany.mockResolvedValue([
+      {
+        id: "p-9",
+        promptId: "code_009",
+        text: "Say goodbye.",
+        bucket: "orthography",
+      },
+    ]);
     const body = await (await get()).json();
     expect(body.task.source).toBe("no_answer");
     expect(body.task.ownAnswer).toBeNull();
     expect(body.task.prompt.promptId).toBe("code_009");
+  });
+
+  it("ranks the no-answer prompts by coverage: a prompt with no clips first, ties in prompt-code order", async () => {
+    const p = (id: string, code: string) => ({
+      id,
+      promptId: code,
+      text: "t",
+      bucket: "orthography",
+    });
+    mockPrisma.prompt.findMany.mockResolvedValue([
+      p("p-1", "code_001"),
+      p("p-2", "code_002"),
+      p("p-3", "code_003"),
+    ]);
+    // Recorded-by-me lookup (first call) is empty; the pool holds a clip of
+    // code_001 and two of code_002, none of code_003.
+    mockPrisma.speechRecording.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { promptId: "p-1", annotatorId: "x", dialect: null },
+        { promptId: "p-2", annotatorId: "x", dialect: null },
+        { promptId: "p-2", annotatorId: "y", dialect: null },
+      ]);
+    const body = await (await get()).json();
+    expect(body.task.prompt.promptId).toBe("code_003");
+    const clipsQuery = mockPrisma.speechRecording.findMany.mock.calls[1][0];
+    expect(clipsQuery.where).toMatchObject({
+      isDemo: false,
+      uploadedAt: { not: null },
+    });
+    expect(clipsQuery.select).toEqual({
+      promptId: true,
+      annotatorId: true,
+      dialect: true,
+    });
+  });
+
+  it("keeps the prompt-code order when every prompt holds the same number of clips", async () => {
+    const p = (id: string, code: string) => ({
+      id,
+      promptId: code,
+      text: "t",
+      bucket: "orthography",
+    });
+    mockPrisma.prompt.findMany.mockResolvedValue([
+      p("p-1", "code_001"),
+      p("p-2", "code_002"),
+    ]);
+    const body = await (await get()).json();
+    expect(body.task.prompt.promptId).toBe("code_001");
   });
 
   it("is complete when nothing is left", async () => {
@@ -142,11 +196,11 @@ describe("GET /api/lab/speech/next", () => {
   });
 
   it("never offers a frozen prompt: both queue queries filter isHoldout and split test", async () => {
-    mockPrisma.prompt.findFirst.mockResolvedValue(null);
+    mockPrisma.prompt.findMany.mockResolvedValue([]);
     await get();
     const answersWhere =
       mockPrisma.coldAuthorAnswer.findMany.mock.calls[0][0].where;
-    const promptWhere = mockPrisma.prompt.findFirst.mock.calls[0][0].where;
+    const promptWhere = mockPrisma.prompt.findMany.mock.calls[0][0].where;
     expect(answersWhere.prompt).toMatchObject({
       isHoldout: false,
       split: { not: "test" },
@@ -175,7 +229,7 @@ describe("GET /api/lab/speech/next", () => {
     ).toEqual({
       notIn: ["p-1", "p-2"],
     });
-    expect(mockPrisma.prompt.findFirst.mock.calls[0][0].where.id).toEqual({
+    expect(mockPrisma.prompt.findMany.mock.calls[0][0].where.id).toEqual({
       notIn: ["p-1", "p-2"],
     });
   });
@@ -188,7 +242,7 @@ describe("GET /api/lab/speech/next", () => {
     ).toEqual({
       notIn: ["code_x", "code_y"],
     });
-    expect(mockPrisma.prompt.findFirst.mock.calls[0][0].where.promptId).toEqual(
+    expect(mockPrisma.prompt.findMany.mock.calls[0][0].where.promptId).toEqual(
       {
         notIn: ["code_x", "code_y"],
       },

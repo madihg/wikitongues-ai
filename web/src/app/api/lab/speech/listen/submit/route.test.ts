@@ -6,6 +6,8 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
     prompt: { findUnique: vi.fn() },
     speechRecording: { findMany: vi.fn() },
     speechComparison: { findFirst: vi.fn(), create: vi.fn() },
+    speechMinimalPair: { findUnique: vi.fn() },
+    speechMinimalPairAnswer: { createMany: vi.fn() },
   },
   mockRequireResearcher: vi.fn(),
 }));
@@ -69,6 +71,7 @@ beforeEach(() => {
   mockPrisma.speechRecording.findMany.mockResolvedValue(clips());
   mockPrisma.speechComparison.findFirst.mockResolvedValue(null);
   mockPrisma.speechComparison.create.mockResolvedValue({ id: "cmp-1" });
+  mockPrisma.speechMinimalPair.findUnique.mockResolvedValue(null);
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -227,32 +230,39 @@ describe("POST /api/lab/speech/listen/submit", () => {
     expect(created()).toBe(0);
   });
 
-  it("stores the provisional axes on the winner, tagged with its version", async () => {
-    const axes = { intelligibility: 4, tone: "na", pace: 0 };
+  it("stores the provisional axes on both clips, tagged with its version", async () => {
+    const axes = {
+      a: { intelligibility: 4, tone: "na", pace: 0 },
+      b: { intelligibility: 2, tone: 1 },
+    };
     expect((await post({ ...valid, axes })).status).toBe(201);
     expect(
       mockPrisma.speechComparison.create.mock.calls[0][0].data.axes,
-    ).toEqual({
-      version: "provisional-1",
-      target: "a",
-      scores: axes,
-    });
+    ).toEqual({ version: "provisional-1", scores: axes });
   });
 
-  it("scores both clips on a tie, and takes no axes on both_unusable", async () => {
-    const axes = { naturalness: 3 };
+  it("scores both clips on b and on a tie, and takes no axes on both_unusable", async () => {
+    const axes = { a: { naturalness: 3 }, b: { naturalness: 1 } };
+    await post({ ...valid, winner: "b", axes });
     await post({ ...valid, winner: "tie", axes });
-    expect(
-      mockPrisma.speechComparison.create.mock.calls[0][0].data.axes.target,
-    ).toBe("both");
+    for (const call of mockPrisma.speechComparison.create.mock.calls) {
+      expect(call[0].data.axes.scores).toEqual(axes);
+      expect(call[0].data.axes).not.toHaveProperty("target");
+    }
     expect((await post({ ...valid, winner: "both_unusable", axes })).status).toBe(
       400,
     );
   });
 
+  it("400 for the flat one-clip shape the old screen sent", async () => {
+    expect((await post({ ...valid, axes: { tone: 3 } })).status).toBe(400);
+    expect(created()).toBe(0);
+  });
+
   it("axes are optional: none stored when absent or empty", async () => {
     await post(valid);
     await post({ ...valid, axes: {} });
+    await post({ ...valid, axes: { a: {}, b: {} } });
     for (const call of mockPrisma.speechComparison.create.mock.calls) {
       expect(call[0].data).not.toHaveProperty("axes");
     }
@@ -260,11 +270,12 @@ describe("POST /api/lab/speech/listen/submit", () => {
 
   it("400 for out-of-range, unknown or non-integer axes", async () => {
     for (const axes of [
-      { tone: 6 },
-      { tone: -1 },
-      { tone: 2.5 },
-      { volume: 3 },
-      { tone: "yes" },
+      { a: { tone: 6 } },
+      { a: { tone: -1 } },
+      { b: { tone: 2.5 } },
+      { a: {}, b: { volume: 3 } },
+      { a: { tone: "yes" } },
+      { c: { tone: 3 } },
       [1, 2],
       "x",
     ]) {
@@ -273,5 +284,65 @@ describe("POST /api/lab/speech/listen/submit", () => {
       );
     }
     expect(created()).toBe(0);
+  });
+});
+
+describe("POST /api/lab/speech/listen/submit: minimal-pair answers", () => {
+  const PAIR = { id: "mp-1", targetSpelling: "kw\u00e0ba", foilSpelling: "kw\u00e1ba" };
+  beforeEach(() => mockPrisma.speechMinimalPair.findUnique.mockResolvedValue(PAIR));
+
+  it("scores each answer against the pair and stores it with the judgment", async () => {
+    const res = await post({
+      ...valid,
+      toneAnswers: [
+        { recordingId: "clip-a", heardSpelling: PAIR.targetSpelling },
+        { recordingId: "clip-b", heardSpelling: PAIR.foilSpelling.normalize("NFD") },
+      ],
+    });
+    expect(res.status).toBe(201);
+    expect(mockPrisma.speechMinimalPairAnswer.createMany).toHaveBeenCalledWith({
+      data: [
+        { pairId: "mp-1", recordingId: "clip-a", annotatorId: "r1", heard: "target", isDemo: false },
+        { pairId: "mp-1", recordingId: "clip-b", annotatorId: "r1", heard: "foil", isDemo: false },
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  it("null is 'not sure'; demo answers are stored as demo", async () => {
+    await post({
+      ...valid,
+      demoSessionId: "demo-1",
+      toneAnswers: [{ recordingId: "clip-a", heardSpelling: null }],
+    });
+    expect(mockPrisma.speechMinimalPairAnswer.createMany.mock.calls[0][0].data).toEqual([
+      { pairId: "mp-1", recordingId: "clip-a", annotatorId: "r1", heard: "unsure", isDemo: true },
+    ]);
+  });
+
+  it("400 and nothing written for a spelling outside the pair, a foreign clip or a repeat", async () => {
+    for (const toneAnswers of [
+      [{ recordingId: "clip-a", heardSpelling: "gbaba" }],
+      [{ recordingId: "clip-z", heardSpelling: PAIR.targetSpelling }],
+      [
+        { recordingId: "clip-a", heardSpelling: PAIR.targetSpelling },
+        { recordingId: "clip-a", heardSpelling: PAIR.foilSpelling },
+      ],
+      "x",
+    ]) {
+      expect((await post({ ...valid, toneAnswers })).status).toBe(400);
+    }
+    expect(created()).toBe(0);
+    expect(mockPrisma.speechMinimalPairAnswer.createMany).not.toHaveBeenCalled();
+  });
+
+  it("ignores answers on a prompt with no pair, and a request without them is unchanged", async () => {
+    mockPrisma.speechMinimalPair.findUnique.mockResolvedValue(null);
+    const res = await post({ ...valid, toneAnswers: [{ recordingId: "clip-a", heardSpelling: "x" }] });
+    expect(res.status).toBe(201);
+    expect(mockPrisma.speechMinimalPairAnswer.createMany).not.toHaveBeenCalled();
+    mockPrisma.speechMinimalPair.findUnique.mockClear();
+    await post(valid);
+    expect(mockPrisma.speechMinimalPair.findUnique).not.toHaveBeenCalled();
   });
 });

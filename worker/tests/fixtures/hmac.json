@@ -1,0 +1,6 @@
+{
+  "secret": "test-secret-not-real",
+  "timestamp": "1760000000",
+  "body": "{\"jobId\":\"job-1\",\"status\":\"succeeded\"}",
+  "signature": "ddf8439aaa9e4381b9c5d556ba0cb97c8afc11486fc29286e8393724b31d703f"
+}

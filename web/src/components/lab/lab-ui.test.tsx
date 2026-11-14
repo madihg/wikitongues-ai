@@ -126,6 +126,7 @@ const ITEM: RecordingItem = {
   consentVersion: "2026-10-19-v1",
   reviewStatus: null,
   rightsStatus: "pending",
+  isTestSet: false,
   url: "/api/lab/speech/recording/rec-1/audio",
 };
 
@@ -414,7 +415,7 @@ const listen = (over: Partial<Parameters<typeof ListenView>[0]> = {}) =>
       winner={null}
       reasons={[]}
       note=""
-      axes={{}}
+      axes={{ a: {}, b: {} }}
       busy={false}
       error={null}
       onWinner={noop}
@@ -509,6 +510,13 @@ describe("Recordings", () => {
       onQuery={noop}
       onFlag={noop}
       onExport={noop}
+      selected={[]}
+      confirmingFreeze={false}
+      freezing={false}
+      onToggle={noop}
+      onFreezeAsk={noop}
+      onFreezeConfirm={noop}
+      onFreezeCancel={noop}
     />,
   );
 
@@ -529,6 +537,86 @@ describe("Recordings", () => {
     ]) {
       expect(html).toContain(label);
     }
+  });
+
+  it("offers Freeze into test set only once something is selected", () => {
+    expect(html).not.toContain("Freeze into test set");
+    const withSelection = renderToStaticMarkup(
+      <RecordingsView
+        items={[ITEM]}
+        query={DEFAULT_QUERY}
+        exporting={false}
+        message={null}
+        onQuery={noop}
+        onFlag={noop}
+        onExport={noop}
+        selected={["rec-1"]}
+        confirmingFreeze={false}
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
+      />,
+    );
+    expect(withSelection).toContain("1 selected");
+    expect(withSelection).toContain(">Freeze into test set<");
+    expect(withSelection).not.toContain("Confirm freeze");
+  });
+
+  it("asks for a confirm before freezing, and says it cannot be undone", () => {
+    const confirming = renderToStaticMarkup(
+      <RecordingsView
+        items={[ITEM]}
+        query={DEFAULT_QUERY}
+        exporting={false}
+        message="Not frozen: one speaker still has kept clips."
+        onQuery={noop}
+        onFlag={noop}
+        onExport={noop}
+        selected={["rec-1"]}
+        confirmingFreeze
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
+      />,
+    );
+    expect(confirming).toContain("Confirm freeze");
+    expect(confirming).toContain(">Cancel<");
+    expect(confirming).toContain("cannot be undone");
+    expect(confirming).toContain("Not frozen: one speaker");
+  });
+
+  it("a frozen clip wears a Test set badge and cannot be selected again", () => {
+    const frozen = renderToStaticMarkup(
+      <RecordingsView
+        items={[{ ...ITEM, isTestSet: true }]}
+        query={DEFAULT_QUERY}
+        exporting={false}
+        message={null}
+        onQuery={noop}
+        onFlag={noop}
+        onExport={noop}
+        selected={[]}
+        confirmingFreeze={false}
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
+      />,
+    );
+    expect(frozen).toContain(">Test set<");
+    expect(frozen).not.toContain('type="checkbox"');
+    expect(html).not.toContain(">Test set<");
+  });
+
+  it("the interface never offers to unfreeze", () => {
+    expect(sourceOf("recordings-interface.tsx").toLowerCase()).not.toContain(
+      "unfreeze",
+    );
   });
 
   it("says plainly that only OPEN, cleared clips are exported", () => {
@@ -588,7 +676,11 @@ describe("44px minimum targets", () => {
       />,
     ),
     renderToStaticMarkup(
-      <SpeechAxesRow winner="a" scores={{ tone: 3 }} onScore={noop} />,
+      <SpeechAxesRow
+        winner="a"
+        scores={{ a: { tone: 3 }, b: {} }}
+        onScore={noop}
+      />,
     ),
     renderToStaticMarkup(<TakeFeedback metrics={METRICS} status="done" />),
     renderToStaticMarkup(<SessionLine />),
@@ -616,6 +708,13 @@ describe("44px minimum targets", () => {
         onQuery={noop}
         onFlag={noop}
         onExport={noop}
+        selected={[]}
+        confirmingFreeze={false}
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
       />,
     ),
     (() => {
@@ -827,13 +926,13 @@ describe("the episode's Say it block", () => {
     expect(html).toContain("Optional");
   });
 
-  it("never blocks: Skip for now is there before anything is recorded", () => {
+  it("never blocks: Skip, no recording is there before anything is recorded", () => {
     const html = block("what it means");
     const skip = tagsOf(html, "button").find((t) =>
       t.includes('data-testid="say-it-continue"'),
     )!;
     expect(skip).not.toMatch(DISABLED);
-    expect(html).toContain(">Skip for now<");
+    expect(html).toContain(">Skip, no recording<");
   });
 
   it("reads the locked English meaning when there is one", () => {
@@ -850,9 +949,9 @@ describe("the episode's Say it block", () => {
     );
   });
 
-  it("is wired only for researchers with the flag on, after the lock and before the outputs", () => {
+  it("is wired for any speaker the server allows, after the lock and before the outputs", () => {
     const src = readFileSync(join(dir, "..", "annotation-interface.tsx"), "utf8");
-    expect(src).toContain("useSpeechLayer(researcher)");
+    expect(src).toContain("useSpeechLayer(canProbeSpeech(");
     expect(src).toMatch(/if \(speechLayer && coldAnswer\.trim\(\)\) \{\s*setSayIt\(true\);\s*return;/);
     // The block renders inside the locked first step, not in the pairwise step.
     const first = src.indexOf("<SayItBlock");
@@ -861,9 +960,9 @@ describe("the episode's Say it block", () => {
     expect(src.match(/<SayItBlock/g)).toHaveLength(1);
   });
 
-  it("the hook asks the server only for researchers", () => {
+  it("the hook asks the server only for eligible roles", () => {
     const src = sourceOf("use-speech-layer.ts");
-    expect(src).toContain("if (!researcher)");
+    expect(src).toContain("if (!eligible)");
     expect(src).toContain("/api/lab/flags");
   });
 
@@ -905,31 +1004,52 @@ describe("Listen: language and the provisional speech axes", () => {
     }
   });
 
-  it("each axis offers N/A and 0 to 5 as 44px radio buttons, nothing preselected", () => {
+  it("each axis offers N/A and 0 to 5 for Clip A and for Clip B, 44px, nothing preselected", () => {
     const html = renderToStaticMarkup(
-      <SpeechAxesRow winner="b" scores={{}} onScore={noop} />,
+      <SpeechAxesRow winner="b" scores={{ a: {}, b: {} }} onScore={noop} />,
     );
     const radios = tagsOf(html, "button");
-    expect(radios).toHaveLength(5 * 7);
+    expect(radios).toHaveLength(5 * 2 * 7);
     for (const r of radios) {
       expect(r).toContain('role="radio"');
       expect(r).toContain('aria-checked="false"');
       expect(classOf(r)).toMatch(/min-h-\[44px\].*min-w-\[44px\]/);
     }
     expect(html).toContain(">N/A<");
-    expect(html).toContain("Scored on the winner, clip B.");
+    for (const axis of SPEECH_AXES) {
+      expect(html).toContain(`aria-label="${axis.label}, Clip A"`);
+      expect(html).toContain(`aria-label="${axis.label}, Clip B"`);
+    }
+    expect(html.match(/>Clip A</g)).toHaveLength(5);
+    expect(html.match(/>Clip B</g)).toHaveLength(5);
+    // Side by side from sm up, stacked at phone width.
+    expect(html).toContain("sm:grid-cols-2");
   });
 
-  it("marks the chosen scores, and says both clips on a tie", () => {
+  it("both clips are rated for a, b and tie, whichever won", () => {
+    for (const winner of ["a", "b", "tie"] as const) {
+      const html = listen({ winner, reasons: ["robotic"] });
+      expect(html, winner).toContain('data-testid="speech-axes"');
+      expect(html, winner).toContain('data-side="a"');
+      expect(html, winner).toContain('data-side="b"');
+      expect(html, winner).toContain("Score both clips, whichever won.");
+    }
+  });
+
+  it("marks the chosen scores on the side they belong to", () => {
     const html = renderToStaticMarkup(
       <SpeechAxesRow
         winner="tie"
-        scores={{ tone: 3, pace: "na" }}
+        scores={{ a: { tone: 3 }, b: { tone: 1, pace: "na" } }}
         onScore={noop}
       />,
     );
-    expect(html).toContain("Scored on both clips (a tie).");
-    expect(html.match(/aria-checked="true"/g)).toHaveLength(2);
+    expect(html.match(/aria-checked="true"/g)).toHaveLength(3);
+    expect(html).toMatch(/aria-checked="true" aria-label="Tone, Clip A 3"/);
+    expect(html).toMatch(/aria-checked="true" aria-label="Tone, Clip B 1"/);
+    expect(html).toMatch(
+      /aria-checked="true" aria-label="Pace, Clip B not applicable"/,
+    );
   });
 
   it("axes are optional: Submit does not wait for them", () => {
@@ -963,6 +1083,13 @@ describe("Recordings: language, take metrics, filters and sort", () => {
       onQuery={noop}
       onFlag={noop}
       onExport={noop}
+      selected={[]}
+      confirmingFreeze={false}
+      freezing={false}
+      onToggle={noop}
+      onFreezeAsk={noop}
+      onFreezeConfirm={noop}
+      onFreezeCancel={noop}
     />,
   );
 
@@ -989,6 +1116,13 @@ describe("Recordings: language, take metrics, filters and sort", () => {
         onQuery={noop}
         onFlag={noop}
         onExport={noop}
+        selected={[]}
+        confirmingFreeze={false}
+        freezing={false}
+        onToggle={noop}
+        onFreezeAsk={noop}
+        onFreezeConfirm={noop}
+        onFreezeCancel={noop}
       />,
     );
     expect(orphan).toContain("No transcript attached.");

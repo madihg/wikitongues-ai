@@ -20,14 +20,21 @@ export type RecorderState = "idle" | "recording" | "recorded";
  * MediaRecorder behind a small state machine: idle -> recording -> recorded.
  * Mime fallback comes from pickRecorderMime (webm opus, then mp4 on iOS
  * Safari). Capture asks for 48 kHz mono. The recorder hard-stops at 30
- * seconds (MAX_DURATION_MS) by itself, whatever the screen does. Everything
+ * seconds (MAX_DURATION_MS) by itself, whatever the screen does. `raw`
+ * (studio sessions) turns the browser's echo cancelling, noise suppression and
+ * auto gain off. Everything
  * (mic tracks, timer, object URL) is released on stop, reset and unmount.
  */
-export function useRecorder() {
+export function useRecorder(opts: { raw?: boolean } = {}) {
+  // Studio takes train a voice: the browser's own cleanup (echo cancelling,
+  // noise suppression, auto gain) would be baked into it, so raw turns it off.
+  const raw = opts.raw === true;
   const [state, setState] = useState<RecorderState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [take, setTake] = useState<Take | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The live microphone stream while recording, for a level meter (studio).
+  const [stream, setStream] = useState<MediaStream | null>(null);
   // Decided after mount so server and client markup agree.
   const [supported, setSupported] = useState(false);
 
@@ -51,6 +58,7 @@ export function useRecorder() {
     timerRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    setStream(null);
   }, []);
 
   const dropUrl = useCallback(() => {
@@ -75,11 +83,13 @@ export function useRecorder() {
         audio: {
           channelCount: 1,
           sampleRate: { ideal: 48000 },
-          echoCancellation: true,
-          noiseSuppression: true,
+          echoCancellation: !raw,
+          noiseSuppression: !raw,
+          ...(raw ? { autoGainControl: false } : {}),
         },
       });
       streamRef.current = stream;
+      setStream(stream);
       const sampleRate =
         stream.getAudioTracks()[0]?.getSettings().sampleRate ?? 48000;
 
@@ -124,7 +134,7 @@ export function useRecorder() {
             : "Could not start recording.",
       );
     }
-  }, [dropUrl, release, stop]);
+  }, [dropUrl, raw, release, stop]);
 
   const reset = useCallback(() => {
     const rec = recorderRef.current;
@@ -152,5 +162,5 @@ export function useRecorder() {
     };
   }, [dropUrl, release]);
 
-  return { state, elapsedMs, take, error, supported, start, stop, reset };
+  return { state, elapsedMs, take, error, supported, stream, start, stop, reset };
 }

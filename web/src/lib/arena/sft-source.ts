@@ -28,6 +28,8 @@ export interface ColdAnswerInput {
   bucket: EvalBucket | null;
   promptBucket: EvalBucket | null;
   isHoldout: boolean;
+  /** Prompt split; "test" is frozen like isHoldout. */
+  split?: string | null;
   verificationStatus: VerificationStatus;
   consentTraining: boolean;
   isDemo: boolean;
@@ -48,6 +50,8 @@ export interface EditInput {
   bucket: EvalBucket | null;
   promptBucket: EvalBucket | null;
   isHoldout: boolean;
+  /** Prompt split; "test" is frozen like isHoldout. */
+  split?: string | null;
   verificationStatus: VerificationStatus;
   consentTraining: boolean;
   isDemo: boolean;
@@ -72,6 +76,7 @@ export function coldAnswersToSftRows(rows: ColdAnswerInput[]): SftSourceRow[] {
       correctedText: r.answerText,
       bucket: r.bucket ?? r.promptBucket,
       isHoldout: r.isHoldout, // contamination guard applied by buildSftExamples
+      split: r.split,
       verificationStatus: r.verificationStatus,
       provenance:
         r.provenance === "corrected_from_inadequate"
@@ -100,6 +105,7 @@ export function editsToSftRows(rows: EditInput[]): SftSourceRow[] {
       correctedText: r.correctedText,
       bucket: r.bucket ?? r.promptBucket,
       isHoldout: r.isHoldout,
+      split: r.split,
       verificationStatus: r.verificationStatus,
       provenance: "edit",
     });
@@ -120,7 +126,7 @@ export async function loadSftSourceRows(job: {
   const cold = await prisma.coldAuthorAnswer.findMany({
     where: { isDemo: false },
     include: {
-      prompt: { select: { text: true, isHoldout: true, bucket: true } },
+      prompt: { select: { text: true, isHoldout: true, split: true, bucket: true } },
     },
   });
 
@@ -134,7 +140,7 @@ export async function loadSftSourceRows(job: {
     include: {
       modelOutput: {
         select: {
-          prompt: { select: { text: true, isHoldout: true, bucket: true } },
+          prompt: { select: { text: true, isHoldout: true, split: true, bucket: true } },
         },
       },
     },
@@ -148,6 +154,7 @@ export async function loadSftSourceRows(job: {
       bucket: c.bucket,
       promptBucket: c.prompt.bucket,
       isHoldout: c.prompt.isHoldout,
+      split: c.prompt.split,
       verificationStatus: c.verificationStatus,
       consentTraining: c.consentTraining,
       isDemo: c.isDemo,
@@ -163,6 +170,7 @@ export async function loadSftSourceRows(job: {
       bucket: e.bucket,
       promptBucket: e.modelOutput.prompt.bucket,
       isHoldout: e.modelOutput.prompt.isHoldout,
+      split: e.modelOutput.prompt.split,
       verificationStatus: e.verificationStatus,
       consentTraining: e.consentTraining,
       isDemo: e.isDemo,

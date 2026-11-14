@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { abSwap, assignedPair } from "@/lib/pairing";
 import { labGate } from "@/lib/speech/lab-route";
 import { REJECTED_REVIEW_STATUSES } from "@/lib/speech/limits";
+import { optionsFor } from "@/lib/speech/minimal-pairs";
 import { audioUrl } from "@/lib/speech/storage";
 
 /**
@@ -22,18 +23,62 @@ import { audioUrl } from "@/lib/speech/storage";
  * carries no tier, speaker, source or take metrics, only an id and the audio
  * endpoint URL per side, plus the language (both clips share it).
  *
+ * Next-day exposure (annotator side of US-032): when a promoted TTS candidate
+ * exists and the caller has no counted judgment yet today (UTC), the first
+ * pair served is one clip derived from that candidate against a human clip,
+ * on the first prompt that has both. Nothing is stored beyond the judgment
+ * itself, which is an ordinary SpeechComparison, so "first of the day" is
+ * read from the caller's own rows. With no promoted candidate, or in demo
+ * mode, nothing here runs and the queue is exactly as before.
+ *
+ * A synthesised clip's voice is its model ref (sourceRef) when it has one, so
+ * two runs of one TTS model on a prompt are one voice, not two. A prompt with
+ * a tone minimal pair (an Igala pair) carries `minimalPair.options`: the two
+ * spellings in an order fixed per listener, never saying which is the target.
+ *
  * A (prompt, language) is done for a researcher once they have a counted
  * (non-demo) SpeechComparison on a pair in that language. Demo mode (`?demo=<id>`) ignores that history and
  * admits the demo session's own clips, as the text queue does.
  */
+
+type Clip = {
+  id: string;
+  promptId: string;
+  language: string;
+  annotatorId: string | null;
+  modelOutputId: string | null;
+  sourceType: string;
+  sourceRef: string | null;
+  createdAt: Date;
+  prompt: { promptId: string; text: string };
+};
 
 const NOT_REJECTED = [
   { reviewStatus: null },
   { reviewStatus: { notIn: [...REJECTED_REVIEW_STATUSES] } },
 ];
 
+/**
+ * The model ref of the promoted TTS candidate, but only for a caller who has
+ * not yet made a counted judgment today (UTC); otherwise null.
+ */
+async function promotedTtsRef(annotatorId: string): Promise<string | null> {
+  const candidate = await prisma.speechCandidate.findFirst({
+    where: { system: "tts", promotedAt: { not: null } },
+    orderBy: { promotedAt: "desc" },
+    select: { modelRef: true },
+  });
+  if (!candidate) return null;
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  const today = await prisma.speechComparison.count({
+    where: { annotatorId, isDemo: false, createdAt: { gte: startOfDay } },
+  });
+  return today === 0 ? candidate.modelRef : null;
+}
+
 export async function GET(req: Request) {
-  const gate = await labGate();
+  const gate = await labGate({ audience: "speaker" });
   if (gate.error) return gate.error;
   const annotatorId = gate.userId;
 
@@ -55,6 +100,7 @@ export async function GET(req: Request) {
       annotatorId: true,
       modelOutputId: true,
       sourceType: true,
+      sourceRef: true,
       createdAt: true,
       prompt: { select: { promptId: true, text: true } },
     },
@@ -74,13 +120,12 @@ export async function GET(req: Request) {
   );
 
   // Group by prompt and language, one clip per distinct voice.
-  type Clip = (typeof clips)[number];
   const byPrompt = new Map<string, Map<string, Clip>>();
   for (const c of clips) {
     if (done.has(slot(c.promptId, c.language))) continue;
     const voice =
       c.sourceType === "derived" || c.modelOutputId
-        ? `synth:${c.modelOutputId ?? c.id}`
+        ? `synth:${c.sourceRef ?? c.modelOutputId ?? c.id}`
         : `human:${c.annotatorId ?? c.id}`;
     const key = slot(c.promptId, c.language);
     let voices = byPrompt.get(key);
@@ -113,8 +158,29 @@ export async function GET(req: Request) {
     return NextResponse.json({ complete: true, demo: isDemo, progress });
   }
 
-  const { promptCode, language, list } = candidates[0];
-  const pair = assignedPair(annotatorId, `${promptCode}:${language}`, list.length);
+  let chosen = candidates[0];
+  let exposure: [Clip, Clip] | null = null;
+  const modelRef = isDemo ? null : await promotedTtsRef(annotatorId);
+  if (modelRef) {
+    for (const c of candidates) {
+      const derived = c.list.find(
+        (x) => x.sourceType === "derived" && x.sourceRef === modelRef,
+      );
+      const human = c.list.find(
+        (x) => x.sourceType !== "derived" && !x.modelOutputId,
+      );
+      if (derived && human) {
+        chosen = c;
+        exposure = [derived, human];
+        break;
+      }
+    }
+  }
+
+  const { promptCode, language, list } = chosen;
+  const pair = exposure
+    ? ([list.indexOf(exposure[0]), list.indexOf(exposure[1])] as [number, number])
+    : assignedPair(annotatorId, `${promptCode}:${language}`, list.length);
   if (!pair) {
     // Cannot happen with two or more clips; fail closed rather than guess.
     return NextResponse.json({ complete: true, demo: isDemo, progress });
@@ -124,11 +190,22 @@ export async function GET(req: Request) {
   const clipA = swap ? list[j] : list[i];
   const clipB = swap ? list[i] : list[j];
 
+  const minimalPair =
+    language === "igala"
+      ? await prisma.speechMinimalPair.findUnique({
+          where: { promptId: clipA.promptId },
+          select: { targetSpelling: true, foilSpelling: true },
+        })
+      : null;
+
   return NextResponse.json({
     complete: false,
     demo: isDemo,
     progress,
     task: {
+      ...(minimalPair
+        ? { minimalPair: { options: optionsFor(minimalPair, annotatorId, promptCode) } }
+        : {}),
       prompt: {
         id: clipA.promptId,
         promptId: promptCode,
