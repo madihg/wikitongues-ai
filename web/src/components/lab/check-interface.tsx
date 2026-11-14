@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   answerWords,
+  CHECK_LEVELS,
   differingWords,
+  MAX_CHECK_NOTE_CHARS,
+  type CheckLevel,
   type CheckVerdict,
 } from "@/lib/speech/check";
 
@@ -13,6 +16,8 @@ import {
  * machine: the ASR transcript is fetched only AFTER the verdict is sent, and
  * is then shown beside the written answer with the words that differ
  * highlighted. "Change my verdict" sends a new one for the same clip.
+ * "Does not match" asks on what level (word, sound, tone, missing or added,
+ * other) before it can be sent; any verdict may carry a short note.
  */
 
 export interface CheckTask {
@@ -92,19 +97,24 @@ export interface CheckViewProps {
   /** Picked but not yet sent. */
   picked: CheckVerdict | null;
   wrongWord: number | null;
+  /** The level picked for does_not_match, if any. */
+  level: CheckLevel | null;
+  note: string;
   busy: boolean;
   error: string | null;
   /** undefined: not loaded; null: none exists. */
   transcript: string | null | undefined;
   onPick: (v: CheckVerdict) => void;
   onWrongWord: (i: number | null) => void;
+  onLevel: (l: CheckLevel) => void;
+  onNote: (n: string) => void;
   onSend: () => void;
   onChange: () => void;
   onNext: () => void;
 }
 
 export function CheckView(p: CheckViewProps) {
-  const { task, sent, picked, wrongWord } = p;
+  const { task, sent, picked, wrongWord, level, note } = p;
   const choosing = sent === null || picked !== null;
   const pointing = choosing && picked === "does_not_match";
   const words = task.answer.words;
@@ -171,10 +181,66 @@ export function CheckView(p: CheckViewProps) {
               </button>
             ))}
           </div>
+          <p className="text-xs text-text-tertiary">
+            A dialect pronunciation of the same word still matches.
+          </p>
+          {picked === "does_not_match" && (
+            <div>
+              <p className="mb-2 text-sm font-semibold text-text-primary">
+                On what level?
+              </p>
+              <div
+                className="flex flex-wrap gap-2"
+                role="group"
+                aria-label="On what level does it not match"
+              >
+                {CHECK_LEVELS.map((l) => (
+                  <button
+                    key={l.key}
+                    type="button"
+                    aria-pressed={level === l.key}
+                    disabled={p.busy}
+                    onClick={() => p.onLevel(l.key)}
+                    className={`min-h-[44px] cursor-pointer rounded-md border px-3 text-sm focus-visible:outline-none focus-visible:shadow-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50 ${
+                      level === l.key
+                        ? "border-danger bg-danger-subtle text-text-primary"
+                        : "border-border-strong bg-surface text-text-primary hover:bg-surface-sunken"
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div>
+            <label
+              htmlFor="check-note"
+              className="block text-sm font-semibold text-text-primary"
+            >
+              Note{" "}
+              <span className="font-normal text-text-tertiary">(optional)</span>
+            </label>
+            <input
+              id="check-note"
+              type="text"
+              value={note}
+              maxLength={MAX_CHECK_NOTE_CHARS}
+              onChange={(e) => p.onNote(e.target.value)}
+              className="mt-2 min-h-[44px] w-full rounded-md border border-border-strong bg-surface px-3 text-base text-text-primary focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+            />
+            <p className="mt-1 text-right font-mono text-xs text-text-muted">
+              {note.length}/{MAX_CHECK_NOTE_CHARS}
+            </p>
+          </div>
           <button
             type="button"
             data-testid="check-send"
-            disabled={p.busy || picked === null}
+            disabled={
+              p.busy ||
+              picked === null ||
+              (picked === "does_not_match" && level === null)
+            }
             onClick={p.onSend}
             className="min-h-[44px] cursor-pointer rounded-md bg-accent px-5 text-sm font-medium text-accent-contrast hover:bg-accent-hover focus-visible:outline-none focus-visible:shadow-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -238,6 +304,8 @@ export function CheckInterface() {
   const [picked, setPicked] = useState<CheckVerdict | null>(null);
   const [sent, setSent] = useState<CheckVerdict | null>(null);
   const [wrongWord, setWrongWord] = useState<number | null>(null);
+  const [level, setLevel] = useState<CheckLevel | null>(null);
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string | null | undefined>(undefined);
@@ -247,6 +315,8 @@ export function CheckInterface() {
     setPicked(null);
     setSent(null);
     setWrongWord(null);
+    setLevel(null);
+    setNote("");
     setError(null);
     setTranscript(undefined);
     try {
@@ -293,9 +363,11 @@ export function CheckInterface() {
         body: JSON.stringify({
           recordingId: task.recording.id,
           verdict: picked,
+          ...(picked === "does_not_match" ? { level } : {}),
           ...(picked === "does_not_match" && wrongWord !== null
             ? { wrongWordIndex: wrongWord }
             : {}),
+          ...(note.trim() ? { note } : {}),
         }),
       });
       if (!res.ok) {
@@ -327,14 +399,21 @@ export function CheckInterface() {
       sent={sent}
       picked={picked}
       wrongWord={wrongWord}
+      level={level}
+      note={note}
       busy={busy}
       error={error}
       transcript={transcript}
       onPick={(v) => {
         setPicked(v);
-        if (v !== "does_not_match") setWrongWord(null);
+        if (v !== "does_not_match") {
+          setWrongWord(null);
+          setLevel(null);
+        }
       }}
       onWrongWord={setWrongWord}
+      onLevel={setLevel}
+      onNote={setNote}
       onSend={() => void send()}
       onChange={() => setPicked(sent)}
       onNext={() => void fetchNext()}

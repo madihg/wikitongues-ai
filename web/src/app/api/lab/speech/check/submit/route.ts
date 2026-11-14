@@ -3,8 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
 import {
   answerWords,
+  CHECK_LEVELS,
   CHECK_VERDICTS,
+  isCheckLevel,
+  MAX_CHECK_NOTE_CHARS,
   VERDICT_STATUS,
+  type CheckLevel,
   type CheckVerdict,
 } from "@/lib/speech/check";
 
@@ -13,11 +17,18 @@ import {
  * speaker side of the lab; 404 when the lab flag is off.
  *
  * Body: { recordingId, verdict: matches | does_not_match | cannot_hear,
- * wrongWordIndex?, demoSessionId? }. `wrongWordIndex` is the position of the
+ * level?, note?, wrongWordIndex?, demoSessionId? }. `level` says on what
+ * level the clip does not match (word | sound | tone | missing_extra |
+ * other): REQUIRED with does_not_match and refused with any other verdict. A
+ * dialect pronunciation of the same word matches, so it has no level.
+ * `note` is optional free text with any verdict, trimmed, at most 280
+ * characters; it is never logged. `wrongWordIndex` is the position of the
  * word that does not match in the written answer, and only goes with
  * does_not_match.
  *
- *   400  bad verdict, or an index that does not fit the answer
+ *   400  bad verdict, a missing or unknown level, a level with a verdict
+ *        other than does_not_match, a note over 280 characters, or an index
+ *        that does not fit the answer
  *   404  not a confirmed, written-answer clip
  *   403  the caller's own clip, or a frozen prompt (no detail)
  *
@@ -49,6 +60,24 @@ export async function POST(req: Request) {
     return bad(`verdict must be one of: ${CHECK_VERDICTS.join(", ")}`);
   }
   const verdict = b.verdict as CheckVerdict;
+  let level: CheckLevel | null = null;
+  if (verdict === "does_not_match") {
+    if (b.level === undefined || b.level === null) {
+      return bad("Say on what level it does not match.");
+    }
+    if (!isCheckLevel(b.level)) {
+      return bad(`level must be one of: ${CHECK_LEVELS.map((l) => l.key).join(", ")}`);
+    }
+    level = b.level;
+  } else if (b.level !== undefined && b.level !== null) {
+    return bad("A level only goes with does_not_match.");
+  }
+  if (b.note !== undefined && b.note !== null && typeof b.note !== "string") {
+    return bad("note must be text");
+  }
+  const noteText = typeof b.note === "string" ? b.note.trim() : "";
+  if (noteText.length > MAX_CHECK_NOTE_CHARS) return bad("The note is too long.");
+  const note = noteText || null;
   const demoSessionId =
     typeof b.demoSessionId === "string" && b.demoSessionId
       ? b.demoSessionId
@@ -97,14 +126,14 @@ export async function POST(req: Request) {
   }
 
   const isDemo = demoSessionId !== null || clip.isDemo;
-  const row = { verdict, wrongWordIndex, isDemo };
+  const row = { verdict, wrongWordIndex, level, note, isDemo };
   const check = await prisma.speechCheck.upsert({
     where: {
       recordingId_reviewerId: { recordingId: clip.id, reviewerId },
     },
     create: { recordingId: clip.id, reviewerId, ...row },
     update: row,
-    select: { id: true, verdict: true, wrongWordIndex: true },
+    select: { id: true, verdict: true, wrongWordIndex: true, level: true, note: true },
   });
 
   if (!isDemo) {

@@ -14,6 +14,31 @@ export const VERDICT_STATUS: Record<CheckVerdict, "keep" | "wrong_text" | "bad_a
   cannot_hear: "bad_audio",
 };
 
+/**
+ * On what level a does_not_match verdict goes wrong, so a linguist can see
+ * where the problem is without the reviewer writing the explanation. A
+ * dialect pronunciation of the same word is NOT a level: it matches.
+ */
+export const CHECK_LEVELS = [
+  { key: "word", label: "A different word was said" },
+  { key: "sound", label: "Right word, a sound is off" },
+  { key: "tone", label: "Right word, the tone is off" },
+  { key: "missing_extra", label: "Words missing or added" },
+  { key: "other", label: "Something else, say what in the note" },
+] as const;
+export type CheckLevel = (typeof CHECK_LEVELS)[number]["key"];
+
+/** The longest note a reviewer may add to a verdict. */
+export const MAX_CHECK_NOTE_CHARS = 280;
+
+export function isCheckLevel(v: unknown): v is CheckLevel {
+  return CHECK_LEVELS.some((l) => l.key === v);
+}
+
+export function levelLabel(key: CheckLevel): string {
+  return CHECK_LEVELS.find((l) => l.key === key)?.label ?? key;
+}
+
 /** The words of a written answer, as the reviewer sees and points at them. */
 export function answerWords(answer: string): string[] {
   return answer.split(/\s+/).filter(Boolean);

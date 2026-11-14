@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { differingWords, answerWords, VERDICT_STATUS } from "./check";
+import {
+  differingWords,
+  answerWords,
+  VERDICT_STATUS,
+  CHECK_LEVELS,
+  MAX_CHECK_NOTE_CHARS,
+  isCheckLevel,
+  levelLabel,
+} from "./check";
 
 describe("differingWords", () => {
   it("marks nothing when the words agree, ignoring case and punctuation", () => {
@@ -35,5 +43,31 @@ describe("check basics", () => {
       does_not_match: "wrong_text",
       cannot_hear: "bad_audio",
     });
+  });
+});
+
+describe("check levels", () => {
+  it("are the five levels a reviewer picks from, in order", () => {
+    expect(CHECK_LEVELS.map((l) => l.key)).toEqual([
+      "word",
+      "sound",
+      "tone",
+      "missing_extra",
+      "other",
+    ]);
+    expect(MAX_CHECK_NOTE_CHARS).toBe(280);
+  });
+  it("label each key in words an annotator understands", () => {
+    expect(levelLabel("word")).toBe("A different word was said");
+    expect(levelLabel("sound")).toBe("Right word, a sound is off");
+    expect(levelLabel("tone")).toBe("Right word, the tone is off");
+    expect(levelLabel("missing_extra")).toBe("Words missing or added");
+    expect(levelLabel("other")).toBe("Something else, say what in the note");
+  });
+  it("know their own keys and nothing else", () => {
+    expect(isCheckLevel("tone")).toBe(true);
+    for (const v of ["dialect", "", "Word", 3, null, undefined]) {
+      expect(isCheckLevel(v)).toBe(false);
+    }
   });
 });
