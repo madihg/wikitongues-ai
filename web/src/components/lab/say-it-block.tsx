@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ConsentGate } from "./consent-gate";
+import { ClipChoiceCard } from "./tier-default";
 import { RecordClip } from "./record-clip";
 import { useLabConsent } from "./use-lab-consent";
 
@@ -46,17 +47,34 @@ export function SayItBlock({
   onClipSaved,
   onDone,
 }: SayItBlockProps) {
-  const { consent, busy: consentBusy, error: consentError, accept, needAgain } =
-    useLabConsent();
+  const {
+    consent,
+    busy: consentBusy,
+    error: consentError,
+    accept,
+    needAgain,
+    clipChoice,
+    choiceBusy,
+    choiceError,
+    saveClipChoice,
+  } = useLabConsent();
   const [saved, setSaved] = useState(0);
   const [busy, setBusy] = useState({ igala: false, english: false });
 
   const consentOk = consent.status === "granted";
+  // Asked once, straight after consent (the same card as the Record page).
+  const choiceNeeded = consentOk && clipChoice.status === "needed";
+  const rememberedChoice =
+    clipChoice.status === "set" ? clipChoice.choice : null;
   const offReason = !consentOk
     ? consent.status === "error"
       ? null
       : "Accept the consent below to turn recording on, or skip."
-    : null;
+    : choiceNeeded
+      ? "Choose what happens to your clips to turn recording on, or skip."
+      : clipChoice.status === "loading"
+        ? "Loading your clip choice..."
+        : null;
   const licensedAllowed =
     consent.status === "granted" ? consent.grant.commercialLicensing : false;
   const cloningAllowed =
@@ -91,6 +109,16 @@ export function SayItBlock({
           {consent.message}
         </p>
       )}
+      {choiceNeeded && (
+        <ClipChoiceCard
+          name="tier-default-say-it"
+          licensedAllowed={licensedAllowed}
+          cloningAllowed={cloningAllowed}
+          busy={choiceBusy}
+          error={choiceError}
+          onSave={(choice) => void saveClipChoice(choice)}
+        />
+      )}
 
       <RecordClip
         language="igala"
@@ -106,6 +134,9 @@ export function SayItBlock({
         offReason={offReason}
         licensedAllowed={licensedAllowed}
         cloningAllowed={cloningAllowed}
+        rememberedChoice={rememberedChoice}
+        onRememberChoice={saveClipChoice}
+        rememberError={choiceError}
         blocked={busy.english}
         onBusyChange={(b) => setBusy((s) => (s.igala === b ? s : { ...s, igala: b }))}
         onConsentRequired={needAgain}
@@ -132,6 +163,9 @@ export function SayItBlock({
         offReason={offReason}
         licensedAllowed={licensedAllowed}
         cloningAllowed={cloningAllowed}
+        rememberedChoice={rememberedChoice}
+        onRememberChoice={saveClipChoice}
+        rememberError={choiceError}
         blocked={busy.igala}
         onBusyChange={(b) => setBusy((s) => (s.english === b ? s : { ...s, english: b }))}
         onConsentRequired={needAgain}

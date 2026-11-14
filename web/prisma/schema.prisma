@@ -1089,6 +1089,14 @@ model SpeakerProfile {
   ageBand              String?
   gender               String?
   mayShareDemographics Boolean  @default(false)
+  // The clip choice, asked once and remembered (2026-11-13). All three are
+  // null until the speaker chooses; nothing is ever chosen for them. The
+  // choice counts only while it is newer than the speaker's current consent
+  // grant, so a new consent text version, or consenting again after a
+  // withdrawal, asks again. Every recording still stores its own tier.
+  defaultTier          DataTier?
+  defaultVoiceCloning  Boolean?
+  tierChosenAt         DateTime?
   updatedAt            DateTime @updatedAt
 }
 

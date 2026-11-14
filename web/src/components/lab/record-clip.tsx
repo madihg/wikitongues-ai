@@ -22,14 +22,20 @@ import {
   VoiceCloningOptIn,
 } from "./record-parts";
 import { studioClipKept } from "@/lib/speech/studio";
+import { resolveClipChoice, type ClipChoice } from "@/lib/speech/clip-choice";
+import { ClipChoiceChange, ClipChoiceLine } from "./tier-default";
 import { LevelMeter } from "./level-meter";
 import { TakeFeedback } from "./take-feedback";
 import { useRecorder, type Take } from "./use-recorder";
 
 /**
  * One clip, start to finish: record, hear it back with feedback, Keep or
- * Re-record or Discard, choose what happens to it (nothing pre-selected),
- * Save. It is the ONE component behind every recording in the Lab: the
+ * Re-record or Discard, then Save. What happens to the clip is the speaker's
+ * remembered choice (asked once, after consent: tier-default.tsx), shown as
+ * one quiet line with a Change link; Save is ready as soon as Keep is tapped.
+ * With no remembered choice the three cards show on the clip, nothing
+ * pre-selected, as they always did. Either way a clip is never saved without
+ * a tier the speaker picked. It is the ONE component behind every recording in the Lab: the
  * Record page uses two of them (Igala, then English) and the episode's "Say
  * it" block uses two more. It owns the take and its upload, and tells its
  * parent only what the parent needs: that a clip was saved, whether it is
@@ -70,6 +76,19 @@ export interface RecordClipProps {
   offReason: string | null;
   licensedAllowed: boolean;
   cloningAllowed: boolean;
+  /**
+   * The speaker's remembered clip choice, or null when there is none (then
+   * the clip asks with the three cards). Never a platform default.
+   */
+  rememberedChoice?: ClipChoice | null;
+  /**
+   * Remember a new choice for every clip from now on ("All my clips from now
+   * on"). Resolves true when saved. Absent: the Change panel offers only
+   * "Only this clip".
+   */
+  onRememberChoice?: (choice: ClipChoice) => Promise<boolean>;
+  /** Why remembering the choice failed, from the parent's save. */
+  rememberError?: string | null;
   /** Another clip of this prompt is uploading: wait, so one answer row is made. */
   blocked?: boolean;
   /**
@@ -146,6 +165,9 @@ export function RecordClip(props: RecordClipProps) {
     offReason,
     licensedAllowed,
     cloningAllowed,
+    rememberedChoice = null,
+    onRememberChoice,
+    rememberError = null,
     blocked = false,
     studio,
     onSaved,
@@ -155,10 +177,22 @@ export function RecordClip(props: RecordClipProps) {
 
   const recorder = useRecorder({ raw: !!studio });
   const [kept, setKept] = useState(false);
+  // The choice made on THIS clip (the cards below, or "Only this clip"). Null
+  // until the speaker picks: nothing is chosen for them.
   const [chosenTier, setTier] = useState<Tier | null>(null);
-  // A studio take has no choice to make: it is community_only.
-  const tier: Tier | null = studio ? STUDIO_TIER : chosenTier;
   const [voiceCloning, setVoiceCloning] = useState(false);
+  // What the clip is saved with: this clip's own choice if there is one,
+  // else the speaker's remembered choice, else nothing (Save stays off).
+  const choice = resolveClipChoice(
+    chosenTier === null ? null : { tier: chosenTier, voiceCloning },
+    rememberedChoice,
+  );
+  // A studio take has no choice to make: it is community_only.
+  const tier: Tier | null = studio ? STUDIO_TIER : (choice?.tier ?? null);
+  const cloningOptIn = !studio && choice?.voiceCloning === true && cloningAllowed;
+  // The Change panel, open or shut, and whether "All my clips" is saving.
+  const [changing, setChanging] = useState(false);
+  const [remembering, setRemembering] = useState(false);
   const [upload, setUpload] = useState<UploadState>({ status: "idle" });
   // The analysis of one take, tagged with the take it belongs to so a new
   // take never shows the previous one's numbers.
@@ -205,6 +239,7 @@ export function RecordClip(props: RecordClipProps) {
     setKept(false);
     setTier(null);
     setVoiceCloning(false);
+    setChanging(false);
     setUpload({ status: "idle" });
     savedRef.current = null;
   }, [recorder]);
@@ -253,7 +288,7 @@ export function RecordClip(props: RecordClipProps) {
             durationMs: take.durationMs,
             sampleRate: take.sampleRate,
             sizeBytes: take.blob.size,
-            voiceCloningOptIn: voiceCloning,
+            voiceCloningOptIn: cloningOptIn,
             ...(metrics
               ? { quality: { ...metrics, retakes: retakesRef.current } }
               : {}),
@@ -406,11 +441,11 @@ export function RecordClip(props: RecordClipProps) {
                   consent say otherwise.
                   {take.sampleRate ? ` Captured at ${take.sampleRate / 1000} kHz.` : ""}
                 </p>
-              ) : (
+              ) : rememberedChoice === null ? (
                 <>
                   <TierChoice
                     name={`tier-${language}`}
-                    value={tier}
+                    value={chosenTier}
                     onChange={setTier}
                     licensedAllowed={licensedAllowed}
                   />
@@ -420,10 +455,47 @@ export function RecordClip(props: RecordClipProps) {
                     onChange={setVoiceCloning}
                   />
                 </>
+              ) : changing ? (
+                <ClipChoiceChange
+                  name={`tier-${language}`}
+                  current={choice}
+                  licensedAllowed={licensedAllowed}
+                  cloningAllowed={cloningAllowed}
+                  busy={remembering}
+                  error={rememberError}
+                  onOnlyThis={(c) => {
+                    setTier(c.tier);
+                    setVoiceCloning(c.voiceCloning);
+                    setChanging(false);
+                  }}
+                  onAll={
+                    onRememberChoice
+                      ? (c) => {
+                          setRemembering(true);
+                          void onRememberChoice(c).then((ok) => {
+                            setRemembering(false);
+                            if (!ok) return;
+                            // The remembered choice now covers this clip too.
+                            setTier(null);
+                            setVoiceCloning(false);
+                            setChanging(false);
+                          });
+                        }
+                      : undefined
+                  }
+                  onCancel={() => setChanging(false)}
+                />
+              ) : (
+                choice && (
+                  <ClipChoiceLine
+                    choice={{ ...choice, voiceCloning: cloningOptIn }}
+                    onChange={() => setChanging(true)}
+                  />
+                )
               )}
               <div className="flex flex-wrap items-center gap-2">
                 <SaveBar
-                  tier={tier}
+                  tier={changing ? null : tier}
                   busy={blocked}
                   onSave={() => void save()}
                 />

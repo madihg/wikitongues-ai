@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConsentGate } from "./consent-gate";
+import { ClipChoiceCard } from "./tier-default";
 import { AnswerBox } from "./record-parts";
 import { RecordClip, type ClipAnswerRef } from "./record-clip";
 import { useLabConsent } from "./use-lab-consent";
@@ -42,8 +43,17 @@ const NEXT_BUTTON =
   "min-h-[44px] cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover focus-visible:outline-none focus-visible:shadow-[var(--ring)]";
 
 export function RecordInterface() {
-  const { consent, busy: consentBusy, error: consentError, accept, needAgain } =
-    useLabConsent();
+  const {
+    consent,
+    busy: consentBusy,
+    error: consentError,
+    accept,
+    needAgain,
+    clipChoice,
+    choiceBusy,
+    choiceError,
+    saveClipChoice,
+  } = useLabConsent();
 
   const [queue, setQueue] = useState<QueueState>({ status: "loading" });
   const [recorded, setRecorded] = useState(0);
@@ -105,13 +115,24 @@ export function RecordInterface() {
   const cloningAllowed =
     consent.status === "granted" ? consent.grant.voiceCloning : false;
 
+  // The clip choice is asked once, straight after consent. Until it is made
+  // nothing can be recorded, so nothing can be saved without it. If the
+  // server could not say ("unavailable"), each clip asks, as it always did.
+  const choiceNeeded = consentOk && clipChoice.status === "needed";
+  const rememberedChoice =
+    clipChoice.status === "set" ? clipChoice.choice : null;
+
   const offReason = !consentOk
     ? consent.status === "error"
       ? null
       : "Read and accept the consent above to turn recording on."
-    : task && !answerReady
-      ? "Lock your answer to turn recording on."
-      : null;
+    : choiceNeeded
+      ? "Choose what happens to your clips above to turn recording on."
+      : clipChoice.status === "loading"
+        ? "Loading your clip choice..."
+        : task && !answerReady
+          ? "Lock your answer to turn recording on."
+          : null;
 
   const answerRef: ClipAnswerRef | null = task?.ownAnswer
     ? { coldAuthorAnswerId: task.ownAnswer.id }
@@ -158,6 +179,15 @@ export function RecordInterface() {
         <p role="alert" className="text-sm text-danger">
           {consent.message}
         </p>
+      )}
+      {choiceNeeded && (
+        <ClipChoiceCard
+          licensedAllowed={licensedAllowed}
+          cloningAllowed={cloningAllowed}
+          busy={choiceBusy}
+          error={choiceError}
+          onSave={(choice) => void saveClipChoice(choice)}
+        />
       )}
 
       {queue.status === "loading" && (
@@ -239,6 +269,9 @@ export function RecordInterface() {
             offReason={offReason}
             licensedAllowed={licensedAllowed}
             cloningAllowed={cloningAllowed}
+            rememberedChoice={rememberedChoice}
+            onRememberChoice={saveClipChoice}
+            rememberError={choiceError}
             blocked={busy.english}
             onBusyChange={(b) => setBusy((s) => (s.igala === b ? s : { ...s, igala: b }))}
             onConsentRequired={needAgain}
@@ -265,6 +298,9 @@ export function RecordInterface() {
             offReason={offReason}
             licensedAllowed={licensedAllowed}
             cloningAllowed={cloningAllowed}
+            rememberedChoice={rememberedChoice}
+            onRememberChoice={saveClipChoice}
+            rememberError={choiceError}
             blocked={busy.igala}
             onBusyChange={(b) => setBusy((s) => (s.english === b ? s : { ...s, english: b }))}
             onConsentRequired={needAgain}
