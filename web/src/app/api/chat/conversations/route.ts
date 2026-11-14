@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireChatUser } from "@/lib/chat-guard";
 
 // ─── GET /api/chat/conversations?language=xxx ───────────────
 
+// Signed-in accounts only. An account lists its own conversations; a
+// researcher lists all of them.
+
 export async function GET(req: Request) {
+  const gate = await requireChatUser();
+  if (gate.error) return gate.error;
+
   const { searchParams } = new URL(req.url);
   const language = searchParams.get("language");
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const limit = 20;
 
-  const where = language ? { language } : {};
+  const where = {
+    ...(language ? { language } : {}),
+    ...(gate.user.role === "RESEARCHER" ? {} : { learnerId: gate.user.id }),
+  };
 
   const [conversations, total] = await Promise.all([
     prisma.conversation.findMany({
