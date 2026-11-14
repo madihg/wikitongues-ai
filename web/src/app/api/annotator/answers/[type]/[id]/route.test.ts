@@ -77,11 +77,16 @@ beforeEach(() => {
 
 describe("/api/annotator/answers/[type]/[id]", () => {
   it("401 signed out, 403 for a learner, 404 for an unknown kind of row", async () => {
-    expect((await patch("cold", "c-ann", { englishGloss: "x" })).status).toBe(401);
-    expect((await GET(new Request("http://test/x"), ctx("cold", "c-ann"))).status)
-      .toBe(401);
+    expect((await patch("cold", "c-ann", { englishGloss: "x" })).status).toBe(
+      401,
+    );
+    expect(
+      (await GET(new Request("http://test/x"), ctx("cold", "c-ann"))).status,
+    ).toBe(401);
     as("lea", "LEARNER");
-    expect((await patch("cold", "c-ann", { englishGloss: "x" })).status).toBe(403);
+    expect((await patch("cold", "c-ann", { englishGloss: "x" })).status).toBe(
+      403,
+    );
     as("ann", "ANNOTATOR");
     expect((await patch("rubric", "c-ann", { score: 1 })).status).toBe(404);
   });
@@ -101,13 +106,18 @@ describe("/api/annotator/answers/[type]/[id]", () => {
 
   it("another person's row is refused (403), for an annotator and for a researcher", async () => {
     as("other", "ANNOTATOR");
-    expect((await patch("cold", "c-ann", { englishGloss: "x" })).status).toBe(403);
-    expect((await GET(new Request("http://test/x"), ctx("cold", "c-ann"))).status)
-      .toBe(403);
+    expect((await patch("cold", "c-ann", { englishGloss: "x" })).status).toBe(
+      403,
+    );
+    expect(
+      (await GET(new Request("http://test/x"), ctx("cold", "c-ann"))).status,
+    ).toBe(403);
     // A researcher changes another person's answer text in Annotations, not
     // through this door.
     as("res", "RESEARCHER");
-    expect((await patch("cold", "c-ann", { answerText: "x y" })).status).toBe(403);
+    expect((await patch("cold", "c-ann", { answerText: "x y" })).status).toBe(
+      403,
+    );
     expect(db.answerRevision.rows).toHaveLength(0);
   });
 
@@ -118,10 +128,15 @@ describe("/api/annotator/answers/[type]/[id]", () => {
       ["other", "RESEARCHER"],
     ]) {
       as(id, role);
-      expect((await patch("pairwise", "pw-ann", { winner: "a" })).status).toBe(405);
+      expect((await patch("pairwise", "pw-ann", { winner: "a" })).status).toBe(
+        405,
+      );
       expect(
-        (await patch("pairwise", "pw-ann", { axisScores: [{ axis: "syntax", score: 5 }] }))
-          .status,
+        (
+          await patch("pairwise", "pw-ann", {
+            axisScores: [{ axis: "syntax", score: 5 }],
+          })
+        ).status,
       ).toBe(405);
     }
     expect(db.pairwiseComparison.rows[0].winner).toBe("b");
@@ -137,7 +152,10 @@ describe("/api/annotator/answers/[type]/[id]", () => {
 
   it("GET returns the owner's episode, and no clip rows with the speech layer off", async () => {
     as("ann", "ANNOTATOR");
-    const res = await GET(new Request("http://test/x"), ctx("pairwise", "pw-ann"));
+    const res = await GET(
+      new Request("http://test/x"),
+      ctx("pairwise", "pw-ann"),
+    );
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.promptText).toBe("A test question?");

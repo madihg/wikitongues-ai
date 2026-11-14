@@ -83,8 +83,9 @@ describe("what counts as a change", () => {
     expect(changedFields({ answerText: NFC_E }, { answerText: NFD_E })).toEqual(
       [],
     );
-    expect(changedFields({ englishGloss: "A cup" }, { englishGloss: " A cup " }))
-      .toEqual([]);
+    expect(
+      changedFields({ englishGloss: "A cup" }, { englishGloss: " A cup " }),
+    ).toEqual([]);
     expect(changedFields({ englishGloss: null }, { englishGloss: "" })).toEqual(
       [],
     );
@@ -177,7 +178,9 @@ describe("clips after a text change", () => {
 describe("small rules", () => {
   it("your answers to fix: no meaning, or a reason under 20 characters", () => {
     expect(needsFix({ kind: "cold", englishGloss: "  " })).toBe(true);
-    expect(needsFix({ kind: "cold", englishGloss: "It means go." })).toBe(false);
+    expect(needsFix({ kind: "cold", englishGloss: "It means go." })).toBe(
+      false,
+    );
     expect(needsFix({ kind: "edit", rationale: null })).toBe(true);
     expect(needsFix({ kind: "edit", rationale: "tone" })).toBe(true);
     expect(
@@ -216,7 +219,9 @@ describe("the AnswerRevision migration", () => {
   ];
 
   it("up creates one table and alters nothing that exists", () => {
-    expect(up).toContain('SET search_path TO "wikitongues", "extensions", "public"');
+    expect(up).toContain(
+      'SET search_path TO "wikitongues", "extensions", "public"',
+    );
     expect(up).toContain('CREATE TABLE "AnswerRevision"');
     expect(up.match(/CREATE TABLE/g)).toHaveLength(1);
     expect(up).not.toMatch(/ALTER TABLE|DROP\s+(TABLE|COLUMN|INDEX)|RENAME/i);
@@ -234,7 +239,9 @@ describe("the AnswerRevision migration", () => {
   });
 
   it("down removes exactly that table", () => {
-    expect(down).toContain('SET search_path TO "wikitongues", "extensions", "public"');
+    expect(down).toContain(
+      'SET search_path TO "wikitongues", "extensions", "public"',
+    );
     expect(down).toContain('DROP TABLE IF EXISTS "AnswerRevision"');
     expect(down.match(/DROP TABLE/g)).toHaveLength(1);
   });

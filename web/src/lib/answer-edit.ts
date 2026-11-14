@@ -321,7 +321,9 @@ export async function applyAnswerEdit(args: {
       const after = canonicalSegments(next);
       if (before !== after) {
         changes.push({ field: "segments", before, after });
-        data.segments = segmentsEnvelope(next) as unknown as Prisma.InputJsonValue;
+        data.segments = segmentsEnvelope(
+          next,
+        ) as unknown as Prisma.InputJsonValue;
       }
     }
     // Legacy rows may predate the NFC contract: re-store the NFC original so
@@ -377,7 +379,10 @@ export async function applyAnswerEdit(args: {
     ]);
   } catch (e) {
     if (isMissingTable(e)) {
-      return fail(503, "Editing is not switched on yet. Please try again later.");
+      return fail(
+        503,
+        "Editing is not switched on yet. Please try again later.",
+      );
     }
     if (
       typeof e === "object" &&
@@ -681,28 +686,24 @@ export async function loadEditEpisode(args: {
           })),
       };
     }),
-    ...pairwise.map(
-      (p): EditItem => ({
-        type: "pairwise",
-        id: p.id,
-        createdAt: p.createdAt.toISOString(),
-        winner: p.winner,
-        explanation: p.explanation,
-      }),
-    ),
-    ...edits.map(
-      (e): EditItem => ({
-        type: "edit",
-        id: e.id,
-        createdAt: e.createdAt.toISOString(),
-        onOutput: sideOf(e.modelOutputId),
-        originalText: e.originalText,
-        correctedText: e.correctedText,
-        rationale: e.rationale,
-        segments: storedSegments(e.segments),
-        needsFix: needsFix({ kind: "edit", rationale: e.rationale }),
-      }),
-    ),
+    ...pairwise.map((p): EditItem => ({
+      type: "pairwise",
+      id: p.id,
+      createdAt: p.createdAt.toISOString(),
+      winner: p.winner,
+      explanation: p.explanation,
+    })),
+    ...edits.map((e): EditItem => ({
+      type: "edit",
+      id: e.id,
+      createdAt: e.createdAt.toISOString(),
+      onOutput: sideOf(e.modelOutputId),
+      originalText: e.originalText,
+      correctedText: e.correctedText,
+      rationale: e.rationale,
+      segments: storedSegments(e.segments),
+      needsFix: needsFix({ kind: "edit", rationale: e.rationale }),
+    })),
   ];
 
   const episode: EditEpisode = { promptText: prompt?.text ?? "", items };

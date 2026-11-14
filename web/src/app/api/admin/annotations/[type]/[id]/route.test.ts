@@ -27,7 +27,10 @@ import { PATCH } from "./route";
 
 const patch = (type: string, id: string, body: unknown) =>
   PATCH(
-    new Request("http://test/x", { method: "PATCH", body: JSON.stringify(body) }),
+    new Request("http://test/x", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
     { params: Promise.resolve({ type, id }) },
   );
 
@@ -79,14 +82,18 @@ const find = (rows: Record<string, unknown>[], id: string) =>
 
 describe("PATCH /api/admin/annotations/[type]/[id]", () => {
   it("was 400 and 405: a researcher's own meaning, reason and why now save", async () => {
-    const meaning = await patch("cold", "c-agnes", { englishGloss: "A new meaning." });
+    const meaning = await patch("cold", "c-agnes", {
+      englishGloss: "A new meaning.",
+    });
     const reason = await patch("edit", "e-agnes", {
       rationale: "A fuller reason for the change.",
     });
     const why = await patch("pairwise", "pw-agnes", {
       explanation: "A keeps the tone marks.",
     });
-    expect([meaning.status, reason.status, why.status]).toEqual([200, 200, 200]);
+    expect([meaning.status, reason.status, why.status]).toEqual([
+      200, 200, 200,
+    ]);
     expect(find(db.coldAuthorAnswer.rows, "c-agnes").englishGloss).toBe(
       "A new meaning.",
     );
@@ -100,10 +107,15 @@ describe("PATCH /api/admin/annotations/[type]/[id]", () => {
   });
 
   it("another person's meaning, reason or why stays closed (403)", async () => {
-    expect((await patch("cold", "c-other", { englishGloss: "x" })).status).toBe(403);
-    expect((await patch("edit", "e-other", { rationale: "x" })).status).toBe(403);
-    expect((await patch("pairwise", "pw-other", { explanation: "x" })).status)
-      .toBe(403);
+    expect((await patch("cold", "c-other", { englishGloss: "x" })).status).toBe(
+      403,
+    );
+    expect((await patch("edit", "e-other", { rationale: "x" })).status).toBe(
+      403,
+    );
+    expect(
+      (await patch("pairwise", "pw-other", { explanation: "x" })).status,
+    ).toBe(403);
     expect(db.answerRevision.rows).toHaveLength(0);
   });
 
@@ -111,7 +123,9 @@ describe("PATCH /api/admin/annotations/[type]/[id]", () => {
     const res = await patch("cold", "c-other", { answerText: "alpha BETA" });
     expect(res.status).toBe(200);
     expect((await res.json()).success).toBe(true);
-    expect(find(db.coldAuthorAnswer.rows, "c-other").answerText).toBe("alpha BETA");
+    expect(find(db.coldAuthorAnswer.rows, "c-other").answerText).toBe(
+      "alpha BETA",
+    );
     const fix = await patch("edit", "e-other", { correctedText: "ONE two" });
     expect(fix.status).toBe(200);
     expect(find(db.outputEdit.rows, "e-other").correctedText).toBe("ONE two");
@@ -120,15 +134,24 @@ describe("PATCH /api/admin/annotations/[type]/[id]", () => {
       "correctedText",
       "segments",
     ]);
-    expect(db.answerRevision.rows.every((r) => r.editorId === "agnes")).toBe(true);
+    expect(db.answerRevision.rows.every((r) => r.editorId === "agnes")).toBe(
+      true,
+    );
   });
 
   it("the choice is still refused (405), on one's own comparison too", async () => {
-    expect((await patch("pairwise", "pw-agnes", { winner: "b" })).status).toBe(405);
-    expect((await patch("pairwise", "pw-other", { winner: "b" })).status).toBe(405);
+    expect((await patch("pairwise", "pw-agnes", { winner: "b" })).status).toBe(
+      405,
+    );
+    expect((await patch("pairwise", "pw-other", { winner: "b" })).status).toBe(
+      405,
+    );
     expect(
-      (await patch("pairwise", "pw-agnes", { verificationStatus: "expert_reviewed" }))
-        .status,
+      (
+        await patch("pairwise", "pw-agnes", {
+          verificationStatus: "expert_reviewed",
+        })
+      ).status,
     ).toBe(405);
     expect(find(db.pairwiseComparison.rows, "pw-agnes").winner).toBe("a");
   });
@@ -153,8 +176,9 @@ describe("PATCH /api/admin/annotations/[type]/[id]", () => {
       correctedText: "one TWO three",
       verificationStatus: "expert_reviewed",
     });
-    expect((await patch("cold", "c-other", { verificationStatus: "nope" })).status)
-      .toBe(400);
+    expect(
+      (await patch("cold", "c-other", { verificationStatus: "nope" })).status,
+    ).toBe(400);
     expect((await patch("cold", "c-other", {})).status).toBe(400);
   });
 
@@ -164,6 +188,8 @@ describe("PATCH /api/admin/annotations/[type]/[id]", () => {
       userId: null,
       role: null,
     });
-    expect((await patch("cold", "c-other", { answerText: "x" })).status).toBe(403);
+    expect((await patch("cold", "c-other", { answerText: "x" })).status).toBe(
+      403,
+    );
   });
 });

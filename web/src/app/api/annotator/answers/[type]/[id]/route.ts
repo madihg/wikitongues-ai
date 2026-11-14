@@ -34,7 +34,9 @@ async function who(): Promise<Who> {
     };
   }
   if (!ROLES.includes(user.role)) {
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    return {
+      error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+    };
   }
   return { userId: user.id as string, role: user.role as string };
 }
@@ -54,7 +56,16 @@ export async function GET(
     layer: speechLayerAnnotatorsEnabled(),
   });
   const res = await loadEditEpisode({ type, id, userId: me.userId, withClips });
-  return NextResponse.json(res.body, { status: res.status });
+  // Where "Re-record" goes: the Record page this person already knows.
+  const recordHref = !withClips
+    ? null
+    : me.role === "RESEARCHER"
+      ? "/lab/speech"
+      : "/speak";
+  return NextResponse.json(
+    res.status === 200 ? { ...res.body, recordHref } : res.body,
+    { status: res.status },
+  );
 }
 
 export async function PATCH(

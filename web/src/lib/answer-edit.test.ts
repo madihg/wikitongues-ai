@@ -199,7 +199,9 @@ describe("the fix for Nov 10: the meaning and the reason are editable on your ow
     const why = await edit(agnes, "pairwise", "pw-agnes", {
       explanation: "B keeps the respect form. A drops it.",
     });
-    expect([meaning.status, reason.status, why.status]).toEqual([200, 200, 200]);
+    expect([meaning.status, reason.status, why.status]).toEqual([
+      200, 200, 200,
+    ]);
     expect(row(db.coldAuthorAnswer, "c-agnes").englishGloss).toBe(
       "A fuller meaning.",
     );
@@ -226,7 +228,9 @@ describe("the fix for Nov 10: the meaning and the reason are editable on your ow
     const why = await edit(charity, "pairwise", "pw-charity", {
       explanation: "A is right because the tone is kept.",
     });
-    expect([meaning.status, reason.status, why.status]).toEqual([200, 200, 200]);
+    expect([meaning.status, reason.status, why.status]).toEqual([
+      200, 200, 200,
+    ]);
     expect(row(db.coldAuthorAnswer, "c-charity").englishGloss).toBe(
       "Now it has a meaning.",
     );
@@ -234,8 +238,9 @@ describe("the fix for Nov 10: the meaning and the reason are editable on your ow
       "This reason was missing before.",
     );
     expect(revs()).toHaveLength(3);
-    expect(revs().every((r) => r.editorId === CHARITY && r.authorId === CHARITY))
-      .toBe(true);
+    expect(
+      revs().every((r) => r.editorId === CHARITY && r.authorId === CHARITY),
+    ).toBe(true);
   });
 });
 
@@ -280,7 +285,8 @@ describe("owner only", () => {
       (await edit(agnes, "edit", "e-charity", { rationale: "x" })).status,
     ).toBe(403);
     expect(
-      (await edit(agnes, "pairwise", "pw-charity", { explanation: "x" })).status,
+      (await edit(agnes, "pairwise", "pw-charity", { explanation: "x" }))
+        .status,
     ).toBe(403);
     expect(revs()).toHaveLength(0);
   });
@@ -381,8 +387,9 @@ describe("what a save writes", () => {
       userId: AGNES,
       withClips: false,
     });
-    const cold = (ep.body.items as { type: string; firstVersion: unknown }[])
-      .find((i) => i.type === "cold");
+    const cold = (
+      ep.body.items as { type: string; firstVersion: unknown }[]
+    ).find((i) => i.type === "cold");
     expect(cold?.firstVersion).toMatchObject({ text: "alpha beta" });
   });
 
@@ -398,8 +405,12 @@ describe("what a save writes", () => {
       (await edit(charity, "cold", "c-demo", { isDemo: false })).status,
     ).toBe(400);
     expect(
-      (await edit(agnes, "cold", "c-agnes", { answerText: "x y", isDemo: true }))
-        .status,
+      (
+        await edit(agnes, "cold", "c-agnes", {
+          answerText: "x y",
+          isDemo: true,
+        })
+      ).status,
     ).toBe(400);
     expect(row(db.coldAuthorAnswer, "c-agnes").isDemo).toBe(false);
   });
@@ -431,8 +442,9 @@ describe("what a save writes", () => {
       (await edit(agnes, "cold", "c-agnes", { englishGloss: 7 })).status,
     ).toBe(400);
     expect((await edit(agnes, "cold", "c-agnes", {})).status).toBe(400);
-    expect((await edit(agnes, "cold", "missing", { answerText: "x" })).status)
-      .toBe(404);
+    expect(
+      (await edit(agnes, "cold", "missing", { answerText: "x" })).status,
+    ).toBe(404);
     expect(revs()).toHaveLength(0);
   });
 
@@ -509,7 +521,9 @@ describe("a correction keeps its spans true", () => {
 
 describe("clips and the episode", () => {
   it("changing the words says the Igala clip may no longer match; the clip is kept", async () => {
-    const res = await edit(agnes, "cold", "c-agnes", { answerText: "new words" });
+    const res = await edit(agnes, "cold", "c-agnes", {
+      answerText: "new words",
+    });
     expect(res.body.clipsStale).toBe(true);
     expect(db.speechRecording.rows).toHaveLength(2);
     const quiet = await edit(agnes, "cold", "c-agnes", { dialect: "ankpa" });
@@ -555,7 +569,9 @@ describe("clips and the episode", () => {
       (await edit(agnes, "listen", "l-agnes", { note: "B has a hiss in it." }))
         .status,
     ).toBe(200);
-    expect(row(db.speechComparison, "l-agnes").note).toBe("B has a hiss in it.");
+    expect(row(db.speechComparison, "l-agnes").note).toBe(
+      "B has a hiss in it.",
+    );
     expect(row(db.speechComparison, "l-agnes").winner).toBe("a");
     expect(revs()[0]).toMatchObject({ targetType: "listen", field: "note" });
   });
