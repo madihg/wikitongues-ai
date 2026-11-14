@@ -263,6 +263,20 @@ describe("POST check/submit", () => {
     expect(mockPrisma.speechCheck.upsert).not.toHaveBeenCalled();
   });
 
+  it("404 for a clip its speaker withdrew: no verdict is stored and the status stays withdrawn", async () => {
+    mockPrisma.speechRecording.findUnique.mockResolvedValue(
+      submitRow({ reviewStatus: "withdrawn" }),
+    );
+    for (const verdict of ["matches", "cannot_hear"]) {
+      expect((await post({ recordingId: "c1", verdict })).status).toBe(404);
+    }
+    expect(mockPrisma.speechCheck.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.speechRecording.update).not.toHaveBeenCalled();
+    expect(
+      mockPrisma.speechRecording.findUnique.mock.calls[0][0].select.reviewStatus,
+    ).toBe(true);
+  });
+
   it("a demo verdict is stored as demo and leaves the clip's status alone", async () => {
     mockPrisma.speechRecording.findUnique.mockResolvedValue(
       submitRow({ isDemo: true, demoSessionId: "d1" }),

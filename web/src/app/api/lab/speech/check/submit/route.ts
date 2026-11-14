@@ -11,6 +11,7 @@ import {
   type CheckLevel,
   type CheckVerdict,
 } from "@/lib/speech/check";
+import { WITHDRAWN_REVIEW_STATUS } from "@/lib/speech/withdrawal";
 
 /**
  * Submit one Check verdict (POST /api/lab/speech/check/submit). For the
@@ -89,15 +90,19 @@ export async function POST(req: Request) {
       id: true,
       annotatorId: true,
       uploadedAt: true,
+      reviewStatus: true,
       isDemo: true,
       demoSessionId: true,
       prompt: { select: { isHoldout: true, split: true } },
       coldAuthorAnswer: { select: { answerText: true } },
     },
   });
+  // A clip its speaker withdrew is gone for every reviewer: a verdict must
+  // never write over "withdrawn" and bring the clip back (withdrawal.ts).
   const visible =
     clip &&
     clip.uploadedAt &&
+    clip.reviewStatus !== WITHDRAWN_REVIEW_STATUS &&
     clip.coldAuthorAnswer &&
     (!clip.isDemo || (demoSessionId && clip.demoSessionId === demoSessionId));
   if (!visible) {
