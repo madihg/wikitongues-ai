@@ -421,3 +421,60 @@ describe("speech nightly migration", () => {
     expect(nDown).not.toMatch(/DROP TYPE|DROP TABLE IF EXISTS "Speech(TrainJob|Candidate)"/);
   });
 });
+
+describe("speech measures migration (Nov 13)", () => {
+  const dirM = join(root, "migrations", "20261113120000_speech_measures");
+  const mUp = readFileSync(join(dirM, "migration.sql"), "utf8");
+  const mDown = readFileSync(join(dirM, "down.sql"), "utf8");
+  const TABLES = [
+    "SpeechClipMeasure",
+    "SpeechAutoMeasure",
+    "SpeechDerivative",
+    "SpeechListenRound",
+  ];
+
+  it("starts with the search_path line, in both directions", () => {
+    expect(mUp).toMatch(
+      /^SET search_path TO "wikitongues", "extensions", "public";$/m,
+    );
+    expect(mDown).toMatch(/^SET search_path TO "wikitongues"/m);
+  });
+
+  it("sorts after every earlier speech migration", () => {
+    const names = readdirSync(join(root, "migrations")).filter((n) => /^\d{14}_/.test(n));
+    expect(names.sort().at(-1)! >= "20261113120000_speech_measures").toBe(true);
+    expect("20261113120000_speech_measures" > "20261107130000_speech_check_level").toBe(true);
+  });
+
+  it("is additive: four new tables, no existing table touched", () => {
+    expect(mUp).not.toMatch(/\bDROP\s|\bDELETE\s+FROM|\bTRUNCATE|\bUPDATE\s|\bALTER TABLE/i);
+    for (const t of TABLES) {
+      expect(mUp).toContain(`CREATE TABLE "${t}"`);
+      expect(schema).toContain(`model ${t} {`);
+    }
+    expect((mUp.match(/CREATE TABLE/g) ?? []).length).toBe(4);
+    // Plain string keys: no foreign key reaches into an existing table.
+    expect(mUp).not.toMatch(/FOREIGN KEY|REFERENCES/i);
+  });
+
+  it("each table has the unique key that makes its writer idempotent", () => {
+    for (const idx of [
+      "SpeechClipMeasure_clipKey_stage_rulerRef_key",
+      "SpeechAutoMeasure_kind_modelRef_rulerRef_manifestVersion_key",
+      "SpeechDerivative_recordingId_kind_version_key",
+      "SpeechListenRound_raterId_candidateRecordingId_isRepeat_key",
+    ]) {
+      expect(mUp).toContain(`CREATE UNIQUE INDEX "${idx}"`);
+    }
+  });
+
+  it("stores numbers and keys, never a clip's text or audio", () => {
+    expect(mUp).not.toMatch(/"(text|transcript|hypothesis|bytes)"/i);
+  });
+
+  it("down.sql drops the four tables and nothing else", () => {
+    for (const t of TABLES) expect(mDown).toContain(`DROP TABLE IF EXISTS "${t}"`);
+    expect((mDown.match(/DROP TABLE/g) ?? []).length).toBe(4);
+    expect(mDown).not.toMatch(/ALTER TABLE|DROP TYPE|DROP COLUMN/i);
+  });
+});
