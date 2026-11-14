@@ -1,4 +1,5 @@
 import { searchRag } from "@/lib/rag";
+import { TUTOR_MAX_OUTPUT_TOKENS } from "./limits";
 import {
   generateForCandidate,
   type CandidateLike,
@@ -51,7 +52,7 @@ export const DEFAULT_CANDIDATE: CandidateLike = {
   useSystemPrompt: true,
   systemPrompt: IGALA_SYSTEM,
   ragEnabled: true,
-  decodingParams: { temperature: 0.7, maxTokens: 1024 },
+  decodingParams: { temperature: 0.7, maxTokens: TUTOR_MAX_OUTPUT_TOKENS },
 };
 
 // ─── Confidence heuristic ───────────────────────────────────

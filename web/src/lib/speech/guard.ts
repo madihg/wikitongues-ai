@@ -70,12 +70,25 @@ export interface ExportableRow {
 const REJECTED_REVIEWS = new Set(["bad_audio", "wrong_text", "withdrawn"]);
 
 /**
- * Rows that leave by NO path, whatever else is true of them: COMMUNITY-ONLY
- * clips (the speaker said it never leaves the Igala tools), test-set clips
- * (the exam), demo clips (not data), and any clip whose prompt is frozen
- * (a second line of defence behind isTestSet).
+ * True for a synthesised clip (a model's output, not a person's recording).
+ * The one place the rule is spelled, shared by export and training: a
+ * synthetic clip is never exported and never trains or examines a model,
+ * whatever its tier, consent, rights, review verdict or opt-ins say. Those
+ * flags describe what a SPEAKER agreed to, and a synthetic clip has none.
+ */
+export function isSynthetic(row: Pick<ExportableRow, "sourceType">): boolean {
+  return row.sourceType === "derived";
+}
+
+/**
+ * Rows that leave by NO path, whatever else is true of them: synthesised
+ * clips (not a person's recording), COMMUNITY-ONLY clips (the speaker said it
+ * never leaves the Igala tools), test-set clips (the exam), demo clips (not
+ * data), and any clip whose prompt is frozen (a second line of defence behind
+ * isTestSet).
  */
 export function neverLeaves(row: ExportableRow): boolean {
+  if (isSynthetic(row)) return true;
   if (row.tier === "community_only") return true;
   if (row.isTestSet) return true;
   if (row.isDemo) return true;
@@ -117,8 +130,6 @@ export interface LicensedContext {
   consent: { commercialLicensing: boolean; crossBorder: boolean } | null;
   /** True only when called from the gated delivery path (a signed contract). */
   gatedDelivery: boolean;
-  /** Manifest flag `includeSynthetic` (FR-8): synthesised clips ride along. */
-  includeSynthetic?: boolean;
   /** The delivery will train a cloned voice (FR-9: needs the opt-in). */
   forVoiceCloning?: boolean;
 }
@@ -126,7 +137,11 @@ export interface LicensedContext {
 /**
  * LICENSED export: tier licensed AND the speaker's consent flags allow
  * commercial licensing and cross-border transfer AND not a test set AND
- * rights cleared, and only from the gated delivery path. No route in the
+ * rights cleared, and only from the gated delivery path. A synthesised clip
+ * never rides along: the old `includeSynthetic` option (FR-8) is gone, and
+ * neverLeaves refuses the clip before anything else is read. If a delivery
+ * should one day carry a model's output, that is a new path with its own
+ * rule, not a flag on this one. No route in the
  * first slice calls this; it exists so the rule is written once, tested, and
  * ready for the delivery path.
  */
@@ -141,7 +156,6 @@ export function canExportLicensed(
   if (!ctx.consent.commercialLicensing || !ctx.consent.crossBorder) {
     return false;
   }
-  if (row.sourceType === "derived" && !ctx.includeSynthetic) return false;
   if (ctx.forVoiceCloning && !row.voiceCloningOptIn) return false;
   return true;
 }

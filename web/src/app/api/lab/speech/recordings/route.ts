@@ -14,6 +14,7 @@ import {
   type VerdictKey,
 } from "@/lib/speech/analyse";
 import { audioUrl } from "@/lib/speech/storage";
+import { restrictedClipIds } from "@/lib/speech/listen-rounds";
 
 /**
  * The researcher review list (GET /api/lab/speech/recordings) and the review
@@ -29,6 +30,10 @@ import { audioUrl } from "@/lib/speech/storage";
  * `?flag=` one of the take warnings (too_quiet, clipped, cut_short, ...) to
  * list only takes with that verdict; `?sort=newest|quietest|loudest|longest|
  * shortest|most_clipped` (default newest).
+ *
+ * A synthetic clip that belongs to an assigned Listen round is not listed:
+ * the list would let a rater hear it outside the round and see that it has
+ * no speaker (lib/speech/listen-rounds.ts).
  *
  * PATCH sets one clip's review flag: body { id, reviewStatus } where
  * reviewStatus is keep, bad_audio, wrong_text, or null to clear it. A clip
@@ -105,8 +110,10 @@ export async function GET(req: Request) {
   // newest clips; the plain list is limited in the query.
   const needsMetrics = flag !== null || sort !== "newest";
 
+  const inRounds = await restrictedClipIds(prisma);
   const rows = await prisma.speechRecording.findMany({
     where: {
+      ...(inRounds.length > 0 ? { id: { notIn: inRounds } } : {}),
       isDemo: false,
       uploadedAt: { not: null },
       ...(language ? { language } : {}),

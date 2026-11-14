@@ -1,4 +1,4 @@
-import { isFrozenPrompt, type ExportableRow } from "./guard";
+import { isFrozenPrompt, isSynthetic, type ExportableRow } from "./guard";
 import { REJECTED_REVIEW_STATUSES } from "./limits";
 
 /**
@@ -6,6 +6,11 @@ import { REJECTED_REVIEW_STATUSES } from "./limits";
  * context in, a verdict and a reason out. buildTrainingManifest filters
  * through it and nowhere else; canEvaluate is the mirror used only by
  * buildEvalManifest. Registered in export-paths.test.ts.
+ *
+ * The first rule is about what the clip IS: a synthesised clip (sourceType
+ * derived) never trains and never examines a model, on any scope, for any
+ * purpose. It is refused before consent, tier or review are read, with its
+ * own reason, so no combination of those flags can let one through.
  *
  *  - scope "internal": a worker the platform controls; community_only clips
  *    may train there.
@@ -17,6 +22,7 @@ export interface TrainContext {
 }
 
 export type TrainRefusal =
+  | "derived"
   | "test_set"
   | "demo"
   | "frozen_prompt"
@@ -34,6 +40,7 @@ export type TrainVerdict = { ok: true } | { ok: false; reason: TrainRefusal };
 const no = (reason: TrainRefusal): TrainVerdict => ({ ok: false, reason });
 
 export function canTrain(row: ExportableRow, ctx: TrainContext): TrainVerdict {
+  if (isSynthetic(row)) return no("derived");
   if (row.isTestSet) return no("test_set");
   if (row.isDemo) return no("demo");
   if (row.prompt && isFrozenPrompt(row.prompt)) return no("frozen_prompt");

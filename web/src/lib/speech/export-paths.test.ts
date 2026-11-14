@@ -8,6 +8,7 @@ import { buildTrainingManifest, buildEvalManifest } from "./training-manifest";
 import { loadTrainableRows, loadTestSetRows } from "./loop-rows";
 import { buildSigned } from "./loop-launch";
 import { buildFirstModelPlan } from "./first-model-plan";
+import { syntheticClipRow } from "../../../scripts/speech/publish-listen-candidates";
 import { mockProvider } from "./train-providers";
 import { licensedRow, openRow } from "./fixtures";
 import type { ManifestRow } from "./manifest";
@@ -108,6 +109,10 @@ function forbiddenRows(): ManifestRow[] {
     }),
     openRow({ id: "testset-open", isTestSet: true }),
     licensedRow({ id: "testset-licensed", isTestSet: true }),
+    // A synthesised clip, otherwise perfect for its tier: consented, rights
+    // cleared, published, kept by a reviewer, cloning allowed.
+    openRow({ id: "derived-open", sourceType: "derived", voiceCloningOptIn: true }),
+    licensedRow({ id: "derived-licensed", sourceType: "derived", voiceCloningOptIn: true }),
     openRow({
       id: "frozen-prompt",
       prompt: { isHoldout: true, split: "test" },
@@ -151,6 +156,11 @@ describe.each(ENTRY_POINTS)("export entry point: $name", (entry) => {
           id.startsWith("frozen"),
       ),
     ).toEqual([]);
+  });
+
+  it("refuses a synthesised clip that is otherwise perfect for the tier", async () => {
+    const out = await entry.released(forbiddenRows());
+    expect(out.filter((id) => id.startsWith("derived"))).toEqual([]);
   });
 
   it("releases nothing when given only forbidden rows", async () => {
@@ -214,6 +224,20 @@ describe.each(TRAIN_ENTRY_POINTS)("training entry point: $name", (entry) => {
     ).toEqual([]);
   });
 
+  it("refuses a synthesised clip that is otherwise perfect for training", async () => {
+    // Consent on record, a chosen tier, rights cleared, kept, cloning allowed.
+    const out = await entry.released(forbiddenRows());
+    expect(out.filter((id) => id.startsWith("derived"))).toEqual([]);
+    const control = [
+      openRow({ id: "person-open", voiceCloningOptIn: true }),
+      licensedRow({ id: "person-licensed", voiceCloningOptIn: true }),
+    ];
+    expect((await entry.released(control)).sort()).toEqual([
+      "person-licensed",
+      "person-open",
+    ]);
+  });
+
   it("refuses demo rows and rejected reviews", async () => {
     const rows = [
       openRow({ id: "demo", isDemo: true }),
@@ -267,6 +291,124 @@ describe("training entry point: first-model-plan.buildFirstModelPlan (voice clon
       cloning("fine"),
     ];
     expect(released(rows)).toEqual(["fine"]);
+  });
+});
+
+/**
+ * A synthetic clip published into Listen (scripts/speech/publish-listen-candidates.ts)
+ * is a SpeechRecording row. It must never be taken for a person's speech: not
+ * by an export, not by a training manifest, not by an exam, whatever a
+ * reviewer later does to it. The row is built by the script's own function,
+ * so this is the shape that reaches the database.
+ */
+describe("a synthetic Listen clip never leaves and never trains", () => {
+  const synthetic = (id: string, over: Partial<ManifestRow> = {}): ManifestRow => {
+    const written = syntheticClipRow({
+      id,
+      promptId: "p-1",
+      systemRef: "mms-tts-yor-unadapted@test",
+      mimeType: "audio/webm;codecs=opus",
+      durationMs: 3000,
+      sampleRate: 48000,
+      sizeBytes: 1000,
+      checksumSha256: "abc",
+    });
+    return {
+      ...written,
+      uploadedAt: new Date("2026-11-13T00:00:00Z"), // as it is once the audio is in place
+      publishedOpenAt: null,
+      dialect: null,
+      consentVersion: null,
+      fundingSource: "unknown",
+      prompt: { isHoldout: false, split: "train" },
+      coldAuthorAnswer: { answerText: "the market opens at dawn" },
+      ...over,
+    };
+  };
+  // As written, then with every flag a careless hand could flip, one at a time.
+  const variants = (): ManifestRow[] => [
+    synthetic("as-written"),
+    synthetic("kept-by-a-reviewer", { reviewStatus: "keep" }),
+    synthetic("tier-open", { tier: "open", reviewStatus: "keep", publishedOpenAt: new Date() }),
+    synthetic("tier-licensed", { tier: "licensed", reviewStatus: "keep" }),
+    synthetic("rights-cleared", { rightsStatus: "cleared", reviewStatus: "keep" }),
+    synthetic("cloning-flag", { voiceCloningOptIn: true, reviewStatus: "keep" }),
+    synthetic("marked-exam", { isTestSet: true, reviewStatus: "keep" }),
+    // Every flag flipped at once, as favourably as each tier allows: a consent
+    // record, rights cleared, kept by a reviewer, cloning allowed, published.
+    synthetic("all-favourable-open", {
+      tier: "open",
+      publishedOpenAt: new Date(),
+      consentId: "consent-1",
+      rightsStatus: "cleared",
+      reviewStatus: "keep",
+      voiceCloningOptIn: true,
+    }),
+    synthetic("all-favourable-licensed", {
+      tier: "licensed",
+      consentId: "consent-1",
+      rightsStatus: "cleared",
+      reviewStatus: "keep",
+      voiceCloningOptIn: true,
+    }),
+  ];
+
+  it.each(ENTRY_POINTS)("export $name releases none of them", async (entry) => {
+    expect(await entry.released(variants())).toEqual([]);
+  });
+
+  it.each(TRAIN_ENTRY_POINTS)("training $name takes none of them", async (entry) => {
+    expect(await entry.released(variants())).toEqual([]);
+  });
+
+  it("the voice-cloning plan, the cloning purpose and the exam take none of them", () => {
+    const plan = buildFirstModelPlan(variants(), { signedUrl, heldTiers: [] });
+    expect([...plan.train, ...plan.heldOut]).toEqual([]);
+    for (const row of variants()) {
+      expect(canTrain(row, { scope: "internal", purpose: "cloning" }).ok, row.id).toBe(false);
+      expect(canTrain(row, { scope: "internal", purpose: "tts" }).ok, row.id).toBe(false);
+      expect(canEvaluate(row, { scope: "internal", purpose: "asr" }).ok, row.id).toBe(false);
+      expect(neverLeaves(row) || row.rightsStatus !== "cleared" || row.consentId === null, row.id).toBe(true);
+    }
+  });
+
+  it("the rule is stated outright: derived, before consent, tier or review are read", () => {
+    for (const row of variants()) {
+      for (const scope of ["internal", "provider"] as const) {
+        for (const purpose of ["asr", "tts", "cloning"] as const) {
+          expect(canTrain(row, { scope, purpose }), `${row.id} ${scope} ${purpose}`).toEqual({
+            ok: false,
+            reason: "derived",
+          });
+        }
+      }
+      expect(neverLeaves(row), row.id).toBe(true);
+    }
+  });
+
+  it("the same favourable rows, as a person's recording, do train and do leave (the control)", () => {
+    const person = variants()
+      .filter((r) => r.id.startsWith("all-favourable"))
+      .map((r) => ({ ...r, sourceType: "contributor" as const }));
+    expect(person.length).toBe(2);
+    for (const row of person) {
+      expect(canTrain(row, { scope: "provider", purpose: "cloning" }), row.id).toEqual({ ok: true });
+      expect(neverLeaves(row), row.id).toBe(false);
+    }
+    expect(canExportOpen(person[0])).toBe(true);
+    expect(canExportLicensed(person[1], gated)).toBe(true);
+  });
+
+  it("under the outright rule, the row as written is still blocked three more ways", () => {
+    // Read the row as if it were a person's: each of these alone refuses it.
+    const row = { ...synthetic("as-written"), sourceType: "contributor" as const };
+    expect(canTrain({ ...row, reviewStatus: "keep" }, { scope: "internal", purpose: "asr" })).toEqual({
+      ok: false,
+      reason: "no_consent",
+    });
+    expect(row.tier).toBe("community_only");
+    expect(neverLeaves(row)).toBe(true);
+    expect(row.rightsStatus).toBe("restricted");
   });
 });
 
@@ -404,6 +546,7 @@ const REGISTERED_FILES = [
   "src/lib/speech/tts-job.ts", // the TTS launch: buildTrainingManifest, purpose tts
   "src/lib/speech/first-model-plan.ts", // the first voice model's plan: buildTrainingManifest, purpose cloning (entry point below)
   "scripts/speech/first-model-plan.ts", // its script: writes only what buildFirstModelPlan returns
+  "scripts/speech/publish-listen-candidates.ts", // writes synthetic Listen clips (syntheticClipRow); every guard refuses that row (test above)
 ];
 
 function sourceFiles(dir: string): string[] {

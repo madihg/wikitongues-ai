@@ -5,6 +5,7 @@ import {
   canExportLicensed,
   canExportOpen,
   isFrozenPrompt,
+  isSynthetic,
   neverLeaves,
   type LicensedContext,
 } from "./guard";
@@ -55,6 +56,7 @@ describe("neverLeaves", () => {
   });
 
   it.each([
+    ["a synthesised clip", { sourceType: "derived" as const }],
     ["community_only", { tier: "community_only" as const }],
     ["a test set", { isTestSet: true }],
     ["a demo clip", { isDemo: true }],
@@ -62,6 +64,26 @@ describe("neverLeaves", () => {
     ["a prompt in split test", { prompt: { isHoldout: false, split: "test" } }],
   ])("is true for %s", (_name, over) => {
     expect(neverLeaves(openRow(over))).toBe(true);
+  });
+});
+
+describe("a synthesised clip", () => {
+  it("isSynthetic reads the source type and nothing else", () => {
+    expect(isSynthetic({ sourceType: "derived" })).toBe(true);
+    expect(isSynthetic({ sourceType: "contributor" })).toBe(false);
+    expect(isSynthetic({ sourceType: "third_party" })).toBe(false);
+  });
+
+  it("never leaves, with every other flag as favourable as it can be", () => {
+    // Open, published, consented, rights cleared, kept, cloning allowed.
+    const best = openRow({
+      sourceType: "derived",
+      reviewStatus: "keep",
+      voiceCloningOptIn: true,
+    });
+    expect(canExportOpen({ ...best, sourceType: "contributor" })).toBe(true);
+    expect(neverLeaves(best)).toBe(true);
+    expect(canExportOpen(best)).toBe(false);
   });
 });
 
@@ -142,12 +164,21 @@ describe("canExportLicensed", () => {
     expect(canExportLicensed(licensedRow(over), consenting)).toBe(false);
   });
 
-  it("keeps synthesised clips out unless includeSynthetic is passed (FR-8)", () => {
-    const synth = licensedRow({ sourceType: "derived" });
+  it("never lets a synthesised clip ride along, whatever the delivery asks", () => {
+    // Every other flag as favourable as it can be: licensed, consented,
+    // rights cleared, kept by a reviewer, cloning allowed.
+    const synth = licensedRow({
+      sourceType: "derived",
+      reviewStatus: "keep",
+      voiceCloningOptIn: true,
+    });
+    expect(canExportLicensed({ ...synth, sourceType: "contributor" }, consenting)).toBe(true);
     expect(canExportLicensed(synth, consenting)).toBe(false);
-    expect(
-      canExportLicensed(synth, { ...consenting, includeSynthetic: true }),
-    ).toBe(true);
+    expect(canExportLicensed(synth, { ...consenting, forVoiceCloning: true })).toBe(false);
+    // The option that used to admit synthetic clips (FR-8) no longer exists:
+    // passed by an old caller, it changes nothing.
+    const old = { ...consenting, includeSynthetic: true } as typeof consenting;
+    expect(canExportLicensed(synth, old)).toBe(false);
   });
 
   it("never clones a voice without the speaker's opt-in (FR-9)", () => {
