@@ -235,23 +235,28 @@ describe("the sidebar line", () => {
       "Pass 2: tone marks (30)",
       "My Work",
     ]);
+    // Every item marked: the line stays, with no number (spec 4.1, "No number
+    // when it is zero", the rule every waiting number follows).
     const researcher = labels(navForRole("RESEARCHER", null, { tone: 0 }));
     expect(researcher[researcher.indexOf("Annotate") + 1]).toBe(
-      "Pass 2: tone marks (0)",
+      "Pass 2: tone marks",
     );
   });
 
-  it("comes after the speech links when an annotator has them", () => {
-    const withSpeech = labels(
-      navForRole("ANNOTATOR", null, { lab: true, tone: 4 }),
-    );
-    expect(withSpeech.slice(1, 6)).toEqual([
-      "Annotate",
-      "Speak",
-      "Listen",
-      "Check",
-      "Pass 2: tone marks (4)",
-    ]);
+  it("comes after the one Speech link when the person has speech", () => {
+    for (const role of ["ANNOTATOR", "RESEARCHER"]) {
+      const withSpeech = labels(
+        navForRole(role, null, { lab: true, tone: 4, waiting: { speech: 7 } }),
+      );
+      expect(withSpeech.slice(0, 6), role).toEqual([
+        "Dashboard",
+        "Annotate",
+        "Speech (7)",
+        "Pass 2: tone marks (4)",
+        "My Work",
+        "Rubric",
+      ]);
+    }
   });
 
   it("the count is what waits; nothing given yet, or any failure, shows no line", async () => {
