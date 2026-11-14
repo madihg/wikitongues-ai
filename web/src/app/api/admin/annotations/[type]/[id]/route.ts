@@ -5,14 +5,15 @@ import { bucketLabel, rubricV2Label } from "@/lib/buckets";
 import { failureTagLabel } from "@/lib/failure-tags";
 import { dialectLabel } from "@/lib/dialects";
 import { isAnnotationType } from "@/lib/annotations-query";
-import { diffToSegments, nfc, segmentsEnvelope } from "@/lib/edit-segments";
-import { VerificationStatus, type Prisma } from "@prisma/client";
+import { applyAnswerEdit } from "@/lib/answer-edit";
+import { VerificationStatus } from "@prisma/client";
 
 /**
  * GET  /api/admin/annotations/[type]/[id] — full detail for one annotation event.
- * PATCH same path — researcher correction (cold + edit only; pairwise is
- * READ-ONLY: an annotator's judgment must not be editable, for methodological
- * integrity). All researcher-gated.
+ * PATCH same path: researcher correction of answer text on any row, and of
+ * the surrounding text (meaning, reason, the written "why") on the
+ * researcher's own rows. The judgment itself (the choice, tags, scores) is
+ * never editable, for methodological integrity. All researcher-gated.
  *
  * type is one of pairwise | cold | edit.
  */
@@ -33,7 +34,7 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ type: string; id: string }> },
 ) {
-  const { error } = await requireResearcher();
+  const { error, userId } = await requireResearcher();
   if (error) return error;
 
   const { type, id } = await params;
@@ -44,14 +45,16 @@ export async function GET(
     );
   }
 
-  if (type === "pairwise") return pairwiseDetail(id);
-  if (type === "cold") return coldDetail(id);
-  return editDetail(id);
+  // isOwn: the reader wrote this row. The drawer then opens the meaning, the
+  // reason and the written "why" for editing (own rows only, decision 4).
+  if (type === "pairwise") return pairwiseDetail(id, userId);
+  if (type === "cold") return coldDetail(id, userId);
+  return editDetail(id, userId);
 }
 
 // ─── pairwise (read-only) ────────────────────────────────────────────────────
 
-async function pairwiseDetail(id: string) {
+async function pairwiseDetail(id: string, viewerId: string | null) {
   const c = await prisma.pairwiseComparison.findUnique({
     where: { id },
     include: {
@@ -141,6 +144,7 @@ async function pairwiseDetail(id: string) {
     id: c.id,
     createdAt: c.createdAt.toISOString(),
     editable: false,
+    isOwn: c.annotator.id === viewerId,
     annotator: c.annotator,
     prompt: prompt
       ? {
@@ -201,7 +205,7 @@ async function pairwiseDetail(id: string) {
 
 // ─── cold (editable: answerText, verificationStatus) ─────────────────────────
 
-async function coldDetail(id: string) {
+async function coldDetail(id: string, viewerId: string | null) {
   // Explicit select (not include) - prod may lag the client on newly added
   // nullable columns (e.g. instructionIg), and an unscoped include RETURNS
   // all scalars, which 500s. List exactly what the response below consumes.
@@ -232,6 +236,7 @@ async function coldDetail(id: string) {
     id: a.id,
     createdAt: a.createdAt.toISOString(),
     editable: true,
+    isOwn: a.annotator.id === viewerId,
     annotator: a.annotator,
     prompt: a.prompt
       ? {
@@ -253,7 +258,7 @@ async function coldDetail(id: string) {
 
 // ─── edit (editable: correctedText, verificationStatus) ──────────────────────
 
-async function editDetail(id: string) {
+async function editDetail(id: string, viewerId: string | null) {
   const e = await prisma.outputEdit.findUnique({
     where: { id },
     include: {
@@ -277,6 +282,7 @@ async function editDetail(id: string) {
     id: e.id,
     createdAt: e.createdAt.toISOString(),
     editable: true,
+    isOwn: e.annotator.id === viewerId,
     annotator: e.annotator,
     prompt: p
       ? {
@@ -296,13 +302,25 @@ async function editDetail(id: string) {
   });
 }
 
-// ─── PATCH (researcher corrections) ──────────────────────────────────────────
+// ─── PATCH (researcher corrections, and a researcher's own rows) ─────────────
 
+/**
+ * What a researcher may change here:
+ *   - on anyone's row: the answer text (cold) or the corrected text (edit),
+ *     and the verification status, as before;
+ *   - on their OWN rows, also what they wrote around it: the English
+ *     meaning, the variety, the question in Igala, the reason for a
+ *     correction, and the written "why" on a comparison. These were shown
+ *     read-only, and the reason was not shown at all when it was empty, which
+ *     is why Agnes could not find them on Nov 10.
+ *   - never the choice, the tags or a score (405).
+ * Every text change writes AnswerRevision rows (src/lib/answer-edit.ts).
+ */
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ type: string; id: string }> },
 ) {
-  const { error } = await requireResearcher();
+  const { error, userId, role } = await requireResearcher();
   if (error) return error;
 
   const { type, id } = await params;
@@ -313,27 +331,22 @@ export async function PATCH(
     );
   }
 
-  // Pairwise judgments are immutable by design.
-  if (type === "pairwise") {
-    return NextResponse.json(
-      { error: "Pairwise comparisons are read-only" },
-      { status: 405 },
-    );
-  }
-
   // Guard req.json() so a bad body returns JSON 400, never a bare 500.
   const body = await req.json().catch(() => null);
-  if (!body || typeof body !== "object") {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const o = body as Record<string, unknown>;
+  const { verificationStatus: rawStatus, ...fields } = body as Record<
+    string,
+    unknown
+  >;
 
   // verificationStatus, if present, must be a valid enum value.
   let verificationStatus: VerificationStatus | undefined;
-  if ("verificationStatus" in o && o.verificationStatus != null) {
+  if (rawStatus != null) {
     if (
-      typeof o.verificationStatus !== "string" ||
-      !VERIFICATION_VALUES.includes(o.verificationStatus)
+      typeof rawStatus !== "string" ||
+      !VERIFICATION_VALUES.includes(rawStatus)
     ) {
       return NextResponse.json(
         {
@@ -342,104 +355,63 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    verificationStatus = o.verificationStatus as VerificationStatus;
-  }
-
-  if (type === "cold") {
-    const data: {
-      answerText?: string;
-      verificationStatus?: VerificationStatus;
-    } = {};
-    if ("answerText" in o) {
-      if (
-        typeof o.answerText !== "string" ||
-        o.answerText.trim().length === 0
-      ) {
-        return NextResponse.json(
-          { error: "answerText must be a non-empty string" },
-          { status: 400 },
-        );
-      }
-      data.answerText = o.answerText.trim();
-    }
-    if (verificationStatus) data.verificationStatus = verificationStatus;
-    if (Object.keys(data).length === 0) {
-      return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
-    }
-    try {
-      const updated = await prisma.coldAuthorAnswer.update({
-        where: { id },
-        data,
-        select: {
-          id: true,
-          answerText: true,
-          verificationStatus: true,
-        },
-      });
-      return NextResponse.json({ success: true, ...updated });
-    } catch (e) {
-      return notFoundOr500(e);
-    }
-  }
-
-  // type === "edit"
-  const data: {
-    correctedText?: string;
-    originalText?: string;
-    segments?: Prisma.InputJsonValue;
-    verificationStatus?: VerificationStatus;
-  } = {};
-  if ("correctedText" in o) {
-    if (
-      typeof o.correctedText !== "string" ||
-      o.correctedText.trim().length === 0
-    ) {
+    // A comparison has no verification status.
+    if (type === "pairwise") {
       return NextResponse.json(
-        { error: "correctedText must be a non-empty string" },
-        { status: 400 },
+        { error: "Pairwise comparisons have no verification status" },
+        { status: 405 },
       );
     }
-    // THE EDITING GROUND invariant: applySegments(originalText, segments) ===
-    // correctedText must hold on the stored row. A researcher rewrite of
-    // correctedText that left the old segments in place would break exactly
-    // that reconstruction, so the spans are RE-DERIVED here against the
-    // stored original (reasons on vanished spans are dropped - the rewrite
-    // superseded them). Both texts land NFC, matching the write paths.
-    const existing = await prisma.outputEdit.findUnique({
-      where: { id },
-      select: { originalText: true },
-    });
-    if (!existing) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-    const originalNfc = nfc(existing.originalText);
-    const corrected = nfc(o.correctedText.trim());
-    data.correctedText = corrected;
-    // Legacy rows may predate the NFC contract; re-store the NFC form so the
-    // offsets in the fresh envelope address the text actually on the row.
-    if (existing.originalText !== originalNfc) data.originalText = originalNfc;
-    data.segments = segmentsEnvelope(
-      diffToSegments(originalNfc, corrected),
-    ) as unknown as Prisma.InputJsonValue;
+    verificationStatus = rawStatus as VerificationStatus;
   }
-  if (verificationStatus) data.verificationStatus = verificationStatus;
-  if (Object.keys(data).length === 0) {
+
+  const hasFields = Object.keys(fields).some((k) => k !== "saveId");
+  if (!hasFields && !verificationStatus) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
-  try {
-    const updated = await prisma.outputEdit.update({
-      where: { id },
-      data,
-      select: {
-        id: true,
-        correctedText: true,
-        verificationStatus: true,
-      },
+
+  let changed: string[] = [];
+  let clipsStale = false;
+  if (hasFields) {
+    const res = await applyAnswerEdit({
+      type,
+      id,
+      body: fields,
+      userId: userId as string,
+      role,
     });
-    return NextResponse.json({ success: true, ...updated });
+    if (res.status !== 200) {
+      return NextResponse.json(res.body, { status: res.status });
+    }
+    changed = (res.body.changed as string[]) ?? [];
+    clipsStale = res.body.clipsStale === true;
+  }
+
+  try {
+    if (verificationStatus && type === "cold") {
+      await prisma.coldAuthorAnswer.update({
+        where: { id },
+        data: { verificationStatus },
+        select: { id: true },
+      });
+    } else if (verificationStatus && type === "edit") {
+      await prisma.outputEdit.update({
+        where: { id },
+        data: { verificationStatus },
+        select: { id: true },
+      });
+    }
   } catch (e) {
     return notFoundOr500(e);
   }
+
+  return NextResponse.json({
+    success: true,
+    id,
+    changed,
+    clipsStale,
+    ...(verificationStatus ? { verificationStatus } : {}),
+  });
 }
 
 function notFoundOr500(e: unknown): NextResponse {

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { bucketLabel } from "@/lib/buckets";
+import { needsFix } from "@/lib/answer-revisions";
 
 /**
  * "My Work" history - the signed-in annotator's own submissions, newest first.
@@ -11,6 +12,11 @@ import { bucketLabel } from "@/lib/buckets";
  *   - pairwise: blind A/B comparisons (winner/confidence/explanation)
  *   - cold:     source-free gold answers authored before models were shown
  *   - edit:     inline corrections of a winning output
+ *
+ * Every row carries its id and kind, which is what the Edit button opens
+ * (/api/annotator/answers/[type]/[id]), and `needsFix`: an own answer with no
+ * English meaning, or a correction with no reason or a very short one.
+ * ?filter=fix returns only those rows ("Needs a meaning or a reason").
  */
 
 const DEFAULT_LIMIT = 20;
@@ -36,7 +42,9 @@ interface ColdRow {
   bucketLabel: string;
   promptText: string;
   answerText: string;
+  englishGloss: string | null;
   provenance: string;
+  needsFix: boolean;
 }
 
 interface EditRow {
@@ -47,6 +55,8 @@ interface EditRow {
   promptText: string;
   originalText: string;
   correctedText: string;
+  rationale: string | null;
+  needsFix: boolean;
 }
 
 type HistoryRow = PairwiseRow | ColdRow | EditRow;
@@ -68,25 +78,33 @@ export async function GET(req: Request) {
   // Pull limit+offset worth of each type, merge, sort, then slice the page.
   // Simpler than a cross-model SQL union, and each type is capped by the same
   // window so a single-type page is never starved.
-  const fetchCap = limit + offset;
+  // The fix filter is decided in code (a reason "under 20 characters" is not
+  // a database predicate), so it reads the person's own answers and
+  // corrections whole, capped, and leaves comparisons out: they have nothing
+  // to fix.
+  const fixOnly = url.searchParams.get("filter") === "fix";
+  const FIX_CAP = 5000;
+  const fetchCap = fixOnly ? FIX_CAP : limit + offset;
 
   const [pairwise, cold, edits] = await Promise.all([
-    prisma.pairwiseComparison.findMany({
-      where: { annotatorId, isDemo: false },
-      orderBy: { createdAt: "desc" },
-      take: fetchCap,
-      select: {
-        id: true,
-        promptId: true,
-        bucket: true,
-        winner: true,
-        confidence: true,
-        explanation: true,
-        createdAt: true,
-        modelOutputA: { select: { outputText: true } },
-        modelOutputB: { select: { outputText: true } },
-      },
-    }),
+    fixOnly
+      ? Promise.resolve([])
+      : prisma.pairwiseComparison.findMany({
+          where: { annotatorId, isDemo: false },
+          orderBy: { createdAt: "desc" },
+          take: fetchCap,
+          select: {
+            id: true,
+            promptId: true,
+            bucket: true,
+            winner: true,
+            confidence: true,
+            explanation: true,
+            createdAt: true,
+            modelOutputA: { select: { outputText: true } },
+            modelOutputB: { select: { outputText: true } },
+          },
+        }),
     prisma.coldAuthorAnswer.findMany({
       where: { annotatorId, isDemo: false },
       orderBy: { createdAt: "desc" },
@@ -95,6 +113,7 @@ export async function GET(req: Request) {
         id: true,
         bucket: true,
         answerText: true,
+        englishGloss: true,
         provenance: true,
         createdAt: true,
         prompt: { select: { text: true } },
@@ -109,6 +128,7 @@ export async function GET(req: Request) {
         bucket: true,
         originalText: true,
         correctedText: true,
+        rationale: true,
         createdAt: true,
         modelOutput: { select: { prompt: { select: { text: true } } } },
       },
@@ -149,7 +169,9 @@ export async function GET(req: Request) {
       bucketLabel: bucketLabel(c.bucket),
       promptText: c.prompt?.text ?? "(prompt removed)",
       answerText: c.answerText,
+      englishGloss: c.englishGloss,
       provenance: c.provenance,
+      needsFix: needsFix({ kind: "cold", englishGloss: c.englishGloss }),
     })),
     ...edits.map((e): EditRow => ({
       kind: "edit",
@@ -159,8 +181,12 @@ export async function GET(req: Request) {
       promptText: e.modelOutput?.prompt?.text ?? "(prompt removed)",
       originalText: e.originalText,
       correctedText: e.correctedText,
+      rationale: e.rationale,
+      needsFix: needsFix({ kind: "edit", rationale: e.rationale }),
     })),
-  ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  ]
+    .filter((r) => !fixOnly || (r.kind !== "pairwise" && r.needsFix))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
   const page = rows.slice(offset, offset + limit);
   const hasMore = rows.length > offset + limit;
@@ -170,5 +196,8 @@ export async function GET(req: Request) {
     limit,
     offset,
     hasMore,
+    filter: fixOnly ? "fix" : "all",
+    // With the filter on, the whole list was read, so this is the true count.
+    ...(fixOnly ? { fixCount: rows.length } : {}),
   });
 }

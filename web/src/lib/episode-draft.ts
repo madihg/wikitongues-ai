@@ -71,9 +71,10 @@ export type DraftRestore<D> =
  *     it was being written.
  *   - Neither: nothing.
  */
-export function planDraftRestore<
-  D extends ColdDraft & { step: DraftStep },
->(full: D | null, coldRaw: unknown): DraftRestore<D> {
+export function planDraftRestore<D extends ColdDraft & { step: DraftStep }>(
+  full: D | null,
+  coldRaw: unknown,
+): DraftRestore<D> {
   const cold = coldPartOf(coldRaw);
   if (full) {
     // A lock is never undone: an unlocked cold part over a locked full draft
@@ -93,4 +94,69 @@ export function planDraftRestore<
     };
   }
   return null;
+}
+
+// ─── The last submitted item of this sitting ────────────────────────────────
+//
+// The "Saved" strip and "Edit previous" (src/components/episode-frame.tsx)
+// need to know what was submitted last, and nothing more: which row to open
+// in the edit drawer, and the prompt it belonged to. Kept in sessionStorage
+// per kind of work, so it lasts for the sitting (the tab) and survives a
+// reload, and is replaced by the next submit.
+
+export type LastSavedType = "pairwise" | "cold" | "edit" | "listen";
+
+export interface LastSaved {
+  type: LastSavedType;
+  id: string;
+  promptText: string;
+}
+
+/** One key per kind of work: "annotate", "listen", "check", "tone". */
+export function lastSavedKey(surface: string): string {
+  return `wt-last-saved-${surface}`;
+}
+
+const LAST_SAVED_TYPES: readonly string[] = [
+  "pairwise",
+  "cold",
+  "edit",
+  "listen",
+];
+
+/** Storage is untrusted: anything that is not a well-formed entry is null. */
+export function parseLastSaved(raw: unknown): LastSaved | null {
+  let o: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      o = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!o || typeof o !== "object") return null;
+  const r = o as Record<string, unknown>;
+  if (typeof r.type !== "string" || !LAST_SAVED_TYPES.includes(r.type)) {
+    return null;
+  }
+  if (typeof r.id !== "string" || r.id.length === 0 || r.id.length > 64) {
+    return null;
+  }
+  return {
+    type: r.type as LastSavedType,
+    id: r.id,
+    promptText: typeof r.promptText === "string" ? r.promptText : "",
+  };
+}
+
+/** The first 40 characters of the prompt, with "..." when it was cut. Cut on
+ *  whole characters, so a letter is never split from its tone mark. */
+export function savedStripText(promptText: string, max = 40): string {
+  const chars = Array.from(promptText.trim().normalize("NFC"));
+  if (chars.length <= max) return chars.join("");
+  let end = max;
+  // A combining mark stays with the letter before it.
+  while (end < chars.length && /\p{M}/u.test(chars[end])) end++;
+  if (end >= chars.length) return chars.join("");
+  return `${chars.slice(0, end).join("").trimEnd()}...`;
 }
