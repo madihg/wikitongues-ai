@@ -112,12 +112,12 @@ describe("GET /api/lab/speech/today", () => {
     });
   });
 
-  it("rejected clips stay out of the pool: bad_audio and wrong_text are excluded", async () => {
+  it("rejected clips stay out of the pool: bad_audio, wrong_text and withdrawn are excluded", async () => {
     await get();
     const where = mockPrisma.speechRecording.aggregate.mock.calls[0][0].where;
     expect(where.OR).toEqual([
       { reviewStatus: null },
-      { reviewStatus: { notIn: ["bad_audio", "wrong_text"] } },
+      { reviewStatus: { notIn: ["bad_audio", "wrong_text", "withdrawn"] } },
     ]);
   });
 
