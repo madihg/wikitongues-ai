@@ -550,3 +550,37 @@ describe("buildMeasureView: which version is on screen", () => {
     });
   });
 });
+
+describe("the quality check measures, it never decides", () => {
+  it("the row says on screen that the check is not calibrated yet", () => {
+    expect(AUTO_LEVELS.rejected.label).toContain("not calibrated yet");
+    expect(AUTO_LEVELS.rejected.meaning).toContain(
+      "no clip is blocked, hidden or removed because of it",
+    );
+    expect(page(EMPTY_DATA).auto).toContain("(not calibrated yet)");
+  });
+
+  it("no page, component or route calls the clip quality gate", async () => {
+    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const SRC = join(process.cwd(), "src");
+    const users: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const full = join(dir, name);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (
+          /\.tsx?$/.test(name) &&
+          !/\.test\.tsx?$/.test(name) &&
+          /\bgateVerdict\b/.test(readFileSync(full, "utf8"))
+        ) {
+          users.push(full.slice(SRC.length));
+        }
+      }
+    };
+    walk(SRC);
+    // Defined in one file and used by nothing in the app: the gate cannot
+    // block a save, hide a clip or drop it from a list.
+    expect(users).toEqual(["/lib/speech/quality-gates.ts"]);
+  });
+});

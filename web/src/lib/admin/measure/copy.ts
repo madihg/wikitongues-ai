@@ -107,10 +107,10 @@ export const AUTO_LEVELS = {
     trust: "A count, always shown.",
   },
   rejected: {
-    label: "Clips the quality check turns away",
+    label: "Clips a first quality check would turn away (not calibrated yet)",
     meaning:
-      "Clips too noisy, too clipped or too empty to learn from, by the worker's own rules. The rules are not tuned on Igala phone audio yet.",
-    trust: "A count. Read it as a first sorting, not a verdict.",
+      "Clips the worker's rules call too noisy, too clipped or too empty to learn from. The rules have not been tuned on Igala phone audio, so read this as a first sorting. It only measures: no clip is blocked, hidden or removed because of it.",
+    trust: "Not until the rules are tuned on about 100 clips labelled by hand.",
   },
   cleaningCheck: {
     label: "Did cleaning change what the recogniser hears?",

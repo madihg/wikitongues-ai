@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireResearcher } from "@/lib/api-auth";
+import { requireLead } from "@/lib/admin/lead-route";
 import { sessionize, minutesSince } from "@/lib/time-sessions";
 
 /**
@@ -19,7 +19,8 @@ import { sessionize, minutesSince } from "@/lib/time-sessions";
  * queries lean; only users with at least one event are returned.
  */
 export async function GET() {
-  const { error } = await requireResearcher();
+  // Hours per person are pay data: research leads only (RESEARCH_LEADS).
+  const { error } = await requireLead();
   if (error) return error;
 
   const [pairwise, coldAnswers, outputEdits, rubricScores, promptFlags] =

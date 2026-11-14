@@ -51,7 +51,7 @@ export default async function TodayPage({
 }: {
   searchParams?: Promise<{ week?: string }>;
 }) {
-  await requireResearcherPage();
+  const who = await requireResearcherPage();
   const sp = (await searchParams) ?? {};
   const thisWeek = sp.week !== "last";
   const now = new Date();
@@ -61,11 +61,14 @@ export default async function TodayPage({
   // Started once, awaited by three blocks. The queue is the same load the
   // Annotate page makes, so "Prompts left" is what a person would be served.
   // It runs beside the other queries, not before them.
+  // People data is for research leads. For another researcher no person is
+  // loaded, and the queue (only needed for "prompts left") is not either.
   const work = loadTodayWork(prisma, {
     now,
     week,
     speech,
-    queuePrompts: loadQueueInputs().then((q) => q.queuePrompts),
+    lead: who.lead,
+    queuePrompts: who.lead ? loadQueueInputs().then((q) => q.queuePrompts) : [],
   });
   // A block that never renders must not leave a rejection unhandled.
   work.catch(() => undefined);
@@ -111,9 +114,11 @@ export default async function TodayPage({
         <Suspense fallback={<Skeleton rows={3} tall />}>
           <ModelsBlock speech={speech} />
         </Suspense>
-        <Suspense fallback={<Skeleton rows={4} />}>
-          <WeekWorkBlock work={work} speech={speech} thisWeek={thisWeek} />
-        </Suspense>
+        {who.lead && (
+          <Suspense fallback={<Skeleton rows={4} />}>
+            <WeekWorkBlock work={work} speech={speech} thisWeek={thisWeek} />
+          </Suspense>
+        )}
         <Suspense fallback={<Skeleton rows={1} tall />}>
           <HoldingsBlock work={work} thisWeek={thisWeek} />
         </Suspense>

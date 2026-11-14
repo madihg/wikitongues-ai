@@ -257,7 +257,7 @@ function Levels({ levels }: { levels: LevelsBlock }) {
               <td className={td}>{cell(r.before, r.unit)}</td>
               <td className={td}>{cell(r.after, r.unit)}</td>
               <td className={`${td} text-text-tertiary`}>
-                {LEVEL_TARGETS[r.key].asRecorded}
+                {LEVEL_TARGETS[r.key]}
               </td>
             </tr>
           ))}

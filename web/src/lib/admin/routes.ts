@@ -59,6 +59,13 @@ export const RESEARCH_VIEWS: ResearchLink[] = [
 export const SPEECH_MODEL_HREF = "/admin/speech";
 
 /**
+ * People holds pay and people data. It is for research leads only (the owner
+ * and RESEARCH_LEADS, src/lib/admin/leads.ts): the page and its data routes
+ * refuse anyone else on the server, and the sidebar leaves the link out.
+ */
+export const PEOPLE_HREF = "/admin/people";
+
+/**
  * The tone marks pass 2 admin page. It arrives with the annotator release,
  * not with this change: the Data view links to it from Disagreements, where
  * its subject lives, and owns it in the sidebar.

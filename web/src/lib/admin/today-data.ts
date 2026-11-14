@@ -57,6 +57,12 @@ export async function loadTodayWork(
     now: Date;
     week: Week;
     speech: boolean;
+    /**
+     * A research lead sees people: the week's rows, who is running low, who
+     * has gone quiet. For anyone else no person is loaded at all, so no name
+     * can reach the page.
+     */
+    lead: boolean;
     queuePrompts: QueuePrompt[] | Promise<QueuePrompt[]>;
   },
 ): Promise<TodayWork> {
@@ -84,7 +90,10 @@ export async function loadTodayWork(
     loop,
     spend,
   ] = await allLimited([
-    () => loadPeople(db, week, { speech, queuePrompts: options.queuePrompts }),
+    () =>
+      options.lead
+        ? loadPeople(db, week, { speech, queuePrompts: options.queuePrompts })
+        : ([] as PersonWeek[]),
     () => db.promptFlag.count({ where: { resolved: false } }),
     () =>
       db.promptFlag.findFirst({

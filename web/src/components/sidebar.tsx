@@ -6,7 +6,8 @@ import { useSession, signOut } from "next-auth/react";
 import { useSpeechLayer } from "@/components/lab/use-speech-layer";
 import { canProbeSpeech } from "@/lib/lab-flags";
 import { navForRole, activeNavHref, isOwner } from "@/lib/personas";
-import { activeResearchHref } from "@/lib/admin/routes";
+import { activeResearchHref, PEOPLE_HREF } from "@/lib/admin/routes";
+import { useResearchLead } from "@/components/admin/use-research-lead";
 
 export function Sidebar() {
   const { data: session } = useSession();
@@ -15,6 +16,14 @@ export function Sidebar() {
   // false for an annotator until SPEECH_LAYER_ANNOTATORS is set.
   const labOn = useSpeechLayer(canProbeSpeech(session?.user?.role));
 
+  // People is for research leads. The owner is one; another researcher asks
+  // the server once. An annotator never asks.
+  const ownerNow = isOwner(session?.user?.email);
+  const askedLead = useResearchLead(
+    session?.user?.role === "RESEARCHER" && !ownerNow,
+  );
+  const lead = ownerNow || askedLead;
+
   if (!session) return null;
 
   const { role, email } = session.user;
@@ -22,7 +31,9 @@ export function Sidebar() {
   const mainLinks = links.filter((l) => !l.group);
   const labLinks = links.filter((l) => l.group === "lab");
   // Below the divider: the five research views, then More. Researchers only.
-  const researchLinks = links.filter((l) => l.group === "research");
+  const researchLinks = links.filter(
+    (l) => l.group === "research" && (lead || l.href !== PEOPLE_HREF),
+  );
   const moreLinks = links.filter((l) => l.group === "more");
   const owner = isOwner(email);
 

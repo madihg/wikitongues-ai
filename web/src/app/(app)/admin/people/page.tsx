@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { requireResearcherPage } from "@/lib/admin/page-gate";
+import { requireLeadPage } from "@/lib/admin/page-gate";
 import { loadPeople } from "@/lib/admin/people-data";
 import { weekRows, weekTotals } from "@/lib/admin/today";
 import { weekOf, type Week } from "@/lib/admin/week";
@@ -13,6 +13,9 @@ import { WeekWorkTable } from "@/components/admin/week-work-table";
 
 /**
  * People: who worked, for how many hours, and who is running out of prompts.
+ *
+ * Research leads only (the owner and RESEARCH_LEADS): this is pay and people
+ * data. Another researcher gets the forbidden page and nothing is read.
  *
  * Three blocks. The week's work, one row per person, with the prompts each
  * person has left (the same rows Today shows). Then the hours table, which
@@ -41,7 +44,7 @@ export default async function PeoplePage({
 }: {
   searchParams?: Promise<{ w?: string }>;
 }) {
-  await requireResearcherPage();
+  await requireLeadPage();
   const sp = (await searchParams) ?? {};
   // Weeks back from this one: 0 is this week, 1 is last week. Never forward.
   const back = Math.min(Math.max(parseInt(sp.w ?? "0", 10) || 0, 0), 520);

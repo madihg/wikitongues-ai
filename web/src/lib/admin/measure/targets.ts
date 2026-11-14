@@ -1,16 +1,21 @@
+import gates from "@/lib/speech/quality-gates.json";
+
 /**
- * What a good clip measures, for the Target column of the levels table.
- *
- * The numbers are the speech work's (out/speech/recording-spec.md, Nov 13,
- * which wins over earlier figures by decision). In code they live in
- * web/src/lib/speech/quality-gates.json once that branch is on main; until
- * then they are repeated here, in this one file. Change them there first.
+ * What a good clip measures, for the "Aim for" column of the levels table.
+ * The numbers are the speech work's and live in one file, quality-gates.json
+ * (the record screen's meter and the cleaning step read the same file). This
+ * module only words them.
  */
+const m = gates.meter;
+
 export const LEVEL_TARGETS = {
-  peak: { asRecorded: "-12 to -3 dBFS", afterCleaning: "at most -1 dBFS" },
-  speech: { asRecorded: "-28 to -16 dBFS", afterCleaning: "about -23" },
-  noise: { asRecorded: "as low as the room allows", afterCleaning: null },
-  snr: { asRecorded: "20 dB or more", afterCleaning: null },
-  clipped: { asRecorded: "0", afterCleaning: null },
-  rejected: { asRecorded: "0", afterCleaning: null },
+  peak: `${m.greenMinDbfs} to ${m.greenMaxDbfs} dBFS`,
+  speech: `${m.speechLevelGoodMinDbfs} to ${m.speechLevelGoodMaxDbfs} dBFS`,
+  noise: "as low as the room allows",
+  snr: `${gates.warn.speechOverNoiseDbBelow} dB or more`,
+  clipped: "0",
+  rejected: "not a target: the check is not calibrated",
 } as const;
+
+/** True once the worker's quality rules have been tuned on Igala phone audio. */
+export const QUALITY_GATES_CALIBRATED: boolean = gates.calibrated;

@@ -94,6 +94,7 @@ describe("requireResearcherPage", () => {
       email: "r@example.org",
       role: "RESEARCHER",
       owner: false,
+      lead: false,
     });
   });
 
@@ -185,7 +186,7 @@ describe("every page under /admin checks the visitor on the server", () => {
       it("is a server page whose first statement is the gate", () => {
         expect(src.trimStart().startsWith('"use client"')).toBe(false);
         expect(firstStatement(src)).toMatch(
-          /^(const \w+ = )?await require(ResearcherPage|LabPage)\(/,
+          /^(const \w+ = )?await require(ResearcherPage|LeadPage|LabPage)\(/,
         );
       });
 
