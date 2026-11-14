@@ -863,6 +863,7 @@ model SpeechRecording {
   storagePath        String // stable clip name ("clips/<id>.<ext>"), never a URL; the audio itself is `bytes`
   language           String         @default("igala") // "igala" | "english": what the speaker said
   bytes              Bytes? // the clip, stored in Postgres; never selected into a list or an export
+  storageKey         String? // object key in the private bucket "igala-speech"; null until the clip is copied there
   quality            Json? // client-side take metrics (lib/speech/analyse.ts), for sorting and filtering
   mimeType           String
   durationMs         Int
@@ -901,6 +902,7 @@ model SpeechRecording {
   @@index([annotatorId])
   @@index([isDemo])
   @@index([tier])
+  @@index([storageKey])
 }
 
 // Blind A/B judgment of two clips for one prompt, mirroring PairwiseComparison.

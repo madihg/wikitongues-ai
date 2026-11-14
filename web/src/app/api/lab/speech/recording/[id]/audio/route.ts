@@ -4,16 +4,26 @@ import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
 import { MAX_BYTES } from "@/lib/speech/limits";
 import { parseRange } from "@/lib/speech/range";
-import { baseMime } from "@/lib/speech/storage";
+import { baseMime, recordingPath } from "@/lib/speech/storage";
+import {
+  putClip,
+  signedUrl,
+  storageEnabled,
+} from "@/lib/speech/storage-supabase";
 
 /**
- * A clip's audio, stored in Postgres (`bytes` on SpeechRecording).
+ * A clip's audio, stored in Postgres (`bytes` on SpeechRecording) and, when
+ * SPEECH_STORAGE=1, also in the private bucket `igala-speech` (`storageKey`).
+ * Postgres stays the source of truth until every row is moved; turning the
+ * flag off puts reads back on the bytes.
  *
  * PUT  /api/lab/speech/recording/[id]/audio
  *   The body IS the audio. Researcher-only; the row must be yours. The
  *   server computes sizeBytes and the sha256 itself (it trusts nothing the
  *   client says about the bytes) and sets uploadedAt, which is what makes
- *   the clip visible to review, listening and export.
+ *   the clip visible to review, listening and export. With storage on, the
+ *   bytes are also uploaded first and storageKey is set in the same update;
+ *   if that upload fails the row is written as before (bytes only).
  *     400  empty body, or a Content-Type that is not an audio type
  *     404  no such recording of yours (same answer for someone else's row)
  *     409  the clip already has its audio (bytes are never replaced)
@@ -22,7 +32,9 @@ import { baseMime } from "@/lib/speech/storage";
  *     415  the Content-Type does not match the mime type the row declared
  *
  * GET  /api/lab/speech/recording/[id]/audio
- *   Researcher-only. Serves the stored bytes with the row's Content-Type.
+ *   Researcher-only. With storage on and a storageKey, answers 302 to a
+ *   one-hour signed URL; otherwise serves the stored bytes with the row's
+ *   Content-Type and Range support.
  *   Any researcher can hear any confirmed clip (Listen and Recordings need
  *   that); a demo clip only its own maker. Never cacheable by a shared
  *   cache: `private, no-store`, so a CDN keeps no copy.
@@ -64,7 +76,9 @@ export async function PUT(
   const type = baseMime(req.headers.get("content-type") ?? "");
   if (!type.startsWith("audio/")) {
     return NextResponse.json(
-      { error: "Send the audio as the request body with an audio Content-Type." },
+      {
+        error: "Send the audio as the request body with an audio Content-Type.",
+      },
       { status: 400 },
     );
   }
@@ -87,6 +101,20 @@ export async function PUT(
   }
 
   const checksumSha256 = createHash("sha256").update(body).digest("hex");
+
+  // Storage is additive: any failure leaves the row exactly as without it.
+  let storageKey: string | undefined;
+  if (storageEnabled()) {
+    try {
+      const key = recordingPath(id, row.mimeType);
+      await putClip(key, body, baseMime(row.mimeType));
+      storageKey = key;
+    } catch (e) {
+      console.warn(
+        `speech storage upload failed for ${id}: ${e instanceof Error ? e.name : "error"}`,
+      );
+    }
+  }
   // One winner if two uploads race: only a row still without audio updates.
   const result = await prisma.speechRecording.updateMany({
     where: { id, annotatorId: gate.userId, uploadedAt: null },
@@ -95,6 +123,7 @@ export async function PUT(
       sizeBytes: body.length,
       checksumSha256,
       uploadedAt: new Date(),
+      ...(storageKey ? { storageKey } : {}),
     },
   });
   if (result.count === 0) {
@@ -116,28 +145,53 @@ export async function GET(
   if (gate.error) return gate.error;
   const { id } = await params;
 
-  const row = await prisma.speechRecording.findUnique({
+  // First read: no bytes, so a redirect never loads the clip from Postgres.
+  const meta = await prisma.speechRecording.findUnique({
     where: { id },
     select: {
-      bytes: true,
       mimeType: true,
       uploadedAt: true,
       isDemo: true,
       annotatorId: true,
+      storageKey: true,
     },
   });
-  const visible =
-    row &&
-    row.bytes &&
-    row.uploadedAt &&
-    (!row.isDemo || row.annotatorId === gate.userId);
-  if (!visible) {
+  const allowed =
+    meta &&
+    meta.uploadedAt &&
+    (!meta.isDemo || meta.annotatorId === gate.userId);
+  if (!allowed) {
     return NextResponse.json({ error: "Recording not found" }, { status: 404 });
   }
 
-  const bytes = Buffer.from(row.bytes!);
+  if (meta.storageKey && storageEnabled()) {
+    try {
+      const url = await signedUrl(meta.storageKey);
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: url,
+          "Cache-Control": "private, no-store, max-age=0",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    } catch {
+      console.warn(`speech storage signing failed for ${id}; serving bytes`);
+    }
+  }
+
+  const row = await prisma.speechRecording.findUnique({
+    where: { id },
+    select: { bytes: true },
+  });
+  if (!row?.bytes) {
+    return NextResponse.json({ error: "Recording not found" }, { status: 404 });
+  }
+  const mimeType = meta.mimeType;
+
+  const bytes = Buffer.from(row.bytes);
   const headers: Record<string, string> = {
-    "Content-Type": baseMime(row.mimeType),
+    "Content-Type": baseMime(mimeType),
     "Accept-Ranges": "bytes",
     "Cache-Control": "private, no-store, max-age=0",
     "X-Content-Type-Options": "nosniff",

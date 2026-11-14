@@ -12,6 +12,14 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
   },
   mockRequireResearcher: vi.fn(),
 }));
+const { mockStorage } = vi.hoisted(() => ({
+  mockStorage: {
+    storageEnabled: vi.fn(),
+    putClip: vi.fn(),
+    signedUrl: vi.fn(),
+  },
+}));
+vi.mock("@/lib/speech/storage-supabase", () => mockStorage);
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/api-auth", () => ({ requireResearcher: mockRequireResearcher }));
 
@@ -60,6 +68,9 @@ beforeEach(() => {
   });
   mockPrisma.speechRecording.findFirst.mockResolvedValue(MINE);
   mockPrisma.speechRecording.updateMany.mockResolvedValue({ count: 1 });
+  mockStorage.storageEnabled.mockReturnValue(false);
+  mockStorage.putClip.mockResolvedValue(undefined);
+  mockStorage.signedUrl.mockResolvedValue("https://signed.example/clip?t=1");
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -179,6 +190,45 @@ describe("PUT /api/lab/speech/recording/[id]/audio", () => {
     mockPrisma.speechRecording.updateMany.mockResolvedValue({ count: 0 });
     expect((await put(bytes(10))).status).toBe(409);
   });
+  it("storage off: no upload and no storageKey in the update", async () => {
+    const res = await put(bytes(64));
+    expect(res.status).toBe(200);
+    expect(mockStorage.putClip).not.toHaveBeenCalled();
+    const data = mockPrisma.speechRecording.updateMany.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty("storageKey");
+    expect(Buffer.from(data.bytes).length).toBe(64);
+  });
+
+  it("storage on: uploads to clips/<id>.<ext> and sets storageKey in the same update, bytes kept", async () => {
+    mockStorage.storageEnabled.mockReturnValue(true);
+    const body = bytes(64);
+    const res = await put(body);
+    expect(res.status).toBe(200);
+    expect(mockStorage.putClip).toHaveBeenCalledTimes(1);
+    const [key, sent, mime] = mockStorage.putClip.mock.calls[0];
+    expect(key).toBe("clips/rec-1.webm");
+    expect(Buffer.from(sent).equals(Buffer.from(body))).toBe(true);
+    expect(mime).toBe("audio/webm");
+    expect(mockPrisma.speechRecording.updateMany).toHaveBeenCalledTimes(1);
+    const data = mockPrisma.speechRecording.updateMany.mock.calls[0][0].data;
+    expect(data.storageKey).toBe("clips/rec-1.webm");
+    expect(Buffer.from(data.bytes).equals(Buffer.from(body))).toBe(true);
+    expect(JSON.stringify(await res.json())).not.toContain("storageKey");
+  });
+
+  it("storage on but the upload fails: bytes only, a warning, no Igala text", async () => {
+    mockStorage.storageEnabled.mockReturnValue(true);
+    mockStorage.putClip.mockRejectedValue(new Error("bucket down"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await put(bytes(64));
+    expect(res.status).toBe(200);
+    const data = mockPrisma.speechRecording.updateMany.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty("storageKey");
+    expect(Buffer.from(data.bytes).length).toBe(64);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0].join(" "))).toContain("rec-1");
+    warn.mockRestore();
+  });
 });
 
 describe("GET /api/lab/speech/recording/[id]/audio", () => {
@@ -247,5 +297,64 @@ describe("GET /api/lab/speech/recording/[id]/audio", () => {
       annotatorId: "r1",
     });
     expect((await get()).status).toBe(200);
+  });
+  it("storage on and storageKey set: 302 to a signed URL, private no-store, no bytes read", async () => {
+    mockStorage.storageEnabled.mockReturnValue(true);
+    mockPrisma.speechRecording.findUnique.mockResolvedValue({
+      ...stored,
+      storageKey: "clips/rec-1.webm",
+    });
+    const res = await get();
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("https://signed.example/clip?t=1");
+    expect(res.headers.get("Cache-Control")).toContain("no-store");
+    expect(res.headers.get("Cache-Control")).toContain("private");
+    expect(mockStorage.signedUrl).toHaveBeenCalledWith("clips/rec-1.webm");
+    for (const call of mockPrisma.speechRecording.findUnique.mock.calls) {
+      if (call[0].select.bytes)
+        throw new Error("bytes selected for a redirect");
+    }
+  });
+
+  it("storage on but the row has no storageKey: streams bytes with Range as today", async () => {
+    mockStorage.storageEnabled.mockReturnValue(true);
+    const res = await get("bytes=2-4");
+    expect(res.status).toBe(206);
+    expect(Buffer.from(await res.arrayBuffer()).toString()).toBe("234");
+    expect(mockStorage.signedUrl).not.toHaveBeenCalled();
+  });
+
+  it("storage off (the rollback flag) with a storageKey: streams bytes", async () => {
+    mockPrisma.speechRecording.findUnique.mockResolvedValue({
+      ...stored,
+      storageKey: "clips/rec-1.webm",
+    });
+    const res = await get();
+    expect(res.status).toBe(200);
+    expect(mockStorage.signedUrl).not.toHaveBeenCalled();
+  });
+
+  it("a signed-URL failure falls back to the bytes", async () => {
+    mockStorage.storageEnabled.mockReturnValue(true);
+    mockStorage.signedUrl.mockRejectedValue(new Error("down"));
+    mockPrisma.speechRecording.findUnique.mockResolvedValue({
+      ...stored,
+      storageKey: "clips/rec-1.webm",
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await get();
+    expect(res.status).toBe(200);
+    warn.mockRestore();
+  });
+
+  it("someone else's demo clip is 404 even with a storageKey, no signing", async () => {
+    mockStorage.storageEnabled.mockReturnValue(true);
+    mockPrisma.speechRecording.findUnique.mockResolvedValue({
+      ...stored,
+      isDemo: true,
+      storageKey: "clips/rec-1.webm",
+    });
+    expect((await get()).status).toBe(404);
+    expect(mockStorage.signedUrl).not.toHaveBeenCalled();
   });
 });
