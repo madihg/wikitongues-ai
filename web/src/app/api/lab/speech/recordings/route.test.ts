@@ -8,6 +8,8 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    // Assigned Listen rounds: none unless a test says so.
+    speechListenRound: { findMany: vi.fn() },
   },
   mockRequireResearcher: vi.fn(),
 }));
@@ -63,6 +65,7 @@ beforeEach(() => {
     role: "RESEARCHER",
   });
   mockPrisma.speechRecording.findMany.mockResolvedValue([row()]);
+  mockPrisma.speechListenRound.findMany.mockResolvedValue([]);
   mockPrisma.speechRecording.findUnique.mockResolvedValue({ id: "rec-1" });
   mockPrisma.speechRecording.update.mockImplementation(
     async ({ data }: { data: { reviewStatus: string | null } }) => ({
@@ -120,6 +123,28 @@ describe("GET /api/lab/speech/recordings", () => {
       isDemo: false,
       uploadedAt: { not: null },
     });
+  });
+
+  it("leaves out a synthetic clip that belongs to an assigned Listen round", async () => {
+    await get();
+    expect(
+      mockPrisma.speechRecording.findMany.mock.calls[0][0].where.id,
+    ).toBeUndefined();
+    mockPrisma.speechListenRound.findMany.mockResolvedValue([
+      { candidateRecordingId: "synth-1" },
+      { candidateRecordingId: "synth-2" },
+    ]);
+    await get();
+    expect(
+      mockPrisma.speechRecording.findMany.mock.calls[1][0].where.id,
+    ).toEqual({ notIn: ["synth-1", "synth-2"] });
+  });
+
+  it("lists as before when the rounds table is not there", async () => {
+    mockPrisma.speechListenRound.findMany.mockRejectedValue(
+      Object.assign(new Error("table does not exist"), { code: "P2021" }),
+    );
+    expect((await get()).status).toBe(200);
   });
 
   it("filters by review status, including unreviewed", async () => {

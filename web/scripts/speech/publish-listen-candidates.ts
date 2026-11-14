@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -8,7 +8,11 @@ import {
   type RoundPair,
   type SystemRoundTrip,
 } from "../../src/lib/speech/listen-rounds";
-import { REJECTED_REVIEW_STATUSES } from "../../src/lib/speech/limits";
+import {
+  MAX_DURATION_MS,
+  REJECTED_REVIEW_STATUSES,
+} from "../../src/lib/speech/limits";
+import { isAllowedAudioMime, recordingPath } from "../../src/lib/speech/storage";
 
 /**
  * Register a model's synthetic clips as blind Listen rounds for named raters.
@@ -28,17 +32,33 @@ import { REJECTED_REVIEW_STATUSES } from "../../src/lib/speech/limits";
  *    clip of the same prompt, in the same language, and nothing else.
  *  - Blind. The side is randomised and balanced per rater, and the model ref
  *    stays in the database. The Listen routes send two clip ids and nothing
- *    more (listen/next/route-rounds.test.ts).
+ *    more (listen/next/route-rounds.test.ts). A synthetic clip is stored
+ *    under the same name pattern as a person's clip (clips/<id>.<ext>), so
+ *    the address the browser is sent to tells nothing either; give the
+ *    script WebM/Opus files and the file type matches too. No candidate row
+ *    is written, so no admin page lists the system. The researcher
+ *    Recordings list leaves round clips out.
  *  - Named raters only. A round belongs to one account. The synthetic clips
  *    never enter the open Listen queue. A rater is never given a round whose
  *    human clip is their own voice: they would know which side is the model.
  *  - Repeats. One round in ten comes back at the end with the sides swapped.
+ *  - Only what a round needs. A synthetic clip is registered only if at
+ *    least one planned round plays it, so no synthetic clip sits in the
+ *    database without a rater.
+ *  - A human clip that ran into the 30 second cap is left out: its text runs
+ *    past its audio, so the model would be judged on words the person never
+ *    reached.
  *  - Idempotent. A clip is one row per (model ref, prompt); a round is one
  *    row per (rater, clip, repeat). Running it twice changes nothing.
+ *  - Reversible. scripts/speech/withdraw-listen-batch.ts takes a batch out of
+ *    Listen again without deleting a row.
  *
- * The clips come from weights under CC BY-NC 4.0: each row is community_only,
- * rights restricted, with the licence and "internal prototype, not for
- * release" in sourceLicense, so no export path can carry it.
+ * The clips come from weights under CC BY-NC 4.0. syntheticClipRow is the one
+ * place their row is shaped: sourceType derived, community_only, rights
+ * restricted, no consent record, no speaker, no review verdict, the licence
+ * and "internal prototype, not for release" in sourceLicense. Each of those
+ * alone keeps the row out of every export and every training manifest
+ * (export-paths.test.ts proves it on this exact shape).
  *
  * Output is ids and counts, never text or audio.
  */
@@ -53,6 +73,8 @@ export interface ManifestClip {
   humanRecordingId: string;
   /** File name inside --clips-dir. */
   file: string;
+  /** The file's type. WebM/Opus makes it look like any recorded clip. */
+  mimeType: string;
   durationMs: number;
   sampleRate: number;
 }
@@ -66,6 +88,7 @@ export interface PublishManifest {
 
 export interface HumanClip {
   id: string;
+  durationMs: number;
   promptId: string;
   language: string;
   annotatorId: string | null;
@@ -124,6 +147,7 @@ export function planPublish(
       else if (h.sourceType === "derived") skip("human_clip_is_synthetic");
       else if (h.isDemo) skip("human_clip_is_demo");
       else if (h.uploadedAt === null) skip("human_clip_not_uploaded");
+      else if (h.durationMs >= MAX_DURATION_MS) skip("human_clip_cut_at_the_cap");
       else if (h.reviewStatus && REJECTED_REVIEW_STATUSES.includes(h.reviewStatus)) {
         skip("human_clip_rejected_or_withdrawn");
       } else if (h.prompt.isHoldout || h.prompt.split === "test") skip("frozen_prompt");
@@ -142,14 +166,64 @@ export function planPublish(
     }
   }
   const plan = planRounds({ seed: manifest.batch, raterIds, pairs });
+  const played = new Set(plan.rounds.map((r) => r.candidateKey));
   return {
     batch: manifest.batch,
     eligible: gate.eligible,
     refused: gate.refused,
-    clips,
+    // Only the clips a planned round plays are registered.
+    clips: clips.filter((c) => played.has(c.candidateKey)),
     skipped,
     rounds: plan.rounds,
     skippedOwnVoice: plan.skippedOwnVoice,
+  };
+}
+
+/**
+ * The SpeechRecording row of one synthetic clip. Every field that marks it as
+ * not a person's recording is set here and nowhere else.
+ */
+export function syntheticClipRow(c: {
+  id: string;
+  promptId: string;
+  systemRef: string;
+  mimeType: string;
+  durationMs: number;
+  sampleRate: number;
+  sizeBytes: number;
+  checksumSha256: string;
+}) {
+  if (!isAllowedAudioMime(c.mimeType)) throw new Error(`Unsupported audio type: ${c.mimeType}`);
+  // Named like any clip, so the address the browser plays tells nothing.
+  const key = recordingPath(c.id, c.mimeType);
+  return {
+    id: c.id,
+    promptId: c.promptId,
+    storagePath: key,
+    storageKey: key,
+    language: "igala",
+    mimeType: c.mimeType,
+    durationMs: c.durationMs,
+    sampleRate: c.sampleRate,
+    sizeBytes: c.sizeBytes,
+    checksumSha256: c.checksumSha256,
+    // Set once the audio is in the bucket: until then nothing can play it.
+    uploadedAt: null as Date | null,
+    tier: "community_only" as const,
+    sourceType: "derived" as const,
+    sourceRef: c.systemRef,
+    sourceLicense: PROTOTYPE_LICENCE,
+    rightsStatus: "restricted" as const,
+    voiceCloningOptIn: false,
+    speakerIdOptIn: false,
+    isTestSet: false,
+    isDemo: false,
+    // No speaker, no answer, no consent record, no review verdict: a
+    // synthetic clip has none of them.
+    annotatorId: null,
+    coldAuthorAnswerId: null,
+    consentId: null,
+    reviewStatus: null,
   };
 }
 
@@ -222,6 +296,7 @@ async function main() {
       where: { id: { in: humanIds } },
       select: {
         id: true,
+        durationMs: true,
         promptId: true,
         language: true,
         annotatorId: true,
@@ -239,58 +314,50 @@ async function main() {
     const { putClip, storageEnabled } = await import("../../src/lib/speech/storage-supabase");
     if (!storageEnabled()) throw new Error("SPEECH_STORAGE is off: a synthetic clip has no bytes column to fall back on.");
 
-    // 1. One recording per (model ref, prompt). An existing row is reused.
+    // 1. One recording per (model ref, prompt). An existing row is reused. The
+    // row comes first with no upload time, then the audio, then the upload
+    // time: a run that dies in between leaves nothing playable, and the next
+    // run finishes the job.
     const recordingOf = new Map<string, string>();
     let createdClips = 0;
     for (const c of plan.clips) {
-      const existing = await prisma.speechRecording.findFirst({
+      const data = new Uint8Array(readFileSync(join(clipsDir, c.file)));
+      let row = await prisma.speechRecording.findFirst({
         where: { sourceType: "derived", sourceRef: c.systemRef, promptId: c.promptId },
         orderBy: { createdAt: "asc" },
-        select: { id: true },
+        select: { id: true, storageKey: true, mimeType: true, uploadedAt: true },
       });
-      if (existing) {
-        recordingOf.set(c.candidateKey, existing.id);
-        continue;
+      if (!row) {
+        row = await prisma.speechRecording.create({
+          data: syntheticClipRow({
+            id: randomUUID(),
+            promptId: c.promptId,
+            systemRef: c.systemRef,
+            mimeType: c.mimeType,
+            durationMs: c.durationMs,
+            sampleRate: c.sampleRate,
+            sizeBytes: data.length,
+            checksumSha256: createHash("sha256").update(data).digest("hex"),
+          }),
+          select: { id: true, storageKey: true, mimeType: true, uploadedAt: true },
+        });
+        createdClips++;
       }
-      const data = new Uint8Array(readFileSync(join(clipsDir, c.file)));
-      const sha = createHash("sha256").update(data).digest("hex");
-      const key = `tts/${plan.batch}/${createHash("sha256").update(c.systemRef).digest("hex").slice(0, 12)}/${c.promptId}.wav`;
-      await putClip(key, data, "audio/wav").catch((e: unknown) => {
-        // A run that died after the upload and before the row: the object is already there.
-        if (!(e instanceof Error) || !/exists|duplicate/i.test(e.message)) throw e;
-      });
-      const row = await prisma.speechRecording.create({
-        data: {
-          promptId: c.promptId,
-          storagePath: key,
-          storageKey: key,
-          language: "igala",
-          mimeType: "audio/wav",
-          durationMs: c.durationMs,
-          sampleRate: c.sampleRate,
-          sizeBytes: data.length,
-          checksumSha256: sha,
-          uploadedAt: new Date(),
-          tier: "community_only",
-          sourceType: "derived",
-          sourceRef: c.systemRef,
-          sourceLicense: PROTOTYPE_LICENCE,
-          rightsStatus: "restricted",
-          isDemo: false,
-        },
-        select: { id: true },
-      });
+      if (row.uploadedAt === null && row.storageKey) {
+        await putClip(row.storageKey, data, row.mimeType).catch((e: unknown) => {
+          // A run that died after the upload: the object is already there.
+          if (!(e instanceof Error) || !/exists|duplicate/i.test(e.message)) throw e;
+        });
+        await prisma.speechRecording.update({
+          where: { id: row.id },
+          data: { uploadedAt: new Date() },
+          select: { id: true },
+        });
+      }
       recordingOf.set(c.candidateKey, row.id);
-      createdClips++;
     }
 
-    // 2. The system as a candidate, so the dashboard can name the version.
-    await prisma.speechCandidate.createMany({
-      data: plan.eligible.map((s) => ({ system: "tts" as const, modelRef: s.systemRef })),
-      skipDuplicates: true,
-    });
-
-    // 3. The rounds. The unique key (rater, clip, repeat) makes a second run a no-op.
+    // 2. The rounds. The unique key (rater, clip, repeat) makes a second run a no-op.
     const created = await prisma.speechListenRound.createMany({
       data: plan.rounds.map((r) => ({
         batch: plan.batch,

@@ -8,6 +8,7 @@ import { buildTrainingManifest, buildEvalManifest } from "./training-manifest";
 import { loadTrainableRows, loadTestSetRows } from "./loop-rows";
 import { buildSigned } from "./loop-launch";
 import { buildFirstModelPlan } from "./first-model-plan";
+import { syntheticClipRow } from "../../../scripts/speech/publish-listen-candidates";
 import { mockProvider } from "./train-providers";
 import { licensedRow, openRow } from "./fixtures";
 import type { ManifestRow } from "./manifest";
@@ -270,6 +271,80 @@ describe("training entry point: first-model-plan.buildFirstModelPlan (voice clon
   });
 });
 
+/**
+ * A synthetic clip published into Listen (scripts/speech/publish-listen-candidates.ts)
+ * is a SpeechRecording row. It must never be taken for a person's speech: not
+ * by an export, not by a training manifest, not by an exam, whatever a
+ * reviewer later does to it. The row is built by the script's own function,
+ * so this is the shape that reaches the database.
+ */
+describe("a synthetic Listen clip never leaves and never trains", () => {
+  const synthetic = (id: string, over: Partial<ManifestRow> = {}): ManifestRow => {
+    const written = syntheticClipRow({
+      id,
+      promptId: "p-1",
+      systemRef: "mms-tts-yor-unadapted@test",
+      mimeType: "audio/webm;codecs=opus",
+      durationMs: 3000,
+      sampleRate: 48000,
+      sizeBytes: 1000,
+      checksumSha256: "abc",
+    });
+    return {
+      ...written,
+      uploadedAt: new Date("2026-11-13T00:00:00Z"), // as it is once the audio is in place
+      publishedOpenAt: null,
+      dialect: null,
+      consentVersion: null,
+      fundingSource: "unknown",
+      prompt: { isHoldout: false, split: "train" },
+      coldAuthorAnswer: { answerText: "the market opens at dawn" },
+      ...over,
+    };
+  };
+  // As written, then with every flag a careless hand could flip, one at a time.
+  const variants = (): ManifestRow[] => [
+    synthetic("as-written"),
+    synthetic("kept-by-a-reviewer", { reviewStatus: "keep" }),
+    synthetic("tier-open", { tier: "open", reviewStatus: "keep", publishedOpenAt: new Date() }),
+    synthetic("tier-licensed", { tier: "licensed", reviewStatus: "keep" }),
+    synthetic("rights-cleared", { rightsStatus: "cleared", reviewStatus: "keep" }),
+    synthetic("cloning-flag", { voiceCloningOptIn: true, reviewStatus: "keep" }),
+    synthetic("marked-exam", { isTestSet: true, reviewStatus: "keep" }),
+  ];
+
+  it.each(ENTRY_POINTS)("export $name releases none of them", async (entry) => {
+    expect(await entry.released(variants())).toEqual([]);
+  });
+
+  it.each(TRAIN_ENTRY_POINTS)("training $name takes none of them", async (entry) => {
+    expect(await entry.released(variants())).toEqual([]);
+  });
+
+  it("the voice-cloning plan, the cloning purpose and the exam take none of them", () => {
+    const plan = buildFirstModelPlan(variants(), { signedUrl, heldTiers: [] });
+    expect([...plan.train, ...plan.heldOut]).toEqual([]);
+    for (const row of variants()) {
+      expect(canTrain(row, { scope: "internal", purpose: "cloning" }).ok, row.id).toBe(false);
+      expect(canTrain(row, { scope: "internal", purpose: "tts" }).ok, row.id).toBe(false);
+      expect(canEvaluate(row, { scope: "internal", purpose: "asr" }).ok, row.id).toBe(false);
+      expect(neverLeaves(row) || row.rightsStatus !== "cleared" || row.consentId === null, row.id).toBe(true);
+    }
+  });
+
+  it("three separate rules each block it: no consent record, community_only, rights restricted", () => {
+    const row = synthetic("as-written");
+    expect(row.consentId).toBeNull();
+    expect(canTrain({ ...row, reviewStatus: "keep" }, { scope: "internal", purpose: "asr" })).toEqual({
+      ok: false,
+      reason: "no_consent",
+    });
+    expect(neverLeaves(row)).toBe(true);
+    expect(row.rightsStatus).toBe("restricted");
+    expect(row.sourceType).toBe("derived");
+  });
+});
+
 describe("the provider scope also refuses community_only", () => {
   it.each(TRAIN_ENTRY_POINTS.filter((e) => e.name.includes("provider")))(
     "$name",
@@ -404,6 +479,7 @@ const REGISTERED_FILES = [
   "src/lib/speech/tts-job.ts", // the TTS launch: buildTrainingManifest, purpose tts
   "src/lib/speech/first-model-plan.ts", // the first voice model's plan: buildTrainingManifest, purpose cloning (entry point below)
   "scripts/speech/first-model-plan.ts", // its script: writes only what buildFirstModelPlan returns
+  "scripts/speech/publish-listen-candidates.ts", // writes synthetic Listen clips (syntheticClipRow); every guard refuses that row (test above)
 ];
 
 function sourceFiles(dir: string): string[] {
