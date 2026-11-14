@@ -48,6 +48,7 @@ export function initialValues(items: EditItem[]): EditorValues {
         fields: {
           answerText: item.answerText,
           englishGloss: item.englishGloss ?? "",
+          englishTranslation: item.englishTranslation ?? "",
           dialect: item.dialect ?? "",
           instructionIg: item.instructionIg ?? "",
         },
@@ -174,6 +175,8 @@ export const EDITOR_COPY = {
   title: "Edit your answer",
   answer: "Your answer in Igala",
   meaning: "What it means / why, in English",
+  translation: "Short English translation (for recording)",
+  translationHelp: "A few words. Say what the Igala says, nothing more.",
   dialect: "Which Igala is this?",
   instruction: "The question, in Igala",
   why: "Why you chose as you did",

@@ -16,6 +16,7 @@ const cold: EditItem = {
   createdAt: "2026-10-12T08:00:00.000Z",
   answerText: "alpha beta",
   englishGloss: null,
+  englishTranslation: null,
   dialect: "ankpa",
   instructionIg: null,
   provenance: "speaker_authored_sourcefree",
@@ -142,6 +143,25 @@ describe("the fixed parts", () => {
       "Your first version is kept. It was written before you saw the AI answers.",
     );
     expect(m).toMatch(/aria-expanded="false"[^>]*>Show</);
+  });
+
+  it("an own answer has the short English translation box, with its help, between the meaning and the variety", () => {
+    const m = render([{ ...cold, englishTranslation: "Good morning, elder." }]);
+    expect(m).toContain("Short English translation (for recording)");
+    expect(m).toContain("A few words. Say what the Igala says, nothing more.");
+    expect(m).toMatch(
+      /<input[^>]*id="cold:c1-translation"[^>]*value="Good morning, elder\."/,
+    );
+    expect(m).toMatch(/id="cold:c1-translation"[^>]*maxLength="200"|maxLength="200"[^>]*id="cold:c1-translation"/);
+    const order = [
+      "What it means / why, in English",
+      "Short English translation (for recording)",
+      "Which Igala is this?",
+    ].map((t) => m.indexOf(t));
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // Empty until the speaker types one: the box is there, with no value.
+    expect(render([cold])).toMatch(/id="cold:c1-translation"[^>]*value=""/);
   });
 
   it("the clips line and Re-record, only where speech is on", () => {

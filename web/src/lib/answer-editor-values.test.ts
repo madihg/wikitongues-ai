@@ -16,6 +16,7 @@ const cold: EditItem = {
   createdAt: "2026-10-12T08:00:00.000Z",
   answerText: "alpha beta",
   englishGloss: null,
+  englishTranslation: null,
   dialect: null,
   instructionIg: null,
   provenance: "speaker_authored_sourcefree",
@@ -78,6 +79,22 @@ describe("what one press of Save changes sends", () => {
         type: "pairwise",
         id: "p1",
         body: { explanation: "B keeps the respect form." },
+      },
+    ]);
+  });
+
+  it("the short English translation is sent when it changes, and only then", () => {
+    expect(initialValues([cold])[itemKey(cold)].fields.englishTranslation).toBe(
+      "",
+    );
+    const reqs = changed((v) => {
+      v[itemKey(cold)].fields.englishTranslation = "Good morning, elder.";
+    });
+    expect(reqs).toEqual([
+      {
+        type: "cold",
+        id: "c1",
+        body: { englishTranslation: "Good morning, elder." },
       },
     ]);
   });

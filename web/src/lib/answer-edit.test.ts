@@ -554,6 +554,97 @@ describe("clips and the episode", () => {
     expect(items[2]).toMatchObject({ onOutput: "B", needsFix: true });
   });
 
+  it("the short English translation: its author saves it, it is logged, and the drawer reads it back", async () => {
+    const first = await edit(charity, "cold", "c-charity", {
+      englishTranslation: "  Good   morning, elder. ",
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.changed).toEqual(["englishTranslation"]);
+    expect(row(db.coldAuthorAnswer, "c-charity").englishTranslation).toBe(
+      "Good morning, elder.",
+    );
+    expect(revs()).toHaveLength(1);
+    expect(revs()[0]).toMatchObject({
+      targetType: "cold",
+      targetId: "c-charity",
+      field: "englishTranslation",
+      before: null,
+      after: "Good morning, elder.",
+      editorId: CHARITY,
+      authorId: CHARITY,
+    });
+    const ep = await loadEditEpisode({
+      type: "cold",
+      id: "c-charity",
+      userId: CHARITY,
+      withClips: false,
+    });
+    const items = ep.body.items as Record<string, unknown>[];
+    expect(items[0]).toMatchObject({
+      type: "cold",
+      id: "c-charity",
+      englishTranslation: "Good morning, elder.",
+    });
+    // It may be emptied again: it is not one of the required boxes.
+    const cleared = await edit(charity, "cold", "c-charity", {
+      englishTranslation: "",
+    });
+    expect(cleared.status).toBe(200);
+    expect(row(db.coldAuthorAnswer, "c-charity").englishTranslation).toBeNull();
+    expect(revs()).toHaveLength(2);
+  });
+
+  it("the short English translation: not on another person's row, and never out of shape", async () => {
+    const other = await edit(agnes, "cold", "c-charity", {
+      englishTranslation: "Hello.",
+    });
+    expect(other.status).toBe(403);
+    const long = await edit(agnes, "cold", "c-agnes", {
+      englishTranslation: "x".repeat(201),
+    });
+    expect(long.status).toBe(400);
+    const short = await edit(agnes, "cold", "c-agnes", {
+      englishTranslation: "x",
+    });
+    expect(short.status).toBe(400);
+    expect(revs()).toHaveLength(0);
+  });
+
+  it("changing the translation says the English clip that read it may no longer match", async () => {
+    db.speechRecording.rows.push({
+      id: "clip-en-new",
+      coldAuthorAnswerId: "c-agnes",
+      annotatorId: AGNES,
+      language: "english",
+      spokenText: "First words.",
+      durationMs: 3000,
+      createdAt: at(10),
+    });
+    row(db.coldAuthorAnswer, "c-agnes").englishTranslation = "First words.";
+    const res = await edit(agnes, "cold", "c-agnes", {
+      englishTranslation: "Other words.",
+    });
+    expect(res.body.clipsStale).toBe(true);
+    const ep = await loadEditEpisode({
+      type: "cold",
+      id: "c-agnes",
+      userId: AGNES,
+      withClips: true,
+    });
+    const clips = (ep.body.items as { clips: { id: string; stale: boolean }[] }[])[0]
+      .clips;
+    expect(clips.map((c) => [c.id, c.stale])).toEqual([
+      ["clip-ig", false],
+      ["clip-en", false],
+      ["clip-en-new", true],
+    ]);
+    // The older English clip read the meaning: a new meaning touches it alone.
+    const gloss = await edit(agnes, "cold", "c-agnes", {
+      englishGloss: "Second meaning.",
+    });
+    expect(gloss.body.clipsStale).toBe(true);
+  });
+
   it("someone else's episode is refused (403), for a researcher too", async () => {
     const res = await loadEditEpisode({
       type: "cold",

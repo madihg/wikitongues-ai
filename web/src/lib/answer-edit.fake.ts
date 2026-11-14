@@ -14,10 +14,13 @@ function matches(row: Row, where: Row | undefined): boolean {
       if (!(cond as Row[]).some((w) => matches(row, w))) return false;
       continue;
     }
-    const value = row[key];
+    // A column the fixture leaves out is null, as in the database.
+    const value = row[key] ?? null;
     if (cond && typeof cond === "object" && "in" in (cond as Row)) {
       if (!((cond as { in: unknown[] }).in ?? []).includes(value)) return false;
-    } else if (value !== cond) {
+    } else if (cond && typeof cond === "object" && "not" in (cond as Row)) {
+      if (value === ((cond as { not: unknown }).not ?? null)) return false;
+    } else if (value !== (cond ?? null)) {
       return false;
     }
   }

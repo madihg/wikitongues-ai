@@ -26,11 +26,17 @@ export function isRevisionTarget(v: unknown): v is RevisionTarget {
 
 /**
  * The fields an author may change, per kind of row. Adding a field is one
- * entry here (for example `englishTranslation` on cold, once its column
- * exists) plus its box in the drawer.
+ * entry here plus its box in the drawer. `englishTranslation` is the short
+ * English translation typed on the Record page (speech flow, C2).
  */
 export const EDITABLE_FIELDS: Record<RevisionTarget, readonly string[]> = {
-  cold: ["answerText", "englishGloss", "dialect", "instructionIg"],
+  cold: [
+    "answerText",
+    "englishGloss",
+    "englishTranslation",
+    "dialect",
+    "instructionIg",
+  ],
   edit: ["correctedText", "rationale", "segments"],
   pairwise: ["explanation"],
   listen: ["note"],
@@ -234,35 +240,89 @@ export interface ClipLite {
   coldAuthorAnswerId: string | null;
   language: string;
   createdAt: Date | string;
+  /**
+   * English clips only: the exact words the clip read, when it recorded
+   * them (the short translation, from 2026-11-13). Absent or null on an
+   * older English clip, which read the meaning.
+   */
+  spokenText?: string | null;
+}
+
+/** The answer fields a clip can read aloud. A change to any other field
+ *  never touches a clip. */
+export const CLIP_TEXT_FIELDS: readonly string[] = [
+  "answerText",
+  "englishGloss",
+  "englishTranslation",
+];
+
+/** The answer field a clip read: the answer for an Igala clip; for an
+ *  English clip the short translation when the clip recorded its words,
+ *  else the meaning. */
+export function clipTextField(clip: {
+  language: string;
+  spokenText?: string | null;
+}): string {
+  if (clip.language !== "english") return "answerText";
+  return storedText(clip.spokenText) !== null
+    ? "englishTranslation"
+    : "englishGloss";
 }
 
 /**
- * Which clips read a text that changed after they were recorded. An Igala
- * clip reads the answer; an English clip reads the meaning. No clip is ever
- * deleted or altered: Check and the dataset builder leave these out until a
- * newer clip exists. `revisions` are cold-row revisions keyed by targetId.
+ * Which clips read words that are no longer the words on the answer. A clip
+ * is used only while its spoken text still matches the current text: the
+ * text as it stood when the clip was recorded (the `before` of the first
+ * change made after the clip) is compared, in stored shape (NFC, trimmed),
+ * with the text as it stands now (the `after` of the last change). So a
+ * change that was later put back, or one that differs only by Unicode form,
+ * leaves the clip usable. No clip is ever deleted or altered: Check, the
+ * dataset builder and the manifests leave these out until a newer clip
+ * exists. `revisions` are cold-row revisions keyed by targetId.
  */
 export function staleClipIds(
   clips: ClipLite[],
   revisions: (RevisionLite & { targetId: string })[],
 ): Set<string> {
-  const latest = new Map<string, number>();
-  for (const r of revisions) {
-    if (r.field !== "answerText" && r.field !== "englishGloss") continue;
+  const byField = new Map<string, (RevisionLite & { targetId: string })[]>();
+  for (const r of sortRevisions(revisions)) {
+    if (!CLIP_TEXT_FIELDS.includes(r.field)) continue;
     const key = `${r.targetId}|${r.field}`;
-    const t = at(r);
-    if (t > (latest.get(key) ?? 0)) latest.set(key, t);
+    const list = byField.get(key);
+    if (list) list.push(r);
+    else byField.set(key, [r]);
   }
   const out = new Set<string>();
   for (const c of clips) {
     if (!c.coldAuthorAnswerId) continue;
-    const field = c.language === "english" ? "englishGloss" : "answerText";
-    const changedAt = latest.get(`${c.coldAuthorAnswerId}|${field}`);
+    const list = byField.get(`${c.coldAuthorAnswerId}|${clipTextField(c)}`);
+    if (!list) continue;
     const recordedAt =
       typeof c.createdAt === "string"
         ? Date.parse(c.createdAt)
         : c.createdAt.getTime();
-    if (changedAt !== undefined && changedAt > recordedAt) out.add(c.id);
+    const firstAfter = list.find((r) => at(r) > recordedAt);
+    if (!firstAfter) continue;
+    const spoken = storedText(firstAfter.before);
+    const now = storedText(list[list.length - 1].after);
+    if (spoken !== now) out.add(c.id);
   }
   return out;
+}
+
+/**
+ * The second, direct check for an English clip that recorded its words: the
+ * words it read must be the answer's short translation as it stands now.
+ * True for every other clip (their text is checked through the edit log),
+ * and when the answer carries no translation to compare with.
+ */
+export function spokenTextMatches(
+  clip: { language?: string | null; spokenText?: string | null },
+  answer: { englishTranslation?: string | null } | null | undefined,
+): boolean {
+  if (clip.language !== "english") return true;
+  const spoken = storedText(clip.spokenText);
+  const now = storedText(answer?.englishTranslation);
+  if (spoken === null || now === null) return true;
+  return spoken === now;
 }

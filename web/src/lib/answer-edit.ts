@@ -2,6 +2,11 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sanitizeDialect } from "@/lib/dialects";
 import {
+  cleanTranslation,
+  MAX_TRANSLATION_CHARS,
+  MIN_TRANSLATION_CHARS,
+} from "@/lib/speech/limits";
+import {
   attachReasons,
   diffToSegments,
   nfc,
@@ -24,6 +29,7 @@ import {
   isMissingTable,
   lockedKeysIn,
   needsFix,
+  CLIP_TEXT_FIELDS,
   newSaveId,
   staleClipIds,
   storedText,
@@ -77,6 +83,7 @@ async function loadParent(
         isDemo: true,
         answerText: true,
         englishGloss: true,
+        englishTranslation: true,
         dialect: true,
         instructionIg: true,
         promptId: true,
@@ -90,6 +97,7 @@ async function loadParent(
       current: {
         answerText: r.answerText,
         englishGloss: r.englishGloss,
+        englishTranslation: r.englishTranslation,
         dialect: r.dialect,
         instructionIg: r.instructionIg,
       },
@@ -287,6 +295,21 @@ export async function applyAnswerEdit(args: {
     }
     let value = storedText(raw as string | null);
     if (field === "dialect") value = sanitizeDialect(value);
+    // The short English translation keeps the shape the Record page gives
+    // it: single spaces, 2 to 200 characters. It may be emptied.
+    if (field === "englishTranslation" && value !== null) {
+      value = cleanTranslation(value) || null;
+      if (
+        value !== null &&
+        (value.length < MIN_TRANSLATION_CHARS ||
+          value.length > MAX_TRANSLATION_CHARS)
+      ) {
+        return fail(
+          400,
+          `The short English translation must be ${MIN_TRANSLATION_CHARS} to ${MAX_TRANSLATION_CHARS} characters.`,
+        );
+      }
+    }
     if (value === null && REQUIRED_FIELDS[type].includes(field)) {
       return fail(400, `${field} must be a non-empty string`);
     }
@@ -400,16 +423,24 @@ export async function applyAnswerEdit(args: {
   let clipsStale = false;
   if (
     type === "cold" &&
-    changes.some((c) => c.field === "answerText" || c.field === "englishGloss")
+    changes.some((c) => CLIP_TEXT_FIELDS.includes(c.field))
   ) {
     try {
-      const languages = [
-        ...(changes.some((c) => c.field === "answerText") ? ["igala"] : []),
-        ...(changes.some((c) => c.field === "englishGloss") ? ["english"] : []),
+      // An Igala clip reads the answer. An English clip reads the short
+      // translation when it recorded one (spokenText), else the meaning.
+      const changed = (field: string) => changes.some((c) => c.field === field);
+      const reads = [
+        ...(changed("answerText") ? [{ language: "igala" }] : []),
+        ...(changed("englishGloss")
+          ? [{ language: "english", spokenText: null }]
+          : []),
+        ...(changed("englishTranslation")
+          ? [{ language: "english", spokenText: { not: null } }]
+          : []),
       ];
       clipsStale =
         (await prisma.speechRecording.count({
-          where: { coldAuthorAnswerId: id, language: { in: languages } },
+          where: { coldAuthorAnswerId: id, OR: reads },
         })) > 0;
     } catch {
       clipsStale = false;
@@ -443,6 +474,7 @@ export type EditItem =
       createdAt: string;
       answerText: string;
       englishGloss: string | null;
+      englishTranslation: string | null;
       dialect: string | null;
       instructionIg: string | null;
       provenance: string;
@@ -558,6 +590,7 @@ export async function loadEditEpisode(args: {
             createdAt: true,
             answerText: true,
             englishGloss: true,
+            englishTranslation: true,
             dialect: true,
             instructionIg: true,
             provenance: true,
@@ -626,6 +659,7 @@ export async function loadEditEpisode(args: {
     id: string;
     coldAuthorAnswerId: string | null;
     language: string;
+    spokenText: string | null;
     durationMs: number;
     createdAt: Date;
   }[] = [];
@@ -639,6 +673,7 @@ export async function loadEditEpisode(args: {
           id: true,
           coldAuthorAnswerId: true,
           language: true,
+          spokenText: true,
           durationMs: true,
           createdAt: true,
         },
@@ -670,6 +705,7 @@ export async function loadEditEpisode(args: {
         createdAt: c.createdAt.toISOString(),
         answerText: c.answerText,
         englishGloss: c.englishGloss,
+        englishTranslation: c.englishTranslation,
         dialect: c.dialect,
         instructionIg: c.instructionIg,
         provenance: c.provenance,
@@ -733,7 +769,7 @@ export async function staleRecordingIds(
       where: {
         targetType: "cold",
         targetId: { in: answerIds },
-        field: { in: ["answerText", "englishGloss"] },
+        field: { in: [...CLIP_TEXT_FIELDS] },
       },
       select: {
         targetId: true,

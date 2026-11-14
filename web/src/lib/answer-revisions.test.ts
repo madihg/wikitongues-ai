@@ -10,6 +10,8 @@ import {
   firstVersion,
   lockedKeysIn,
   needsFix,
+  clipTextField,
+  spokenTextMatches,
   staleClipIds,
   storedText,
 } from "./answer-revisions";
@@ -172,6 +174,141 @@ describe("clips after a text change", () => {
       [rev("answerText", 2000), rev("dialect", 4000)],
     );
     expect(stale.size).toBe(0);
+  });
+});
+
+describe("a clip is used only while its spoken text matches the current text", () => {
+  const clip = (
+    id: string,
+    language: string,
+    ms: number,
+    spokenText: string | null = null,
+  ) => ({
+    id,
+    coldAuthorAnswerId: "c1",
+    language,
+    spokenText,
+    createdAt: new Date(ms),
+  });
+  const rev = (
+    field: string,
+    before: string | null,
+    after: string | null,
+    ms: number,
+  ) => ({ targetId: "c1", field, before, after, createdAt: new Date(ms) });
+
+  it("the short English translation is a field its author may change", () => {
+    expect(EDITABLE_FIELDS.cold).toContain("englishTranslation");
+    const can = (role: string, isAuthor: boolean) =>
+      canEditField({
+        role,
+        isAuthor,
+        type: "cold",
+        field: "englishTranslation",
+      });
+    expect(can("ANNOTATOR", true)).toBe(true);
+    expect(can("RESEARCHER", true)).toBe(true);
+    // Decision 4: not on another person's row, for a researcher either.
+    expect(can("RESEARCHER", false)).toBe(false);
+    expect(can("ANNOTATOR", false)).toBe(false);
+  });
+
+  it("which text a clip read", () => {
+    expect(clipTextField({ language: "igala" })).toBe("answerText");
+    expect(clipTextField({ language: "english", spokenText: null })).toBe(
+      "englishGloss",
+    );
+    expect(clipTextField({ language: "english", spokenText: "  " })).toBe(
+      "englishGloss",
+    );
+    expect(clipTextField({ language: "english", spokenText: "Go." })).toBe(
+      "englishTranslation",
+    );
+  });
+
+  it("an answer changed after the clip leaves the clip out", () => {
+    const stale = staleClipIds(
+      [clip("ig", "igala", 1000)],
+      [rev("answerText", "old words", "new words", 2000)],
+    );
+    expect([...stale]).toEqual(["ig"]);
+  });
+
+  it("a change that was put back leaves the clip usable", () => {
+    const stale = staleClipIds(
+      [clip("ig", "igala", 1000)],
+      [
+        rev("answerText", "old words", "new words", 2000),
+        rev("answerText", "new words", "old words", 3000),
+      ],
+    );
+    expect(stale.size).toBe(0);
+  });
+
+  it("the comparison is in stored shape: Unicode form and outer spaces alone do not count", () => {
+    const stale = staleClipIds(
+      [clip("ig", "igala", 1000)],
+      [
+        rev("answerText", NFC_E, "x", 2000),
+        rev("answerText", "x", ` ${NFD_E} `, 3000),
+      ],
+    );
+    expect(stale.size).toBe(0);
+  });
+
+  it("edits made before the clip do not count; the clip read the text as it stood", () => {
+    const stale = staleClipIds(
+      [clip("ig", "igala", 5000)],
+      [
+        rev("answerText", "v1", "v2", 1000),
+        rev("answerText", "v2", "v3", 2000),
+      ],
+    );
+    expect(stale.size).toBe(0);
+  });
+
+  it("an English clip that recorded its words follows the short translation, not the meaning", () => {
+    const clips = [
+      clip("old-en", "english", 1000),
+      clip("new-en", "english", 1000, "Good morning."),
+    ];
+    expect([
+      ...staleClipIds(clips, [rev("englishGloss", "m1", "m2", 2000)]),
+    ]).toEqual(["old-en"]);
+    expect([
+      ...staleClipIds(clips, [
+        rev("englishTranslation", "Good morning.", "Morning, elder.", 2000),
+      ]),
+    ]).toEqual(["new-en"]);
+  });
+
+  it("the direct check: an English clip's own words against the translation as it stands", () => {
+    const en = { language: "english", spokenText: "Good morning." };
+    expect(spokenTextMatches(en, { englishTranslation: "Good morning." })).toBe(
+      true,
+    );
+    expect(
+      spokenTextMatches(en, { englishTranslation: " Good morning. " }),
+    ).toBe(true);
+    expect(
+      spokenTextMatches(en, { englishTranslation: "Morning, elder." }),
+    ).toBe(false);
+    // Nothing to compare with: the clip's own record stands.
+    expect(spokenTextMatches(en, { englishTranslation: null })).toBe(true);
+    expect(spokenTextMatches(en, null)).toBe(true);
+    // Igala clips and older English clips are checked through the edit log.
+    expect(
+      spokenTextMatches(
+        { language: "igala", spokenText: null },
+        { englishTranslation: "x" },
+      ),
+    ).toBe(true);
+    expect(
+      spokenTextMatches(
+        { language: "english", spokenText: null },
+        { englishTranslation: "x" },
+      ),
+    ).toBe(true);
   });
 });
 
