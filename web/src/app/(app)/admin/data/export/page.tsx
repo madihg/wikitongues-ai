@@ -1,7 +1,9 @@
 import { ExportPanel } from "@/components/admin/export-panel";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /** Data, Export: the downloads that used to close the Researcher Dashboard. */
-export default function DataExportPage() {
+export default async function DataExportPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8">

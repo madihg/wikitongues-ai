@@ -2,13 +2,15 @@ import Link from "next/link";
 import { Leaderboard } from "@/components/admin/leaderboard";
 import { CategoryBreakdown } from "@/components/admin/category-breakdown";
 import { GapDashboard } from "@/components/admin/gap-dashboard";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
  * The three cards that left the Researcher Dashboard, rendered exactly as
  * they were. Each fetches its own data from a researcher-only route. Kept so
  * nothing is lost; linked only from More, Archive.
  */
-export default function LegacyCardsPage() {
+export default async function LegacyCardsPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8">

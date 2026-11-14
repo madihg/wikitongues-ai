@@ -1,5 +1,6 @@
 import { AgreementStats } from "@/components/admin/agreement-stats";
 import { ContestedItems } from "@/components/arena/contested-items";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
  * Data, Disagreements: first whether annotators apply the rubric alike, then
@@ -8,7 +9,8 @@ import { ContestedItems } from "@/components/arena/contested-items";
  * before (the Inter-Annotator Agreement card of the old dashboard and the
  * Collective review page), in the order a reader needs them.
  */
-export default function DisagreementsPage() {
+export default async function DisagreementsPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8">

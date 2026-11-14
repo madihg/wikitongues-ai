@@ -3,9 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { approachLabel } from "@/lib/method-metrics";
 import { ModelChat, type ChatCandidate } from "@/components/arena/model-chat";
 import { CompareSwitch } from "@/components/arena/compare-switch";
-import { requireResearcherPage } from "@/lib/admin/page-gate";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
  * Talk to the candidates. The surface that exists because the metrics cannot
@@ -23,7 +23,6 @@ import { InfoTip } from "@/components/info-tip";
 export const dynamic = "force-dynamic";
 
 async function ChatSurface() {
-  await requireResearcherPage();
   const candidates = await prisma.candidateModel.findMany({
     // provider "derived" (tone-stripped scoreboard controls, see
     // scripts/derive-tone-stripped-arms.ts) is a measurement device, not a
@@ -55,7 +54,8 @@ async function ChatSurface() {
   return <ModelChat candidates={list} />;
 }
 
-export default function ArenaChatPage() {
+export default async function ArenaChatPage() {
+  await requireResearcherPage();
   return (
     <div>
       <CompareSwitch />

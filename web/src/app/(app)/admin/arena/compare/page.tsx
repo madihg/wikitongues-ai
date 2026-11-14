@@ -1,11 +1,13 @@
 import { HeadToHead, ComparePicker } from "@/components/arena/head-to-head";
 import { CompareSwitch } from "@/components/arena/compare-switch";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 export default async function ComparePage({
   searchParams,
 }: {
   searchParams: Promise<{ a?: string; b?: string }>;
 }) {
+  await requireResearcherPage();
   const sp = await searchParams;
   const a = typeof sp.a === "string" ? sp.a : "";
   const b = typeof sp.b === "string" ? sp.b : "";

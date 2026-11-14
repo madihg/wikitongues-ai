@@ -1,6 +1,8 @@
 import { EpochTrajectory } from "@/components/arena/epoch-trajectory";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
-export default function TrajectoryPage() {
+export default async function TrajectoryPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8">

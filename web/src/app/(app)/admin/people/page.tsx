@@ -1,5 +1,6 @@
 import { AnnotatorActivity } from "@/components/admin/annotator-activity";
 import { TimeSpent } from "@/components/admin/time-spent";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
  * People: who worked, for how many hours, and who is running out of prompts.
@@ -9,7 +10,8 @@ import { TimeSpent } from "@/components/admin/time-spent";
  * estimate and the frozen old estimate side by side); this page only gives
  * it a home.
  */
-export default function PeoplePage() {
+export default async function PeoplePage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8">

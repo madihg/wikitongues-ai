@@ -10,8 +10,6 @@ import { requireResearcherPage } from "@/lib/admin/page-gate";
 export const dynamic = "force-dynamic";
 
 export default async function VerdictPage() {
-  // The server gate: this page carries speakers' own written reasons, and a
-  // server component renders whatever the client-side guard later hides.
   await requireResearcherPage();
   const insights = await computeAnnotationInsights(prisma);
 
