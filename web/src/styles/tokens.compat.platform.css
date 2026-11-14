@@ -1,0 +1,58 @@
+/* Platform compat: today's values, pinned (2026-11-13).
+ *
+ * Import after tokens.css. With this file in place the platform renders
+ * exactly as it did before the token PR (proof: audit/step1-proof.md).
+ * This file is the migration's to-do list. Each rollout step deletes the
+ * block it names and nothing else. When the file is empty, delete it.
+ */
+
+:root {
+  /* [step 2: type] The stacks globals.css declares today. No web font loads
+     in production, so these resolve to the device's own fonts. */
+  --wt-font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --wt-font-display: "Fraunces", Georgia, serif;
+  --wt-font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* [step 3: colour] Text and edges that fail AA today. */
+  --wt-ink-3: #7d7064;
+  --wt-ink-disabled: #b6aa9c;
+  --text-muted: var(--wt-ink-disabled);
+  --wt-line: #ece6dd;
+  --wt-line-control: #d8cfc4;
+  --wt-sunken: #f7f3ec;
+  --wt-success: #2f7d54;
+  --wt-warning: #b5790f;
+  --ring: 0 0 0 3px var(--wt-ochre-200);
+  --warning-text: #b45309; /* benchmark-bars.tsx read an undefined name and got this fallback */
+
+  /* [step 3: colour] Info as a blue state. */
+  --info: #3f5a8a;
+  --info-subtle: #eaeff6;
+
+  /* [step 4: shape] Shadows and the two radius steps being retired. */
+  --radius-sm: 4px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(26, 23, 20, 0.06);
+  --shadow:
+    0 1px 3px rgba(26, 23, 20, 0.08), 0 1px 2px rgba(26, 23, 20, 0.04);
+  --shadow-md: 0 4px 12px rgba(26, 23, 20, 0.08);
+  --shadow-lg: 0 12px 32px rgba(26, 23, 20, 0.12);
+  --transition-default: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* [step 5: data] The blind-pair and supporting hues. */
+  --wt-data-1: #3f5a8a;
+  --wt-data-2: #b5512f;
+  --wt-data-3: #4f7a5e;
+  --wt-data-low: #b23b32;
+  --wt-data-mid: #b5790f;
+  --wt-data-high: #2f7d54;
+
+  /* [step 3: colour] Goes with the two blocks above, in the same PR. Deleting it turns the accent violet. This block is the ochre the platform has today. */
+  --wt-accent: #e0a21f;
+  --wt-accent-hover: #c4881a;
+  --wt-accent-pressed: #9c6a13;
+  --wt-accent-tint: #fdf6e9;
+  --wt-accent-text: #9c6a13;
+  --wt-on-accent: #1a1714;
+}
