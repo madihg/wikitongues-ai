@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import fixture from "./metrics.fixtures.json";
 import {
   cer,
+  cerToneRetained,
   wer,
   werToneRetained,
   toneErrorRate,
@@ -21,6 +22,7 @@ describe("metrics fixture (shared with worker/tests/test_metrics.py)", () => {
       expect(round4(wer(c.ref, c.hyp))).toBe(c.werStripped);
       expect(round4(werToneRetained(c.ref, c.hyp))).toBe(c.werRetained);
       expect(round4(toneErrorRate(c.ref, c.hyp))).toBe(c.ter);
+      expect(round4(cerToneRetained(c.ref, c.hyp))).toBe(c.cerRetained);
       const all = scoreAll(c.ref, c.hyp);
       expect(round4(all.cer)).toBe(c.cer);
       expect(round4(all.werStripped)).toBe(c.werStripped);
@@ -42,6 +44,8 @@ describe("metrics definitions", () => {
 
   it("CER and WER ignore tone marks, werToneRetained does not", () => {
     expect(cer("táva", "tava")).toBe(0);
+    expect(cerToneRetained("táva", "tava")).toBe(0.25);
+    expect(cerToneRetained("tẹva", "teva")).toBe(cer("tẹva", "teva"));
     expect(wer("táva", "tava")).toBe(0);
     expect(werToneRetained("táva", "tava")).toBe(1);
   });

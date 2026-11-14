@@ -10,7 +10,15 @@ from pathlib import Path
 
 import pytest
 
-from igala_speech.metrics import cer, score_all, ter, wer, wer_tone_retained
+from igala_speech.metrics import (
+    cer,
+    cer_tone_retained,
+    score_all,
+    score_three_ways,
+    ter,
+    wer,
+    wer_tone_retained,
+)
 from igala_speech.normalise import normalise_for_scoring, tone_strip
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -29,6 +37,10 @@ def test_fixture_case(case):
     assert round(wer(ref, hyp), 4) == case["werStripped"]
     assert round(wer_tone_retained(ref, hyp), 4) == case["werRetained"]
     assert round(ter(ref, hyp), 4) == case["ter"]
+    assert round(cer_tone_retained(ref, hyp), 4) == case["cerRetained"]
+    three = score_three_ways(ref, hyp)
+    assert sorted(three) == ["cer", "cerRetained", "ter", "werRetained", "werStripped"]
+    assert round(three["cerRetained"], 4) == case["cerRetained"]
     got = score_all(ref, hyp)
     assert round(got["cer"], 4) == case["cer"]
     assert round(got["werStripped"], 4) == case["werStripped"]
