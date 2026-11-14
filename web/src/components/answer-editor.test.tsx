@@ -145,14 +145,17 @@ describe("the fixed parts", () => {
     expect(m).toMatch(/aria-expanded="false"[^>]*>Show</);
   });
 
-  it("an own answer has the short English translation box, with its help, between the meaning and the variety", () => {
-    const m = render([{ ...cold, englishTranslation: "Good morning, elder." }]);
+  it("with speech on, an own answer has the short English translation box, with its help, between the meaning and the variety", () => {
+    const m = render(
+      [{ ...cold, englishTranslation: "Good morning, elder." }],
+      "/speak",
+    );
     expect(m).toContain("Short English translation (for recording)");
     expect(m).toContain("A few words. Say what the Igala says, nothing more.");
     expect(m).toMatch(
       /<input[^>]*id="cold:c1-translation"[^>]*value="Good morning, elder\."/,
     );
-    expect(m).toMatch(/id="cold:c1-translation"[^>]*maxLength="200"|maxLength="200"[^>]*id="cold:c1-translation"/);
+    expect(m).toMatch(/<input[^>]*maxLength="200"[^>]*id="cold:c1-translation"|<input[^>]*id="cold:c1-translation"[^>]*maxLength="200"/);
     const order = [
       "What it means / why, in English",
       "Short English translation (for recording)",
@@ -161,7 +164,23 @@ describe("the fixed parts", () => {
     expect(order.every((i) => i > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     // Empty until the speaker types one: the box is there, with no value.
-    expect(render([cold])).toMatch(/id="cold:c1-translation"[^>]*value=""/);
+    expect(render([cold], "/speak")).toMatch(
+      /id="cold:c1-translation"[^>]*value=""/,
+    );
+  });
+
+  it("with speech off the box is not asked for, unless the answer already has a translation", () => {
+    // An account that cannot record is not asked for a text "for recording".
+    const off = render([cold]);
+    expect(off).not.toContain("Short English translation");
+    expect(off).not.toContain('id="cold:c1-translation"');
+    // The other boxes are all still there.
+    expect(textareas(off)).toEqual(
+      textareas(render([cold], "/speak")),
+    );
+    // A translation that exists stays visible and editable.
+    const has = render([{ ...cold, englishTranslation: "Good morning." }]);
+    expect(has).toMatch(/id="cold:c1-translation"[^>]*value="Good morning\."/);
   });
 
   it("the clips line and Re-record, only where speech is on", () => {

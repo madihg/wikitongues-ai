@@ -383,26 +383,32 @@ function ColdFields({
         />
       </section>
 
-      <section>
-        <label className={LABEL} htmlFor={`${key}-translation`}>
-          {EDITOR_COPY.translation}
-        </label>
-        <input
-          id={`${key}-translation`}
-          type="text"
-          maxLength={MAX_TRANSLATION_CHARS}
-          aria-describedby={`${key}-translation-help`}
-          className={`${BOX} min-h-11`}
-          value={fields.englishTranslation}
-          onChange={(e) => onField("englishTranslation", e.target.value)}
-        />
-        <p
-          id={`${key}-translation-help`}
-          className="mt-1 text-xs text-text-tertiary"
-        >
-          {EDITOR_COPY.translationHelp}
-        </p>
-      </section>
+      {/* The short translation is what the English clip reads. It shows
+          where speech is on for this person (recordHref), or when the answer
+          already has one; an account that cannot record is not asked for a
+          text "for recording". */}
+      {(recordHref !== null || fields.englishTranslation !== "") && (
+        <section>
+          <label className={LABEL} htmlFor={`${key}-translation`}>
+            {EDITOR_COPY.translation}
+          </label>
+          <input
+            id={`${key}-translation`}
+            type="text"
+            maxLength={MAX_TRANSLATION_CHARS}
+            aria-describedby={`${key}-translation-help`}
+            className={`${BOX} min-h-11`}
+            value={fields.englishTranslation}
+            onChange={(e) => onField("englishTranslation", e.target.value)}
+          />
+          <p
+            id={`${key}-translation-help`}
+            className="mt-1 text-xs text-text-tertiary"
+          >
+            {EDITOR_COPY.translationHelp}
+          </p>
+        </section>
+      )}
 
       <section className="grid gap-4 sm:grid-cols-2">
         <div>
