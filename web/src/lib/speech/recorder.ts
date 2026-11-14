@@ -54,32 +54,41 @@ export function formatClock(ms: number): string {
 /**
  * How the microphone is opened.
  *
- * "raw" (the default since 2026-11-13) asks the browser to turn OFF echo
- * cancellation, noise suppression and automatic gain, all three together:
- * Chrome is reported to ignore the gain setting unless echo cancellation is
- * off too. Reasons: a denoiser baked into the upload cannot be undone and is
- * different on every phone; automatic gain changes the level inside a clip
- * and lifts the noise floor; both change what is measured from the clip
- * (pitch, level) and what a voice model learns. The clips are cleaned later,
- * as a copy, with the raw upload kept.
+ * "processed" is what the recorder has always asked for: echo cancellation
+ * and noise suppression on, automatic gain left to the browser. All 131
+ * clips recorded up to 2026-11-13 were made this way.
  *
- * "processed" is exactly what the recorder asked for before that date: echo
- * cancellation and noise suppression on, automatic gain left to the browser.
- * It stays as a tested fallback: set NEXT_PUBLIC_SPEECH_CAPTURE=processed to
- * go back without a code change (for example if raw capture turns out too
- * quiet on the speakers' devices).
+ * "raw" asks the browser to turn OFF echo cancellation, noise suppression
+ * and automatic gain, all three together: Chrome is reported to ignore the
+ * gain setting unless echo cancellation is off too. It is what studio
+ * sittings already use.
+ *
+ * The decision (2026-11-13, from the speech research and the recording spec):
+ * new clips SHOULD be recorded raw. A denoiser baked into the upload cannot
+ * be undone and is different on every phone; automatic gain changes the level
+ * inside a clip and lifts the noise floor; both change what is measured from
+ * the clip (pitch, level) and what a voice model learns. Clips are cleaned
+ * later, as a copy, with the raw upload kept.
+ *
+ * The switch: raw clips will be quieter and noisier than the 131, so the
+ * recording spec leaves the change to Halim to confirm. Until then the
+ * default stays "processed", so nothing changes for a speaker. To switch,
+ * set NEXT_PUBLIC_SPEECH_CAPTURE=raw and redeploy (the value is read at build
+ * time); unset it to go back. Both modes go through captureConstraints and
+ * are tested.
  *
  * Either way the browser may not honour the request, so the settings it
- * actually applied are read back (appliedCapture) and stored with each clip.
+ * actually applied are read back (appliedCapture) and stored with each clip
+ * from now on: that record is what a comparison of the two modes rests on.
  */
 export type CaptureMode = "raw" | "processed";
-export const DEFAULT_CAPTURE_MODE: CaptureMode = "raw";
+export const DEFAULT_CAPTURE_MODE: CaptureMode = "processed";
 
 /** The capture mode for ordinary clips. Studio takes are always raw. */
 export function captureMode(
   env: string | undefined = process.env.NEXT_PUBLIC_SPEECH_CAPTURE,
 ): CaptureMode {
-  return env === "processed" ? "processed" : DEFAULT_CAPTURE_MODE;
+  return env === "raw" || env === "processed" ? env : DEFAULT_CAPTURE_MODE;
 }
 
 /** The audio constraints for a mode. Mono, 48 kHz asked for in both. */

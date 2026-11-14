@@ -74,13 +74,17 @@ describe("formatClock", () => {
   });
 });
 
-describe("capture settings (decided 2026-11-13: raw by default)", () => {
-  it("raw is the default; only the exact word processed switches back", () => {
-    expect(DEFAULT_CAPTURE_MODE).toBe("raw");
-    expect(captureMode(undefined)).toBe("raw");
-    expect(captureMode("")).toBe("raw");
-    expect(captureMode("1")).toBe("raw");
-    expect(captureMode("Processed")).toBe("raw");
+describe("capture settings (decided 2026-11-13: raw, behind a switch until Halim confirms)", () => {
+  it("nothing changes by default: the recorder asks what it always asked", () => {
+    expect(DEFAULT_CAPTURE_MODE).toBe("processed");
+    expect(captureMode(undefined)).toBe("processed");
+    expect(captureMode("")).toBe("processed");
+    expect(captureMode("1")).toBe("processed");
+    expect(captureMode("Raw")).toBe("processed");
+  });
+
+  it("NEXT_PUBLIC_SPEECH_CAPTURE=raw switches every ordinary clip to raw, and processed says so explicitly", () => {
+    expect(captureMode("raw")).toBe("raw");
     expect(captureMode("processed")).toBe("processed");
   });
 

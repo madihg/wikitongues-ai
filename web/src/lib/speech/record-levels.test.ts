@@ -9,7 +9,6 @@ import {
   METER,
   RECORD_LEVELS,
   ROOM_MESSAGE,
-  TYPICAL_VOICE_DBFS,
   barPosition,
   barWord,
   meterZone,
@@ -67,7 +66,7 @@ const messagesOf = (samples: Float32Array) =>
   verdicts(analyseSamples(samples, SR)).map((v) => v.message);
 
 describe("the level numbers", () => {
-  it("are the SPEECH lane's meter block, key for key (read 2026-11-13)", () => {
+  it("are the recording spec's, with the meter block's key names (speech/first-model, PR #100)", () => {
     expect(METER).toEqual({
       greenMinDbfs: -12,
       greenMaxDbfs: -3,
@@ -79,6 +78,9 @@ describe("the level numbers", () => {
       speechLevelQuietDbfs: -30,
       speechLevelLoudDbfs: -14,
       noisyRoomSnrDb: 20,
+      // The two keys the recording spec asks to be added for the room check.
+      roomQuietDbfs: -50,
+      roomNoisyDbfs: -40,
     });
   });
 
@@ -86,6 +88,8 @@ describe("the level numbers", () => {
     expect(THRESHOLDS.aLittleQuietDbfs).toBe(METER.speechLevelQuietDbfs);
     expect(THRESHOLDS.tooLoudDbfs).toBe(METER.speechLevelLoudDbfs);
     expect(THRESHOLDS.tooLoudPeakDbfs).toBe(METER.clipDbfs);
+    expect(THRESHOLDS.aLittleQuietPeakDbfs).toBe(METER.quietWarnDbfs);
+    expect(THRESHOLDS.tooQuietPeakDbfs).toBe(METER.veryQuietDbfs);
     expect(THRESHOLDS.noisyRoomSnrDb).toBe(METER.noisyRoomSnrDb);
     expect(THRESHOLDS.tooQuietDbfs).toBe(RECORD_LEVELS.veryQuietSpeechDbfs);
     // No level number is written a second time in analyse.ts.
@@ -99,6 +103,8 @@ describe("the level numbers", () => {
       "aLittleQuietDbfs",
       "tooLoudDbfs",
       "tooLoudPeakDbfs",
+      "aLittleQuietPeakDbfs",
+      "tooQuietPeakDbfs",
       "noisyRoomSnrDb",
     ]) {
       expect(block, key).toMatch(new RegExp(`${key}: (METER|RECORD_LEVELS)\\.`));
@@ -133,8 +139,25 @@ describe("the take feedback at the levels in the spec", () => {
   });
 
   it("-29 is fine and -31 is a little quiet: the line is at -30", () => {
-    expect(keysOf(take(-29, null))).not.toContain("a_little_quiet");
-    expect(keysOf(take(-31, null))).toContain("a_little_quiet");
+    // Metrics, not a tone: a tone's loudest point is only 3 dB over its
+    // level, so it would trip the loudest-point rule first.
+    const at = (rmsDbfs: number): QualityMetrics => ({
+      durationMs: 5000,
+      leadingSilenceMs: 300,
+      trailingSilenceMs: 600,
+      speechShare: 0.8,
+      rmsDbfs,
+      peakDbfs: -14,
+      clippingShare: 0,
+      syllables: null,
+      syllablesPerSecond: null,
+    });
+    const keys = (rms: number) => verdicts(at(rms)).map((v) => v.key);
+    expect(keys(-29)).toEqual(["good"]);
+    expect(keys(-30)).toEqual(["good"]);
+    expect(keys(-31)).toEqual(["a_little_quiet"]);
+    expect(keys(-39.9)).toEqual(["a_little_quiet"]);
+    expect(keys(-40)).toEqual(["too_quiet"]);
   });
 
   it("a loudest point above -1 dBFS shows Clipped or the too loud line", () => {
@@ -157,6 +180,10 @@ describe("the take feedback at the levels in the spec", () => {
       syllablesPerSecond: null,
     };
     expect(verdicts(good).map((v) => v.key)).toEqual(["too_loud"]);
+    // "At or above -1": the edge itself is too loud, just under it is not.
+    expect(verdicts({ ...good, peakDbfs: -1 }).map((v) => v.key)).toEqual([
+      "too_loud",
+    ]);
     expect(verdicts({ ...good, peakDbfs: -1.5 }).map((v) => v.key)).toEqual([
       "good",
     ]);
@@ -164,6 +191,27 @@ describe("the take feedback at the levels in the spec", () => {
     expect(
       verdicts({ ...good, peakDbfs: 0, clippingShare: 0.05 }).map((v) => v.key),
     ).toEqual(["clipped"]);
+  });
+
+  it("a loudest point under -20 is a little quiet, and under -30 too quiet, whatever the voice level says", () => {
+    const base: QualityMetrics = {
+      durationMs: 5000,
+      leadingSilenceMs: 300,
+      trailingSilenceMs: 600,
+      speechShare: 0.8,
+      rmsDbfs: -27,
+      peakDbfs: -15,
+      clippingShare: 0,
+      syllables: null,
+      syllablesPerSecond: null,
+    };
+    const keys = (peakDbfs: number) =>
+      verdicts({ ...base, peakDbfs }).map((v) => v.key);
+    expect(keys(-15)).toEqual(["good"]);
+    expect(keys(-20)).toEqual(["good"]);
+    expect(keys(-20.5)).toEqual(["a_little_quiet"]);
+    expect(keys(-30)).toEqual(["a_little_quiet"]);
+    expect(keys(-30.5)).toEqual(["too_quiet"]);
   });
 
   it("a voice level over the loud line is too loud", () => {
@@ -267,14 +315,15 @@ describe("the bar", () => {
 });
 
 describe("the room check's three answers", () => {
-  it("compares the room with a typical voice, with the clip gates' 25 and 15 dB", () => {
-    expect(TYPICAL_VOICE_DBFS).toBe(-22);
-    expect(roomVerdict(-60)).toBe("quiet");
-    expect(roomVerdict(-47)).toBe("quiet"); // exactly 25 dB under
-    expect(roomVerdict(-46.9)).toBe("some_noise");
-    expect(roomVerdict(-37)).toBe("some_noise"); // exactly 15 dB under
-    expect(roomVerdict(-36.9)).toBe("noisy");
+  it("quiet under -50 dBFS, noisy over -40, some noise between (recording spec)", () => {
+    expect(roomVerdict(-69)).toBe("quiet");
+    expect(roomVerdict(-50.1)).toBe("quiet");
+    expect(roomVerdict(-50)).toBe("some_noise");
+    expect(roomVerdict(-45)).toBe("some_noise");
+    expect(roomVerdict(-40)).toBe("some_noise");
+    expect(roomVerdict(-39.9)).toBe("noisy");
     expect(roomVerdict(-20)).toBe("noisy");
+    expect(roomVerdict(-120)).toBe("quiet");
   });
 
   it("answers in the spec's words", () => {

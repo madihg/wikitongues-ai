@@ -29,17 +29,19 @@ export type RecorderState = "idle" | "recording" | "recorded";
  * Mime fallback comes from pickRecorderMime (webm opus, then mp4 on iOS
  * Safari). Capture asks for 48 kHz mono. The recorder hard-stops at 30
  * seconds (MAX_DURATION_MS) by itself, whatever the screen does. The
- * microphone is opened raw (the browser's echo cancelling, noise suppression
- * and auto gain all off) unless NEXT_PUBLIC_SPEECH_CAPTURE says "processed";
- * `raw` (studio sessions) is always raw. The settings the browser actually
- * applied are read back and kept on the take, to be stored with the clip
- * (lib/speech/recorder.ts has the reasons). Everything
+ * microphone is opened as captureMode() says: as it always was (echo
+ * cancelling and noise suppression on) until NEXT_PUBLIC_SPEECH_CAPTURE is
+ * set to "raw", which turns the browser's echo cancelling, noise suppression
+ * and auto gain all off. `raw` (studio sessions) is always raw. The settings
+ * the browser actually applied are read back and kept on the take, to be
+ * stored with the clip (lib/speech/recorder.ts has the decision and the
+ * reasons). Everything
  * (mic tracks, timer, object URL) is released on stop, reset and unmount.
  */
 export function useRecorder(opts: { raw?: boolean } = {}) {
   // Every take may train a voice: the browser's own cleanup (echo cancelling,
   // noise suppression, auto gain) would be baked into it. Studio takes are
-  // always raw; other takes follow captureMode() (raw unless switched back).
+  // always raw; other takes follow captureMode() (unchanged until switched).
   const mode = opts.raw === true ? "raw" : captureMode();
   const [state, setState] = useState<RecorderState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);

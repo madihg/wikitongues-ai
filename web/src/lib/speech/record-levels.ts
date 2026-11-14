@@ -3,14 +3,17 @@
  * live bar, the room check and the take feedback all read them from here.
  * Client-safe (no server imports).
  *
- * The numbers belong to the speech-model work, not to this screen. METER uses
- * the same key names and values as the `meter` block of quality-gates.json on
- * branch speech/first-model (read 2026-11-13, before that branch was pushed).
- * When that file is on main, replace the literal below with
+ * The numbers belong to the speech-model work, not to this screen: they are
+ * the ones in the recording spec of 2026-11-13 (section 3, "Thresholds for
+ * the record screen"). METER uses the same key names and values as the
+ * `meter` block of quality-gates.json on branch speech/first-model (PR #100),
+ * plus the two room-check keys that spec asks to be added there
+ * (roomQuietDbfs, roomNoisyDbfs). When that file is on main, add those two
+ * keys to it and replace the literal below with
  *   import { QUALITY_GATES } from "./quality-gates";
  *   export const METER = QUALITY_GATES.meter;
- * and nothing else here needs to change. The values are a research synthesis
- * and are not calibrated on Igala phone audio yet.
+ * Nothing else here needs to change. The values are a research synthesis and
+ * are not calibrated on Igala phone audio yet.
  */
 export const METER = {
   /** The green band of the bar: the loudest moments should land in it. */
@@ -30,19 +33,15 @@ export const METER = {
   speechLevelLoudDbfs: -14,
   /** Noise closer to the voice than this many dB: "Noisy room". */
   noisyRoomSnrDb: 20,
+  /** Room check: a room under this level is quiet; over the next, noisy. */
+  roomQuietDbfs: -50,
+  roomNoisyDbfs: -40,
 } as const;
 
 /** The few numbers only this screen uses. */
 export const RECORD_LEVELS = {
   /** At or under this voice level the stronger "Too quiet" line shows. */
   veryQuietSpeechDbfs: -40,
-  /**
-   * The room check compares the room's noise with a typical voice (the
-   * middle of the good band). 25 dB or more under it is a quiet room; less
-   * than 15 dB under it is a noisy one. Same 25 and 15 as the clip gates.
-   */
-  roomQuietSnrDb: 25,
-  roomNoisySnrDb: 15,
   /** How long the room check listens, and how much of the start it ignores. */
   roomCheckMs: 3000,
   roomSettleMs: 300,
@@ -103,14 +102,14 @@ export interface RoomReading {
   at: string;
 }
 
-/** The voice level the room is compared with: the middle of the good band. */
-export const TYPICAL_VOICE_DBFS =
-  (METER.speechLevelGoodMinDbfs + METER.speechLevelGoodMaxDbfs) / 2;
-
+/**
+ * Quiet under -50 dBFS, noisy over -40, some noise between. A voice at the
+ * usual level of about -23 dBFS stands 27 dB over a -50 room and 17 dB over a
+ * -40 room, which is where the 20 dB "Noisy room" rule starts to fire.
+ */
 export function roomVerdict(noiseDbfs: number): RoomVerdict {
-  const under = TYPICAL_VOICE_DBFS - noiseDbfs;
-  if (under >= RECORD_LEVELS.roomQuietSnrDb) return "quiet";
-  if (under < RECORD_LEVELS.roomNoisySnrDb) return "noisy";
+  if (noiseDbfs < METER.roomQuietDbfs) return "quiet";
+  if (noiseDbfs > METER.roomNoisyDbfs) return "noisy";
   return "some_noise";
 }
 

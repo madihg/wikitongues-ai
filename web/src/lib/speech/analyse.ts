@@ -159,9 +159,12 @@ export function analyseSamples(
   }
 
   // Noise floor: the mean power of the quietest tenth of the frames. The
-  // speech rule above cannot give it (it calls anything within 28 dB of the
-  // loudest frame speech, so steady room noise 12 dB under the voice would
-  // count as speech); the quietest frames are the gaps whatever their level.
+  // worker measures the same thing (noiseFloorDbfs, snrDb) over the frames a
+  // real voice detector calls non-speech. The browser has no such detector:
+  // its speech rule above calls anything within 28 dB of the loudest frame
+  // speech, so steady room noise 12 dB under the voice would count as speech
+  // and never be measured. The quietest frames are the gaps whatever their
+  // level, so this estimate works in exactly the rooms that need the warning.
   let noiseFloorDbfs: number | null = null;
   if (frameCount >= NOISE_FLOOR_MIN_FRAMES) {
     const order = frameDb
@@ -239,11 +242,15 @@ export const THRESHOLDS = {
   minDurationMs: 600,
   /** At or under this voice level: the stronger "Too quiet" line. */
   tooQuietDbfs: RECORD_LEVELS.veryQuietSpeechDbfs,
+  /** ...or a loudest point under this. */
+  tooQuietPeakDbfs: METER.veryQuietDbfs,
   /** Under this voice level (and above the one before): "A little quiet". */
   aLittleQuietDbfs: METER.speechLevelQuietDbfs,
+  /** ...or a loudest point under this. */
+  aLittleQuietPeakDbfs: METER.quietWarnDbfs,
   /** Over this voice level: "Too loud". */
   tooLoudDbfs: METER.speechLevelLoudDbfs,
-  /** A loudest point over this is too loud too, even with a calm voice level. */
+  /** A loudest point at or over this is too loud too, even with a calm voice level. */
   tooLoudPeakDbfs: METER.clipDbfs,
   /** Noise closer to the voice than this many dB: "Noisy room". */
   noisyRoomSnrDb: METER.noisyRoomSnrDb,
@@ -284,13 +291,16 @@ export function verdicts(m: QualityMetrics): Verdict[] {
     });
   }
   const clipped = m.clippingShare > T.clippingShare || m.peakDbfs > T.peakDbfs;
-  if (m.rmsDbfs <= T.tooQuietDbfs) {
+  if (m.rmsDbfs <= T.tooQuietDbfs || m.peakDbfs < T.tooQuietPeakDbfs) {
     out.push({
       key: "too_quiet",
       tone: "warn",
       message: "Too quiet: hold the phone closer and try again",
     });
-  } else if (m.rmsDbfs < T.aLittleQuietDbfs) {
+  } else if (
+    m.rmsDbfs < T.aLittleQuietDbfs ||
+    m.peakDbfs < T.aLittleQuietPeakDbfs
+  ) {
     // The softer first step: a quiet clip can be raised later, so this only
     // suggests moving closer.
     out.push({
@@ -301,7 +311,7 @@ export function verdicts(m: QualityMetrics): Verdict[] {
   } else if (
     m.rmsDbfs > T.tooLoudDbfs ||
     // A loudest point near full scale with no clipping yet: the same advice.
-    (m.peakDbfs > T.tooLoudPeakDbfs && !clipped)
+    (m.peakDbfs >= T.tooLoudPeakDbfs && !clipped)
   ) {
     out.push({
       key: "too_loud",
