@@ -1,6 +1,8 @@
 import { CandidateRegistry } from "@/components/arena/candidate-registry";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 
-export default function CandidatesPage() {
+export default async function CandidatesPage() {
+  await requireResearcherPage();
   return (
     <div>
       <div className="mb-8">

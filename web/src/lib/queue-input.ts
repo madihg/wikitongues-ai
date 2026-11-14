@@ -41,6 +41,30 @@ import {
 export const QUEUE_OUTPUT_ORDER: Prisma.ModelOutputOrderByWithRelationInput[] =
   [{ createdAt: "asc" }, { id: "asc" }];
 
+/**
+ * The order the queue walks the prompt catalogue in: creation time, then id
+ * to break a tie. Until 2026-11-13 the prompt query carried no order, so the
+ * walk followed whatever order the database returned (storage order, which
+ * shifts when a row is rewritten). The SET of prompts an annotator still has
+ * to do never depended on it; the ORDER they meet them in did. A seed that
+ * writes rows in a designed order (prisma/seed-prompt-bank-v46.ts stamps
+ * createdAt one millisecond apart) is served in that order by this contract.
+ */
+export const QUEUE_PROMPT_ORDER: Prisma.PromptOrderByWithRelationInput[] = [
+  { createdAt: "asc" },
+  { id: "asc" },
+];
+
+/** QUEUE_PROMPT_ORDER as a comparator, for tests and read-only scripts. Pure. */
+export function compareQueuePromptRows(
+  a: { createdAt: Date; id: string },
+  b: { createdAt: Date; id: string },
+): number {
+  const t = a.createdAt.getTime() - b.createdAt.getTime();
+  if (t !== 0) return t;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 export interface QueuePromptDetail {
   id: string;
   promptId: string;
@@ -73,6 +97,7 @@ export async function loadQueueInputs(): Promise<QueueInputs> {
     }),
     prisma.prompt.findMany({
       where: { modelOutputs: { some: {} } },
+      orderBy: QUEUE_PROMPT_ORDER,
       select: {
         id: true,
         promptId: true,
