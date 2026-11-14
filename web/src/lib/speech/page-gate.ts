@@ -52,3 +52,14 @@ export async function requireSpeakPage(): Promise<void> {
   });
   if (!allowed) forbidden();
 }
+
+/**
+ * True when the signed-in account is a researcher. The /speak layout asks so
+ * the band can add the researcher tabs (Recordings, Studio) and the Listen
+ * page can add the researcher cards. It opens nothing: every page and route
+ * still runs its own gate.
+ */
+export async function isLabResearcher(): Promise<boolean> {
+  const session = await getServerSession(authOptions);
+  return canUseLab(session?.user?.role);
+}

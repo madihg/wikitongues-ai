@@ -1,12 +1,14 @@
 "use client";
 
 import { verdicts, type QualityMetrics } from "@/lib/speech/analyse";
+import { RecordLevelBar } from "./level-meter";
 
 /**
  * The feedback card shown right after Stop, before Keep. Pure: metrics (or
  * null while analysing or when the browser could not decode the clip) in,
  * plain-language verdicts out. The wording and thresholds live in
- * lib/speech/analyse.ts. The card never blocks: a warning only suggests
+ * lib/speech/analyse.ts. Under the verdicts, the numbers line and beside it
+ * a small picture of the level bar with the take's loudest point on it. The card never blocks: a warning only suggests
  * another try, and Keep stays available.
  */
 
@@ -76,9 +78,16 @@ export function TakeFeedback({
           </li>
         ))}
       </ul>
-      <p className="font-mono text-xs text-text-tertiary">
-        {metricLine(metrics)}
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="font-mono text-xs text-text-tertiary">
+          {metricLine(metrics)}
+        </p>
+        <RecordLevelBar
+          compact
+          peakDbfs={metrics.peakDbfs}
+          heldPeakDbfs={metrics.peakDbfs}
+        />
+      </div>
     </section>
   );
 }

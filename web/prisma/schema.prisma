@@ -356,6 +356,12 @@ model ColdAuthorAnswer {
   // Plain-English "what it means / why" gloss for the Igala answer. Training
   // metadata (audit/filter) only — never merged into the Igala answer itself.
   englishGloss       String?
+  // A short, direct English translation of the answer, in a few words: what
+  // the Igala says, nothing more. Typed once on the Record page (or in the
+  // episode's "Say it" block) and read aloud for the English clip. The gloss
+  // above stays what it always was, the longer meaning and why. Null until
+  // the speaker types one.
+  englishTranslation String?
   // The prompt/instruction itself rewritten in Igala by the speaker, so one
   // episode can mint two training rows (English-instruction -> Igala and
   // Igala-instruction -> Igala). Optional, never blocks locking.
@@ -891,6 +897,7 @@ model SpeechRecording {
   demoSessionId      String?
   studioSessionId    String? // one studio sitting of the TTS voice speaker (PR H); null for every other clip
   studioText         String? // the tone-marked script line the speaker read; the transcript of a studio clip
+  spokenText         String? // the exact English words an English clip read (the short translation as typed at the time); null for every clip made before 2026-11-13, which read the gloss or the prompt
   createdAt          DateTime       @default(now())
 
   prompt           Prompt             @relation(fields: [promptId], references: [id])
@@ -1089,6 +1096,14 @@ model SpeakerProfile {
   ageBand              String?
   gender               String?
   mayShareDemographics Boolean  @default(false)
+  // The clip choice, asked once and remembered (2026-11-13). All three are
+  // null until the speaker chooses; nothing is ever chosen for them. The
+  // choice counts only while it is newer than the speaker's current consent
+  // grant, so a new consent text version, or consenting again after a
+  // withdrawal, asks again. Every recording still stores its own tier.
+  defaultTier          DataTier?
+  defaultVoiceCloning  Boolean?
+  tierChosenAt         DateTime?
   updatedAt            DateTime @updatedAt
 }
 

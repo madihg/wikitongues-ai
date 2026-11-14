@@ -42,8 +42,11 @@ export const OPEN_ROWS_QUERY = {
     uploadedAt: true,
     reviewStatus: true,
     voiceCloningOptIn: true,
+    spokenText: true,
     prompt: { select: { isHoldout: true, split: true, text: true } },
-    coldAuthorAnswer: { select: { answerText: true, englishGloss: true } },
+    coldAuthorAnswer: {
+      select: { answerText: true, englishGloss: true, englishTranslation: true },
+    },
   },
 } as const;
 

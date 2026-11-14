@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { signalBusy } from "@/lib/activity-signal";
 import { MAX_DURATION_MS } from "@/lib/speech/limits";
-import { pickRecorderMime } from "@/lib/speech/recorder";
+import {
+  appliedCapture,
+  captureConstraints,
+  captureMode,
+  pickRecorderMime,
+  type CaptureSettings,
+} from "@/lib/speech/recorder";
 
 /** A finished take, held in memory until it is kept, re-recorded or discarded. */
 export interface Take {
@@ -13,6 +19,8 @@ export interface Take {
   durationMs: number;
   sampleRate: number;
   mime: string;
+  /** What was asked of the microphone and what the browser applied. */
+  capture: CaptureSettings;
 }
 
 export type RecorderState = "idle" | "recording" | "recorded";
@@ -21,15 +29,21 @@ export type RecorderState = "idle" | "recording" | "recorded";
  * MediaRecorder behind a small state machine: idle -> recording -> recorded.
  * Mime fallback comes from pickRecorderMime (webm opus, then mp4 on iOS
  * Safari). Capture asks for 48 kHz mono. The recorder hard-stops at 30
- * seconds (MAX_DURATION_MS) by itself, whatever the screen does. `raw`
- * (studio sessions) turns the browser's echo cancelling, noise suppression and
- * auto gain off. Everything
+ * seconds (MAX_DURATION_MS) by itself, whatever the screen does. The
+ * microphone is opened as captureMode() says: as it always was (echo
+ * cancelling and noise suppression on) until NEXT_PUBLIC_SPEECH_CAPTURE is
+ * set to "raw", which turns the browser's echo cancelling, noise suppression
+ * and auto gain all off. `raw` (studio sessions) is always raw. The settings
+ * the browser actually applied are read back and kept on the take, to be
+ * stored with the clip (lib/speech/recorder.ts has the decision and the
+ * reasons). Everything
  * (mic tracks, timer, object URL) is released on stop, reset and unmount.
  */
 export function useRecorder(opts: { raw?: boolean } = {}) {
-  // Studio takes train a voice: the browser's own cleanup (echo cancelling,
-  // noise suppression, auto gain) would be baked into it, so raw turns it off.
-  const raw = opts.raw === true;
+  // Every take may train a voice: the browser's own cleanup (echo cancelling,
+  // noise suppression, auto gain) would be baked into it. Studio takes are
+  // always raw; other takes follow captureMode() (unchanged until switched).
+  const mode = opts.raw === true ? "raw" : captureMode();
   const [state, setState] = useState<RecorderState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [take, setTake] = useState<Take | null>(null);
@@ -82,18 +96,18 @@ export function useRecorder(opts: { raw?: boolean } = {}) {
       const mime = pickRecorderMime((m) => MediaRecorder.isTypeSupported(m));
       if (!mime) throw new Error("This browser cannot record audio.");
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: { ideal: 48000 },
-          echoCancellation: !raw,
-          noiseSuppression: !raw,
-          ...(raw ? { autoGainControl: false } : {}),
-        },
+        audio: captureConstraints(mode),
       });
       streamRef.current = stream;
       setStream(stream);
-      const sampleRate =
-        stream.getAudioTracks()[0]?.getSettings().sampleRate ?? 48000;
+      // Confirm what the browser really applied: it may ignore the request.
+      const settings = stream.getAudioTracks()[0]?.getSettings();
+      const sampleRate = settings?.sampleRate ?? 48000;
+      const capture = appliedCapture(
+        mode,
+        settings as Record<string, unknown> | undefined,
+        typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+      );
 
       const rec = new MediaRecorder(stream, { mimeType: mime });
       chunksRef.current = [];
@@ -111,7 +125,7 @@ export function useRecorder(opts: { raw?: boolean } = {}) {
         const url = URL.createObjectURL(blob);
         urlRef.current = url;
         setElapsedMs(durationMs);
-        setTake({ blob, url, durationMs, sampleRate, mime: type });
+        setTake({ blob, url, durationMs, sampleRate, mime: type, capture });
         setState("recorded");
       };
       recorderRef.current = rec;
@@ -137,7 +151,7 @@ export function useRecorder(opts: { raw?: boolean } = {}) {
             : "Could not start recording.",
       );
     }
-  }, [dropUrl, raw, release, stop]);
+  }, [dropUrl, mode, release, stop]);
 
   const reset = useCallback(() => {
     const rec = recorderRef.current;

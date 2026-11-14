@@ -111,6 +111,27 @@ const ROUTES: Route[] = [
       ),
   },
   {
+    name: "GET speech/clip-choice",
+    file: "speech/clip-choice/route.ts",
+    audience: "speaker",
+    call: async () => (await load<{ GET: () => Promise<Response> }>("./speech/clip-choice/route")).GET,
+  },
+  {
+    name: "PUT speech/clip-choice",
+    file: "speech/clip-choice/route.ts",
+    audience: "speaker",
+    call: async () => () =>
+      load<{ PUT: (r: Request) => Promise<Response> }>("./speech/clip-choice/route").then((m) =>
+        m.PUT(json("PUT", "speech/clip-choice")),
+      ),
+  },
+  {
+    name: "GET speech/waiting",
+    file: "speech/waiting/route.ts",
+    audience: "speaker",
+    call: async () => (await load<{ GET: () => Promise<Response> }>("./speech/waiting/route")).GET,
+  },
+  {
     name: "GET speech/next",
     file: "speech/next/route.ts",
     audience: "speaker",

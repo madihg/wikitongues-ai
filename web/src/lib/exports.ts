@@ -94,6 +94,10 @@ export async function exportGold(): Promise<string> {
     // permissions that govern what may be done with them.
     { key: "igala_answer", get: (r) => r.answerText },
     { key: "english_translation", get: (r) => r.englishGloss },
+    // The short, direct translation typed for the English clip (2026-11-13).
+    // Its own column: english_translation above keeps its name and holds the
+    // longer meaning, as every earlier export did.
+    { key: "english_translation_short", get: (r) => r.englishTranslation },
     { key: "dialect", get: (r) => r.dialect },
     { key: "consent_training", get: (r) => r.consentTraining },
     { key: "consent_benchmark", get: (r) => r.consentBenchmark },
@@ -417,6 +421,7 @@ One row per community-authored answer. This is the primary artifact.
 | category | prompt category (orthography, lexicon, register, ...) |
 | igala_answer | the contributor's Igala, written before seeing any model output |
 | english_translation | the contributor's English gloss, where given |
+| english_translation_short | a short, direct English translation of the answer in a few words, typed by the contributor for the English recording; empty where none was typed |
 | dialect | self-reported dialect, where given |
 | instruction_igala | contributor's note written in Igala, where given |
 | provenance | how the answer was produced |

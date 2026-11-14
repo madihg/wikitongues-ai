@@ -1,18 +1,12 @@
+import { redirect } from "next/navigation";
 import { requireLabPage } from "@/lib/speech/page-gate";
-import { RecordInterface } from "@/components/lab/record-interface";
 
+/**
+ * The old Record path. Record lives at /speak for every role now, so this
+ * only redirects: the gate first (flag off is still a 404, a stranger still a
+ * 403), then on to /speak.
+ */
 export default async function RecordPage() {
   await requireLabPage({ annotatorRedirect: "/speak" });
-  return (
-    <div>
-      <h1 className="text-2xl font-semibold text-text-primary">Record</h1>
-      <p className="mt-2 text-sm text-text-tertiary">
-        Say a prompt out loud, then choose what happens to the clip. Nothing is
-        shared until you choose.
-      </p>
-      <div className="mt-6">
-        <RecordInterface />
-      </div>
-    </div>
-  );
+  redirect("/speak");
 }

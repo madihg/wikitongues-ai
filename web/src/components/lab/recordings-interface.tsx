@@ -29,6 +29,8 @@ export interface RecordingItem {
   promptText: string;
   answerText: string | null;
   englishGloss?: string | null;
+  /** The exact words an English clip read; absent on older clips. */
+  spokenText?: string | null;
   language: SpeechLanguage;
   quality: QualityMetrics | null;
   flags: VerdictKey[];
@@ -68,8 +70,10 @@ const LANGUAGE_FILTERS: { key: string; label: string }[] = [
 const WARNING_FILTERS: { key: string; label: string }[] = [
   { key: "", label: "Any take" },
   { key: "too_quiet", label: "Too quiet" },
+  { key: "a_little_quiet", label: "A little quiet" },
   { key: "too_loud", label: "Too loud" },
   { key: "clipped", label: "Clipped" },
+  { key: "noisy_room", label: "Noisy room" },
   { key: "cut_short", label: "Cut short" },
   { key: "no_speech", label: "No speech" },
   { key: "too_fast", label: "Fast" },
@@ -159,7 +163,9 @@ export function RecordingCard({
         )
       ) : (
         <p className="mt-2 text-sm text-text-secondary">
-          {item.englishGloss?.trim() || item.promptText}
+          {item.spokenText?.trim() ||
+            item.englishGloss?.trim() ||
+            item.promptText}
         </p>
       )}
       <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-tertiary">
