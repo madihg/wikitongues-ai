@@ -1,11 +1,12 @@
 import { requireSpeakPage } from "@/lib/speech/page-gate";
 import { RecordInterface } from "@/components/lab/record-interface";
 
+/** The Record tab: the first Speech tab, for every role. */
 export default async function SpeakPage() {
   await requireSpeakPage();
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-text-primary">Speak</h1>
+      <h1 className="text-2xl font-semibold text-text-primary">Record</h1>
       <p className="mt-2 text-sm text-text-tertiary">
         Say a prompt out loud, then choose what happens to the clip. Nothing is
         shared until you choose.

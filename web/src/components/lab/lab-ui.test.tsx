@@ -47,7 +47,7 @@ import {
   type RecordingItem,
 } from "./recordings-interface";
 import { AXES_BLOCK_LABEL, SPEECH_AXES } from "@/lib/speech/speech-axes";
-import { LabBand, LAB_TABS, activeLabTab } from "./lab-band";
+import { LabBand, LAB_TABS, SpeakBand, activeLabTab } from "./lab-band";
 
 /**
  * Proof of the Speech Lab screens' invariants (design: "Record tab",
@@ -627,16 +627,28 @@ describe("Recordings", () => {
 // ---------- The band ---------------------------------------------------
 
 describe("LabBand", () => {
-  it("is the 56px ink band with LAB, Speech and the three tabs", () => {
-    mockPathname.current = "/lab/speech/listen";
+  it("is the 56px ink band with SPEECH and every researcher tab", () => {
+    mockPathname.current = "/speak/listen";
     const html = renderToStaticMarkup(<LabBand />);
     const [header] = tagsOf(html, "header");
     expect(classOf(header)).toMatch(/\bh-14\b/);
     expect(classOf(header)).toContain("bg-foreground");
     expect(classOf(header)).toContain("text-background");
-    expect(html).toContain("LAB");
+    // One name for one thing (2026-11-13): the band reads SPEECH. "LAB" and
+    // "Add your voice" are gone.
+    expect(html).toContain(">SPEECH<");
+    expect(html).not.toContain("LAB");
+    expect(html).not.toContain("Add your voice");
     expect(html).toContain("tracking-widest");
     for (const tab of LAB_TABS) expect(html).toContain(`>${tab.label}<`);
+    expect(LAB_TABS.map((t) => t.label)).toEqual([
+      "Record",
+      "Listen",
+      "Check",
+      "Profile",
+      "Recordings",
+      "Studio",
+    ]);
   });
 
   it("marks the current tab", () => {
@@ -650,12 +662,42 @@ describe("LabBand", () => {
   });
 
   it("activeLabTab: Record only on its exact path", () => {
-    expect(activeLabTab("/lab/speech")).toBe("/lab/speech");
-    expect(activeLabTab("/lab/speech/listen")).toBe("/lab/speech/listen");
+    expect(activeLabTab("/speak")).toBe("/speak");
+    expect(activeLabTab("/speak/listen")).toBe("/speak/listen");
     expect(activeLabTab("/lab/speech/recordings/x")).toBe(
       "/lab/speech/recordings",
     );
+    // The old Record and Listen paths are redirects now, not tabs.
+    expect(activeLabTab("/lab/speech")).toBeNull();
     expect(activeLabTab("/lab/other")).toBeNull();
+  });
+
+  it("an annotator's band is the same band with the four speaker tabs only", () => {
+    mockPathname.current = "/speak";
+    const html = renderToStaticMarkup(<SpeakBand />);
+    expect(html).toContain(">SPEECH<");
+    const tabs = tagsOf(html, "a").map((t) => /href="([^"]*)"/.exec(t)?.[1]);
+    expect(tabs).toEqual([
+      "/speak",
+      "/speak/listen",
+      "/speak/check",
+      "/speak/profile",
+    ]);
+    expect(html).toContain(">Record<");
+    expect(html).not.toContain(">Speak<");
+    expect(html).not.toContain(">Recordings<");
+    // A researcher on the same page gets the same four first, then two more.
+    const researcher = renderToStaticMarkup(<SpeakBand researcher />);
+    expect(
+      tagsOf(researcher, "a").map((t) => /href="([^"]*)"/.exec(t)?.[1]),
+    ).toEqual([...tabs, "/lab/speech/recordings", "/lab/speech/studio"]);
+  });
+
+  it("the tab strip scrolls sideways on a narrow screen, it never wraps", () => {
+    const html = renderToStaticMarkup(<LabBand />);
+    const [nav] = tagsOf(html, "nav");
+    expect(classOf(nav)).toContain("overflow-x-auto");
+    for (const a of tagsOf(html, "a")) expect(classOf(a)).toContain("shrink-0");
   });
 });
 

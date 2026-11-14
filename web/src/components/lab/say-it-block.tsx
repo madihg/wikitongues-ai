@@ -156,7 +156,7 @@ export function SayItBlock({
           {saved > 0 ? "Continue to the AI outputs" : "Skip, no recording"}
         </button>
         <p className="text-xs text-text-tertiary">
-          You can also record past answers later, from the Speak or Record page.
+          You can also record past answers later, on the Record page.
         </p>
       </div>
     </section>

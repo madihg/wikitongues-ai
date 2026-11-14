@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
 import { rankByCoverage } from "@/lib/speech/coverage";
+import { NOT_FROZEN, loadRecordQueue } from "@/lib/speech/record-queue";
 
 /**
  * The Record queue (GET /api/lab/speech/next). For the speaker side of the
@@ -26,9 +27,6 @@ import { rankByCoverage } from "@/lib/speech/coverage";
  * re-orders; it adds and drops nothing.
  */
 
-/** Never serve a frozen prompt: the shared filter for both queue steps. */
-const NOT_FROZEN = { isHoldout: false, split: { not: "test" as const } };
-
 export async function GET(req: Request) {
   const gate = await labGate({ audience: "speaker" });
   if (gate.error) return gate.error;
@@ -42,45 +40,12 @@ export async function GET(req: Request) {
     .filter(Boolean)
     .slice(0, 100);
 
-  // Prompts (by Prompt.id) this researcher has already recorded for real.
-  const recordedRows = isDemo
-    ? []
-    : await prisma.speechRecording.findMany({
-        where: { annotatorId, isDemo: false, language: "igala" },
-        select: { promptId: true },
-      });
-  const recordedIds = [...new Set(recordedRows.map((r) => r.promptId))];
-
   // Step 1: own answers with no recording, oldest answer first. One row per
-  // prompt (the latest answer if there are several).
-  const answers = await prisma.coldAuthorAnswer.findMany({
-    where: {
-      annotatorId,
-      isDemo: false,
-      prompt: {
-        ...NOT_FROZEN,
-        language: "igala",
-        id: { notIn: recordedIds },
-        promptId: { notIn: exclude },
-      },
-    },
-    orderBy: { createdAt: "asc" },
-    select: {
-      id: true,
-      promptId: true,
-      answerText: true,
-      englishGloss: true,
-      dialect: true,
-      createdAt: true,
-      prompt: {
-        select: { id: true, promptId: true, text: true, bucket: true },
-      },
-    },
-  });
-  const latestPerPrompt = new Map<string, (typeof answers)[number]>();
-  for (const a of answers) latestPerPrompt.set(a.promptId, a); // later wins
-  const withAnswer = [...latestPerPrompt.values()].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+  // prompt (the latest answer if there are several). The same loader counts
+  // what is waiting for the sidebar (lib/speech/record-queue.ts).
+  const { recordedIds, waiting: withAnswer } = await loadRecordQueue(
+    annotatorId,
+    { isDemo, exclude },
   );
 
   const progress = { recorded: recordedIds.length };

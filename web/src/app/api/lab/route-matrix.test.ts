@@ -111,6 +111,12 @@ const ROUTES: Route[] = [
       ),
   },
   {
+    name: "GET speech/waiting",
+    file: "speech/waiting/route.ts",
+    audience: "speaker",
+    call: async () => (await load<{ GET: () => Promise<Response> }>("./speech/waiting/route")).GET,
+  },
+  {
     name: "GET speech/next",
     file: "speech/next/route.ts",
     audience: "speaker",
