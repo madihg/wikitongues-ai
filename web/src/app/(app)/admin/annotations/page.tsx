@@ -1,11 +1,13 @@
+import { DataTabs } from "@/components/admin/data-tabs";
 import { AnnotationsReview } from "@/components/admin/annotations-review";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
 import { isAnnotationType } from "@/lib/annotations-query";
 
 /**
- * Researcher annotation-review surface. Lives under the admin layout, so the
- * RoleGuard already restricts it to RESEARCHER.
+ * Researcher annotation-review surface: the Text answers tab of the Data
+ * view, and its default. Lives under the admin layout, so the RoleGuard
+ * already restricts it to RESEARCHER.
  *
  * Deep-link contract (other pages link in via these exact param names):
  *   ?annotator=<userId>   pre-select that annotator in the filter
@@ -26,6 +28,7 @@ export default async function AnnotationsPage({
 
   return (
     <div>
+      <DataTabs />
       <div className="mb-8">
         <h1 className="flex items-center gap-2 text-2xl font-semibold text-text-primary">
           Annotations

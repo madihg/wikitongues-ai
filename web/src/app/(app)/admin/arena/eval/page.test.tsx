@@ -2,17 +2,17 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 /**
- * Render test for the rebuilt Model Arena Overview.
+ * Render test for the Benchmark tab, which took over the two blocks of the
+ * Model Arena overview that had no other home: the Community Agreement Score
+ * scoreboard (now the full field) and the rubric arena table with its reading
+ * guide (now the "By category" block). The overview's other blocks, the
+ * speakers' headline and the current pairing, live on the Verdict tab.
  *
- * The page exists to fix an ordering defect: it used to lead with the
- * Bradley-Terry rubric table fitted over all history, where nearly every cell
- * reports an absence of evidence, and it apologized for that table before the
- * reader had seen anything. So the two things worth pinning down are exactly
- * the two things that would silently regress:
+ * Two things are pinned, the two that would silently regress:
  *
- * 1. ORDER. The speakers' verdict comes first, the agreement scoreboard
- *    second, the rubric table third, the reading guide last.
- * 2. LIVE NUMBERS. Nothing on the page is hardcoded. Proved the only way it
+ * 1. ORDER. The scoreboard first, the automatic eval second, the rubric
+ *    table and its reading guide last and closed until asked for.
+ * 2. LIVE NUMBERS. Nothing in the prose is hardcoded. Proved the only way it
  *    can be proved: render twice against two different fixture databases and
  *    require every quoted figure to move with the data.
  *
@@ -192,11 +192,37 @@ vi.mock("@/lib/prisma", () => {
   };
 });
 
-import ArenaPage from "./page";
+vi.mock("@/lib/admin/page-gate", () => ({
+  requireResearcherPage: vi.fn(async () => ({
+    id: "u1",
+    name: "R",
+    email: "r@example.org",
+    role: "RESEARCHER",
+    owner: false,
+  })),
+}));
+vi.mock("next/navigation", () => ({
+  redirect: (to: string) => {
+    throw new Error(`NEXT_REDIRECT:${to}`);
+  },
+}));
 
-async function renderPage(): Promise<string> {
-  return renderToStaticMarkup(await ArenaPage());
-}
+import BenchmarkPage from "./page";
+import {
+  AgreementSection,
+  CategorySection,
+} from "@/components/arena/benchmark-sections";
+import ArenaRedirect from "../page";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
+
+const shell = async (open?: string) =>
+  renderToStaticMarkup(
+    await BenchmarkPage({
+      searchParams: Promise.resolve(open ? { open } : {}),
+    }),
+  );
+const bars = async () => renderToStaticMarkup(await AgreementSection());
+const category = async () => renderToStaticMarkup(await CategorySection());
 
 /** Visible prose only: tags, SSR text-node comments and runs of whitespace
  * collapsed away, so an assertion about a sentence cannot be satisfied (or
@@ -210,9 +236,9 @@ function textOf(html: string): string {
     .trim();
 }
 
-// Section anchors, in the order the rebuilt page must present them.
-const VERDICT = "What the speakers decided";
 const SCOREBOARD = "Community Agreement Score";
+const AUTO = "Automatic eval";
+const BY_CATEGORY = "By category";
 const RUBRIC = "The rubric arena, category by category";
 const GUIDE = "How to read the table above";
 
@@ -220,48 +246,62 @@ beforeEach(() => {
   fixture.comparisons = baseWorld();
 });
 
-describe("Model Arena overview - order", () => {
-  it("leads with the speakers' verdict and demotes the rubric table below it", async () => {
-    const html = await renderPage();
-    const at = [VERDICT, SCOREBOARD, RUBRIC, GUIDE].map((s) => html.indexOf(s));
-    expect(at.every((i) => i >= 0)).toBe(true);
-    // Strictly increasing: verdict, scoreboard, rubric table, reading guide.
-    expect([...at].sort((a, b) => a - b)).toEqual(at);
-  });
-
-  it("puts the honesty text under the data, not above it", async () => {
-    const html = await renderPage();
-    // The long pre-table explainer is suppressed on this page; its opening
-    // line must not reappear above the verdict.
-    expect(html).not.toContain("How to read this table");
-    expect(html.indexOf(GUIDE)).toBeGreaterThan(html.indexOf(RUBRIC));
-    expect(html.indexOf(GUIDE)).toBeGreaterThan(html.indexOf(VERDICT));
-  });
-
-  it("renders the three blocks the lede promises, and the eval link", async () => {
-    const html = await renderPage();
-    // 1. the headline split, naming the computed leader.
-    expect(html).toContain("Gemini + RAG v4");
-    // 2. the current pairing bar.
-    expect(html).toContain("The current pairing");
-    expect(html).toContain("current pairing</span>");
-    // 3. the both-inadequate rate with its weekly trend strip.
-    expect(html).toContain("Both answers rejected, and where that rate is");
-    expect(html).toContain("rejected both");
-    // The scoreboard states its relationship to the verdict and links out.
-    expect(html).toContain("machine proxy");
-    expect(html).toContain("the humans win");
-    expect(html).toContain('href="/admin/arena/eval"');
-    expect(html).toContain('href="/admin/arena/verdict"');
-    // The scoreboard itself draws, anchored to native speaker agreement.
-    expect(html).toContain("native speaker agreement");
-    expect(html).toContain("<svg");
+describe("the old Model Arena address", () => {
+  it("redirects to the Verdict tab", () => {
+    expect(() => ArenaRedirect()).toThrow("NEXT_REDIRECT:/admin/arena/verdict");
   });
 });
 
-describe("Model Arena overview - live numbers", () => {
+describe("Benchmark - order and the gate", () => {
+  it("checks the researcher on the server before anything else", async () => {
+    await shell();
+    expect(requireResearcherPage).toHaveBeenCalled();
+  });
+
+  it("puts the scoreboard first, the automatic eval second, By category last", async () => {
+    const html = await shell();
+    const at = [SCOREBOARD, AUTO, BY_CATEGORY].map((s) => html.indexOf(s));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+  });
+
+  it("keeps By category closed, and uncomputed, until it is asked for", async () => {
+    const closed = await shell();
+    expect(closed).toContain(
+      'href="/admin/arena/eval?open=category#by-category"',
+    );
+    expect(closed).not.toContain("Close</a>");
+    const open = await shell("category");
+    expect(open).toContain('href="/admin/arena/eval#by-category"');
+    expect(open).toContain("Close</a>");
+  });
+
+  it("states the scoreboard's relationship to the verdict", async () => {
+    const html = await shell();
+    expect(html).toContain("machine proxy");
+    expect(html).toContain("the humans win");
+  });
+
+  it("draws the whole field, anchored to native speaker agreement, with no fold", async () => {
+    const html = await bars();
+    expect(html).toContain("native speaker agreement");
+    expect(html).toContain("<svg");
+    expect(html).toContain("Gemini + RAG v4");
+    // Every arm is on the first chart: nothing behind a "show all" toggle.
+    expect(html).not.toContain("<details");
+  });
+
+  it("puts the reading guide under the rubric table, not above it", async () => {
+    const html = await category();
+    expect(html).not.toContain("How to read this table");
+    expect(html.indexOf(RUBRIC)).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf(GUIDE)).toBeGreaterThan(html.indexOf(RUBRIC));
+  });
+});
+
+describe("Benchmark, By category - live numbers", () => {
   it("reconciles the all-time and pool comparison counts from the data", async () => {
-    const html = await renderPage();
+    const html = await category();
     // 11 all-time = 7 pool + 4 retired; 5 pool decided, 0 retired decided.
     expect(html).toContain(
       "11 counts every blind comparison recorded outside demo sessions",
@@ -281,7 +321,7 @@ describe("Model Arena overview - live numbers", () => {
     // reads two numbers for one thing. Both come from the same population:
     // non-demo comparisons by real annotators (see the @test.com exclusion in
     // /api/arena/leaderboard, which the table is served from).
-    const txt = textOf(await renderPage());
+    const txt = textOf(await category());
     expect(txt).toContain("dated rather than membership-based");
     expect(txt).toContain(
       "its own count runs a little above the pool number quoted here",
@@ -291,28 +331,15 @@ describe("Model Arena overview - live numbers", () => {
     );
   });
 
-  it("shows the both-inadequate rate falling from the retired arms to the pool", async () => {
-    // Read the prose, not the markup: bar widths are inline percentages too,
-    // so a raw "14%" search would match a style attribute.
-    const txt = textOf(await renderPage());
-    // 3 of 4 retired matchups rejected both; 1 of 7 pool matchups did.
-    expect(txt).toContain(
-      "rejected both answers in 75% of the 4 matchups involving an arm since retired",
-    );
-    expect(txt).toContain(
-      "Among the 7 matchups between the current pool arms it is 14%",
-    );
-  });
-
   it("quotes the decided-winner total in the reading guide from the data", async () => {
-    const html = await renderPage();
+    const html = await category();
     expect(html).toContain("Spread 5 decided winners across");
   });
 
   it("hardcodes nothing: every quoted figure moves when the data moves", async () => {
-    const before = await renderPage();
+    const before = await category();
     fixture.comparisons = secondWorld();
-    const after = await renderPage();
+    const after = await category();
 
     expect(after).not.toBe(before);
     // All-time count follows the fixture: 11 becomes 15.
@@ -322,20 +349,16 @@ describe("Model Arena overview - live numbers", () => {
     expect(after).not.toContain(
       "11 counts every blind comparison recorded outside demo sessions",
     );
-    // The retired arm is now uniformly both-inadequate.
-    expect(after).toContain("100%");
     expect(after).toContain("0 of 8");
     // The pool half is untouched by the retired rows, as the split promises.
     expect(after).toContain("5 of its 7 matchups produced a decided winner");
   });
 
-  it("carries none of the production figures this page used to imply", async () => {
-    const txt = textOf(await renderPage());
-    // The real database currently reads 1,222 non-demo comparisons by real
-    // annotators (1,241 before the @test.com accounts are excluded), 73
-    // decided, 191 of them between current pool arms, 1,030 before the pivot
-    // and 192 since. With a fixture database none of those can legitimately
-    // appear in the prose, so their presence would mean a baked-in number.
+  it("carries none of the production figures the old page used to imply", async () => {
+    const txt = textOf((await category()) + (await bars()) + (await shell()));
+    // With a fixture database none of the real database's figures can
+    // legitimately appear in the prose, so their presence would mean a
+    // baked-in number.
     for (const stale of [
       "1,241",
       "1241",

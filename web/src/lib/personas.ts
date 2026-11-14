@@ -10,6 +10,7 @@
  */
 
 import { canUseLab } from "@/lib/lab-flags";
+import { researchLinks } from "@/lib/admin/routes";
 
 export const OWNER_EMAILS = ["madihalim@gmail.com"];
 
@@ -50,10 +51,16 @@ export interface NavLink {
   label: string;
   /** Renders as an out-link: new tab, rel-guarded, arrow-marked, never active. */
   external?: boolean;
-  /** Sidebar group. "lab" links render after a divider under a "Lab" heading. */
-  group?: "lab";
+  /**
+   * Sidebar group. "lab" links render after a divider under a "Lab" heading;
+   * "research" links are the five researcher views, under their own divider
+   * and heading; "more" is the single More entry that closes the list.
+   */
+  group?: "lab" | "research" | "more";
   /** Small monospace tag beside the label (the lab links say who may see them). */
   tag?: string;
+  /** The one question a research view answers. Shown as the link's tooltip. */
+  question?: string;
 }
 
 /** Server-derived switches that change the nav. Passed in so navForRole stays pure. */
@@ -69,7 +76,8 @@ export interface NavOptions {
 
 /**
  * Primary sidebar nav for the (app) area. Annotators get only their own work;
- * researchers (and the owner) get the full tool, with Prompts before Annotate.
+ * researchers (and the owner) get the same lines first, then the five
+ * research views and More.
  */
 export function navForRole(
   role?: string | null,
@@ -77,34 +85,21 @@ export function navForRole(
   options: NavOptions = {},
 ): NavLink[] {
   if (isResearcher(role, email)) {
+    // A researcher's own work comes first, with the labels and the order an
+    // annotator sees. The research tools sit below the sidebar's divider:
+    // five views and More (src/lib/admin/routes.ts owns that list). Prompts,
+    // Corrections, Review queue, Annotations, Speakers' Verdict, Model Arena
+    // and How it works are all still reachable, inside a view or under More.
     const links: NavLink[] = [
       { href: "/annotator", label: "Dashboard" },
-      { href: "/annotator/prompts", label: "Prompts" },
       { href: "/annotator/annotate", label: "Annotate" },
-      // Researchers keep the standalone Corrections lane (the backlog view of
-      // already-judged outputs). Annotators do NOT get it - see below.
-      { href: "/annotator/corrections", label: "Corrections" },
       { href: "/annotator/history", label: "My Work" },
       { href: "/annotator/rubric", label: "Rubric" },
-      { href: "/annotator/review", label: "Review queue" },
-      { href: "/admin/annotations", label: "Annotations" },
-      { href: "/admin", label: "Researcher Dashboard" },
-      // First stop for the human-judgment evidence: what speakers decide in
-      // blind matchups, in plain language. Deliberately ahead of Model Arena.
-      { href: "/admin/arena/verdict", label: "Speakers' Verdict" },
-      { href: "/admin/arena", label: "Model Arena" },
-      // Plain-language project explainer for staff, funders and community
-      // members. Points OUT to the public marketing page (see the constant
-      // above): one telling of the story, publicly readable, live numbers.
-      {
-        href: PUBLIC_HOW_IT_WORKS_URL,
-        label: "How it works",
-        external: true,
-      },
     ];
     // The Speech Lab ships dark (src/lib/lab-flags.ts): the link exists only
     // when the server says the flag is on. Annotators never get it, below.
-    if (options.lab && canUseLab(role)) {
+    const speech = !!options.lab && canUseLab(role);
+    if (speech) {
       links.push({
         href: "/lab/speech",
         label: "Speech",
@@ -117,14 +112,9 @@ export function navForRole(
         label: "Check",
         group: "lab",
       });
-      // The nightly loop's dashboard: overnight card, hours, trend, candidates.
-      links.push({
-        href: "/admin/speech",
-        label: "Speech loop",
-        tag: "researchers only",
-        group: "lab",
-      });
     }
+    // The nightly loop's dashboard is now a tab of the Speech model view.
+    links.push(...researchLinks({ speech }));
     return links;
   }
   // Pure annotator. NO Corrections tab (2026-08-28 rework, Halim's call):

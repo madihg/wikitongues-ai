@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { approachLabel } from "@/lib/method-metrics";
 import { ModelChat, type ChatCandidate } from "@/components/arena/model-chat";
+import { CompareSwitch } from "@/components/arena/compare-switch";
+import { requireResearcherPage } from "@/lib/admin/page-gate";
 import { HelpButton } from "@/components/help-button";
 import { InfoTip } from "@/components/info-tip";
 
@@ -21,6 +23,7 @@ import { InfoTip } from "@/components/info-tip";
 export const dynamic = "force-dynamic";
 
 async function ChatSurface() {
+  await requireResearcherPage();
   const candidates = await prisma.candidateModel.findMany({
     // provider "derived" (tone-stripped scoreboard controls, see
     // scripts/derive-tone-stripped-arms.ts) is a measurement device, not a
@@ -55,6 +58,7 @@ async function ChatSurface() {
 export default function ArenaChatPage() {
   return (
     <div>
+      <CompareSwitch />
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-2xl text-text-primary">
           Chat with the models

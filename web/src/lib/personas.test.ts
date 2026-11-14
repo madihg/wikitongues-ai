@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { activeNavHref, navForRole, PUBLIC_HOW_IT_WORKS_URL } from "./personas";
+import { ARCHIVE } from "@/lib/admin/routes";
 
 /**
  * The no-tab flow (2026-08-28 rework, Halim's call): annotators do NOT get a
@@ -30,9 +31,11 @@ describe("navForRole - the no-tab flow", () => {
     }
   });
 
-  it("researchers KEEP the standalone Corrections lane (the backlog view)", () => {
+  it("researchers no longer carry Corrections in the sidebar: the backlog view is kept under More, Archive", () => {
     const links = navForRole("RESEARCHER", RESEARCHER_EMAIL);
-    expect(links.map((l) => l.href)).toContain("/annotator/corrections");
+    expect(links.map((l) => l.href)).not.toContain("/annotator/corrections");
+    expect(links.map((l) => l.href)).toContain("/admin/more");
+    expect(ARCHIVE.map((a) => a.href)).toContain("/annotator/corrections");
   });
 
   it("an unknown/absent role gets the annotator nav - and so no Corrections either", () => {
@@ -42,20 +45,68 @@ describe("navForRole - the no-tab flow", () => {
   });
 });
 
-describe("navForRole - the Speakers' Verdict entry", () => {
-  it("researchers get the verdict ahead of Model Arena", () => {
-    const hrefs = navForRole("RESEARCHER", RESEARCHER_EMAIL).map((l) => l.href);
-    const verdict = hrefs.indexOf("/admin/arena/verdict");
-    const arena = hrefs.indexOf("/admin/arena");
-    expect(verdict).toBeGreaterThan(-1);
-    expect(arena).toBeGreaterThan(-1);
-    expect(verdict).toBeLessThan(arena);
+describe("navForRole - a researcher's sidebar", () => {
+  const links = navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: true });
+
+  it("opens with the annotator's own four lines, same labels, same order", () => {
+    const annotator = navForRole("ANNOTATOR", "annotator@example.com");
+    expect(links.slice(0, 4)).toEqual(annotator);
+    expect(links.slice(0, 4).map((l) => l.label)).toEqual([
+      "Dashboard",
+      "Annotate",
+      "My Work",
+      "Rubric",
+    ]);
   });
 
-  it("annotators do NOT get the verdict entry - it is a researcher surface", () => {
+  it("then lists the five research views, then More, in that order", () => {
     expect(
-      navForRole("ANNOTATOR", "annotator@example.com").map((l) => l.href),
-    ).not.toContain("/admin/arena/verdict");
+      links.filter((l) => l.group === "research").map((l) => [l.label, l.href]),
+    ).toEqual([
+      ["Today", "/admin"],
+      ["People", "/admin/people"],
+      ["Data", "/admin/annotations"],
+      ["Text model", "/admin/arena/verdict"],
+      ["Speech model", "/admin/speech"],
+    ]);
+    expect(links[links.length - 1]).toMatchObject({
+      href: "/admin/more",
+      label: "More",
+      group: "more",
+    });
+  });
+
+  it("goes from twelve top-level research lines to five views and More", () => {
+    const below = links.filter(
+      (l) => l.group === "research" || l.group === "more",
+    );
+    expect(below).toHaveLength(6);
+    // Every line that left the sidebar is still reachable (routes.test.ts
+    // walks the addresses); none of them is a sidebar line any more.
+    const hrefs = links.map((l) => l.href);
+    for (const gone of [
+      "/annotator/prompts",
+      "/annotator/corrections",
+      "/annotator/review",
+      "/admin/arena",
+    ]) {
+      expect(hrefs).not.toContain(gone);
+    }
+  });
+
+  it("hides the Speech model view while speech is off on the server", () => {
+    const off = navForRole("RESEARCHER", RESEARCHER_EMAIL);
+    expect(off.map((l) => l.label)).not.toContain("Speech model");
+    expect(off.filter((l) => l.group === "research")).toHaveLength(4);
+  });
+
+  it("annotators get none of it", () => {
+    const annotator = navForRole("ANNOTATOR", "annotator@example.com", {
+      lab: true,
+    });
+    expect(annotator.some((l) => l.group)).toBe(false);
+    expect(annotator.map((l) => l.href)).not.toContain("/admin/arena/verdict");
+    expect(annotator.map((l) => l.href)).not.toContain("/admin");
   });
 });
 
@@ -66,17 +117,14 @@ describe("activeNavHref - one highlighted entry, always the most specific", () =
     expect(activeNavHref(links, "/admin/arena/verdict")).toBe(
       "/admin/arena/verdict",
     );
-    expect(activeNavHref(links, "/admin/arena")).toBe("/admin/arena");
     expect(activeNavHref(links, "/admin")).toBe("/admin");
   });
 
-  it("on nested routes picks the longest owning link, never its parent too", () => {
-    // A verdict sub-route belongs to the verdict entry, not to Model Arena.
+  it("on nested routes picks the longest owning link", () => {
     expect(activeNavHref(links, "/admin/arena/verdict/anything")).toBe(
       "/admin/arena/verdict",
     );
-    // Other arena sub-routes still belong to Model Arena.
-    expect(activeNavHref(links, "/admin/arena/costs")).toBe("/admin/arena");
+    expect(activeNavHref(links, "/admin/more/legacy")).toBe("/admin/more");
   });
 
   it("the role dashboards only match exactly", () => {
@@ -86,52 +134,31 @@ describe("activeNavHref - one highlighted entry, always the most specific", () =
     expect(activeNavHref(links, "/annotator/annotate")).toBe(
       "/annotator/annotate",
     );
-  });
-
-  it("an out-link is never the active entry", () => {
-    // "How it works" points at the public marketing page. Even standing on
-    // the in-app route it supersedes, nothing in the nav lights up: the
-    // reader's destination is off this app entirely.
-    expect(activeNavHref(links, "/admin/how-it-works")).toBeNull();
-    expect(activeNavHref(links, PUBLIC_HOW_IT_WORKS_URL)).toBeNull();
+    // A research page that is not a link of its own is resolved by
+    // activeResearchHref (src/lib/admin/routes.ts), which the sidebar asks
+    // first; this function alone does not claim it for "/admin".
+    expect(activeNavHref(links, "/admin/data/export")).toBeNull();
   });
 
   it("returns null when nothing matches", () => {
     expect(activeNavHref(links, "/learner/chat")).toBeNull();
+    expect(activeNavHref(links, "/admin/how-it-works")).toBeNull();
   });
 });
 
 describe("How it works points out to the public page", () => {
-  const links = navForRole("RESEARCHER");
-
-  it("is an external entry aimed at the marketing site", () => {
-    const hiw = links.find((l) => l.label === "How it works");
-    expect(hiw).toBeDefined();
-    expect(hiw?.external).toBe(true);
-    expect(hiw?.href).toBe(PUBLIC_HOW_IT_WORKS_URL);
-    // Absolute https, so the browser leaves the app rather than 404ing on a
-    // relative path.
+  it("is an absolute https address on the marketing site", () => {
     expect(() => new URL(PUBLIC_HOW_IT_WORKS_URL)).not.toThrow();
     expect(PUBLIC_HOW_IT_WORKS_URL.startsWith("https://")).toBe(true);
-    // No in-app how-it-works entry survives alongside it: one front door.
-    expect(links.some((l) => l.href === "/admin/how-it-works")).toBe(false);
   });
 
-  it("is the only out-link, and every other entry stays in-app", () => {
-    for (const l of links) {
-      if (l.external) {
-        expect(l.label).toBe("How it works");
-      } else {
-        expect(l.href.startsWith("/")).toBe(true);
-      }
+  it("left the sidebar for More, Tools: no role has an out-link in the nav", () => {
+    for (const role of ["RESEARCHER", "ANNOTATOR", "LEARNER"]) {
+      const links = navForRole(role, null, { lab: true });
+      expect(links.some((l) => l.external)).toBe(false);
+      expect(links.some((l) => l.label === "How it works")).toBe(false);
+      for (const l of links) expect(l.href.startsWith("/")).toBe(true);
     }
-    expect(links.filter((l) => l.external)).toHaveLength(1);
-  });
-
-  it("annotators do not get it at all", () => {
-    const annotator = navForRole("ANNOTATOR");
-    expect(annotator.some((l) => l.external)).toBe(false);
-    expect(annotator.some((l) => l.label === "How it works")).toBe(false);
   });
 });
 
@@ -161,7 +188,7 @@ describe("navForRole - the Speech Lab group", () => {
     ).toEqual([]);
   });
 
-  it("researchers get the Speech link, the shared Check screen and the Speech loop link when the flag is on", () => {
+  it("researchers get the Speech link and the shared Check screen when the flag is on; the loop is a tab of the Speech model view", () => {
     const links = navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: true });
     const lab = links.filter((l) => l.group === "lab");
     expect(lab).toEqual([
@@ -172,21 +199,18 @@ describe("navForRole - the Speech Lab group", () => {
         group: "lab",
       },
       { href: "/speak/check", label: "Check", group: "lab" },
-      {
-        href: "/admin/speech",
-        label: "Speech loop",
-        tag: "researchers only",
-        group: "lab",
-      },
     ]);
-    // Lab links come last, so the sidebar can render them after a divider.
-    expect(links[links.length - 1].group).toBe("lab");
+    expect(links.map((l) => l.label)).not.toContain("Speech loop");
+    // The lab links sit between the annotator's lines and the research views.
+    const groups = links.map((l) => l.group ?? "main");
+    expect(groups.lastIndexOf("main")).toBeLessThan(groups.indexOf("lab"));
+    expect(groups.lastIndexOf("lab")).toBeLessThan(groups.indexOf("research"));
   });
 
   it("the lab link does not disturb the existing researcher links", () => {
     const off = navForRole("RESEARCHER", RESEARCHER_EMAIL).map((l) => l.href);
     const on = navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: true })
-      .filter((l) => l.group !== "lab")
+      .filter((l) => l.group !== "lab" && l.href !== "/admin/speech")
       .map((l) => l.href);
     expect(on).toEqual(off);
   });

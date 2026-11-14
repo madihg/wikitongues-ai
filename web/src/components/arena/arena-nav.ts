@@ -1,87 +1,72 @@
+import {
+  ARENA_MORE_PAGES,
+  isViewTabActive,
+  type ViewTab,
+} from "@/lib/admin/routes";
+
 /**
- * The Model Arena tab bar: one persistent horizontal nav across every arena
- * page. Pure data + matching logic so it can be unit-tested without a DOM.
+ * The Text model tab bar: one persistent horizontal nav across the pages that
+ * answer "is the text model getting better?". Pure data plus matching logic,
+ * so it can be unit-tested without a DOM.
  *
- * `hint` is the plain-English one-liner surfaced as the tab's title tooltip.
- * These replaced the old row of pill buttons with separate "i" popovers.
+ * Four tabs, where there were eleven. Nothing was removed: Overview folded
+ * into Verdict and Benchmark, Head-to-head sits beside Chat under Compare,
+ * Collective review moved to the Data view, and Cost ledger, Demo session,
+ * Fine-tune jobs and Trajectory are reached through More. Every old address
+ * still answers (src/lib/admin/routes.ts, OLD_ROUTES).
+ *
+ * `hint` is the plain one-liner surfaced as the tab's title tooltip.
  */
-export interface ArenaTab {
-  href: string;
-  label: string;
-  hint: string;
-}
+export type ArenaTab = ViewTab;
 
 export const ARENA_TABS: ArenaTab[] = [
   {
-    href: "/admin/arena",
-    label: "Overview",
-    hint: "The candidate-by-category table, plus a plain-English reading of what those numbers currently do and do not show.",
-  },
-  {
     href: "/admin/arena/verdict",
-    label: "Speakers' verdict",
-    hint: "What native speakers decide in blind matchups: who wins, why losing answers lose, and how often both answers are still inadequate. The human-judgment counterpart to the benchmark scores, in plain language.",
-  },
-  {
-    href: "/admin/arena/candidates",
-    label: "Candidates",
-    hint: "The registry of model variants. A candidate is a reproducible recipe: a base model plus optional retrieval, system prompt, or fine-tune artifact.",
-  },
-  {
-    href: "/admin/arena/jobs",
-    label: "Fine-tune jobs",
-    hint: "Turn collected annotations into training sets and launch fine-tunes. A tuned model also needs somewhere to be served, which is why tuning runs here have ended up with very different fates.",
-  },
-  {
-    href: "/admin/arena/chat",
-    label: "Chat",
-    hint: "Ask several candidates the same question and read their answers side by side. For the judgement no metric can make: whether an answer is usable Igala, whether the register fits, and whether something fluent-looking is actually Yoruba. The model selection lives in the page address, so a curated set can be handed to a speaker as a link.",
-  },
-  {
-    href: "/admin/arena/compare",
-    label: "Head-to-head",
-    hint: "Two candidates side by side on the frozen prompts, with the human verdict and the written reason. This is where a model's failures become concrete.",
+    label: "Verdict",
+    hint: "What native speakers decide in blind matchups: who wins, why losing answers lose, and how often both answers are still inadequate.",
   },
   {
     href: "/admin/arena/eval",
-    label: "Automatic eval",
-    hint: "Fast automatic signal while human judgment accumulates: character-overlap scores against community gold, a language-identity gate, and the ceiling set by how much the speakers themselves differ. Triage only, never a quality verdict. Any autorater agreement figure here is shown against the always-guess-the-majority baseline, because raw agreement looks high when almost every human label is 'both inadequate'.",
+    label: "Benchmark",
+    hint: "The Community Agreement Score for every model, then the automatic checks behind it, then strength per category from the blind votes.",
   },
   {
-    href: "/admin/arena/trajectory",
-    label: "Trajectory",
-    hint: "Per-category strength over time. It can only move once annotators start picking winners, so it stays flat while nearly every comparison comes back 'both inadequate'.",
+    href: "/admin/arena/chat",
+    label: "Compare",
+    hint: "Read the models side by side: ask them one question, or walk two of them through the frozen prompts.",
+    owns: ["/admin/arena/compare"],
   },
   {
-    href: "/admin/arena/contested",
-    label: "Collective review",
-    hint: "Items where annotators disagreed, plus edits awaiting verification. Resolving them together raises agreement and promotes corrections to gold.",
-  },
-  {
-    href: "/admin/arena/costs",
-    label: "Cost ledger",
-    hint: "Money spent, provider by provider. Real billed amounts where the provider reports them, estimates otherwise, each one labelled.",
-  },
-  {
-    href: "/admin/arena/demo",
-    label: "Demo session",
-    hint: "Run the real annotation flow for a live audience. Demo records never reach training, the table, or fine-tune sources.",
+    href: "/admin/arena/candidates",
+    label: "Setup",
+    hint: "The registry of model variants, and which of them speakers are comparing now.",
   },
 ];
 
-/** Where the arena hands you back to the rest of the researcher tools. */
-export const ARENA_EXIT = {
-  href: "/admin",
-  label: "Researcher dashboard",
-  hint: "Leave the arena and go back to the researcher overview.",
-};
+/** The two modes of the Compare tab. Each keeps its old address. */
+export const COMPARE_MODES = [
+  { href: "/admin/arena/chat", label: "Ask a question" },
+  { href: "/admin/arena/compare", label: "Frozen prompts" },
+] as const;
 
 /**
- * Which tab owns a pathname. The Overview tab is the arena root, so it matches
- * exactly; every other tab also owns its sub-routes (a candidate detail page
- * keeps "Candidates" selected, /jobs/new keeps "Fine-tune jobs" selected).
+ * Which tab owns a pathname. A tab owns its sub-routes (a candidate detail
+ * page keeps "Setup" selected) and any extra prefix it names (Compare owns
+ * the head-to-head page).
  */
-export function isTabActive(pathname: string, href: string): boolean {
-  if (href === "/admin/arena") return pathname === "/admin/arena";
-  return pathname === href || pathname.startsWith(`${href}/`);
+export function isTabActive(pathname: string, tab: ArenaTab): boolean {
+  return isViewTabActive(pathname, tab);
+}
+
+/**
+ * An arena page that no tab owns: it is reached through More now. The bar
+ * shows where the page lives instead of lighting a tab that is not its own.
+ */
+export function arenaMorePage(
+  pathname: string,
+): { label: string; section: "Tools" | "Archive" } | null {
+  const hit = ARENA_MORE_PAGES.find(
+    (p) => pathname === p.prefix || pathname.startsWith(`${p.prefix}/`),
+  );
+  return hit ? { label: hit.label, section: hit.section } : null;
 }

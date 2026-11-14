@@ -1,4 +1,5 @@
 import { HeadToHead, ComparePicker } from "@/components/arena/head-to-head";
+import { CompareSwitch } from "@/components/arena/compare-switch";
 
 export default async function ComparePage({
   searchParams,
@@ -11,6 +12,7 @@ export default async function ComparePage({
 
   return (
     <div>
+      <CompareSwitch />
       <div className="mb-8">
         <h1 className="text-2xl text-text-primary">Head-to-head</h1>
         <p className="mt-2 max-w-2xl text-sm text-text-secondary">
