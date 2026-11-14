@@ -9,6 +9,8 @@
  * The owner account (Halim) can act as all three personas via a switcher.
  */
 
+import { canUseLab } from "@/lib/lab-flags";
+
 export const OWNER_EMAILS = ["madihalim@gmail.com"];
 
 export function isOwner(email?: string | null): boolean {
@@ -48,6 +50,21 @@ export interface NavLink {
   label: string;
   /** Renders as an out-link: new tab, rel-guarded, arrow-marked, never active. */
   external?: boolean;
+  /** Sidebar group. "lab" links render after a divider under a "Lab" heading. */
+  group?: "lab";
+  /** Small monospace tag beside the label (the lab links say who may see them). */
+  tag?: string;
+}
+
+/** Server-derived switches that change the nav. Passed in so navForRole stays pure. */
+export interface NavOptions {
+  /**
+   * The speech layer is on for this account: the lab flag AND either a
+   * researcher, or an annotator with the annotator layer flag on (the server
+   * decides, via /api/lab/flags, and answers false for an annotator while the
+   * layer flag is unset, so an annotator's nav is unchanged until then).
+   */
+  lab?: boolean;
 }
 
 /**
@@ -57,9 +74,10 @@ export interface NavLink {
 export function navForRole(
   role?: string | null,
   email?: string | null,
+  options: NavOptions = {},
 ): NavLink[] {
   if (isResearcher(role, email)) {
-    return [
+    const links: NavLink[] = [
       { href: "/annotator", label: "Dashboard" },
       { href: "/annotator/prompts", label: "Prompts" },
       { href: "/annotator/annotate", label: "Annotate" },
@@ -84,18 +102,54 @@ export function navForRole(
         external: true,
       },
     ];
+    // The Speech Lab ships dark (src/lib/lab-flags.ts): the link exists only
+    // when the server says the flag is on. Annotators never get it, below.
+    if (options.lab && canUseLab(role)) {
+      links.push({
+        href: "/lab/speech",
+        label: "Speech",
+        tag: "researchers only",
+        group: "lab",
+      });
+      // Researchers check clips on the same screen annotators use.
+      links.push({
+        href: "/speak/check",
+        label: "Check",
+        group: "lab",
+      });
+      // The nightly loop's dashboard: overnight card, hours, trend, candidates.
+      links.push({
+        href: "/admin/speech",
+        label: "Speech loop",
+        tag: "researchers only",
+        group: "lab",
+      });
+    }
+    return links;
   }
   // Pure annotator. NO Corrections tab (2026-08-28 rework, Halim's call):
   // corrections happen inside the episode, right after the A/B verdict - a
   // separate lane made "fix it" a different errand from "judge it", and the
   // errand never got run. /annotator/corrections redirects annotators into
   // the annotate flow; the API routes and researcher lane stay.
-  return [
+  const annotatorLinks: NavLink[] = [
     { href: "/annotator", label: "Dashboard" },
     { href: "/annotator/annotate", label: "Annotate" },
     { href: "/annotator/history", label: "My Work" },
     { href: "/annotator/rubric", label: "Rubric" },
   ];
+  // Speech is a normal part of an annotator's work once the layer is on:
+  // Speak, Listen and Check sit right after Annotate. Off, nothing changes.
+  if (options.lab && role === "ANNOTATOR") {
+    annotatorLinks.splice(
+      2,
+      0,
+      { href: "/speak", label: "Speak" },
+      { href: "/speak/listen", label: "Listen" },
+      { href: "/speak/check", label: "Check" },
+    );
+  }
+  return annotatorLinks;
 }
 
 /**

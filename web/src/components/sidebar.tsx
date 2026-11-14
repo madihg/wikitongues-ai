@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
+import { useSpeechLayer } from "@/components/lab/use-speech-layer";
+import { canProbeSpeech } from "@/lib/lab-flags";
 import {
   navForRole,
   activeNavHref,
@@ -14,11 +16,16 @@ import {
 export function Sidebar() {
   const { data: session } = useSession();
   const pathname = usePathname();
+  // Researchers and annotators ask the server once on mount; the answer is
+  // false for an annotator until SPEECH_LAYER_ANNOTATORS is set.
+  const labOn = useSpeechLayer(canProbeSpeech(session?.user?.role));
 
   if (!session) return null;
 
   const { role, email } = session.user;
-  const links = navForRole(role, email);
+  const links = navForRole(role, email, { lab: labOn });
+  const mainLinks = links.filter((l) => l.group !== "lab");
+  const labLinks = links.filter((l) => l.group === "lab");
   const owner = isOwner(email);
   const researcher = isResearcher(role, email);
 
@@ -38,7 +45,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {links.map((link) => {
+        {mainLinks.map((link) => {
           const base =
             "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors";
           // Out-links leave the app: new tab, rel-guarded, arrow-marked, and
@@ -88,6 +95,34 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Lab group: a divider, a heading, then the lab links. Only present
+            when the server flag is on and the account is a researcher. */}
+        {labLinks.length > 0 && (
+          <div className="mt-4 border-t border-border pt-4">
+            <div className="px-3 pb-2 font-mono text-xs uppercase tracking-widest text-text-muted">
+              Lab
+            </div>
+            {labLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  activeHref === link.href
+                    ? "bg-accent-subtle text-accent-text"
+                    : "text-text-secondary hover:bg-surface-sunken hover:text-text-primary"
+                }`}
+              >
+                {link.label}
+                {link.tag && (
+                  <span className="font-mono text-[10px] font-normal text-text-tertiary">
+                    {link.tag}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* Owner-only persona switcher: act as any of the three personas. */}
         {owner && (
