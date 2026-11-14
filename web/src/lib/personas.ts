@@ -87,6 +87,13 @@ export interface NavOptions {
 /** The Pass 2 line. It sits right after Annotate and the Speech link. */
 export const TONE_NAV_HREF = "/annotator/tone";
 
+/** The researcher's view of the tone pass (/admin/tone). */
+export const TONE_ADMIN_LINK: NavLink = {
+  href: "/admin/tone",
+  label: "Tone agreement",
+  group: "research",
+};
+
 /** A link with its waiting number, or the bare link when nothing waits. */
 function withCount(link: NavLink, n: number | undefined): NavLink {
   return typeof n === "number" && n > 0 ? { ...link, count: n } : link;
@@ -168,6 +175,10 @@ function researchLinks(speechOn: boolean): NavLink[] {
   if (speechOn) {
     links.push({ href: "/admin/speech", label: "Speech loop", group: "research" });
   }
+  // Tone-mark pass 2, the researcher's view: how far the markers agree and
+  // where a decision is needed. Last, so no existing link moves; the
+  // researcher dashboard work decides its final place.
+  links.push(TONE_ADMIN_LINK);
   return links;
 }
 

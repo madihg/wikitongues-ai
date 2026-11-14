@@ -244,6 +244,7 @@ describe("navForRole - one Speech link for every role (2026-11-13)", () => {
         "Speakers' Verdict",
         "Model Arena",
         "How it works",
+        "Tone agreement",
       ]);
       expect(links[links.length - 1].group).toBe("research");
     });
@@ -253,10 +254,45 @@ describe("navForRole - one Speech link for every role (2026-11-13)", () => {
       const on = research(
         navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: true }),
       );
-      expect(on.slice(0, off.length)).toEqual(off);
-      expect(on.slice(off.length)).toEqual([
+      const last = { href: "/admin/tone", label: "Tone agreement", group: "research" };
+      expect(off[off.length - 1]).toEqual(last);
+      expect(on.slice(0, off.length - 1)).toEqual(off.slice(0, -1));
+      expect(on.slice(off.length - 1)).toEqual([
         { href: "/admin/speech", label: "Speech loop", group: "research" },
+        last,
       ]);
+    });
+
+    it("the tone pass: researchers reach its admin view below the divider; nobody gets the Pass 2 line before items are given", () => {
+      for (const lab of [false, true]) {
+        const links = navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab });
+        // The admin view is the last research link, so no older link moved.
+        expect(links[links.length - 1]).toEqual({
+          href: "/admin/tone",
+          label: "Tone agreement",
+          group: "research",
+        });
+        // No work line: the person was given no tone items.
+        expect(hrefs(links)).not.toContain("/annotator/tone");
+        expect(
+          hrefs(navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab, tone: null })),
+        ).not.toContain("/annotator/tone");
+        // /admin/tone highlights its own link, never Researcher Dashboard.
+        expect(activeNavHref(links, "/admin/tone")).toBe("/admin/tone");
+      }
+      // An annotator never gets the admin view, and no Pass 2 line either.
+      for (const options of [{}, { lab: true }, { tone: null }]) {
+        const a = hrefs(navForRole("ANNOTATOR", "a@example.com", options));
+        expect(a).not.toContain("/admin/tone");
+        expect(a).not.toContain("/annotator/tone");
+      }
+      // Given items, the work line appears for that person, above the divider.
+      const given = navForRole("RESEARCHER", RESEARCHER_EMAIL, { tone: 30 });
+      expect(given.find((l) => l.href === "/annotator/tone")).toEqual({
+        href: "/annotator/tone",
+        label: "Pass 2: tone marks",
+        count: 30,
+      });
     });
   });
 

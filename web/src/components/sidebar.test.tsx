@@ -8,6 +8,7 @@ const { state } = vi.hoisted(() => ({
     pathname: "/annotator",
     lab: false,
     waiting: undefined as number | undefined,
+    tone: null as number | null,
   },
 }));
 vi.mock("next-auth/react", () => ({
@@ -22,6 +23,11 @@ vi.mock("next/navigation", () => ({ usePathname: () => state.pathname }));
 vi.mock("@/components/lab/use-speech-layer", () => ({
   useSpeechLayer: () => state.lab,
   useSpeechWaiting: (on: boolean) => (on ? state.waiting : undefined),
+}));
+
+// Tone-mark pass 2: null until the server says this person was given items.
+vi.mock("@/components/tone/use-tone-count", () => ({
+  useToneCount: () => state.tone,
 }));
 
 import { Sidebar } from "./sidebar";
@@ -39,6 +45,7 @@ beforeEach(() => {
     pathname: "/annotator",
     lab: false,
     waiting: undefined,
+    tone: null,
   });
 });
 
@@ -120,5 +127,52 @@ describe("Sidebar", () => {
       expect(active, pathname).toHaveLength(1);
       expect(active[0][0], pathname).toContain('href="/speak"');
     }
+  });
+
+  it("nobody sees the Pass 2 line before tone items are given to them", () => {
+    for (const [role, lab] of [
+      ["ANNOTATOR", false],
+      ["ANNOTATOR", true],
+      ["RESEARCHER", false],
+      ["RESEARCHER", true],
+    ] as const) {
+      Object.assign(state, { role, lab, tone: null });
+      const html = renderToStaticMarkup(<Sidebar />);
+      expect(html, `${role} ${lab}`).not.toContain("Pass 2");
+      expect(html, `${role} ${lab}`).not.toContain('href="/annotator/tone"');
+    }
+  });
+
+  it("a person who was given tone items gets the line after Speech, with what is waiting", () => {
+    Object.assign(state, { role: "ANNOTATOR", lab: true, waiting: 7, tone: 30 });
+    const html = renderToStaticMarkup(<Sidebar />);
+    expect(labels(html)).toEqual([
+      "Dashboard",
+      "Annotate",
+      "Speech",
+      "Pass 2: tone marks",
+      "My Work",
+      "Rubric",
+    ]);
+    expect(html).toMatch(
+      /href="\/annotator\/tone"[^>]*>Pass 2: tone marks<span data-testid="nav-count"[^>]*>30</,
+    );
+    // Every item marked: the line stays, without a number.
+    Object.assign(state, { tone: 0, waiting: undefined });
+    const done = renderToStaticMarkup(<Sidebar />);
+    expect(labels(done)).toContain("Pass 2: tone marks");
+    expect(done).not.toContain('data-testid="nav-count"');
+  });
+
+  it("researchers reach the tone admin view below the divider, as the last research link; annotators never", () => {
+    Object.assign(state, { role: "RESEARCHER", email: "r@example.com", lab: true });
+    const html = renderToStaticMarkup(<Sidebar />);
+    const all = labels(html);
+    expect(all[all.indexOf("Speech loop") + 1]).toBe("Tone agreement");
+    expect(html.indexOf('href="/admin/tone"')).toBeGreaterThan(
+      html.indexOf('data-testid="research-links"'),
+    );
+    Object.assign(state, { role: "ANNOTATOR", email: "a@example.com" });
+    expect(renderToStaticMarkup(<Sidebar />)).not.toContain("/admin/tone");
   });
 });
