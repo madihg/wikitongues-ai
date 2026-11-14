@@ -1,0 +1,324 @@
+{
+ "_comment": "Read by quality-gates.test.ts and worker/tests/test_quality_gates.py. Both must give these answers.",
+ "cases": [
+  {
+   "id": "clean",
+   "measure": {
+    "peakDbfs": -5.1,
+    "wadaSnrDb": 48,
+    "clippedShare": 0,
+    "speechShare": 0.7,
+    "snrDb": 34
+   },
+   "verdict": "accept",
+   "reasons": []
+  },
+  {
+   "id": "empty",
+   "measure": {},
+   "verdict": "accept",
+   "reasons": []
+  },
+  {
+   "id": "nulls",
+   "measure": {
+    "peakDbfs": null,
+    "wadaSnrDb": null,
+    "clippedShare": null,
+    "speechShare": null
+   },
+   "verdict": "accept",
+   "reasons": []
+  },
+  {
+   "id": "snr-reject",
+   "measure": {
+    "peakDbfs": -6,
+    "wadaSnrDb": 14.9,
+    "clippedShare": 0,
+    "speechShare": 0.8
+   },
+   "verdict": "reject",
+   "reasons": [
+    "snr_low"
+   ]
+  },
+  {
+   "id": "snr-edge-15",
+   "measure": {
+    "peakDbfs": -6,
+    "wadaSnrDb": 15,
+    "clippedShare": 0,
+    "speechShare": 0.8
+   },
+   "verdict": "warn",
+   "reasons": [
+    "snr_marginal"
+   ]
+  },
+  {
+   "id": "snr-edge-25",
+   "measure": {
+    "peakDbfs": -6,
+    "wadaSnrDb": 25,
+    "clippedShare": 0,
+    "speechShare": 0.8
+   },
+   "verdict": "accept",
+   "reasons": []
+  },
+  {
+   "id": "clipped-reject",
+   "measure": {
+    "peakDbfs": 0,
+    "wadaSnrDb": 40,
+    "clippedShare": 0.002,
+    "speechShare": 0.8
+   },
+   "verdict": "reject",
+   "reasons": [
+    "clipped",
+    "peak_hot"
+   ]
+  },
+  {
+   "id": "clipping-some",
+   "measure": {
+    "peakDbfs": -0.5,
+    "wadaSnrDb": 40,
+    "clippedShare": 0.001,
+    "speechShare": 0.8
+   },
+   "verdict": "warn",
+   "reasons": [
+    "peak_hot",
+    "clipping_some"
+   ]
+  },
+  {
+   "id": "mostly-silence",
+   "measure": {
+    "peakDbfs": -6,
+    "wadaSnrDb": 40,
+    "clippedShare": 0,
+    "speechShare": 0.49
+   },
+   "verdict": "reject",
+   "reasons": [
+    "speech_share_low"
+   ]
+  },
+  {
+   "id": "speech-share-edge",
+   "measure": {
+    "peakDbfs": -6,
+    "wadaSnrDb": 40,
+    "clippedShare": 0,
+    "speechShare": 0.5
+   },
+   "verdict": "accept",
+   "reasons": []
+  },
+  {
+   "id": "quiet",
+   "measure": {
+    "peakDbfs": -26,
+    "wadaSnrDb": 30,
+    "clippedShare": 0,
+    "speechShare": 0.8
+   },
+   "verdict": "warn",
+   "reasons": [
+    "peak_quiet"
+   ]
+  },
+  {
+   "id": "very-quiet",
+   "measure": {
+    "peakDbfs": -31,
+    "wadaSnrDb": 30,
+    "clippedShare": 0,
+    "speechShare": 0.8
+   },
+   "verdict": "warn",
+   "reasons": [
+    "peak_very_quiet"
+   ]
+  },
+  {
+   "id": "peak-edges",
+   "measure": {
+    "peakDbfs": -20,
+    "wadaSnrDb": 30,
+    "clippedShare": 0,
+    "speechShare": 0.8
+   },
+   "verdict": "accept",
+   "reasons": []
+  },
+  {
+   "id": "peak-top-edge",
+   "measure": {
+    "peakDbfs": -1,
+    "wadaSnrDb": 30,
+    "clippedShare": 0,
+    "speechShare": 0.8
+   },
+   "verdict": "accept",
+   "reasons": []
+  },
+  {
+   "id": "dnsmos-low",
+   "measure": {
+    "peakDbfs": -6,
+    "wadaSnrDb": 30,
+    "clippedShare": 0,
+    "speechShare": 0.8,
+    "dnsmosOvrl": 2.9
+   },
+   "verdict": "warn",
+   "reasons": [
+    "dnsmos_low"
+   ]
+  },
+  {
+   "id": "noise-close",
+   "measure": {
+    "peakDbfs": -6,
+    "wadaSnrDb": 30,
+    "clippedShare": 0,
+    "speechShare": 0.8,
+    "snrDb": 19.9
+   },
+   "verdict": "warn",
+   "reasons": [
+    "noise_close"
+   ]
+  },
+  {
+   "id": "everything",
+   "measure": {
+    "peakDbfs": -35,
+    "wadaSnrDb": 5,
+    "clippedShare": 0.01,
+    "speechShare": 0.1,
+    "dnsmosOvrl": 1.5,
+    "snrDb": 3
+   },
+   "verdict": "reject",
+   "reasons": [
+    "snr_low",
+    "clipped",
+    "speech_share_low",
+    "peak_very_quiet",
+    "dnsmos_low",
+    "noise_close"
+   ]
+  }
+ ],
+ "loudness": [
+  {
+   "lufs": -28.1,
+   "truePeakDbfs": -11.0,
+   "gainDb": 5.1,
+   "limited": false
+  },
+  {
+   "lufs": -28.1,
+   "truePeakDbfs": -4.6,
+   "gainDb": 3.6,
+   "limited": true
+  },
+  {
+   "lufs": -16.0,
+   "truePeakDbfs": 0.3,
+   "gainDb": -7.0,
+   "limited": false
+  },
+  {
+   "lufs": -23.0,
+   "truePeakDbfs": -6.0,
+   "gainDb": 0.0,
+   "limited": false
+  },
+  {
+   "lufs": -40.0,
+   "truePeakDbfs": -1.0,
+   "gainDb": 0.0,
+   "limited": true
+  }
+ ],
+ "meter": [
+  {
+   "peakDbfs": -40,
+   "zone": "quiet"
+  },
+  {
+   "peakDbfs": -20.1,
+   "zone": "quiet"
+  },
+  {
+   "peakDbfs": -20,
+   "zone": "low"
+  },
+  {
+   "peakDbfs": -12.1,
+   "zone": "low"
+  },
+  {
+   "peakDbfs": -12,
+   "zone": "good"
+  },
+  {
+   "peakDbfs": -5,
+   "zone": "good"
+  },
+  {
+   "peakDbfs": -3,
+   "zone": "good"
+  },
+  {
+   "peakDbfs": -2.9,
+   "zone": "hot"
+  },
+  {
+   "peakDbfs": -1.1,
+   "zone": "hot"
+  },
+  {
+   "peakDbfs": -1,
+   "zone": "clip"
+  },
+  {
+   "peakDbfs": 0,
+   "zone": "clip"
+  }
+ ],
+ "roundTrip": [
+  {
+   "systemCer": 0.5,
+   "humanCer": 0.25,
+   "passes": true
+  },
+  {
+   "systemCer": 0.51,
+   "humanCer": 0.25,
+   "passes": false
+  },
+  {
+   "systemCer": 0.2,
+   "humanCer": 0.3,
+   "passes": true
+  },
+  {
+   "systemCer": 0,
+   "humanCer": 0,
+   "passes": true
+  },
+  {
+   "systemCer": 0.01,
+   "humanCer": 0,
+   "passes": false
+  }
+ ]
+}
