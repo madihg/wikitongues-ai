@@ -1,0 +1,5 @@
+{
+  "_comment": "Orthography conventions for scoring (PRD US-005, FR-7). The contraction table is EMPTY until Salem and Lydia rule on tone marks and contractions (tasks/speech/prd-igala-speech-tts-first-2026-10-19.md, Dependencies); while empty the normaliser passes text through untouched. Keys are variant spellings, values the agreed canonical spelling. Changing this file bumps `version`, which is stored on new rows.",
+  "version": "0-pending-ruling",
+  "contractions": {}
+}
