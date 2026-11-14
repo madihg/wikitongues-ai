@@ -12,7 +12,9 @@ import { describe, expect, it } from "vitest";
  * value deletes its block from the compat file and its row from TODAY in the
  * same commit. Step 3 (colour) took 21 rows out: text, edges, the accent, the
  * state text colours, info and the focus ring. Step 4 (shape) took 7 more: the
- * two retired radii, the four shadows and the transition.
+ * two retired radii, the four shadows and the transition. Step 5 (data) took 7:
+ * side A and B, the score colours and the three supporting hues. What is left
+ * is what these steps did not mean to change.
  */
 const TODAY: Record<string, string> = {
   "--wt-ochre-50": "#fdf6e9",
@@ -27,9 +29,6 @@ const TODAY: Record<string, string> = {
   "--wt-ink-900": "#26211c",
   "--wt-ink-800": "#3a332c",
   "--wt-ink-700": "#544a40",
-  "--wt-clay-500": "#b5512f",
-  "--wt-sage-500": "#4f7a5e",
-  "--wt-indigo-500": "#3f5a8a",
   "--background": "#fbf8f2",
   "--surface": "#ffffff",
   "--surface-raised": "#ffffff",
@@ -40,11 +39,7 @@ const TODAY: Record<string, string> = {
   "--warning-subtle": "#fdf2dc",
   "--danger": "#b23b32",
   "--danger-subtle": "#fbeae8",
-  "--pick-a": "#3f5a8a",
-  "--pick-b": "#b5512f",
   "--score-lo": "#b23b32",
-  "--score-mid": "#b5790f",
-  "--score-hi": "#2f7d54",
   "--radius": "8px",
   "--radius-lg": "12px",
 };

@@ -75,7 +75,7 @@
      tritan simulation (smallest CIELAB distance 30; audit/contrast-new.md).
      A series is still never told apart by colour alone: label it directly. */
   --wt-data-1: #0b4f8a; /* dark blue */
-  --wt-data-2: #c2500a; /* vermilion */
+  --wt-data-2: #b8470a; /* vermilion; dark enough to be text on any surface */
   --wt-data-3: #1f9e79; /* green */
   --wt-data-4: #26211c; /* ink */
   --wt-data-neutral: #9a8f83; /* every bar that is not the point: 3.2 on surface */

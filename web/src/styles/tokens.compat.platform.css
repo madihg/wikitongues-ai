@@ -1,17 +1,10 @@
-/* Platform compat: today's values, pinned (2026-11-13).
+/* Platform compat: empty.
  *
- * Import after tokens.css. With this file in place the platform renders
- * exactly as it did before the token PR (proof: audit/step1-proof.md).
- * This file is the migration's to-do list. Each rollout step deletes the
- * block it names and nothing else. When the file is empty, delete it.
+ * This file pinned today's values while the design tokens rolled out. Steps
+ * 2 to 5 deleted its blocks one by one and it now pins nothing. It stays as
+ * an import so the order is stable; it goes, with the legacy names in
+ * tokens.css section 4, when the components move to the new names.
  */
 
 :root {
-  /* [step 5: data] The blind-pair and supporting hues. */
-  --wt-data-1: #3f5a8a;
-  --wt-data-2: #b5512f;
-  --wt-data-3: #4f7a5e;
-  --wt-data-low: #b23b32;
-  --wt-data-mid: #b5790f;
-  --wt-data-high: #2f7d54;
 }
