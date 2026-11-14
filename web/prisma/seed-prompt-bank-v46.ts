@@ -56,7 +56,8 @@
  *   npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts --check
  * Seed everything, in serving order (the text and speech sets mixed):
  *   npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts
- * Seed one set (this loses the mix: the other set then lands after it):
+ * Seed one set (each row keeps its designed place: the stamps are read back
+ * from the rows that exist, so the other set slots in when it is seeded):
  *   npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts --only text
  *   npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts --only speech
  */
@@ -71,6 +72,8 @@ import {
   provenanceFor,
   speechYield,
   v46ServingOrder,
+  v46StampBase,
+  v46Stamps,
 } from "../src/lib/prompt-bank-v46";
 
 const prisma = new PrismaClient();
@@ -92,7 +95,8 @@ async function main() {
   const { check, only } = parseArgs(process.argv.slice(2));
   // Rows are written in serving order (v46ServingOrder): everyday families
   // first, idioms and cultural values last, speech spread through the text.
-  // Seeding one set alone loses the mix, so the full run is the default.
+  // Each row is stamped with its place (v46Stamps), so the mix holds even
+  // when the two sets are seeded in separate runs.
   const selected = v46ServingOrder().filter((p) =>
     only === null ? true : only === "speech" ? isSpeechPrompt(p) : !isSpeechPrompt(p),
   );
@@ -112,7 +116,7 @@ async function main() {
   }
   const clashes = await prisma.prompt.findMany({
     where: { promptId: { in: [...ids] } },
-    select: { promptId: true, provenance: true },
+    select: { promptId: true, provenance: true, createdAt: true },
   });
   const foreign = clashes.filter((c) => !OURS.has(c.provenance ?? ""));
   if (foreign.length > 0) {
@@ -221,6 +225,10 @@ async function main() {
   });
   const createdById = owner?.id ?? null;
 
+  // One millisecond apart in serving order; a rerun reads the base back from
+  // a row that exists, so missing rows land at their designed places.
+  const stamps = v46Stamps(v46StampBase(clashes, new Date()));
+
   let created = 0;
   for (const p of selected) {
     const before = await prisma.prompt.findUnique({
@@ -241,6 +249,7 @@ async function main() {
         split: "train",
         isHoldout: false,
         provenance: provenanceFor(p),
+        createdAt: stamps.get(p.promptId),
         createdById,
       },
     });

@@ -886,6 +886,32 @@ export function v46ServingOrder(prompts: V46Prompt[] = rows): V46Prompt[] {
   return out;
 }
 
+/**
+ * The creation stamp the seed gives each row: one millisecond apart in
+ * serving order, so no two rows share a createdAt and the queue order
+ * (createdAt, then id) is the designed order whatever ids the rows get.
+ *
+ * The base is the moment the first seed run starts. A later run (after a
+ * failure, or with --only) reads the base back from a row that already
+ * exists, so the missing rows land at their designed places, not at the end.
+ */
+export function v46StampBase(
+  existing: { promptId: string; createdAt: Date }[],
+  now: Date,
+  order: V46Prompt[] = v46ServingOrder(),
+): Date {
+  const index = new Map(order.map((p, i) => [p.promptId, i]));
+  for (const e of existing) {
+    const i = index.get(e.promptId);
+    if (i !== undefined) return new Date(e.createdAt.getTime() - i);
+  }
+  return now;
+}
+
+export function v46Stamps(base: Date, order: V46Prompt[] = v46ServingOrder()): Map<string, Date> {
+  return new Map(order.map((p, i) => [p.promptId, new Date(base.getTime() + i)]));
+}
+
 /** Mean minutes per text prompt of the two annotators who ran out of prompts, measured on the v4.5 bank (gaps under 30 minutes between submissions, Oct 9 to Nov 13). */
 export const MEASURED_MINUTES_PER_TEXT_PROMPT = { firstAnnotator: 10.3, secondAnnotator: 10.6 } as const;
 
