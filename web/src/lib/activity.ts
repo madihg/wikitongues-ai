@@ -47,6 +47,7 @@ export const SURFACES = [
   "listen",
   "check",
   "tone",
+  "edit",
   "rubric",
   "review",
   "dashboard",
@@ -59,13 +60,32 @@ export function isSurface(v: unknown): v is Surface {
   return typeof v === "string" && (SURFACES as readonly string[]).includes(v);
 }
 
-/** Which kind of work a page is. Unknown pages are "other", never dropped. */
+/**
+ * Which kind of work a page is. Unknown pages are "other", never dropped.
+ *
+ *   annotate     /annotator/annotate
+ *   record       /speak (and its Profile tab), the old /lab/speech door, and
+ *                the studio sittings at /lab/speech/studio
+ *   listen       /speak/listen (and the old /lab/speech/listen door)
+ *   check        /speak/check
+ *   tone         /annotator/tone, and the researcher's side of the same pass
+ *                at /admin/tone. Matched on a whole path segment, so a page
+ *                whose name merely contains the letters is not tone work.
+ *   my_work, corrections, rubric, review, dashboard: their own pages
+ *   research     every other researcher page, including the Recordings and
+ *                Rights tools under /lab/speech
+ *   edit         never from a path: the edit drawer names it while it is
+ *                open, on whichever page it was opened (see surfaceFor).
+ */
 export function surfaceForPath(pathname: string): Surface {
   const p = pathname.replace(/\/+$/, "") || "/";
   const under = (base: string) => p === base || p.startsWith(`${base}/`);
-  if (p.includes("tone")) return "tone";
+  if (/(^|\/)tone(-[^/]*)?(\/|$)/.test(p)) return "tone";
   if (under("/speak/listen") || under("/lab/speech/listen")) return "listen";
   if (under("/speak/check")) return "check";
+  if (under("/lab/speech/recordings") || under("/lab/speech/rights")) {
+    return "research";
+  }
   if (under("/speak") || under("/lab/speech")) return "record";
   if (under("/annotator/annotate")) return "annotate";
   if (under("/annotator/corrections")) return "corrections";
@@ -75,6 +95,18 @@ export function surfaceForPath(pathname: string): Surface {
   if (p === "/annotator") return "dashboard";
   if (under("/annotator") || under("/admin")) return "research";
   return "other";
+}
+
+/**
+ * The kind of work right now: the page's, unless something on the page says
+ * otherwise. The edit drawer is an overlay, not a page: while it is open the
+ * work is editing an earlier answer, whichever queue it was opened from.
+ */
+export function surfaceFor(
+  pathname: string,
+  override: Surface | null | undefined,
+): Surface {
+  return override ?? surfaceForPath(pathname);
 }
 
 // ─── Browser side: from moments to a ledger ──────────────────────────────

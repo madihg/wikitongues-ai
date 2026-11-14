@@ -6,6 +6,7 @@ import { SuggestingEditor } from "@/components/suggesting-editor";
 import { IGALA_DIALECTS } from "@/lib/dialects";
 import type { EditItem } from "@/lib/answer-edit";
 import { newSaveId } from "@/lib/answer-revisions";
+import { openSurface } from "@/lib/activity-signal";
 import { MAX_TRANSLATION_CHARS } from "@/lib/speech/limits";
 import {
   EDITOR_COPY,
@@ -76,6 +77,11 @@ export function AnswerEditorDrawer({
   useEffect(() => {
     load();
   }, [load]);
+
+  // While the drawer is open the work is editing an earlier answer,
+  // whichever page it was opened on: the activity beat files the time under
+  // "edit". Closing the drawer hands the clock back to the page.
+  useEffect(() => openSurface("edit"), []);
 
   // Escape closes the drawer, like the Annotations drawer.
   useEffect(() => {

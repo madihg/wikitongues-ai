@@ -113,6 +113,30 @@ describe("ActivityTracker", () => {
     expect(surfaces).toEqual(new Set(["annotate", "record"]));
   });
 
+  it("time in the edit drawer goes to 'edit', and back to the page when the drawer closes", async () => {
+    const { tracker, sent, serverSeconds } = setup();
+    await run(tracker, 2 * MINUTE_MS, () => tracker.input());
+    tracker.setContext("edit", false); // the drawer opens over Annotate
+    await run(tracker, 3 * MINUTE_MS, () => tracker.input());
+    tracker.setContext("annotate", false); // and closes
+    await run(tracker, 1 * MINUTE_MS, () => tracker.input());
+    await tracker.beat(true);
+    const perSurface = new Map<string, Map<number, number>>();
+    for (const body of sent) {
+      for (const b of body.beats) {
+        const minutes = perSurface.get(b.surface) ?? new Map<number, number>();
+        minutes.set(b.minute, Math.max(minutes.get(b.minute) ?? 0, b.activeSeconds));
+        perSurface.set(b.surface, minutes);
+      }
+    }
+    const total = (surface: string) =>
+      [...(perSurface.get(surface)?.values() ?? [])].reduce((n, x) => n + x, 0);
+    expect(total("edit")).toBe(3 * 60);
+    expect(total("annotate")).toBe(3 * 60);
+    // Nothing is counted twice: six minutes of work, six minutes stored.
+    expect(serverSeconds()).toBe(6 * 60);
+  });
+
   it("beats queued offline for 2 hours arrive later in their own minutes", async () => {
     const { tracker, state, sent, serverSeconds } = setup();
     state.online = false;

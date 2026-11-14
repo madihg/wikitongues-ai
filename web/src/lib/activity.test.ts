@@ -7,12 +7,14 @@ import {
   addSpan,
   countSittings,
   formatWorked,
+  isSurface,
   ledgerBeats,
   mergeLedgers,
   normalizeBeats,
   planWrites,
   pruneLedger,
   sumActiveSeconds,
+  surfaceFor,
   surfaceForPath,
   type ActivityFacts,
   type Ledger,
@@ -267,3 +269,51 @@ describe("surfaceForPath", () => {
     expect(surfaceForPath("/somewhere/new")).toBe("other");
   });
 });
+
+describe("the kind of work on every screen of the Nov 13 release", () => {
+  it("Record, Listen and Check: the tabs of Speech, and the old Lab doors", () => {
+    expect(surfaceForPath("/speak")).toBe("record");
+    expect(surfaceForPath("/speak/")).toBe("record");
+    expect(surfaceForPath("/speak/profile")).toBe("record");
+    expect(surfaceForPath("/lab/speech")).toBe("record");
+    expect(surfaceForPath("/lab/speech/studio")).toBe("record");
+    expect(surfaceForPath("/speak/listen")).toBe("listen");
+    expect(surfaceForPath("/lab/speech/listen")).toBe("listen");
+    expect(surfaceForPath("/speak/check")).toBe("check");
+  });
+
+  it("the researcher tools under the speech paths are research, not recording", () => {
+    expect(surfaceForPath("/lab/speech/recordings")).toBe("research");
+    expect(surfaceForPath("/lab/speech/rights")).toBe("research");
+    expect(surfaceForPath("/admin/speech")).toBe("research");
+  });
+
+  it("tone: the marker's queue and the researcher's side, on a whole path segment only", () => {
+    expect(surfaceForPath("/annotator/tone")).toBe("tone");
+    expect(surfaceForPath("/annotator/tone/")).toBe("tone");
+    expect(surfaceForPath("/admin/tone")).toBe("tone");
+    // Letters inside another word are not tone work.
+    expect(surfaceForPath("/admin/arena/milestone")).toBe("research");
+    expect(surfaceForPath("/annotator/stones")).toBe("research");
+    expect(surfaceForPath("/keystone")).toBe("other");
+  });
+
+  it("the edit drawer: its own kind of work on whichever page it is open", () => {
+    expect(isSurface("edit")).toBe(true);
+    for (const page of [
+      "/annotator/annotate",
+      "/annotator/history",
+      "/speak/listen",
+      "/speak/check",
+      "/admin/annotations",
+    ]) {
+      expect(surfaceFor(page, "edit"), page).toBe("edit");
+      // Closed again: the page's own kind of work.
+      expect(surfaceFor(page, null), page).toBe(surfaceForPath(page));
+      expect(surfaceFor(page, undefined), page).toBe(surfaceForPath(page));
+    }
+    // No page is ever "edit" by its path alone.
+    expect(surfaceForPath("/annotator/edit")).toBe("research");
+  });
+});
+

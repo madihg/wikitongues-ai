@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { onBusy, signalBusy } from "./activity-signal";
+import {
+  onBusy,
+  onSurface,
+  openSurface,
+  signalBusy,
+  surfaceOverride,
+} from "./activity-signal";
 
 describe("activity-signal", () => {
   it("tells listeners that a recording started and stopped, and stops telling after unsubscribe", () => {
@@ -34,3 +40,46 @@ describe("activity-signal", () => {
     );
   });
 });
+
+describe("a part of a page that is its own kind of work", () => {
+  it("the edit drawer names its work while it is open, and hands the page back when it closes", () => {
+    const seen = vi.fn();
+    const off = onSurface(seen);
+    expect(surfaceOverride()).toBeNull();
+    const close = openSurface("edit");
+    expect(surfaceOverride()).toBe("edit");
+    close();
+    expect(surfaceOverride()).toBeNull();
+    // Closing twice (React runs a cleanup once, but a caller may not) is harmless.
+    close();
+    expect(seen.mock.calls).toEqual([["edit"], [null]]);
+    off();
+    openSurface("edit")();
+    expect(seen).toHaveBeenCalledTimes(2);
+  });
+
+  it("the newest one still open wins, and closing out of order is safe", () => {
+    const closeFirst = openSurface("edit");
+    const closeSecond = openSurface("tone");
+    expect(surfaceOverride()).toBe("tone");
+    closeFirst();
+    expect(surfaceOverride()).toBe("tone");
+    closeSecond();
+    expect(surfaceOverride()).toBeNull();
+  });
+
+  it("the drawer says so when it opens, and the beat listens", () => {
+    const read = (...parts: string[]) =>
+      readFileSync(join(__dirname, "..", ...parts), "utf8");
+    expect(read("components", "answer-editor.tsx")).toContain(
+      'useEffect(() => openSurface("edit"), []);',
+    );
+    const hook = read("components", "use-activity.ts");
+    expect(hook).toContain("onSurface(");
+    expect(hook).toContain("surfaceFor(pathname, surfaceOverride())");
+    // The path alone is never asked any more: every reading goes through
+    // the one function that knows about the drawer.
+    expect(hook).not.toContain("surfaceForPath(");
+  });
+});
+

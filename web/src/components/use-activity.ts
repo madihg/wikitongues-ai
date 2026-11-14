@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { BEAT_INTERVAL_MS, surfaceForPath, type Ledger } from "@/lib/activity";
-import { onBusy } from "@/lib/activity-signal";
+import { BEAT_INTERVAL_MS, surfaceFor, type Ledger } from "@/lib/activity";
+import { onBusy, onSurface, surfaceOverride } from "@/lib/activity-signal";
 import {
   ActivityTracker,
   type BeatBody,
@@ -73,6 +73,11 @@ async function sendBeats(body: BeatBody): Promise<boolean> {
   return json?.ok === true && json.pending !== true;
 }
 
+/** The kind of work right now: an open overlay's (the edit drawer), else the page's. */
+function surfaceNow(pathname: string = window.location.pathname) {
+  return surfaceFor(pathname, surfaceOverride());
+}
+
 function isDemoUrl(): boolean {
   return new URLSearchParams(window.location.search).has("demo");
 }
@@ -91,11 +96,7 @@ export function useActivity(userId: string | null | undefined): void {
       load: () => readLedger(key),
       save: (ledger) => writeLedger(key, ledger),
     };
-    const t = new ActivityTracker(
-      env,
-      surfaceForPath(window.location.pathname),
-      isDemoUrl(),
-    );
+    const t = new ActivityTracker(env, surfaceNow(), isDemoUrl());
     tracker.current = t;
 
     const onInput = () => t.input();
@@ -126,6 +127,9 @@ export function useActivity(userId: string | null | undefined): void {
       document.addEventListener(name, onStopped, true);
     }
     const offBusy = onBusy((kind, on) => t.setBusy(kind, on));
+    // The edit drawer opened or closed: the time so far belongs to what was
+    // on screen until now.
+    const offSurface = onSurface(() => t.setContext(surfaceNow(), isDemoUrl()));
 
     const onVisibility = () => {
       t.visibilityChanged();
@@ -145,7 +149,7 @@ export function useActivity(userId: string | null | undefined): void {
     let sinceBeat = 0;
     const timer = window.setInterval(() => {
       syncPlaying();
-      t.setContext(surfaceForPath(window.location.pathname), isDemoUrl());
+      t.setContext(surfaceNow(), isDemoUrl());
       sinceBeat += TICK_MS;
       if (sinceBeat >= BEAT_INTERVAL_MS) {
         sinceBeat = 0;
@@ -167,6 +171,7 @@ export function useActivity(userId: string | null | undefined): void {
         document.removeEventListener(name, onStopped, true);
       }
       offBusy();
+      offSurface();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onLeave);
       window.removeEventListener("online", onOnline);
@@ -177,6 +182,6 @@ export function useActivity(userId: string | null | undefined): void {
 
   // Moving to another page: the time so far belongs to the page just left.
   useEffect(() => {
-    tracker.current?.setContext(surfaceForPath(pathname), isDemoUrl());
+    tracker.current?.setContext(surfaceNow(pathname), isDemoUrl());
   }, [pathname]);
 }
