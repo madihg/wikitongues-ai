@@ -11,7 +11,8 @@ import { describe, expect, it } from "vitest";
  * before still resolves to the value it had. A later step that means to change a
  * value deletes its block from the compat file and its row from TODAY in the
  * same commit. Step 3 (colour) took 21 rows out: text, edges, the accent, the
- * state text colours, info and the focus ring.
+ * state text colours, info and the focus ring. Step 4 (shape) took 7 more: the
+ * two retired radii, the four shadows and the transition.
  */
 const TODAY: Record<string, string> = {
   "--wt-ochre-50": "#fdf6e9",
@@ -44,15 +45,8 @@ const TODAY: Record<string, string> = {
   "--score-lo": "#b23b32",
   "--score-mid": "#b5790f",
   "--score-hi": "#2f7d54",
-  "--radius-sm": "4px",
   "--radius": "8px",
   "--radius-lg": "12px",
-  "--radius-xl": "16px",
-  "--shadow-sm": "0 1px 2px rgba(26, 23, 20, 0.06)",
-  "--shadow": "0 1px 3px rgba(26, 23, 20, 0.08), 0 1px 2px rgba(26, 23, 20, 0.04)",
-  "--shadow-md": "0 4px 12px rgba(26, 23, 20, 0.08)",
-  "--shadow-lg": "0 12px 32px rgba(26, 23, 20, 0.12)",
-  "--transition-default": "0.18s cubic-bezier(0.4, 0, 0.2, 1)",
 };
 
 const SRC = join(process.cwd(), "src");
