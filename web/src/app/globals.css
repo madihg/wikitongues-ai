@@ -152,14 +152,14 @@ a:hover {
 
 /* Focus management */
 *:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-  border-radius: var(--radius-sm);
+  outline: var(--wt-focus-width) solid var(--wt-focus);
+  outline-offset: var(--wt-focus-offset);
+  box-shadow: none;
 }
 
 ::selection {
-  background: var(--wt-ochre-200);
-  color: var(--wt-ink-950);
+  background: var(--wt-accent-tint);
+  color: var(--wt-ink);
 }
 
 /* Brand entrance: a gentle staggered rise, used on hero/landing surfaces. */
