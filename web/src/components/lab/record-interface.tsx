@@ -43,6 +43,11 @@ interface QueueTask {
   source: "own_answer" | "no_answer";
   /** The Igala clip is already saved: only the English clip is missing. */
   igalaDone?: boolean;
+  /**
+   * The English sentence a speech-set prompt gives (prompt bank v4.6). The
+   * translation box starts filled with it; the speaker can change it.
+   */
+  suggestedTranslation?: string | null;
 }
 
 type QueueState =
@@ -105,6 +110,8 @@ export function RecordInterface() {
         throw new Error(j?.error ?? "Could not load a prompt.");
       }
       setRecorded(j.progress?.recorded ?? 0);
+      // A speech-set prompt gives its English sentence: start the box on it.
+      setTranslation(j.task?.suggestedTranslation ?? "");
       setQueue(
         j.complete || !j.task
           ? { status: "complete" }

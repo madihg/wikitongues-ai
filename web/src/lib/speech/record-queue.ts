@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { V46_SPEECH_FAMILIES } from "@/lib/prompt-bank-v46";
 
 /**
  * The speaker's own answers that still wait for a clip: the first steps of
@@ -15,7 +16,38 @@ import { prisma } from "@/lib/prisma";
  * Frozen prompts (isHoldout or split "test") never appear: the filter is in
  * the query itself. One row per prompt (the latest answer when there are
  * several), oldest answer first. Demo rows never count.
+ *
+ * The speech set comes first (orchestrator, 2026-11-13): an answer to one of
+ * the 120 prompts written for sound coverage (prompt bank v4.6) is served
+ * ahead of every older unrecorded answer, because coverage matters more than
+ * volume for the first voice. Answers missing only their English clip stay
+ * after both.
  */
+
+/**
+ * A prompt of the v4.6 speech set, by its public code. The set's families are
+ * named in the bank itself; the bare prefix "ig_v46_sp" is not enough, because
+ * the text family "spell" shares it.
+ */
+const SPEECH_SET_CODE = new RegExp(
+  `^ig_v46_(${V46_SPEECH_FAMILIES.join("|")})_\\d+$`,
+);
+export function isSpeechSetPrompt(promptCode: string): boolean {
+  return SPEECH_SET_CODE.test(promptCode);
+}
+
+/** The speech set first, then the rest; each part keeps the order it came in. */
+export function speechSetFirst<T>(
+  items: T[],
+  codeOf: (item: T) => string,
+): { speechSet: T[]; rest: T[] } {
+  const speechSet: T[] = [];
+  const rest: T[] = [];
+  for (const item of items) {
+    (isSpeechSetPrompt(codeOf(item)) ? speechSet : rest).push(item);
+  }
+  return { speechSet, rest };
+}
 
 /** Never serve a frozen prompt: the shared filter for both queue steps. */
 export const NOT_FROZEN = { isHoldout: false, split: { not: "test" as const } };
@@ -36,7 +68,10 @@ export interface WaitingAnswer {
 export interface RecordQueue {
   /** Prompt.id of every prompt this speaker already has an Igala clip of. */
   recordedIds: string[];
-  /** Own answers with no clip yet, oldest first, one per prompt. */
+  /**
+   * Own answers with no clip yet, one per prompt: answers to the speech set
+   * first (oldest first), then every other answer (oldest first).
+   */
   waiting: WaitingAnswer[];
   /** Own answers with an Igala clip and no English clip, oldest first. */
   englishMissing: WaitingAnswer[];
@@ -116,9 +151,13 @@ export async function loadRecordQueue(
         }),
   ]);
 
+  const { speechSet, rest } = speechSetFirst(
+    latestPerPrompt(answers),
+    (a) => a.prompt.promptId,
+  );
   return {
     recordedIds,
-    waiting: latestPerPrompt(answers),
+    waiting: [...speechSet, ...rest],
     englishMissing: latestPerPrompt(englishAnswers),
   };
 }

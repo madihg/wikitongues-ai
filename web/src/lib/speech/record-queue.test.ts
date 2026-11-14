@@ -8,7 +8,21 @@ const { mockPrisma } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
-import { countRecordWaiting, loadRecordQueue } from "./record-queue";
+import {
+  countRecordWaiting,
+  isSpeechSetPrompt,
+  loadRecordQueue,
+  speechSetFirst,
+} from "./record-queue";
+import {
+  MAX_TRANSLATION_CHARS,
+  translationReady,
+} from "./limits";
+import {
+  V46_PROMPTS,
+  isSpeechPrompt,
+  v46SpeechEnglish,
+} from "@/lib/prompt-bank-v46";
 
 /** Fixtures are synthetic English stand-ins. */
 const answer = (id: string, promptRow: string, day: number) => ({
@@ -134,5 +148,60 @@ describe("countRecordWaiting", () => {
 
   it("is zero with nothing waiting", async () => {
     expect(await countRecordWaiting("u1")).toBe(0);
+  });
+});
+
+describe("the speech set (prompt bank v4.6)", () => {
+  it("isSpeechSetPrompt is true for exactly the 120 speech prompts of the bank", () => {
+    const speech = V46_PROMPTS.filter(isSpeechPrompt);
+    expect(speech).toHaveLength(120);
+    for (const p of V46_PROMPTS) {
+      expect(isSpeechSetPrompt(p.promptId), p.promptId).toBe(isSpeechPrompt(p));
+    }
+    // The text family "spell" shares the prefix and is not in the set.
+    expect(isSpeechSetPrompt("ig_v46_spell_001")).toBe(false);
+    expect(isSpeechSetPrompt("code_001")).toBe(false);
+    expect(isSpeechSetPrompt("ig_v45_spnum_001")).toBe(false);
+  });
+
+  it("speechSetFirst splits without reordering either part", () => {
+    const codes = ["a", "ig_v46_spvow_002", "b", "ig_v46_spnum_001"];
+    expect(speechSetFirst(codes, (c) => c)).toEqual({
+      speechSet: ["ig_v46_spvow_002", "ig_v46_spnum_001"],
+      rest: ["a", "b"],
+    });
+  });
+
+  it("the queue's first step lists speech-set answers before older ones, each oldest first", async () => {
+    const a = (id: string, code: string, day: number) => ({
+      ...answer(id, `row-${code}`, day),
+      prompt: {
+        id: `row-${code}`,
+        promptId: code,
+        text: "Say hello.",
+        bucket: "orthography",
+      },
+    });
+    mockPrisma.coldAuthorAnswer.findMany.mockResolvedValue([
+      a("old-1", "code_001", 1),
+      a("old-2", "code_002", 2),
+      a("sp-1", "ig_v46_spnum_001", 20),
+      a("sp-2", "ig_v46_spcar_004", 21),
+    ]);
+    const q = await loadRecordQueue("u1");
+    expect(q.waiting.map((x) => x.id)).toEqual(["sp-1", "sp-2", "old-1", "old-2"]);
+    // The sidebar number does not change with the order.
+    expect(await countRecordWaiting("u1")).toBe(4);
+  });
+
+  it("every given English sentence fits the translation box and turns recording on", () => {
+    const given = V46_PROMPTS.filter(isSpeechPrompt)
+      .map((p) => v46SpeechEnglish(p.promptId))
+      .filter((e): e is string => e !== null);
+    expect(given.length).toBeGreaterThan(0);
+    for (const e of given) {
+      expect(e.length, e).toBeLessThanOrEqual(MAX_TRANSLATION_CHARS);
+      expect(translationReady(e), e).toBe(true);
+    }
   });
 });

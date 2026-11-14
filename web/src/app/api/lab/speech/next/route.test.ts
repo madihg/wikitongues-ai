@@ -358,11 +358,177 @@ describe("GET /api/lab/speech/next", () => {
     ).toEqual({
       notIn: ["code_x", "code_y"],
     });
+    // The no-answer step asks for the speech set first, then everything
+    // else; both honour the exclusions.
     expect(mockPrisma.prompt.findMany.mock.calls[0][0].where.promptId).toEqual(
+      {
+        startsWith: "ig_v46_sp",
+        notIn: ["code_x", "code_y"],
+      },
+    );
+    expect(mockPrisma.prompt.findMany.mock.calls[1][0].where.promptId).toEqual(
       {
         notIn: ["code_x", "code_y"],
       },
     );
+  });
+
+  describe("the speech set comes first (prompt bank v4.6, orchestrator 2026-11-13)", () => {
+    const row = (
+      id: string,
+      code: string,
+      day: number,
+      over: Record<string, unknown> = {},
+    ) =>
+      answerRow({
+        id,
+        promptId: `row-${code}`,
+        createdAt: new Date(Date.UTC(2026, 9, day)),
+        prompt: {
+          id: `row-${code}`,
+          promptId: code,
+          text: "Say hello.",
+          bucket: "orthography",
+        },
+        ...over,
+      });
+    /** Answers the mock returns, honouring `?exclude` and the id filter. */
+    const answersBy = (rows: Record<string, unknown>[]) =>
+      mockPrisma.coldAuthorAnswer.findMany.mockImplementation(
+        async (args: {
+          where: {
+            prompt: {
+              id: { in?: string[]; notIn?: string[] };
+              promptId: { notIn: string[] };
+            };
+          };
+        }) => {
+          const { id: ids, promptId: codes } = args.where.prompt;
+          return rows.filter(
+            (r) =>
+              !codes.notIn.includes((r.prompt as { promptId: string }).promptId) &&
+              (ids.in
+                ? ids.in.includes(r.promptId as string)
+                : !ids.notIn?.includes(r.promptId as string)),
+          );
+        },
+      );
+    /** Walk the queue as the screen does, skipping each prompt it serves. */
+    const walk = async () => {
+      const served: { code: string; igalaDone: boolean; source: string }[] = [];
+      for (let i = 0; i < 20; i++) {
+        const qs = served.length
+          ? `?exclude=${served.map((x) => x.code).join(",")}`
+          : "";
+        const body = await (await get(qs)).json();
+        if (body.complete) break;
+        served.push({
+          code: body.task.prompt.promptId,
+          igalaDone: body.task.igalaDone === true,
+          source: body.task.source,
+        });
+      }
+      return served;
+    };
+
+    it("an answer to a speech-set prompt is served ahead of every older unrecorded answer; English missing stays last", async () => {
+      // Own clips: one old prompt has its Igala clip and no English clip.
+      mockPrisma.speechRecording.findMany.mockResolvedValue([
+        { promptId: "row-code_009", language: "igala" },
+      ]);
+      answersBy([
+        // Three old answers, written long before the speech set existed.
+        row("old-1", "code_001", 1),
+        row("old-2", "code_002", 2),
+        row("old-3", "ig_v45_lex_014", 3),
+        // The answer whose English clip is missing (older still).
+        row("eng", "code_009", 1),
+        // Two speech-set answers, written last.
+        row("sp-b", "ig_v46_spvow_003", 21),
+        row("sp-a", "ig_v46_spnum_001", 20),
+      ]);
+      const served = await walk();
+      expect(served.map((x) => x.code)).toEqual([
+        "ig_v46_spnum_001", // speech set, oldest answer first
+        "ig_v46_spvow_003",
+        "code_001", // then the older answers, oldest first
+        "code_002",
+        "ig_v45_lex_014",
+        "code_009", // English missing, last
+      ]);
+      expect(served.map((x) => x.igalaDone)).toEqual([
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+      ]);
+      expect(served.every((x) => x.source === "own_answer")).toBe(true);
+    });
+
+    it("the coverage ranking never moves an older answer ahead of the speech set", async () => {
+      answersBy([
+        row("old-1", "code_001", 1),
+        row("sp-a", "ig_v46_spnum_001", 20),
+      ]);
+      // The pool already holds clips of the speech-set prompt and none of the
+      // old one, so ranking the two together would put the old one first.
+      mockPrisma.speechRecording.findMany.mockImplementation(
+        async (args: { where: { promptId?: unknown } }) =>
+          args.where.promptId
+            ? [
+                { promptId: "row-ig_v46_spnum_001", annotatorId: "x1", dialect: null },
+                { promptId: "row-ig_v46_spnum_001", annotatorId: "x2", dialect: null },
+              ]
+            : [],
+      );
+      const body = await (await get()).json();
+      expect(body.task.prompt.promptId).toBe("ig_v46_spnum_001");
+    });
+
+    it("only the speech families count: a v4.6 text prompt that shares the prefix does not jump the queue", async () => {
+      answersBy([
+        row("old-1", "code_001", 1),
+        row("spell", "ig_v46_spell_004", 20),
+      ]);
+      const body = await (await get()).json();
+      expect(body.task.prompt.promptId).toBe("code_001");
+    });
+
+    it("with no answer waiting, an unanswered speech-set prompt is offered before any other prompt", async () => {
+      mockPrisma.prompt.findMany.mockImplementation(
+        async (args: { where: { promptId: { startsWith?: string } } }) =>
+          args.where.promptId.startsWith
+            ? [
+                { id: "p-s", promptId: "ig_v46_spell_001", text: "T", bucket: "orthography" },
+                { id: "p-v", promptId: "ig_v46_splong_002", text: "S", bucket: "orthography" },
+              ]
+            : [{ id: "p-a", promptId: "code_001", text: "A", bucket: "orthography" }],
+      );
+      const body = await (await get()).json();
+      expect(body.task.source).toBe("no_answer");
+      expect(body.task.prompt.promptId).toBe("ig_v46_splong_002");
+      // Asked on its own, so the general query's 500-row cap cannot hide it.
+      expect(mockPrisma.prompt.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it("carries the given English sentence of a speech-set prompt as the suggested translation, and null otherwise", async () => {
+      const { V46_PROMPTS, v46SpeechEnglish } = await import(
+        "@/lib/prompt-bank-v46"
+      );
+      const carrier = V46_PROMPTS.find((p) => p.speech?.kind === "carrier")!;
+      answersBy([row("sp", carrier.promptId, 20)]);
+      const withCarrier = await (await get()).json();
+      expect(withCarrier.task.suggestedTranslation).toBe(
+        v46SpeechEnglish(carrier.promptId),
+      );
+      expect(withCarrier.task.suggestedTranslation).toBeTruthy();
+
+      answersBy([row("old", "code_001", 1)]);
+      const plain = await (await get()).json();
+      expect(plain.task.suggestedTranslation).toBeNull();
+    });
   });
 
   it("demo mode ignores recording history", async () => {

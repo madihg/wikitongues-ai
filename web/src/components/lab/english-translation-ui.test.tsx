@@ -244,6 +244,16 @@ describe("the Record page", () => {
     expect(src).toContain("onTakeChange={setEnglishHasTake}");
   });
 
+  it("a speech-set prompt starts the box on its given English sentence", () => {
+    expect(src).toContain(
+      'setTranslation(j.task?.suggestedTranslation ?? "");',
+    );
+    // It only fills the editable box: a translation already saved wins.
+    expect(src).toContain(
+      "const englishText = savedTranslation || cleanTranslation(translation);",
+    );
+  });
+
   it("the next prompt starts with an empty box", () => {
     const next = src.slice(src.indexOf("const nextPrompt"), src.indexOf("const skip"));
     expect(next).toContain('setTranslation("")');
