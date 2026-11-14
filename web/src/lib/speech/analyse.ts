@@ -10,6 +10,9 @@
  * honest and checkable. Client-safe (no server imports).
  */
 
+import { METER, RECORD_LEVELS, sanitizeRoom, type RoomReading } from "./record-levels";
+import { sanitizeCapture, type CaptureSettings } from "./recorder";
+
 /** Frame length for the silence and speech measures. */
 export const FRAME_MS = 20;
 
@@ -39,7 +42,24 @@ export interface QualityMetrics {
   syllablesPerSecond: number | null;
   /** How many takes were thrown away before this one (set by the recorder UI). */
   retakes?: number;
+  /**
+   * The level of the quietest tenth of the clip's frames, in dBFS: the room
+   * and the microphone with nobody speaking (the gaps, the lead-in, the
+   * tail). Null when the clip is too short to tell. Absent on older clips.
+   */
+  noiseFloorDbfs?: number | null;
+  /** Voice level minus the noise floor, in dB. Null when either is unknown. */
+  snrDb?: number | null;
+  /** How the microphone was opened and what the browser applied (recorder.ts). */
+  capture?: CaptureSettings;
+  /** The room check of the sitting this clip was saved in, when one ran. */
+  room?: RoomReading;
 }
+
+/** The share of frames, quietest first, that make up the noise floor. */
+export const NOISE_FLOOR_SHARE = 0.1;
+/** Fewer frames than this (0.2 s) and the noise floor is not estimated. */
+export const NOISE_FLOOR_MIN_FRAMES = 10;
 
 const DBFS_SILENT = -120;
 
@@ -138,6 +158,28 @@ export function analyseSamples(
     }
   }
 
+  // Noise floor: the mean power of the quietest tenth of the frames. The
+  // speech rule above cannot give it (it calls anything within 28 dB of the
+  // loudest frame speech, so steady room noise 12 dB under the voice would
+  // count as speech); the quietest frames are the gaps whatever their level.
+  let noiseFloorDbfs: number | null = null;
+  if (frameCount >= NOISE_FLOOR_MIN_FRAMES) {
+    const order = frameDb
+      .map((d, f) => ({ d, f }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, Math.max(1, Math.floor(frameCount * NOISE_FLOOR_SHARE)));
+    let sq = 0;
+    let n = 0;
+    for (const { f } of order) {
+      sq += frameSq[f];
+      n += frameN[f];
+    }
+    noiseFloorDbfs = round(toDb(Math.sqrt(sq / n)), 1);
+  }
+  const speechDbfs = speechN
+    ? round(toDb(Math.sqrt(speechSq / speechN)), 1)
+    : DBFS_SILENT;
+
   const syllables = text && text.trim() ? countSyllables(text, language) : null;
   const spanMs =
     first >= 0 ? Math.max(0, durationMs - leadingSilenceMs - trailingSilenceMs) : 0;
@@ -149,12 +191,17 @@ export function analyseSamples(
     leadingSilenceMs,
     trailingSilenceMs,
     speechShare: frameCount ? round(speechFrames / frameCount, 3) : 0,
-    rmsDbfs: speechN ? round(toDb(Math.sqrt(speechSq / speechN)), 1) : DBFS_SILENT,
+    rmsDbfs: speechDbfs,
     peakDbfs: round(toDb(peak), 1),
     clippingShare: samples.length ? round(clipped / samples.length, 5) : 0,
     syllables,
     syllablesPerSecond:
       syllablesPerSecond === null ? null : round(syllablesPerSecond, 2),
+    noiseFloorDbfs,
+    snrDb:
+      noiseFloorDbfs === null || speechN === 0
+        ? null
+        : round(speechDbfs - noiseFloorDbfs, 1),
   };
 }
 
@@ -164,7 +211,9 @@ export type VerdictKey =
   | "no_speech"
   | "too_short"
   | "too_quiet"
+  | "a_little_quiet"
   | "too_loud"
+  | "noisy_room"
   | "clipped"
   | "cut_short"
   | "long_pause_start"
@@ -180,12 +229,24 @@ export interface Verdict {
   message: string;
 }
 
-/** Thresholds, in one place so a test (and a tuning pass) can see them. */
+/**
+ * Thresholds, in one place so a test (and a tuning pass) can see them. The
+ * level and noise numbers come from record-levels.ts, the one file the level
+ * targets live in; the rest are this file's own.
+ */
 export const THRESHOLDS = {
   minSpeechShare: 0.05,
   minDurationMs: 600,
-  tooQuietDbfs: -35,
-  tooLoudDbfs: -8,
+  /** At or under this voice level: the stronger "Too quiet" line. */
+  tooQuietDbfs: RECORD_LEVELS.veryQuietSpeechDbfs,
+  /** Under this voice level (and above the one before): "A little quiet". */
+  aLittleQuietDbfs: METER.speechLevelQuietDbfs,
+  /** Over this voice level: "Too loud". */
+  tooLoudDbfs: METER.speechLevelLoudDbfs,
+  /** A loudest point over this is too loud too, even with a calm voice level. */
+  tooLoudPeakDbfs: METER.clipDbfs,
+  /** Noise closer to the voice than this many dB: "Noisy room". */
+  noisyRoomSnrDb: METER.noisyRoomSnrDb,
   clippingShare: 0.005,
   peakDbfs: -0.2,
   cutShortTrailingMs: 120,
@@ -222,24 +283,48 @@ export function verdicts(m: QualityMetrics): Verdict[] {
       message: "Very short: this is under a second, try again",
     });
   }
-  if (m.rmsDbfs < T.tooQuietDbfs) {
+  const clipped = m.clippingShare > T.clippingShare || m.peakDbfs > T.peakDbfs;
+  if (m.rmsDbfs <= T.tooQuietDbfs) {
     out.push({
       key: "too_quiet",
       tone: "warn",
       message: "Too quiet: hold the phone closer and try again",
     });
-  } else if (m.rmsDbfs > T.tooLoudDbfs) {
+  } else if (m.rmsDbfs < T.aLittleQuietDbfs) {
+    // The softer first step: a quiet clip can be raised later, so this only
+    // suggests moving closer.
+    out.push({
+      key: "a_little_quiet",
+      tone: "warn",
+      message: "A little quiet: move a little closer to the microphone.",
+    });
+  } else if (
+    m.rmsDbfs > T.tooLoudDbfs ||
+    // A loudest point near full scale with no clipping yet: the same advice.
+    (m.peakDbfs > T.tooLoudPeakDbfs && !clipped)
+  ) {
     out.push({
       key: "too_loud",
       tone: "warn",
       message: "Too loud: speak a little softer or move back and try again",
     });
   }
-  if (m.clippingShare > T.clippingShare || m.peakDbfs > T.peakDbfs) {
+  if (clipped) {
     out.push({
       key: "clipped",
       tone: "warn",
       message: "Clipped: speak a little further from the microphone",
+    });
+  }
+  if (
+    typeof m.snrDb === "number" &&
+    m.snrDb < T.noisyRoomSnrDb
+  ) {
+    out.push({
+      key: "noisy_room",
+      tone: "warn",
+      message:
+        "Noisy room: we can hear noise behind your voice. Try a quieter place.",
     });
   }
   if (m.trailingSilenceMs < T.cutShortTrailingMs) {
@@ -315,11 +400,20 @@ const NUMERIC_FIELDS: [keyof QualityMetrics, number, number][] = [
   ["syllables", 0, 2000],
   ["syllablesPerSecond", 0, 100],
   ["retakes", 0, 1000],
+  ["noiseFloorDbfs", -120, 6],
+  ["snrDb", -20, 140],
+];
+const NULLABLE_FIELDS: readonly (keyof QualityMetrics)[] = [
+  "syllables",
+  "syllablesPerSecond",
+  "noiseFloorDbfs",
+  "snrDb",
 ];
 
 /**
- * Keep only the known numeric metrics, each within range, from whatever the
- * client sent. Returns null when nothing usable is left. The server never
+ * Keep only the known numeric metrics, each within range, plus the capture
+ * settings and the room reading when well formed, from whatever the client
+ * sent. Returns null when nothing usable is left. The server never
  * trusts a metric for any rule (the metrics only sort and filter); this just
  * keeps junk out of the JSON column.
  */
@@ -329,7 +423,7 @@ export function sanitizeQuality(raw: unknown): QualityMetrics | null {
   const out: Record<string, number | null> = {};
   for (const [key, lo, hi] of NUMERIC_FIELDS) {
     const v = src[key];
-    if (v === null && (key === "syllables" || key === "syllablesPerSecond")) {
+    if (v === null && NULLABLE_FIELDS.includes(key)) {
       out[key] = null;
     } else if (typeof v === "number" && Number.isFinite(v)) {
       out[key] = Math.min(Math.max(v, lo), hi);
@@ -348,7 +442,14 @@ export function sanitizeQuality(raw: unknown): QualityMetrics | null {
   out.clippingShare ??= 0;
   out.syllables ??= null;
   out.syllablesPerSecond ??= null;
-  return out as unknown as QualityMetrics;
+  // The two non-numeric records ride along only when well formed. Neither
+  // feeds any rule: they say how the clip was captured and in what room.
+  const metrics = out as unknown as QualityMetrics;
+  const capture = sanitizeCapture(src.capture);
+  if (capture) metrics.capture = capture;
+  const room = sanitizeRoom(src.room);
+  if (room) metrics.room = room;
+  return metrics;
 }
 
 // ---- Session line ---------------------------------------------------------

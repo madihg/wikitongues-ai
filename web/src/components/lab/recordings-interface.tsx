@@ -70,8 +70,10 @@ const LANGUAGE_FILTERS: { key: string; label: string }[] = [
 const WARNING_FILTERS: { key: string; label: string }[] = [
   { key: "", label: "Any take" },
   { key: "too_quiet", label: "Too quiet" },
+  { key: "a_little_quiet", label: "A little quiet" },
   { key: "too_loud", label: "Too loud" },
   { key: "clipped", label: "Clipped" },
+  { key: "noisy_room", label: "Noisy room" },
   { key: "cut_short", label: "Cut short" },
   { key: "no_speech", label: "No speech" },
   { key: "too_fast", label: "Fast" },

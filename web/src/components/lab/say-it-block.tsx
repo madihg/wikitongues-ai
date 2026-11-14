@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ConsentGate } from "./consent-gate";
 import { ClipChoiceCard } from "./tier-default";
+import { GoodClipGuide } from "./good-clip-guide";
 import { RecordClip } from "./record-clip";
 import { useLabConsent } from "./use-lab-consent";
 import {
@@ -135,6 +136,8 @@ export function SayItBlock({
           onSave={(choice) => void saveClipChoice(choice)}
         />
       )}
+
+      <GoodClipGuide />
 
       <RecordClip
         language="igala"

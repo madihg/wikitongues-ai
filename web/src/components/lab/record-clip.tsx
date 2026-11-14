@@ -24,7 +24,8 @@ import {
 import { studioClipKept } from "@/lib/speech/studio";
 import { resolveClipChoice, type ClipChoice } from "@/lib/speech/clip-choice";
 import { ClipChoiceChange, ClipChoiceLine } from "./tier-default";
-import { LevelMeter } from "./level-meter";
+import { LevelMeter, RecordLevelMeter } from "./level-meter";
+import { readRoomReading } from "@/lib/speech/record-levels";
 import { TakeFeedback } from "./take-feedback";
 import { useRecorder, type Take } from "./use-recorder";
 
@@ -40,6 +41,11 @@ import { useRecorder, type Take } from "./use-recorder";
  * it" block uses two more. It owns the take and its upload, and tells its
  * parent only what the parent needs: that a clip was saved, whether it is
  * busy, and the answer id the first save created.
+ *
+ * Level feedback: a live bar under the Record button (quiet, good, too
+ * loud), then the feedback card after Stop. Neither blocks: Keep is always
+ * available. The capture settings the browser applied and the sitting's room
+ * check are stored with the clip's take metrics.
  *
  * Saving is two steps. POST /api/lab/speech/recording creates the row (tier,
  * language, metrics) and returns the audio URL; then the bytes go up as the
@@ -288,6 +294,7 @@ export function RecordClip(props: RecordClipProps) {
       return;
     }
     setUpload({ status: "uploading", pct: 0 });
+    const room = readRoomReading();
     try {
       const saved = await saveClip(
         {
@@ -316,7 +323,16 @@ export function RecordClip(props: RecordClipProps) {
             sizeBytes: take.blob.size,
             voiceCloningOptIn: cloningOptIn,
             ...(metrics
-              ? { quality: { ...metrics, retakes: retakesRef.current } }
+              ? {
+                  quality: {
+                    ...metrics,
+                    retakes: retakesRef.current,
+                    // How the microphone was opened and what the browser
+                    // applied, and the room check of this sitting if one ran.
+                    capture: take.capture,
+                    ...(room ? { room } : {}),
+                  },
+                }
               : {}),
             ...(studio
               ? {
@@ -398,6 +414,13 @@ export function RecordClip(props: RecordClipProps) {
         {studio && recording && (
           <div className="mt-3">
             <LevelMeter stream={recorder.stream} />
+          </div>
+        )}
+        {/* The level bar, under the Record button: live while recording, and
+            the loudest point stays marked until the next take. */}
+        {!studio && upload.status !== "saved" && upload.status !== "uploading" && (
+          <div className="mt-3">
+            <RecordLevelMeter stream={recorder.stream} />
           </div>
         )}
 

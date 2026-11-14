@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConsentGate } from "./consent-gate";
 import { ClipChoiceCard } from "./tier-default";
+import { GoodClipGuide } from "./good-clip-guide";
+import { RoomCheck } from "./room-check";
 import { AnswerBox } from "./record-parts";
 import { RecordClip, type ClipAnswerRef } from "./record-clip";
 import { useLabConsent } from "./use-lab-consent";
@@ -288,6 +290,15 @@ export function RecordInterface() {
             )}
           </div>
         </section>
+      )}
+
+      {/* Level and room help, once recording is possible: the guide one tap
+          away, and the room check before the first clip. Neither blocks. */}
+      {task && consentOk && !choiceNeeded && (
+        <div className="space-y-3">
+          <GoodClipGuide />
+          <RoomCheck />
+        </div>
       )}
 
       {task && (
