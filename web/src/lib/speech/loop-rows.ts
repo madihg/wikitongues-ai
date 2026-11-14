@@ -33,6 +33,7 @@ const SELECT = {
   uploadedAt: true,
   reviewStatus: true,
   voiceCloningOptIn: true,
+  studioText: true,
   prompt: { select: { isHoldout: true, split: true, text: true } },
   coldAuthorAnswer: { select: { answerText: true, englishGloss: true } },
 } as const;
@@ -74,6 +75,24 @@ export async function loadTrainableRows(
   ]);
   const gone = new Set(withdrawnSpeakerIds(grants));
   return rows.filter((r) => !r.annotatorId || !gone.has(r.annotatorId));
+}
+
+/**
+ * Candidate rows for a TTS job: the trainable query narrowed to the named
+ * studio sittings. Guard them with buildTrainingManifest (purpose "tts").
+ */
+export async function loadStudioRows(
+  db: Db,
+  studioSessionIds: string[],
+): Promise<LoopRow[]> {
+  return db.speechRecording.findMany({
+    where: {
+      ...TRAINABLE_ROWS_QUERY.where,
+      studioSessionId: { in: studioSessionIds },
+    },
+    orderBy: TRAINABLE_ROWS_QUERY.orderBy,
+    select: SELECT,
+  });
 }
 
 /** The exam clips. Only buildEvalManifest may turn these into a manifest. */

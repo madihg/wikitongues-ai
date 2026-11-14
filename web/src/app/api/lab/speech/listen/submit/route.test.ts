@@ -6,6 +6,8 @@ const { mockPrisma, mockRequireResearcher } = vi.hoisted(() => ({
     prompt: { findUnique: vi.fn() },
     speechRecording: { findMany: vi.fn() },
     speechComparison: { findFirst: vi.fn(), create: vi.fn() },
+    speechMinimalPair: { findUnique: vi.fn() },
+    speechMinimalPairAnswer: { createMany: vi.fn() },
   },
   mockRequireResearcher: vi.fn(),
 }));
@@ -69,6 +71,7 @@ beforeEach(() => {
   mockPrisma.speechRecording.findMany.mockResolvedValue(clips());
   mockPrisma.speechComparison.findFirst.mockResolvedValue(null);
   mockPrisma.speechComparison.create.mockResolvedValue({ id: "cmp-1" });
+  mockPrisma.speechMinimalPair.findUnique.mockResolvedValue(null);
 });
 afterEach(() => {
   if (original === undefined) delete process.env.SPEECH_LAB_ENABLED;
@@ -273,5 +276,65 @@ describe("POST /api/lab/speech/listen/submit", () => {
       );
     }
     expect(created()).toBe(0);
+  });
+});
+
+describe("POST /api/lab/speech/listen/submit: minimal-pair answers", () => {
+  const PAIR = { id: "mp-1", targetSpelling: "kw\u00e0ba", foilSpelling: "kw\u00e1ba" };
+  beforeEach(() => mockPrisma.speechMinimalPair.findUnique.mockResolvedValue(PAIR));
+
+  it("scores each answer against the pair and stores it with the judgment", async () => {
+    const res = await post({
+      ...valid,
+      toneAnswers: [
+        { recordingId: "clip-a", heardSpelling: PAIR.targetSpelling },
+        { recordingId: "clip-b", heardSpelling: PAIR.foilSpelling.normalize("NFD") },
+      ],
+    });
+    expect(res.status).toBe(201);
+    expect(mockPrisma.speechMinimalPairAnswer.createMany).toHaveBeenCalledWith({
+      data: [
+        { pairId: "mp-1", recordingId: "clip-a", annotatorId: "r1", heard: "target", isDemo: false },
+        { pairId: "mp-1", recordingId: "clip-b", annotatorId: "r1", heard: "foil", isDemo: false },
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  it("null is 'not sure'; demo answers are stored as demo", async () => {
+    await post({
+      ...valid,
+      demoSessionId: "demo-1",
+      toneAnswers: [{ recordingId: "clip-a", heardSpelling: null }],
+    });
+    expect(mockPrisma.speechMinimalPairAnswer.createMany.mock.calls[0][0].data).toEqual([
+      { pairId: "mp-1", recordingId: "clip-a", annotatorId: "r1", heard: "unsure", isDemo: true },
+    ]);
+  });
+
+  it("400 and nothing written for a spelling outside the pair, a foreign clip or a repeat", async () => {
+    for (const toneAnswers of [
+      [{ recordingId: "clip-a", heardSpelling: "gbaba" }],
+      [{ recordingId: "clip-z", heardSpelling: PAIR.targetSpelling }],
+      [
+        { recordingId: "clip-a", heardSpelling: PAIR.targetSpelling },
+        { recordingId: "clip-a", heardSpelling: PAIR.foilSpelling },
+      ],
+      "x",
+    ]) {
+      expect((await post({ ...valid, toneAnswers })).status).toBe(400);
+    }
+    expect(created()).toBe(0);
+    expect(mockPrisma.speechMinimalPairAnswer.createMany).not.toHaveBeenCalled();
+  });
+
+  it("ignores answers on a prompt with no pair, and a request without them is unchanged", async () => {
+    mockPrisma.speechMinimalPair.findUnique.mockResolvedValue(null);
+    const res = await post({ ...valid, toneAnswers: [{ recordingId: "clip-a", heardSpelling: "x" }] });
+    expect(res.status).toBe(201);
+    expect(mockPrisma.speechMinimalPairAnswer.createMany).not.toHaveBeenCalled();
+    mockPrisma.speechMinimalPair.findUnique.mockClear();
+    await post(valid);
+    expect(mockPrisma.speechMinimalPair.findUnique).not.toHaveBeenCalled();
   });
 });

@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** The three Lab Speech tabs, in order. Nested routes under /lab/speech. */
+/** The four Lab Speech tabs, in order. Nested routes under /lab/speech. */
 export const LAB_TABS = [
   { href: "/lab/speech", label: "Record" },
   { href: "/lab/speech/listen", label: "Listen" },
   { href: "/lab/speech/recordings", label: "Recordings" },
+  { href: "/lab/speech/studio", label: "Studio" },
 ] as const;
 
 /**

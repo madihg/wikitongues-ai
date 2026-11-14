@@ -27,6 +27,8 @@ export interface ManifestRow extends ExportableRow {
   fundingSource: string;
   /** "igala" | "english": what the speaker said (igala when not loaded). */
   language?: string;
+  /** The script line a studio clip read (PR H); its transcript when set. */
+  studioText?: string | null;
   /** The speaker's locked answer for this clip, tone-retained as written. */
   coldAuthorAnswer?: {
     answerText: string;

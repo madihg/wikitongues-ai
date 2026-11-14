@@ -360,6 +360,7 @@ const REGISTERED_FILES = [
   "src/lib/speech/loop-launch.ts", // signs and launches the manifests (entry point above)
   "src/lib/speech/nightly.ts", // the nightly run: builds manifests only through buildSigned
   "scripts/speech/export-manifest.ts", // the export script
+  "src/lib/speech/tts-job.ts", // the TTS launch: buildTrainingManifest, purpose tts
 ];
 
 function sourceFiles(dir: string): string[] {

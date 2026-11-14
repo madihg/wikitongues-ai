@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   AXES_BLOCK_LABEL,
+  AXES_SETS,
   AXES_VERSION,
+  LYDIA_AXES,
+  LYDIA_RUBRIC_READY,
+  PROVISIONAL_AXES,
   SPEECH_AXES,
+  activeAxesSet,
+  axesSetFor,
   axesTargetFor,
   sanitizeAxes,
 } from "./speech-axes";
@@ -70,5 +76,39 @@ describe("sanitizeAxes", () => {
   it("a both-unusable verdict takes no axes", () => {
     expect(sanitizeAxes({ tone: 3 }, "both_unusable")).toBe("invalid");
     expect(sanitizeAxes(undefined, "both_unusable")).toBeNull();
+  });
+});
+
+describe("the axes version mechanism", () => {
+  it("keeps the provisional set active while the Lydia rubric is not ready", () => {
+    expect(LYDIA_RUBRIC_READY).toBe(false);
+    expect(AXES_VERSION).toBe("provisional-1");
+    expect(SPEECH_AXES).toBe(PROVISIONAL_AXES.axes);
+  });
+  it("switches the active set on the guard constant alone", () => {
+    expect(activeAxesSet(false)).toBe(PROVISIONAL_AXES);
+    expect(activeAxesSet(true)).toBe(LYDIA_AXES);
+    expect(LYDIA_AXES.version).toBe("lydia-1");
+  });
+  it("knows every version a stored judgment may carry, and no other", () => {
+    expect(Object.keys(AXES_SETS).sort()).toEqual(["lydia-1", "provisional-1"]);
+    expect(axesSetFor("provisional-1")).toBe(PROVISIONAL_AXES);
+    expect(axesSetFor("lydia-1")).toBe(LYDIA_AXES);
+    expect(axesSetFor("lydia-2")).toBeNull();
+    expect(axesSetFor("__proto__")).toBeNull();
+  });
+  it("scores against the named version and stamps it, so old rows keep theirs", () => {
+    expect(sanitizeAxes({ tone: 4 }, "a", "provisional-1")).toMatchObject({ version: "provisional-1" });
+    expect(sanitizeAxes({ rubric_slot: 2 }, "a", "lydia-1")).toMatchObject({
+      version: "lydia-1",
+      scores: { rubric_slot: 2 },
+    });
+    // a key from one set is not valid in the other
+    expect(sanitizeAxes({ tone: 4 }, "a", "lydia-1")).toBe("invalid");
+    expect(sanitizeAxes({ rubric_slot: 2 }, "a", "provisional-1")).toBe("invalid");
+    expect(sanitizeAxes({ tone: 4 }, "a", "nope")).toBe("invalid");
+  });
+  it("the default is the active version", () => {
+    expect(sanitizeAxes({ tone: 4 }, "a")).toMatchObject({ version: AXES_VERSION });
   });
 });
