@@ -70,6 +70,20 @@ the recipe argv is `ASR_RECIPE` in `igala_speech/pipeline.py`, the image pins
 are unset in `speech.py` (pin them from the first green run), and the EveryVoice
 steps need a project config and a vocoder checkpoint the first run will show.
 
+## Nightly trigger (Halim deploys it)
+
+`nightly_trigger` in `speech.py` is a `modal.Cron("0 2 * * *")` function (02:00
+UTC). It POSTs `APP_BASE_URL/api/speech/nightly` with `x-shared-secret`
+(`igala_speech/nightly.py`). It only starts to run once Halim runs
+`modal deploy worker/speech.py`; nothing in this repo deploys it. The app answers
+404 while `SPEECH_LOOP_ENABLED` is not `1`, which the trigger treats as "not
+yet", not as a failure. Any other non-200 fails the scheduled run. App side
+settings for the loop: `SPEECH_LOOP_ENABLED=1` (leave unset until the first
+manual run succeeds), `SPEECH_WORKER_URL` (set means the real worker, unset means
+the mock), and optionally `RESEND_API_KEY`, `ALERT_EMAIL_TO` and
+`ALERT_EMAIL_FROM` for the alert email. A manual first run is the same call:
+`curl -X POST -H "x-shared-secret: $SPEECH_WORKER_SECRET" $APP_BASE_URL/api/speech/nightly`.
+
 ## Mock mode and local commands
 
 `SPEECH_WORKER_MOCK=1` makes every function deterministic on

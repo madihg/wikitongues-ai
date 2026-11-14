@@ -18,6 +18,10 @@ Endpoints (x-shared-secret on all but /health), each answers {callId, jobId}:
     POST /synthesize  {jobId, modelRef, sentences: [{id, text}]}
     GET  /status/{callId}   queued|running|done|failed
 
+Schedule: nightly_trigger runs at 02:00 UTC (modal.Cron) and POSTs
+APP_BASE_URL/api/speech/nightly with the shared secret. It exists once Halim
+runs `modal deploy`; the app ignores it until SPEECH_LOOP_ENABLED=1.
+
 Local, no GPU, no Modal account: SPEECH_WORKER_MOCK=1 and
 `python -m igala_speech.selftest` (or `pytest`).
 """
@@ -159,6 +163,13 @@ def speech_web():
         return {"callId": call_id, "status": "done"}
 
     return api
+
+
+@app.function(image=web_image, secrets=[secret], schedule=modal.Cron("0 2 * * *"))
+def nightly_trigger() -> None:
+    from igala_speech.nightly import trigger
+
+    print(trigger())
 
 
 @app.local_entrypoint()

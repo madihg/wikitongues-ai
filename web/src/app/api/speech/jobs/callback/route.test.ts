@@ -3,12 +3,13 @@ import { signBody } from "@/lib/speech/job-signing";
 
 const { tx, mockPrisma } = vi.hoisted(() => {
   const tx = {
-    speechTrainJob: { updateMany: vi.fn() },
-    speechEvalResult: { create: vi.fn() },
+    speechTrainJob: { updateMany: vi.fn(), findFirst: vi.fn() },
+    speechCandidate: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
+    speechEvalResult: { create: vi.fn(), findFirst: vi.fn() },
     speechTranscript: { createMany: vi.fn() },
     speechRecording: { createMany: vi.fn() },
     prompt: { findMany: vi.fn() },
-    costEntry: { create: vi.fn() },
+    costEntry: { create: vi.fn(), deleteMany: vi.fn() },
   };
   const mockPrisma = {
     speechTrainJob: { findUnique: vi.fn() },
@@ -17,6 +18,15 @@ const { tx, mockPrisma } = vi.hoisted(() => {
   return { tx, mockPrisma };
 });
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+const { mockNotify, mockScoreModel } = vi.hoisted(() => ({
+  mockNotify: vi.fn(),
+  mockScoreModel: vi.fn(),
+}));
+vi.mock("@/lib/notify", () => ({ notify: mockNotify }));
+vi.mock("@/lib/speech/loop-launch", () => ({
+  loopProvider: () => ({ name: "mock" }),
+  scoreModel: mockScoreModel,
+}));
 
 import { POST } from "./route";
 
@@ -59,8 +69,15 @@ beforeEach(() => {
   mockPrisma.speechTrainJob.findUnique.mockResolvedValue({ id: "job1", status: "running" });
   tx.speechTrainJob.updateMany.mockResolvedValue({ count: 1 });
   tx.prompt.findMany.mockResolvedValue([{ id: "p1" }, { id: "p2" }]);
+  tx.speechTrainJob.findFirst.mockResolvedValue(null); // a baseline: no train job made the model
+  tx.speechCandidate.findUnique.mockResolvedValue(null);
+  tx.speechCandidate.findFirst.mockResolvedValue(null);
+  tx.speechEvalResult.findFirst.mockResolvedValue({ id: "e1", cer: 0.2, ter: 0.3 });
+  tx.speechCandidate.create.mockResolvedValue({ id: "c1" });
+  mockScoreModel.mockResolvedValue({ launched: true, jobId: "eval1" });
 });
 afterEach(() => {
+  delete process.env.SPEECH_LOOP_ENABLED;
   if (saved === undefined) delete process.env.SPEECH_WORKER_SECRET;
   else process.env.SPEECH_WORKER_SECRET = saved;
 });
@@ -249,5 +266,78 @@ describe("POST /api/speech/jobs/callback: what it writes", () => {
     expect((await POST(request({ ...base, kind: "transcribe", transcripts: null }))).status).toBe(400);
     expect((await POST(request(null, { raw: "not json" }))).status).toBe(400);
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+const metrics = {
+  manifestVersion: "v1",
+  nClips: 3,
+  aggregate: { cer: 0.2, werStripped: 0.3, werRetained: 0.4, ter: 0.3 },
+  perSpeaker: {},
+  perDialect: {},
+};
+const evaluate = {
+  ...base,
+  jobId: "eval1",
+  kind: "evaluate",
+  modelRef: "/checkpoints/asr/job1",
+  metrics,
+};
+
+describe("POST /api/speech/jobs/callback: candidates and cost (PR F)", () => {
+  it("registers a candidate when an evaluate scores a trained model", async () => {
+    tx.speechTrainJob.findFirst.mockResolvedValue({ id: "job1" });
+    const res = await POST(request(evaluate));
+    expect(res.status).toBe(200);
+    expect(tx.speechCandidate.create).toHaveBeenCalledTimes(1);
+    expect(tx.speechCandidate.create.mock.calls[0][0].data).toMatchObject({
+      system: "asr",
+      modelRef: "/checkpoints/asr/job1",
+      jobId: "job1",
+      evalResultId: "e1",
+      regressed: false,
+    });
+    expect(mockNotify).not.toHaveBeenCalled();
+  });
+
+  it("sets regressed and raises one regressed alert when the promoted model is clearly better", async () => {
+    tx.speechTrainJob.findFirst.mockResolvedValue({ id: "job1" });
+    tx.speechCandidate.findFirst.mockResolvedValue({ evalResult: { cer: 0.1, ter: 0.3 } });
+    await POST(request(evaluate));
+    expect(tx.speechCandidate.create.mock.calls[0][0].data.regressed).toBe(true);
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify.mock.calls[0][0]).toBe("regressed");
+  });
+
+  it("makes no candidate for a baseline evaluate", async () => {
+    await POST(request({ ...evaluate, modelRef: "base" }));
+    expect(tx.speechCandidate.create).not.toHaveBeenCalled();
+  });
+
+  it("replaces the launch-time cost estimate with the actual figure", async () => {
+    await POST(request(base));
+    expect(tx.costEntry.deleteMany).toHaveBeenCalledWith({
+      where: { refType: "speech_train_job", refId: "job1", estimated: true },
+    });
+    expect(tx.costEntry.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("scores a freshly trained model when the loop is on, and not when it is off", async () => {
+    await POST(request(base));
+    expect(mockScoreModel).not.toHaveBeenCalled();
+
+    process.env.SPEECH_LOOP_ENABLED = "1";
+    const res = await POST(request(base));
+    expect(res.status).toBe(200);
+    expect(mockScoreModel).toHaveBeenCalledTimes(1);
+    expect(mockScoreModel.mock.calls[0][0]).toBe("/checkpoints/asr/job1");
+  });
+
+  it("still answers 200 when scoring cannot start, and raises job_failed", async () => {
+    process.env.SPEECH_LOOP_ENABLED = "1";
+    mockScoreModel.mockRejectedValue(new Error("Speech worker refused evaluate: HTTP 502"));
+    const res = await POST(request(base));
+    expect(res.status).toBe(200);
+    expect(mockNotify.mock.calls[0][0]).toBe("job_failed");
   });
 });

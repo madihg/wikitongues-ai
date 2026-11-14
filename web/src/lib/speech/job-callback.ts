@@ -231,6 +231,10 @@ export async function applyCallback(
     await tx.speechRecording.createMany({ data: recordings });
   }
   if (p.costUsd !== null) {
+    // The actual figure replaces the estimate written when the job launched.
+    await tx.costEntry.deleteMany({
+      where: { refType: "speech_train_job", refId: p.jobId, estimated: true },
+    });
     await tx.costEntry.create({
       data: {
         category: COST_CATEGORY[p.kind],

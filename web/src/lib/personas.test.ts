@@ -161,7 +161,7 @@ describe("navForRole - the Speech Lab group", () => {
     ).toEqual([]);
   });
 
-  it("researchers get the Speech link, tagged, and the shared Check screen when the flag is on", () => {
+  it("researchers get the Speech link, the shared Check screen and the Speech loop link when the flag is on", () => {
     const links = navForRole("RESEARCHER", RESEARCHER_EMAIL, { lab: true });
     const lab = links.filter((l) => l.group === "lab");
     expect(lab).toEqual([
@@ -172,6 +172,12 @@ describe("navForRole - the Speech Lab group", () => {
         group: "lab",
       },
       { href: "/speak/check", label: "Check", group: "lab" },
+      {
+        href: "/admin/speech",
+        label: "Speech loop",
+        tag: "researchers only",
+        group: "lab",
+      },
     ]);
     // Lab links come last, so the sidebar can render them after a divider.
     expect(links[links.length - 1].group).toBe("lab");
