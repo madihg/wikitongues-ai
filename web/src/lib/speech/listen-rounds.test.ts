@@ -8,6 +8,8 @@ import {
 import {
   describePlan,
   planPublish,
+  PROTOTYPE_LICENCE,
+  syntheticClipRow,
   type HumanClip,
   type PublishManifest,
 } from "../../../scripts/speech/publish-listen-candidates";
@@ -104,6 +106,7 @@ describe("eligibleSystems", () => {
 
 const human = (i: number, over: Partial<HumanClip> = {}): HumanClip => ({
   id: `human-${i}`,
+  durationMs: 6000,
   promptId: `p-${i}`,
   language: "igala",
   annotatorId: "speaker-1",
@@ -126,9 +129,10 @@ const manifest = (over: Partial<PublishManifest> = {}): PublishManifest => ({
       clips: Array.from({ length: 10 }, (_, i) => ({
         promptId: `p-${i}`,
         humanRecordingId: `human-${i}`,
-        file: `p-${i}.wav`,
+        file: `p-${i}.webm`,
+        mimeType: "audio/webm;codecs=opus",
         durationMs: 3000,
-        sampleRate: 16000,
+        sampleRate: 48000,
       })),
     },
     {
@@ -136,7 +140,9 @@ const manifest = (over: Partial<PublishManifest> = {}): PublishManifest => ({
       systemCer: 0.9,
       humanCer: 0.4,
       nSentences: 10,
-      clips: [{ promptId: "p-0", humanRecordingId: "human-0", file: "x.wav", durationMs: 1, sampleRate: 16000 }],
+      clips: [
+        { promptId: "p-0", humanRecordingId: "human-0", file: "x.webm", mimeType: "audio/webm", durationMs: 1, sampleRate: 48000 },
+      ],
     },
   ],
   ...over,
@@ -208,5 +214,69 @@ describe("scripts/speech/publish-listen-candidates.ts (planPublish)", () => {
     const plan = planPublish(manifest(), humans(), ["speaker-1", "r2"]);
     expect(plan.rounds.filter((r) => r.raterId === "speaker-1")).toEqual([]);
     expect(plan.skippedOwnVoice).toBe(10);
+  });
+
+  it("registers only the clips a planned round plays", () => {
+    // The only rater spoke eight of the ten human clips: two clips are needed, not ten.
+    const hs = humans().map((h, i) => (i < 8 ? { ...h, annotatorId: "rater-a" } : h));
+    const plan = planPublish(manifest(), hs, ["rater-a"]);
+    expect(plan.clips.map((c) => c.promptId).sort()).toEqual(["p-8", "p-9"]);
+    expect(plan.rounds.filter((r) => !r.isRepeat).length).toBe(2);
+    expect(plan.rounds.filter((r) => r.isRepeat).length).toBe(1);
+    // With no rater who can judge anything, nothing is registered at all.
+    const none = planPublish(manifest(), humans(), ["speaker-1"]);
+    expect(none.clips).toEqual([]);
+  });
+
+  it("leaves out a human clip that ran into the 30 second cap", () => {
+    const hs = humans();
+    hs[0] = human(0, { durationMs: 30000 });
+    const plan = planPublish(manifest(), hs, ["r1"]);
+    expect(plan.skipped).toEqual({ human_clip_cut_at_the_cap: 1 });
+    expect(plan.clips.map((c) => c.promptId)).not.toContain("p-0");
+  });
+});
+
+describe("syntheticClipRow", () => {
+  const row = syntheticClipRow({
+    id: "3f0c2a54-0000-4000-8000-000000000001",
+    promptId: "p-1",
+    systemRef: "model-ok",
+    mimeType: "audio/webm;codecs=opus",
+    durationMs: 3000,
+    sampleRate: 48000,
+    sizeBytes: 1234,
+    checksumSha256: "abc",
+  });
+
+  it("is marked in every way as not a person's recording", () => {
+    expect(row.sourceType).toBe("derived");
+    expect(row.sourceRef).toBe("model-ok");
+    expect(row.tier).toBe("community_only");
+    expect(row.rightsStatus).toBe("restricted");
+    expect(row.sourceLicense).toBe(PROTOTYPE_LICENCE);
+    expect(PROTOTYPE_LICENCE).toMatch(/internal prototype, not for release/i);
+    expect(row.annotatorId).toBeNull();
+    expect(row.coldAuthorAnswerId).toBeNull();
+    expect(row.consentId).toBeNull();
+    expect(row.reviewStatus).toBeNull();
+    expect(row.voiceCloningOptIn).toBe(false);
+    expect(row.isTestSet).toBe(false);
+  });
+
+  it("is named like any recorded clip, so the address tells nothing", () => {
+    expect(row.storageKey).toBe("clips/3f0c2a54-0000-4000-8000-000000000001.webm");
+    expect(row.storagePath).toBe(row.storageKey);
+    expect(row.storageKey).not.toMatch(/tts|model|synth|proto/i);
+  });
+
+  it("is not playable until its audio is in place", () => {
+    expect(row.uploadedAt).toBeNull();
+  });
+
+  it("refuses a file type the recorder could not have made", () => {
+    expect(() =>
+      syntheticClipRow({ ...row, id: "x", systemRef: "m", mimeType: "audio/flac" }),
+    ).toThrow(/Unsupported/);
   });
 });
