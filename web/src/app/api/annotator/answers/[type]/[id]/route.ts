@@ -25,6 +25,15 @@ const ROLES = ["ANNOTATOR", "RESEARCHER"];
 
 type Who = { error: NextResponse } | { userId: string; role: string };
 
+/** May this person use the speech side at all? Listen rows exist only there,
+ *  so with the layer off a Listen row answers 404 like the rest of it. */
+function speechOn(role: string): boolean {
+  return canUseSpeech(role, {
+    lab: speechLabEnabled(),
+    layer: speechLayerAnnotatorsEnabled(),
+  });
+}
+
 async function who(): Promise<Who> {
   const session = await getServerSession(authOptions);
   const user = session?.user;
@@ -51,10 +60,10 @@ export async function GET(
   if (!isRevisionTarget(type)) {
     return NextResponse.json({ error: "Unknown answer type" }, { status: 404 });
   }
-  const withClips = canUseSpeech(me.role, {
-    lab: speechLabEnabled(),
-    layer: speechLayerAnnotatorsEnabled(),
-  });
+  const withClips = speechOn(me.role);
+  if (type === "listen" && !withClips) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const res = await loadEditEpisode({ type, id, userId: me.userId, withClips });
   // Where "Re-record" goes: the Record page this person already knows.
   const recordHref = !withClips
@@ -77,6 +86,9 @@ export async function PATCH(
   const { type, id } = await params;
   if (!isRevisionTarget(type)) {
     return NextResponse.json({ error: "Unknown answer type" }, { status: 404 });
+  }
+  if (type === "listen" && !speechOn(me.role)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   // Guard req.json() so a bad body returns JSON 400, never a bare 500.
   const body = await req.json().catch(() => null);

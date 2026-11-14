@@ -166,4 +166,75 @@ describe("/api/annotator/answers/[type]/[id]", () => {
     expect(body.items[0]).toMatchObject({ needsFix: true, clips: [] });
     expect(body.items[1]).toMatchObject({ winner: "b" });
   });
+
+  describe("a Listen judgment (speech layer)", () => {
+    const flags = {
+      lab: process.env.SPEECH_LAB_ENABLED,
+      layer: process.env.SPEECH_LAYER_ANNOTATORS,
+    };
+    const restore = () => {
+      for (const [key, value] of [
+        ["SPEECH_LAB_ENABLED", flags.lab],
+        ["SPEECH_LAYER_ANNOTATORS", flags.layer],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    };
+    const seedListen = () => {
+      db.speechComparison.rows.push({
+        id: "l-res",
+        annotatorId: "res",
+        isDemo: false,
+        winner: "a",
+        note: "A is clearer.",
+        promptId: "p1",
+        prompt: { text: "A test question?" },
+        createdAt: new Date("2026-11-12T08:00:00Z"),
+      });
+    };
+
+    it("is not there at all while the speech layer is off for this person (404)", async () => {
+      seedListen();
+      delete process.env.SPEECH_LAB_ENABLED;
+      as("res", "RESEARCHER");
+      expect((await patch("listen", "l-res", { note: "x" })).status).toBe(404);
+      expect(
+        (await GET(new Request("http://test/x"), ctx("listen", "l-res")))
+          .status,
+      ).toBe(404);
+      // lab on, annotator layer off: an annotator still gets 404
+      process.env.SPEECH_LAB_ENABLED = "1";
+      delete process.env.SPEECH_LAYER_ANNOTATORS;
+      as("ann", "ANNOTATOR");
+      expect((await patch("listen", "l-res", { note: "x" })).status).toBe(404);
+      restore();
+    });
+
+    it("the author changes the reason; the choice, the chips and the scores are refused; others are refused", async () => {
+      seedListen();
+      process.env.SPEECH_LAB_ENABLED = "1";
+      as("res", "RESEARCHER");
+      const ok = await patch("listen", "l-res", {
+        note: "B has a hiss in it.",
+      });
+      expect(ok.status).toBe(200);
+      expect(db.speechComparison.rows[0].note).toBe("B has a hiss in it.");
+      for (const body of [
+        { winner: "b" },
+        { reasonTags: ["robotic"] },
+        { axes: { a: { natural: 5 } } },
+        { note: "ok", winner: "b" },
+      ]) {
+        expect((await patch("listen", "l-res", body)).status).toBe(405);
+      }
+      expect(db.speechComparison.rows[0].winner).toBe("a");
+      as("other", "RESEARCHER");
+      expect((await patch("listen", "l-res", { note: "mine" })).status).toBe(
+        403,
+      );
+      expect(db.answerRevision.rows).toHaveLength(1);
+      restore();
+    });
+  });
 });

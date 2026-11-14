@@ -564,6 +564,48 @@ describe("clips and the episode", () => {
     expect(res.status).toBe(403);
   });
 
+  it("a Listen judgment read back for the drawer carries no clip, model or speaker", async () => {
+    const ep = await loadEditEpisode({
+      type: "listen",
+      id: "l-agnes",
+      userId: AGNES,
+      withClips: true,
+    });
+    expect(ep.status).toBe(200);
+    expect(Object.keys(ep.body).sort()).toEqual(["items", "promptText"]);
+    const items = ep.body.items as Record<string, unknown>[];
+    expect(items).toHaveLength(1);
+    expect(Object.keys(items[0]).sort()).toEqual([
+      "createdAt",
+      "id",
+      "note",
+      "type",
+      "winner",
+    ]);
+    const wire = JSON.stringify(ep.body).toLowerCase();
+    for (const word of [
+      "recording",
+      "clip",
+      "model",
+      "tts",
+      "storage",
+      "tier",
+    ]) {
+      expect(wire, word).not.toContain(word);
+    }
+    // and someone else cannot read it at all
+    expect(
+      (
+        await loadEditEpisode({
+          type: "listen",
+          id: "l-agnes",
+          userId: CHARITY,
+          withClips: true,
+        })
+      ).status,
+    ).toBe(403);
+  });
+
   it("a Listen judgment: the reason is editable by its author, alone", async () => {
     expect(
       (await edit(agnes, "listen", "l-agnes", { note: "B has a hiss in it." }))

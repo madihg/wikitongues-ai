@@ -27,6 +27,7 @@ import {
   newSaveId,
   staleClipIds,
   storedText,
+  type ClipLite,
   type FieldChange,
   type RevisionTarget,
 } from "@/lib/answer-revisions";
@@ -708,4 +709,42 @@ export async function loadEditEpisode(args: {
 
   const episode: EditEpisode = { promptText: prompt?.text ?? "", items };
   return { status: 200, body: { ...episode } };
+}
+
+/**
+ * The clips whose words changed after they were recorded (see staleClipIds).
+ * For the queues and builders that should leave such a clip out until it is
+ * recorded again. It never fails its caller: if the log cannot be read (the
+ * table is not there yet), no clip is treated as out of date.
+ */
+export async function staleRecordingIds(
+  clips: ClipLite[],
+): Promise<Set<string>> {
+  const answerIds = [
+    ...new Set(
+      clips
+        .map((c) => c.coldAuthorAnswerId)
+        .filter((id): id is string => !!id),
+    ),
+  ];
+  if (answerIds.length === 0) return new Set();
+  try {
+    const revisions = await prisma.answerRevision.findMany({
+      where: {
+        targetType: "cold",
+        targetId: { in: answerIds },
+        field: { in: ["answerText", "englishGloss"] },
+      },
+      select: {
+        targetId: true,
+        field: true,
+        before: true,
+        after: true,
+        createdAt: true,
+      },
+    });
+    return staleClipIds(clips, revisions);
+  } catch {
+    return new Set();
+  }
 }

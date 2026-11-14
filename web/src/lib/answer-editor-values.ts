@@ -149,7 +149,7 @@ export function emptiedRequired(
     cold: ["answerText"],
     edit: ["correctedText", "rationale"],
     pairwise: ["explanation"],
-    listen: ["note"],
+    listen: [],
   };
   for (const item of items) {
     const key = itemKey(item);

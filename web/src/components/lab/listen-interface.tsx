@@ -1,6 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { AnswerEditorDrawer } from "@/components/answer-editor";
+import {
+  EpisodeFooter,
+  EpisodeHeader,
+  FRAME_QUIET,
+  SavedStrip,
+} from "@/components/episode-frame";
+import {
+  lastSavedKey,
+  parseLastSaved,
+  type LastSaved,
+} from "@/lib/episode-draft";
 import {
   LANGUAGE_LABEL,
   MAX_NOTE_CHARS,
@@ -275,6 +293,7 @@ export function ListenView({
   onAxis,
   onHeard = () => {},
   onSubmit,
+  footerLeft = null,
 }: {
   task: ListenTask;
   winner: SpeechWinner | null;
@@ -294,6 +313,8 @@ export function ListenView({
   ) => void;
   onHeard?: (side: "a" | "b", value: string | null) => void;
   onSubmit: () => void;
+  /** The left place of the footer bar: "Edit previous", when there is one. */
+  footerLeft?: ReactNode;
 }) {
   const tone = task.minimalPair;
   const toneDone = !tone || (heard.a !== undefined && heard.b !== undefined);
@@ -406,16 +427,72 @@ export function ListenView({
         </p>
       )}
 
+      {/* The shared footer bar. Listen has no stage to go back to and no
+          skip, so the left place offers "Edit previous" (the last judgment,
+          its reason only) and the middle stays empty. */}
+      <EpisodeFooter
+        left={footerLeft}
+        right={
+          <button
+            type="button"
+            data-testid="submit-button"
+            disabled={!canSubmit}
+            onClick={onSubmit}
+            className="min-h-[44px] w-full cursor-pointer rounded-md bg-accent px-5 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            {busy ? "Submitting..." : "Submit"}
+          </button>
+        }
+      />
+    </div>
+  );
+}
+
+/** localStorage key: the first-visit card was read. */
+export const LISTEN_INTRO_KEY = "wt-listen-intro-seen";
+
+/**
+ * The first-visit card, shown once. It says what the work is and that some
+ * clips are a machine, without ever saying which.
+ */
+export function ListenIntro({ onStart }: { onStart: () => void }) {
+  return (
+    <section
+      aria-label="About Listen"
+      data-testid="listen-intro"
+      className="rounded-lg border border-border bg-surface p-6"
+    >
+      <h2 className="text-lg font-semibold text-text-primary">Listen</h2>
+      <p className="mt-3 text-sm text-text-secondary">
+        You will hear two clips of the same sentence.
+      </p>
+      <p className="mt-1 text-sm text-text-secondary">
+        Pick the one that sounds more like a real Igala speaker.
+      </p>
+      <p className="mt-1 text-sm text-text-secondary">
+        Some clips are people. Some are a machine. We do not tell you which.
+      </p>
+      <p className="mt-1 text-sm text-text-secondary">Please be strict.</p>
       <button
         type="button"
-        data-testid="submit-button"
-        disabled={!canSubmit}
-        onClick={onSubmit}
-        className="min-h-[44px] cursor-pointer rounded-md bg-accent px-5 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={onStart}
+        className="mt-5 min-h-[44px] cursor-pointer rounded-md bg-accent px-6 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
       >
-        {busy ? "Submitting..." : "Submit"}
+        Start
       </button>
-    </div>
+    </section>
+  );
+}
+
+/** The empty state of the Listen queue. */
+export function ListenEmpty({ done }: { done: number }) {
+  return (
+    <p
+      data-testid="listen-empty"
+      className="rounded-md border border-border bg-surface p-4 text-sm text-text-secondary"
+    >
+      No clips to compare right now. You have judged {done}.
+    </p>
   );
 }
 
@@ -439,6 +516,14 @@ export function ListenInterface() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(0);
+  // How many pairs are still waiting, for the header line. Null until known.
+  const [remaining, setRemaining] = useState<number | null>(null);
+  // The first-visit card: null until storage was read, then shown once.
+  const [intro, setIntro] = useState<boolean | null>(null);
+  // The judgment submitted last in this sitting, for the "Saved" strip and
+  // "Edit previous". Only its reason can be changed, never the choice.
+  const [lastSaved, setLastSaved] = useState<LastSaved | null>(null);
+  const [editingSaved, setEditingSaved] = useState(false);
   const demoRef = useRef<string | null>(null);
 
   const loadNext = useCallback(async () => {
@@ -457,6 +542,9 @@ export function ListenInterface() {
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? "Could not load a pair.");
       setDone(j.progress?.completed ?? 0);
+      setRemaining(
+        typeof j.progress?.remaining === "number" ? j.progress.remaining : null,
+      );
       setQueue(
         j.complete || !j.task
           ? { status: "complete" }
@@ -472,8 +560,28 @@ export function ListenInterface() {
 
   useEffect(() => {
     demoRef.current = new URLSearchParams(window.location.search).get("demo");
+    let seen = false;
+    try {
+      seen = localStorage.getItem(LISTEN_INTRO_KEY) === "1";
+      const found = parseLastSaved(
+        sessionStorage.getItem(lastSavedKey("listen")),
+      );
+      if (found) setLastSaved(found);
+    } catch {
+      // No storage: the card shows each visit and the strip does not persist.
+    }
+    setIntro(!seen);
     void loadNext();
   }, [loadNext]);
+
+  const startListening = () => {
+    setIntro(false);
+    try {
+      localStorage.setItem(LISTEN_INTRO_KEY, "1");
+    } catch {
+      // Shown again next visit.
+    }
+  };
 
   const submit = async () => {
     if (queue.status !== "task" || winner === null) return;
@@ -514,6 +622,19 @@ export function ListenInterface() {
         return;
       }
       if (!res.ok) throw new Error(j?.error ?? "Could not save your judgment.");
+      if (typeof j?.id === "string") {
+        const saved: LastSaved = {
+          type: "listen",
+          id: j.id,
+          promptText: task.prompt.text,
+        };
+        setLastSaved(saved);
+        try {
+          sessionStorage.setItem(lastSavedKey("listen"), JSON.stringify(saved));
+        } catch {
+          // Shown for this page view only.
+        }
+      }
       setBusy(false);
       await loadNext();
     } catch (e) {
@@ -530,6 +651,20 @@ export function ListenInterface() {
         <p className="mb-4 rounded-md border border-warning bg-warning-subtle px-3 py-2 text-sm text-text-primary">
           Demo session: judgments here are not counted.
         </p>
+      )}
+      {/* The frame's header line. The page heading already says "Listen". */}
+      <EpisodeHeader left={queue.status === "task" ? remaining : null} />
+      {lastSaved && (
+        <SavedStrip
+          promptText={lastSaved.promptText}
+          onEdit={() => setEditingSaved(true)}
+        />
+      )}
+      {lastSaved && editingSaved && (
+        <AnswerEditorDrawer
+          target={{ type: "listen", id: lastSaved.id }}
+          onClose={() => setEditingSaved(false)}
+        />
       )}
       {queue.status === "loading" && (
         <p className="text-sm text-text-tertiary">Loading a pair...</p>
@@ -548,14 +683,23 @@ export function ListenInterface() {
           </button>
         </div>
       )}
-      {queue.status === "complete" && (
-        <p className="rounded-md border border-border bg-surface p-4 text-sm text-text-secondary">
-          Nothing to listen to right now. A prompt needs clips from two
-          different voices before it appears here. You have judged {done}.
-        </p>
+      {queue.status === "complete" && <ListenEmpty done={done} />}
+      {queue.status === "task" && intro === true && (
+        <ListenIntro onStart={startListening} />
       )}
-      {queue.status === "task" && (
+      {queue.status === "task" && intro === false && (
         <ListenView
+          footerLeft={
+            lastSaved ? (
+              <button
+                type="button"
+                onClick={() => setEditingSaved(true)}
+                className={FRAME_QUIET}
+              >
+                Edit previous
+              </button>
+            ) : null
+          }
           task={queue.task}
           winner={winner}
           reasons={reasons}

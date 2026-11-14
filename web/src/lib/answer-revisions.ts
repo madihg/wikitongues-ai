@@ -41,7 +41,9 @@ export const REQUIRED_FIELDS: Record<RevisionTarget, readonly string[]> = {
   cold: ["answerText"],
   edit: ["correctedText", "rationale"],
   pairwise: ["explanation"],
-  listen: ["note"],
+  // The note on a Listen judgment is optional (the reason chips are the
+  // required part, and they belong to the judgment).
+  listen: [],
 };
 
 /**
