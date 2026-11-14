@@ -3,8 +3,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isResearcher } from "@/lib/personas";
+import {
+  canUseSpeech,
+  speechLabEnabled,
+  speechLayerAnnotatorsEnabled,
+} from "@/lib/lab-flags";
+import { loadRecentEdits } from "@/lib/recent-edits";
+import { loadWaiting } from "@/lib/waiting";
 import { computeQueueState } from "@/lib/pairing";
 import { loadCorrectionInputs, loadQueueInputs } from "@/lib/queue-input";
+import { addWeeks, lagosDate, weekFigure, weekStartOf } from "@/lib/hours";
+import { loadHours } from "@/lib/hours-data";
 
 /**
  * Real numbers for the annotator dashboard. Everything here is scoped to the
@@ -18,6 +27,21 @@ export async function GET() {
   }
   const annotatorId = session.user.id;
   const researcher = isResearcher(session.user.role, session.user.email);
+
+  // Hours for this week and last, started now so they load while the queue
+  // numbers do. The SAME loader and row builder as the researcher's hours
+  // table (lib/hours-data.ts), so the two can never disagree.
+  const thisWeek = weekStartOf(new Date());
+  const lastWeek = addWeeks(thisWeek, -1);
+  const hoursPromise = loadHours({
+    weeks: [thisWeek, lastWeek],
+    from: lastWeek,
+    to: addWeeks(thisWeek, 1),
+    userId: annotatorId,
+  });
+  // Awaited below; this only stops an early failure elsewhere from leaving
+  // the promise unhandled.
+  hoursPromise.catch(() => {});
 
   // Queue remaining — mirrors /api/annotations/next via the SAME loader
   // (loadQueueInputs: pairing-pool output filter, holdout exclusion, lane
@@ -69,21 +93,39 @@ export async function GET() {
       ])
     : [0, 0];
 
-  // Recent activity = this user's latest comparisons + cold-authored answers.
-  const [recentPairwise, recentCold] = await Promise.all([
-    prisma.pairwiseComparison.findMany({
-      where: { annotatorId, isDemo: false },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      select: { promptId: true, winner: true, createdAt: true },
-    }),
-    prisma.coldAuthorAnswer.findMany({
-      where: { annotatorId, isDemo: false },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      select: { createdAt: true, prompt: { select: { text: true } } },
-    }),
-  ]);
+  // Speech is on for this account: the lab flag, and a researcher or (with
+  // the annotator layer on) an annotator. The same rule as /api/lab/flags.
+  const lab = speechLabEnabled();
+  const speech = canUseSpeech(session.user.role, {
+    lab,
+    layer: lab && speechLayerAnnotatorsEnabled(),
+  });
+
+  // Recent activity = this user's latest comparisons, cold-authored answers,
+  // clips and saved edits.
+  const [recentPairwise, recentCold, recentClips, recentEdits, clips] =
+    await Promise.all([
+      prisma.pairwiseComparison.findMany({
+        where: { annotatorId, isDemo: false },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+        select: { promptId: true, winner: true, createdAt: true },
+      }),
+      prisma.coldAuthorAnswer.findMany({
+        where: { annotatorId, isDemo: false },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+        select: { createdAt: true, prompt: { select: { text: true } } },
+      }),
+      prisma.speechRecording.findMany({
+        where: { annotatorId, isDemo: false },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+        select: { createdAt: true, prompt: { select: { text: true } } },
+      }),
+      loadRecentEdits(annotatorId),
+      prisma.speechRecording.count({ where: { annotatorId, isDemo: false } }),
+    ]);
 
   // PairwiseComparison stores the PUBLIC promptId string, not a FK — map to text.
   const promptIds = [...new Set(recentPairwise.map((r) => r.promptId))];
@@ -116,6 +158,18 @@ export async function GET() {
       status: "Saved",
       createdAt: r.createdAt,
     })),
+    ...recentClips.map((r) => ({
+      prompt: r.prompt?.text ?? "(prompt removed)",
+      type: "Clip",
+      status: "Saved",
+      createdAt: r.createdAt,
+    })),
+    ...recentEdits.map((r) => ({
+      prompt: r.prompt,
+      type: "Edit",
+      status: "Saved",
+      createdAt: r.createdAt,
+    })),
   ]
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, 6)
@@ -124,7 +178,34 @@ export async function GET() {
       date: createdAt.toISOString(),
     }));
 
+  // Time worked, this week and last (annotator experience spec 10.3): the
+  // figure here is this person's row in the researcher's hours table.
+  const hours = await hoursPromise;
+  const rowFor = (week: Date) =>
+    hours.rows.find(
+      (r) => r.userId === annotatorId && r.weekStart === lagosDate(week),
+    );
+  const time = {
+    thisWeek: weekFigure(rowFor(thisWeek)),
+    lastWeek: weekFigure(rowFor(lastWeek)),
+    measuredSince: hours.measuredSince?.toISOString() ?? null,
+  };
+
+  // "Waiting for you": each number is the length of the queue its card
+  // opens (lib/waiting.ts asks what the queue routes ask). The fix card
+  // needs authors to be able to edit their own answers, which arrives with
+  // the edit log: until that table exists the count stays at zero.
+  const waitingRest = await loadWaiting(annotatorId, {
+    speech,
+    editing: hours.revisionsCounted,
+  });
+  const waiting = { annotate: pending, ...waitingRest };
+
   return NextResponse.json({
+    time,
+    waiting,
+    speech,
+    clips,
     pending,
     correctionsWaiting,
     completed,

@@ -356,6 +356,12 @@ model ColdAuthorAnswer {
   // Plain-English "what it means / why" gloss for the Igala answer. Training
   // metadata (audit/filter) only — never merged into the Igala answer itself.
   englishGloss       String?
+  // A short, direct English translation of the answer, in a few words: what
+  // the Igala says, nothing more. Typed once on the Record page (or in the
+  // episode's "Say it" block) and read aloud for the English clip. The gloss
+  // above stays what it always was, the longer meaning and why. Null until
+  // the speaker types one.
+  englishTranslation String?
   // The prompt/instruction itself rewritten in Igala by the speaker, so one
   // episode can mint two training rows (English-instruction -> Igala and
   // Igala-instruction -> Igala). Optional, never blocks locking.
@@ -891,6 +897,7 @@ model SpeechRecording {
   demoSessionId      String?
   studioSessionId    String? // one studio sitting of the TTS voice speaker (PR H); null for every other clip
   studioText         String? // the tone-marked script line the speaker read; the transcript of a studio clip
+  spokenText         String? // the exact English words an English clip read (the short translation as typed at the time); null for every clip made before 2026-11-13, which read the gloss or the prompt
   createdAt          DateTime       @default(now())
 
   prompt           Prompt             @relation(fields: [promptId], references: [id])
@@ -1089,6 +1096,14 @@ model SpeakerProfile {
   ageBand              String?
   gender               String?
   mayShareDemographics Boolean  @default(false)
+  // The clip choice, asked once and remembered (2026-11-13). All three are
+  // null until the speaker chooses; nothing is ever chosen for them. The
+  // choice counts only while it is newer than the speaker's current consent
+  // grant, so a new consent text version, or consenting again after a
+  // withdrawal, asks again. Every recording still stores its own tier.
+  defaultTier          DataTier?
+  defaultVoiceCloning  Boolean?
+  tierChosenAt         DateTime?
   updatedAt            DateTime @updatedAt
 }
 
@@ -1252,4 +1267,140 @@ model SpeechListenRound {
   @@index([raterId, comparisonId])
   @@index([candidateRecordingId])
   @@index([batch])
+}
+
+// ---------------------------------------------------------------------------
+// Honest time (annotator experience spec, section 10). ActivityPing holds the
+// seconds a person was active in one minute on one kind of work, sent by the
+// browser beat (src/lib/activity.ts). No content is stored: no keys, no text,
+// no screen. At most 60 seconds per person per minute are ever counted.
+// TimeNote is the annotator's own "this looks wrong" note on a week. Plain
+// string keys, like the speech loop tables, so no existing table is altered.
+// ---------------------------------------------------------------------------
+
+model ActivityPing {
+  id            String   @id @default(cuid())
+  userId        String
+  minute        DateTime // start of the minute, UTC
+  surface       String // kind of work: annotate, record, listen, check, my_work, ... (SURFACES in src/lib/activity.ts)
+  activeSeconds Int // 0 to 60
+  isDemo        Boolean  @default(false) // a demo sitting, left out of invoices
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  @@unique([userId, minute, surface, isDemo])
+  @@index([userId, minute])
+  @@index([minute])
+}
+
+model TimeNote {
+  id        String   @id @default(cuid())
+  userId    String
+  weekStart DateTime // Monday 00:00 Lagos time of the week the note is about, as a UTC instant
+  day       String // the annotator's answer to "Which day?", free text
+  note      String // the annotator's answer to "What did you work on?"
+  createdAt DateTime @default(now())
+
+  @@index([userId, weekStart])
+  @@index([weekStart])
+}
+
+// ---------------------------------------------------------------------------
+// Answer revisions (annotator edit, Nov 13): every edit an author (or a
+// researcher, for answer text) makes to a submitted row writes one row here
+// per changed field, with the exact before and after. Append-only. The parent
+// row is still updated as before, so every screen and export keeps reading
+// it. Plain string keys, like the loop tables above, so no existing table is
+// altered. Column contract: out/edit/CONTRACT.md in the Nov 13 program notes,
+// mirrored in src/lib/answer-revisions.ts.
+// ---------------------------------------------------------------------------
+
+model AnswerRevision {
+  id          String   @id @default(cuid())
+  saveId      String // one value per press of "Save changes"
+  targetType  String // cold | edit | pairwise | listen
+  targetId    String // id of the parent row
+  field       String // the column that changed on the parent row
+  before      String? // exact value before the save, NFC; null = empty
+  after       String? // exact value after the save, NFC; null = cleared
+  editorId    String // User.id of the person who saved
+  authorId    String // annotatorId of the parent row at the time of the save
+  afterReveal Boolean // the author had seen AI outputs for this prompt
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([targetType, targetId, createdAt])
+  @@index([editorId, createdAt])
+  @@index([saveId])
+}
+
+// ---------------------------------------------------------------------------
+// Tone-mark pass 2 (Nov 2026). A second pass over answers that already exist
+// (pass 1): more than one marker adds tone marks to a copy of the text, and
+// the copies are compared. Pass 1 rows (ColdAuthorAnswer, OutputEdit) are
+// never edited, overwritten or deleted by this feature: these four tables
+// stand beside them. Plain string keys, like the tables above, so no
+// existing table is altered.
+// ---------------------------------------------------------------------------
+
+// One pass-1 answer that belongs to a tone set, with the text exactly as it
+// was when it joined the set.
+model TonePassItem {
+  id                 String   @id @default(cuid())
+  setName            String // e.g. "tone-set-v1"
+  sourceType         String // "cold" (ColdAuthorAnswer) | "edit" (OutputEdit)
+  sourceId           String // id of the pass-1 row
+  promptId           String // Prompt.id
+  sourceTextSnapshot String // the pass-1 text exactly as shown to markers
+  cells              String[] @default([]) // coverage cells this item was chosen for
+  requiredMarkers    Int      @default(2) // 3 proposed for homographs and minimal pairs
+  createdAt          DateTime @default(now())
+
+  @@unique([setName, sourceType, sourceId])
+  @@index([sourceType, sourceId])
+}
+
+// One item served to one marker. An item is never served twice to a person.
+model TonePassAssignment {
+  id          String    @id @default(cuid())
+  itemId      String
+  annotatorId String
+  skippedAt   DateTime? // "Skip this one": it does not come back
+  createdAt   DateTime  @default(now())
+
+  @@unique([itemId, annotatorId])
+  @@index([annotatorId])
+}
+
+// One marker's tone-marked copy of one item.
+model TonePass {
+  id                   String   @id @default(cuid())
+  itemId               String
+  sourceType           String
+  sourceId             String
+  passNumber           Int      @default(2)
+  annotatorId          String
+  toneMarkedText       String // NFC; differs from the snapshot in tone marks only
+  sourceTextSnapshot   String // the pass-1 text exactly as shown
+  note                 String?
+  unsureWords          Int[]    @default([]) // positions of words the marker is not sure about
+  flaggedNonToneChange Boolean  @default(false) // the marker also proposed a correction
+  flagText             String? // the proposed correction, whole; never mixed into toneMarkedText
+  activeSeconds        Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([itemId, annotatorId])
+  @@index([sourceType, sourceId])
+  @@index([annotatorId])
+}
+
+// The agreed pass-2 text of one item.
+model TonePassAgreed {
+  id            String   @id @default(cuid())
+  itemId        String   @unique
+  agreedText    String // NFC
+  method        String // exact | majority | adjudicated
+  adjudicatorId String?
+  agreedAt      DateTime @default(now())
 }

@@ -106,6 +106,56 @@ describe("buildOpenManifest", () => {
     expect(nothing.transcript).toBeNull();
   });
 
+  it("an English clip that recorded the short translation uses those exact words, whatever the answer says now", () => {
+    const [line] = buildOpenManifest([
+      openRow({
+        language: "english",
+        spokenText: "  good morning, elder ",
+        coldAuthorAnswer: {
+          answerText: "an answer",
+          englishGloss: "It is the respectful morning greeting.",
+          // Edited after the clip was made: the clip still said the old words.
+          englishTranslation: "good morning, sir",
+        },
+        prompt: { isHoldout: false, split: "train", text: "Say hello." },
+      }),
+    ]);
+    expect(line.transcript).toBe("good morning, elder");
+    expect(line.transcript).not.toContain("respectful");
+  });
+
+  it("an older English clip (no recorded words) keeps the meaning as its transcript even after a translation is typed", () => {
+    const [line] = buildOpenManifest([
+      openRow({
+        language: "english",
+        spokenText: null,
+        coldAuthorAnswer: {
+          answerText: "an answer",
+          englishGloss: "its meaning",
+          englishTranslation: "good morning",
+        },
+      }),
+    ]);
+    expect(line.transcript).toBe("its meaning");
+  });
+
+  it("carries the answer's short translation on Igala and English lines, and no key when there is none", () => {
+    const answer = {
+      answerText: "an answer",
+      englishGloss: "its meaning",
+      englishTranslation: " good morning ",
+    };
+    const [igala, english, none] = buildOpenManifest([
+      openRow({ coldAuthorAnswer: answer }),
+      openRow({ language: "english", spokenText: "good morning", coldAuthorAnswer: answer }),
+      openRow({ coldAuthorAnswer: { answerText: "an answer", englishGloss: null } }),
+    ]);
+    expect(igala.englishTranslation).toBe("good morning");
+    expect(igala.transcript).toBe("an answer");
+    expect(english.englishTranslation).toBe("good morning");
+    expect("englishTranslation" in none).toBe(false);
+  });
+
   it("never carries the account id, a URL, or a consent id", () => {
     const text = toJsonl(buildOpenManifest([openRow()]));
     expect(text).not.toContain("speaker-account-1");

@@ -23,6 +23,13 @@ import { useSpeechLayer } from "@/components/lab/use-speech-layer";
 import { canProbeSpeech } from "@/lib/lab-flags";
 import { ToneKeyboard } from "@/components/tone-keyboard";
 import { SuggestingEditor } from "@/components/suggesting-editor";
+import { AnswerEditorDrawer } from "@/components/answer-editor";
+import {
+  EpisodeFooter,
+  EpisodeHeader,
+  FRAME_QUIET,
+  SavedStrip,
+} from "@/components/episode-frame";
 import {
   attachReasons,
   diffToSegments,
@@ -30,6 +37,10 @@ import {
   type ReasonMap,
 } from "@/lib/edit-segments";
 import {
+  isDrawerSaved,
+  lastSavedKey,
+  parseLastSaved,
+  type LastSaved,
   coldDraftKey,
   pairDraftKey,
   planDraftRestore,
@@ -248,6 +259,31 @@ export function AnnotationInterface() {
   const [submitting, setSubmitting] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [demoSessionId, setDemoSessionId] = useState<string | null>(null);
+
+  // The item submitted last in this sitting: what the "Saved" strip shows
+  // and what "Edit previous" opens. Kept per tab, replaced by the next
+  // submit. `editingSaved` is true while the edit drawer is open on it; the
+  // draft on the page is untouched by opening or closing the drawer.
+  const [lastSaved, setLastSaved] = useState<LastSaved | null>(null);
+  const [editingSaved, setEditingSaved] = useState(false);
+  useEffect(() => {
+    try {
+      const found = parseLastSaved(
+        sessionStorage.getItem(lastSavedKey("annotate")),
+      );
+      if (found) setLastSaved(found);
+    } catch {
+      // No storage: the strip simply does not show after a reload.
+    }
+  }, []);
+  function rememberSaved(saved: LastSaved) {
+    setLastSaved(saved);
+    try {
+      sessionStorage.setItem(lastSavedKey("annotate"), JSON.stringify(saved));
+    } catch {
+      // Shown for this page view only.
+    }
+  }
 
   // A question opened from the review drawer (?prompt=<code>): the code while
   // that question is the one on screen, or the reason it is not.
@@ -1045,6 +1081,13 @@ export function AnnotationInterface() {
         );
       }
       attachSpeechClips(task.prompt.promptId);
+      if (typeof data.comparisonId === "string") {
+        rememberSaved({
+          type: "pairwise",
+          id: data.comparisonId,
+          promptText: task.prompt.text,
+        });
+      }
       clearDraft();
       releasePin();
       await fetchNext();
@@ -1346,10 +1389,28 @@ export function AnnotationInterface() {
     );
   }
 
+  // The "Saved" strip and its drawer, the same on every stage and on the
+  // finished queue: the item just submitted can always be reopened.
+  const savedStrip = lastSaved ? (
+    <SavedStrip
+      promptText={lastSaved.promptText}
+      onEdit={() => setEditingSaved(true)}
+    />
+  ) : null;
+  const savedDrawer =
+    isDrawerSaved(lastSaved) && editingSaved ? (
+      <AnswerEditorDrawer
+        target={{ type: lastSaved.type, id: lastSaved.id }}
+        onClose={() => setEditingSaved(false)}
+      />
+    ) : null;
+
   if (isComplete) {
     return (
       <>
         {demoSwitch}
+        {savedStrip}
+        {savedDrawer}
         <div className="flex flex-col items-center justify-center py-20">
           <div className="rounded-lg border border-success/30 bg-success-subtle p-8 text-center">
             <h2 className="text-lg text-success">All caught up</h2>
@@ -1640,6 +1701,18 @@ export function AnnotationInterface() {
         </div>
       )}
 
+      {/* The frame's header line. The page heading already says "Annotate",
+          so only the count sits here; the progress bar under it is as it was. */}
+      <EpisodeHeader
+        left={
+          progress && !demoSessionId
+            ? Math.max(0, progress.total - progress.completed)
+            : null
+        }
+      />
+      {savedStrip}
+      {savedDrawer}
+
       {progress && !demoSessionId && (
         <div className="mb-6">
           <div className="flex items-center justify-between text-sm text-text-secondary">
@@ -1835,12 +1908,16 @@ export function AnnotationInterface() {
                   }}
                 />
               ) : (
-                <button
-                  onClick={() => setStep("pairwise")}
-                  className="mt-4 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
-                >
-                  Back to the AI outputs
-                </button>
+                <EpisodeFooter
+                  right={
+                    <button
+                      onClick={() => setStep("pairwise")}
+                      className="min-h-[44px] w-full cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover sm:w-auto"
+                    >
+                      Back to the AI outputs
+                    </button>
+                  }
+                />
               )}
             </>
           ) : task.goldFirst ? (
@@ -1860,15 +1937,6 @@ export function AnnotationInterface() {
                 sentence helps.
               </p>
               {authoringBoxes}
-              <button
-                onClick={revealModels}
-                disabled={!glossOk}
-                className="mt-5 cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {coldAnswer.trim()
-                  ? "Lock my answer & reveal the AI outputs"
-                  : "Skip & reveal the AI outputs"}
-              </button>
               {glossNeededHint}
               <p className="mt-2 text-xs text-text-muted">
                 Once revealed, your answer is locked so it stays source-free.
@@ -1891,25 +1959,6 @@ export function AnnotationInterface() {
                 sentence helps.
               </p>
               {authoringBoxes}
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <button
-                  onClick={revealModels}
-                  disabled={!coldAnswer.trim() || !glossOk}
-                  className="cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Lock my answer &amp; reveal the AI outputs
-                </button>
-                {/* Skipping stays available, but not as a side door around the
-                    required meaning: a typed answer would otherwise be locked
-                    and submitted with no gloss at all. */}
-                <button
-                  onClick={revealModels}
-                  disabled={!glossOk}
-                  className="cursor-pointer rounded-md border border-border-strong bg-surface px-6 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Skip - just show me the outputs
-                </button>
-              </div>
               {glossNeededHint}
               <p className="mt-2 text-xs text-text-muted">
                 Once revealed, your answer is locked so it stays source-free.
@@ -1917,17 +1966,67 @@ export function AnnotationInterface() {
             </>
           )}
 
-          {/* Quiet secondary action: skip this prompt entirely (first step only) */}
+          {/* The footer bar of the first stage. Left: nothing to go back to
+              here, so the place offers "Edit previous" (the item submitted
+              last, in the edit drawer) or stays empty. Middle: skip this
+              prompt entirely (first stage only, as before). Right: the main
+              button, with the words it always had. */}
           {!coldLocked && (
-            <div className="mt-6 border-t border-border pt-4">
-              <button
-                onClick={skipPrompt}
-                disabled={skipping}
-                className="cursor-pointer text-xs text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline disabled:opacity-40"
-              >
-                {skipping ? "Skipping…" : "Skip this prompt"}
-              </button>
-            </div>
+            <EpisodeFooter
+              left={
+                lastSaved ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditingSaved(true)}
+                    className={FRAME_QUIET}
+                  >
+                    Edit previous
+                  </button>
+                ) : null
+              }
+              middle={
+                <button
+                  onClick={skipPrompt}
+                  disabled={skipping}
+                  className={FRAME_QUIET}
+                >
+                  {skipping ? "Skipping…" : "Skip this prompt"}
+                </button>
+              }
+              right={
+                task.goldFirst ? (
+                  <button
+                    onClick={revealModels}
+                    disabled={!glossOk}
+                    className="min-h-[44px] w-full cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                  >
+                    {coldAnswer.trim()
+                      ? "Lock my answer & reveal the AI outputs"
+                      : "Skip & reveal the AI outputs"}
+                  </button>
+                ) : (
+                  <>
+                    {/* Skipping stays available, but not as a side door around
+                        the required meaning: a typed answer would otherwise be
+                        locked and submitted with no gloss at all. */}
+                    <button
+                      onClick={revealModels}
+                      disabled={!glossOk}
+                      className="min-h-[44px] w-full cursor-pointer rounded-md border border-border-strong bg-surface px-6 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                    >
+                      Skip - just show me the outputs
+                    </button>
+                    <button
+                      onClick={revealModels}
+                      disabled={!coldAnswer.trim() || !glossOk}
+                      className="min-h-[44px] w-full cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                    >
+                      Lock my answer &amp; reveal the AI outputs
+                    </button>
+                  </>
+                )
+              }
+            />
           )}
         </div>
       )}
@@ -2189,27 +2288,31 @@ export function AnnotationInterface() {
             )}
           </div>
 
-          <div className="mt-6 flex items-center gap-3">
-            <button
-              onClick={() => setStep("prompt")}
-              className="inline-flex min-h-[44px] cursor-pointer items-center text-sm text-text-tertiary hover:text-text-secondary"
-            >
-              &larr; Back
-            </button>
-            <button
-              onClick={proceedToScore}
-              disabled={
-                !winner || !explanationOk || !tagsOk || !correctionResolved
-              }
-              className="min-h-[44px] cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Continue
-            </button>
-          </div>
+          <EpisodeFooter
+            left={
+              <button
+                onClick={() => setStep("prompt")}
+                className="inline-flex min-h-[44px] cursor-pointer items-center text-sm text-text-tertiary hover:text-text-secondary"
+              >
+                &larr; Back
+              </button>
+            }
+            right={
+              <button
+                onClick={proceedToScore}
+                disabled={
+                  !winner || !explanationOk || !tagsOk || !correctionResolved
+                }
+                className="min-h-[44px] w-full cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+              >
+                Continue
+              </button>
+            }
+          />
           {/* Say exactly which required act is missing - a silently disabled
               button on a phone reads as "the app is broken". */}
           {winner && (!tagsOk || !correctionResolved) && (
-            <p className="mt-2 text-xs text-text-tertiary">
+            <p className="mt-2 text-right text-xs text-text-tertiary">
               {!tagsOk
                 ? "To continue: tap at least one tag under the rejected output - the why is the lesson."
                 : winnerEdited
@@ -2223,13 +2326,6 @@ export function AnnotationInterface() {
       {/* STEP: score the winner / salvage */}
       {step === "score" && (
         <>
-          <button
-            onClick={() => setStep("pairwise")}
-            className="mb-6 cursor-pointer text-sm text-text-tertiary hover:text-text-secondary"
-          >
-            &larr; Back to comparison
-          </button>
-
           {/* Single-winner: rubric v2 on the winner + inline edit */}
           {(winner === "a" || winner === "b") && winnerOutput && (
             <div className="space-y-6">
@@ -2612,15 +2708,25 @@ export function AnnotationInterface() {
             </div>
           )}
 
-          <div className="mt-8 flex items-center justify-end">
-            <button
-              onClick={handleSubmit}
-              disabled={submitting || !canSubmit()}
-              className="min-h-[44px] cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {submitting ? "Submitting…" : "Submit & next"}
-            </button>
-          </div>
+          <EpisodeFooter
+            left={
+              <button
+                onClick={() => setStep("pairwise")}
+                className="inline-flex min-h-[44px] cursor-pointer items-center text-sm text-text-tertiary hover:text-text-secondary"
+              >
+                &larr; Back to comparison
+              </button>
+            }
+            right={
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || !canSubmit()}
+                className="min-h-[44px] w-full cursor-pointer rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+              >
+                {submitting ? "Submitting…" : "Submit & next"}
+              </button>
+            }
+          />
           {/* Only for drafts restored from before the required-why rework:
               the Continue gate normally makes this state unreachable, but a
               silently disabled Submit would strand them here. */}

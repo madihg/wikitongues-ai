@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { EpisodeFooter, EpisodeHeader } from "@/components/episode-frame";
 import {
   answerWords,
   CHECK_LEVELS,
@@ -233,19 +234,24 @@ export function CheckView(p: CheckViewProps) {
               {note.length}/{MAX_CHECK_NOTE_CHARS}
             </p>
           </div>
-          <button
-            type="button"
-            data-testid="check-send"
-            disabled={
-              p.busy ||
-              picked === null ||
-              (picked === "does_not_match" && level === null)
+          {/* The shared footer bar: the main button on the right. */}
+          <EpisodeFooter
+            right={
+              <button
+                type="button"
+                data-testid="check-send"
+                disabled={
+                  p.busy ||
+                  picked === null ||
+                  (picked === "does_not_match" && level === null)
+                }
+                onClick={p.onSend}
+                className="min-h-[44px] w-full cursor-pointer rounded-md bg-accent px-5 text-sm font-medium text-accent-contrast hover:bg-accent-hover focus-visible:outline-none focus-visible:shadow-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                {sent ? "Send new verdict" : "Send verdict"}
+              </button>
             }
-            onClick={p.onSend}
-            className="min-h-[44px] cursor-pointer rounded-md bg-accent px-5 text-sm font-medium text-accent-contrast hover:bg-accent-hover focus-visible:outline-none focus-visible:shadow-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {sent ? "Send new verdict" : "Send verdict"}
-          </button>
+          />
         </div>
       )}
 
@@ -269,24 +275,30 @@ export function CheckView(p: CheckViewProps) {
               transcript={p.transcript}
             />
           )}
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              data-testid="check-change"
-              onClick={p.onChange}
-              className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-5 text-sm font-medium text-text-secondary hover:bg-surface-sunken focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-            >
-              Change my verdict
-            </button>
-            <button
-              type="button"
-              data-testid="check-next"
-              onClick={p.onNext}
-              className="min-h-[44px] cursor-pointer rounded-md bg-accent px-5 text-sm font-medium text-accent-contrast hover:bg-accent-hover focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-            >
-              Next clip
-            </button>
-          </div>
+          {/* The shared footer bar. "Change my verdict" is this screen's
+              "Edit previous": it sits in the left place. */}
+          <EpisodeFooter
+            left={
+              <button
+                type="button"
+                data-testid="check-change"
+                onClick={p.onChange}
+                className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-5 text-sm font-medium text-text-secondary hover:bg-surface-sunken focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+              >
+                Change my verdict
+              </button>
+            }
+            right={
+              <button
+                type="button"
+                data-testid="check-next"
+                onClick={p.onNext}
+                className="min-h-[44px] w-full cursor-pointer rounded-md bg-accent px-5 text-sm font-medium text-accent-contrast hover:bg-accent-hover focus-visible:outline-none focus-visible:shadow-[var(--ring)] sm:w-auto"
+              >
+                Next clip
+              </button>
+            }
+          />
         </div>
       )}
     </section>
@@ -309,6 +321,8 @@ export function CheckInterface() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string | null | undefined>(undefined);
+  // How many clips are still waiting, for the header line. Null until known.
+  const [remaining, setRemaining] = useState<number | null>(null);
 
   const fetchNext = useCallback(async () => {
     setLoad({ status: "loading" });
@@ -322,7 +336,14 @@ export function CheckInterface() {
     try {
       const res = await fetch("/api/lab/speech/check/next");
       if (!res.ok) throw new Error("load");
-      const j = (await res.json()) as { complete: boolean; task?: CheckTask };
+      const j = (await res.json()) as {
+        complete: boolean;
+        task?: CheckTask;
+        progress?: { remaining?: number };
+      };
+      setRemaining(
+        typeof j.progress?.remaining === "number" ? j.progress.remaining : null,
+      );
       setLoad(j.complete || !j.task ? { status: "done" } : { status: "task", task: j.task });
     } catch {
       setLoad({ status: "error" });
@@ -344,11 +365,7 @@ export function CheckInterface() {
     );
   }
   if (load.status === "done") {
-    return (
-      <p data-testid="check-done" className="text-sm text-text-secondary">
-        Nothing left to check right now. Thank you.
-      </p>
-    );
+    return <CheckEmpty />;
   }
   const { task } = load;
 
@@ -394,6 +411,9 @@ export function CheckInterface() {
   };
 
   return (
+    <>
+      {/* The frame's header line. The page heading already says "Check". */}
+      <EpisodeHeader left={remaining} />
     <CheckView
       task={task}
       sent={sent}
@@ -418,5 +438,15 @@ export function CheckInterface() {
       onChange={() => setPicked(sent)}
       onNext={() => void fetchNext()}
     />
+    </>
+  );
+}
+
+/** The empty state of the Check queue. */
+export function CheckEmpty() {
+  return (
+    <p data-testid="check-done" className="text-sm text-text-secondary">
+      No clips to check right now.
+    </p>
   );
 }

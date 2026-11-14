@@ -78,7 +78,10 @@ describe("the Speech Lab layout gate", () => {
     expect(el).toBeTruthy();
     const { renderToStaticMarkup } = await import("react-dom/server");
     const html = renderToStaticMarkup(el);
-    expect(html).toContain("LAB");
+    // The one Speech band (2026-11-13): it reads SPEECH, not LAB.
+    expect(html).toContain("SPEECH");
+    expect(html).not.toContain("LAB");
+    expect(html).toContain(">Recordings<");
     expect(html).toContain("child");
     expect(html).toContain("-m-8");
   });
@@ -107,5 +110,59 @@ describe("every page asks for the gate itself", () => {
     const { join } = await import("node:path");
     const src = readFileSync(join(__dirname, "layout.tsx"), "utf8");
     expect(src).toContain('export const dynamic = "force-dynamic"');
+  });
+});
+
+describe("the old Record and Listen paths redirect to /speak", () => {
+  const pages = [
+    ["./page", "/speak"],
+    ["./listen/page", "/speak/listen"],
+  ] as const;
+
+  it("a researcher is sent on to the matching /speak page", async () => {
+    process.env.SPEECH_LAB_ENABLED = "1";
+    mockGetServerSession.mockResolvedValue({
+      user: { id: "r1", role: "RESEARCHER" },
+    });
+    for (const [mod, to] of pages) {
+      const page = (await import(mod)) as { default: () => Promise<unknown> };
+      await expect(page.default(), mod).rejects.toThrow(`NEXT_REDIRECT:${to}`);
+    }
+  });
+
+  it("so is an annotator with the layer on", async () => {
+    process.env.SPEECH_LAB_ENABLED = "1";
+    process.env.SPEECH_LAYER_ANNOTATORS = "1";
+    mockGetServerSession.mockResolvedValue({
+      user: { id: "a1", role: "ANNOTATOR" },
+    });
+    for (const [mod, to] of pages) {
+      const page = (await import(mod)) as { default: () => Promise<unknown> };
+      await expect(page.default(), mod).rejects.toThrow(`NEXT_REDIRECT:${to}`);
+    }
+  });
+
+  it("the gate still comes first: flag off is a 404, a stranger a 403", async () => {
+    for (const [mod] of pages) {
+      const page = (await import(mod)) as { default: () => Promise<unknown> };
+      delete process.env.SPEECH_LAB_ENABLED;
+      await expect(page.default(), mod).rejects.toThrow("NEXT_NOT_FOUND");
+      process.env.SPEECH_LAB_ENABLED = "1";
+      mockGetServerSession.mockResolvedValue({
+        user: { id: "a1", role: "ANNOTATOR" },
+      });
+      await expect(page.default(), mod).rejects.toThrow("NEXT_FORBIDDEN");
+      mockGetServerSession.mockResolvedValue(null);
+      await expect(page.default(), mod).rejects.toThrow("NEXT_FORBIDDEN");
+    }
+  });
+
+  it("Recordings stays where it is, researcher-only", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(__dirname, "recordings/page.tsx"), "utf8");
+    expect(src).toContain("await requireLabPage()");
+    expect(src).not.toContain("redirect(");
+    expect(src).toContain("<RecordingsInterface />");
   });
 });

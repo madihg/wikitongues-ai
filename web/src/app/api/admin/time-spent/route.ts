@@ -1,95 +1,65 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireLead } from "@/lib/admin/lead-route";
-import { sessionize, minutesSince } from "@/lib/time-sessions";
+import { addWeeks, lagosDate, parseWeek } from "@/lib/hours";
+import { hoursCsv, hoursCsvFilename } from "@/lib/hours-csv";
+import { loadHours } from "@/lib/hours-data";
 
 /**
- * GET /api/admin/time-spent — researcher-gated estimate of time-on-platform
- * per person with a login.
+ * GET /api/admin/time-spent: hours per person per week, researcher-gated.
  *
- * There is no session tracking (JWT auth, no heartbeats), so "time spent"
- * cannot be measured directly. Instead we collect every timestamp of real
- * (isDemo=false, where that column exists) annotation activity per user -
- * pairwise picks, cold answers, output edits, rubric axis scores, and prompt
- * flags/skips - and derive an estimate via src/lib/time-sessions.ts:
- * consecutive events close together fold into one session, plus a small
- * lead-in per session for the reading/writing that preceded it.
+ *   ?week=2026-11-09   any day of the week wanted (Lagos date). Default: this week.
+ *   ?weeks=4           how many weeks, ending with that one. Default 1, at most 26.
+ *   ?userId=...        one person only (the person page).
+ *   ?format=csv        the same rows as a CSV for invoices.
  *
- * Only annotatorId + createdAt are selected from each work table to keep the
- * queries lean; only users with at least one event are returned.
+ * Each row carries three figures side by side (lib/hours.ts): measured
+ * active time (null when the beat did not run for that person that week,
+ * never a made-up number), the recounted estimate, and the old estimate
+ * exactly as the platform showed it. Past hours are not rewritten: the old
+ * figure stays beside the new one.
  */
-export async function GET() {
+const MAX_WEEKS = 26;
+
+export async function GET(req: Request) {
   // Hours per person are pay data: research leads only (RESEARCH_LEADS).
   const { error } = await requireLead();
   if (error) return error;
 
-  const [pairwise, coldAnswers, outputEdits, rubricScores, promptFlags] =
-    await Promise.all([
-      prisma.pairwiseComparison.findMany({
-        where: { isDemo: false },
-        select: { annotatorId: true, createdAt: true },
-      }),
-      prisma.coldAuthorAnswer.findMany({
-        where: { isDemo: false },
-        select: { annotatorId: true, createdAt: true },
-      }),
-      prisma.outputEdit.findMany({
-        where: { isDemo: false },
-        select: { annotatorId: true, createdAt: true },
-      }),
-      prisma.rubricAxisScore.findMany({
-        where: { isDemo: false },
-        select: { annotatorId: true, createdAt: true },
-      }),
-      // Flags/skips are activity too, and PromptFlag has no isDemo column.
-      prisma.promptFlag.findMany({
-        select: { annotatorId: true, createdAt: true },
-      }),
-    ]);
+  const params = new URL(req.url).searchParams;
+  const now = new Date();
+  const last = parseWeek(params.get("week"), now);
+  const n = Math.min(
+    MAX_WEEKS,
+    Math.max(1, Math.floor(Number(params.get("weeks")) || 1)),
+  );
+  const weeks = Array.from({ length: n }, (_, i) => addWeeks(last, -i));
+  const from = weeks[weeks.length - 1];
+  const to = addWeeks(last, 1);
+  const userId = params.get("userId") || undefined;
 
-  const timestampsByUser = new Map<string, Date[]>();
-  for (const row of [
-    ...pairwise,
-    ...coldAnswers,
-    ...outputEdits,
-    ...rubricScores,
-    ...promptFlags,
-  ]) {
-    const list = timestampsByUser.get(row.annotatorId);
-    if (list) {
-      list.push(row.createdAt);
-    } else {
-      timestampsByUser.set(row.annotatorId, [row.createdAt]);
-    }
+  const data = await loadHours({ weeks, from, to, userId });
+
+  if (params.get("format") === "csv") {
+    const fallback = lagosDate(from);
+    return new NextResponse(hoursCsv(data.rows), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${hoursCsvFilename(data.rows, fallback)}"`,
+        "Cache-Control": "no-store",
+      },
+    });
   }
 
-  if (timestampsByUser.size === 0) {
-    return NextResponse.json({ users: [] });
-  }
-
-  const users = await prisma.user.findMany({
-    where: { id: { in: [...timestampsByUser.keys()] } },
-    select: { id: true, name: true, email: true, role: true },
+  return NextResponse.json({
+    week: {
+      start: lagosDate(last),
+      end: lagosDate(new Date(to.getTime() - 86_400_000)),
+      isCurrent: parseWeek(null, now).getTime() === last.getTime(),
+    },
+    weeks: weeks.map(lagosDate),
+    rows: data.rows,
+    measuredSince: data.measuredSince?.toISOString() ?? null,
+    demoMinutesLeftOut: Math.round(data.demoSecondsLeftOut / 60),
+    revisionsCounted: data.revisionsCounted,
   });
-
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
-  const result = users.map((user) => {
-    const timestamps = timestampsByUser.get(user.id) ?? [];
-    const { totalMinutes, sessionCount, lastActive } = sessionize(timestamps);
-    return {
-      id: user.id,
-      name: user.name ?? user.email,
-      email: user.email,
-      role: user.role,
-      totalMinutes,
-      sessionCount,
-      lastActive: lastActive?.toISOString() ?? null,
-      last7DaysMinutes: minutesSince(timestamps, sevenDaysAgo),
-    };
-  });
-
-  result.sort((a, b) => b.totalMinutes - a.totalMinutes);
-
-  return NextResponse.json({ users: result });
 }

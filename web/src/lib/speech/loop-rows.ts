@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { LoopRow } from "./training-manifest";
 import { withdrawnSpeakerIds } from "./withdrawal";
+import { dropChangedTextClips, type RevisionDb } from "./clip-text";
 
 /**
  * The queries that feed the training and exam manifests. Like open-rows.ts,
@@ -9,9 +10,16 @@ import { withdrawnSpeakerIds } from "./withdrawal";
  * The select is explicit and omits `bytes` and `quality`: the worker reads
  * audio through a signed URL, never through these rows
  * (audio-bytes-guard.test.ts).
+ *
+ * Every loader here also leaves out a clip whose text changed after it was
+ * recorded (clip-text.ts): its transcript comes from the answer, and the
+ * answer no longer says what the clip says. `coldAuthorAnswerId` and
+ * `createdAt` are selected for that rule.
  */
 const SELECT = {
   id: true,
+  coldAuthorAnswerId: true,
+  createdAt: true,
   storagePath: true,
   storageKey: true,
   language: true,
@@ -34,8 +42,11 @@ const SELECT = {
   reviewStatus: true,
   voiceCloningOptIn: true,
   studioText: true,
+  spokenText: true,
   prompt: { select: { isHoldout: true, split: true, text: true } },
-  coldAuthorAnswer: { select: { answerText: true, englishGloss: true } },
+  coldAuthorAnswer: {
+    select: { answerText: true, englishGloss: true, englishTranslation: true },
+  },
 } as const;
 
 export const TRAINABLE_ROWS_QUERY = {
@@ -56,7 +67,7 @@ export const TEST_SET_ROWS_QUERY = {
   select: SELECT,
 } as const;
 
-type Db = Pick<PrismaClient, "speechRecording">;
+type Db = Pick<PrismaClient, "speechRecording"> & RevisionDb;
 
 /**
  * Candidate training rows. Guard them with buildTrainingManifest. Clips of a
@@ -74,7 +85,10 @@ export async function loadTrainableRows(
     }),
   ]);
   const gone = new Set(withdrawnSpeakerIds(grants));
-  return rows.filter((r) => !r.annotatorId || !gone.has(r.annotatorId));
+  return dropChangedTextClips(
+    db,
+    rows.filter((r) => !r.annotatorId || !gone.has(r.annotatorId)),
+  );
 }
 
 /**
@@ -85,7 +99,7 @@ export async function loadStudioRows(
   db: Db,
   studioSessionIds: string[],
 ): Promise<LoopRow[]> {
-  return db.speechRecording.findMany({
+  const rows = await db.speechRecording.findMany({
     where: {
       ...TRAINABLE_ROWS_QUERY.where,
       studioSessionId: { in: studioSessionIds },
@@ -93,9 +107,13 @@ export async function loadStudioRows(
     orderBy: TRAINABLE_ROWS_QUERY.orderBy,
     select: SELECT,
   });
+  return dropChangedTextClips(db, rows);
 }
 
 /** The exam clips. Only buildEvalManifest may turn these into a manifest. */
 export async function loadTestSetRows(db: Db): Promise<LoopRow[]> {
-  return db.speechRecording.findMany(TEST_SET_ROWS_QUERY);
+  return dropChangedTextClips(
+    db,
+    await db.speechRecording.findMany(TEST_SET_ROWS_QUERY),
+  );
 }

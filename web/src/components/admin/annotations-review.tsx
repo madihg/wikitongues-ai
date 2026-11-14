@@ -432,6 +432,9 @@ interface DetailBase {
   id: string;
   createdAt: string;
   editable: boolean;
+  /** The reader wrote this row. Then the meaning, the reason and the written
+   *  "why" open for editing here too (own rows only). */
+  isOwn?: boolean;
   annotator: AnnotatorLite;
   prompt: PromptLite | null;
 }
@@ -669,7 +672,9 @@ function DetailBody({
 
       {detail.prompt && <PromptSection prompt={detail.prompt} />}
 
-      {detail.type === "pairwise" && <PairwiseBody detail={detail} />}
+      {detail.type === "pairwise" && (
+        <PairwiseBody detail={detail} onSaved={onSaved} />
+      )}
       {detail.type === "cold" && <ColdBody detail={detail} onSaved={onSaved} />}
       {detail.type === "edit" && <EditBody detail={detail} onSaved={onSaved} />}
     </>
@@ -729,7 +734,13 @@ function OutputCard({
   );
 }
 
-function PairwiseBody({ detail }: { detail: PairwiseDetail }) {
+export function PairwiseBody({
+  detail,
+  onSaved = () => {},
+}: {
+  detail: PairwiseDetail;
+  onSaved?: () => void;
+}) {
   const winnerLabel =
     detail.winner === "a"
       ? "Picked A"
@@ -769,15 +780,28 @@ function PairwiseBody({ detail }: { detail: PairwiseDetail }) {
         />
       </section>
 
-      {detail.explanation && (
-        <section>
-          <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-            Explanation
-          </p>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-text-primary">
-            {detail.explanation}
-          </p>
-        </section>
+      {detail.isOwn ? (
+        // Your own comparison: the written "why" can be made fuller. The
+        // pick above stays as it was made.
+        <EditableText
+          type="pairwise"
+          id={detail.id}
+          label="Explanation"
+          field="explanation"
+          initial={detail.explanation}
+          onSaved={onSaved}
+        />
+      ) : (
+        detail.explanation && (
+          <section>
+            <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+              Explanation
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-text-primary">
+              {detail.explanation}
+            </p>
+          </section>
+        )
       )}
 
       {detail.context.rubricAxes.length > 0 ? (
@@ -865,7 +889,7 @@ function PairwiseBody({ detail }: { detail: PairwiseDetail }) {
   );
 }
 
-function ColdBody({
+export function ColdBody({
   detail,
   onSaved,
 }: {
@@ -897,20 +921,34 @@ function ColdBody({
         onSaved={onSaved}
       />
 
-      <section>
-        <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-          English meaning
-        </p>
-        {detail.englishGloss?.trim() ? (
-          <p className="mt-1 whitespace-pre-wrap text-sm text-text-primary">
-            {detail.englishGloss}
+      {detail.isOwn ? (
+        // Your own answer: the meaning is a box, empty or not. It was
+        // read-only text here, which is why it could not be corrected.
+        <EditableText
+          type="cold"
+          id={detail.id}
+          label="English meaning"
+          field="englishGloss"
+          initial={detail.englishGloss ?? ""}
+          allowEmpty
+          onSaved={onSaved}
+        />
+      ) : (
+        <section>
+          <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+            English meaning
           </p>
-        ) : (
-          <p className="mt-1 text-sm text-text-muted">
-            Not given - this answer predates the required English meaning.
-          </p>
-        )}
-      </section>
+          {detail.englishGloss?.trim() ? (
+            <p className="mt-1 whitespace-pre-wrap text-sm text-text-primary">
+              {detail.englishGloss}
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-text-muted">
+              Not given - this answer predates the required English meaning.
+            </p>
+          )}
+        </section>
+      )}
 
       <VerificationControl
         type="cold"
@@ -922,7 +960,7 @@ function ColdBody({
   );
 }
 
-function EditBody({
+export function EditBody({
   detail,
   onSaved,
 }: {
@@ -959,15 +997,28 @@ function EditBody({
         onSaved={onSaved}
       />
 
-      {detail.rationale && (
-        <section>
-          <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-            Rationale
-          </p>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-text-primary">
-            {detail.rationale}
-          </p>
-        </section>
+      {detail.isOwn ? (
+        // Your own correction: the reason is a box even when it is empty.
+        // Before, an empty reason showed nothing at all here.
+        <EditableText
+          type="edit"
+          id={detail.id}
+          label="Rationale"
+          field="rationale"
+          initial={detail.rationale ?? ""}
+          onSaved={onSaved}
+        />
+      ) : (
+        detail.rationale && (
+          <section>
+            <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
+              Rationale
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-text-primary">
+              {detail.rationale}
+            </p>
+          </section>
+        )
       )}
 
       <VerificationControl
@@ -986,13 +1037,21 @@ function EditableText({
   label,
   field,
   initial,
+  allowEmpty = false,
   onSaved,
 }: {
-  type: "cold" | "edit";
+  type: "cold" | "edit" | "pairwise";
   id: string;
   label: string;
-  field: "answerText" | "correctedText";
+  field:
+    | "answerText"
+    | "correctedText"
+    | "englishGloss"
+    | "rationale"
+    | "explanation";
   initial: string;
+  /** Only the English meaning may be saved empty (it is optional on old rows). */
+  allowEmpty?: boolean;
   onSaved: () => void;
 }) {
   const [value, setValue] = useState(initial);
@@ -1024,10 +1083,14 @@ function EditableText({
 
   return (
     <section>
-      <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-text-tertiary">
+      <label
+        htmlFor={`edit-${type}-${id}-${field}`}
+        className="mb-1 block text-xs font-medium uppercase tracking-wider text-text-tertiary"
+      >
         {label}
       </label>
       <textarea
+        id={`edit-${type}-${id}-${field}`}
         value={value}
         onChange={(e) => {
           setValue(e.target.value);
@@ -1039,7 +1102,9 @@ function EditableText({
       <div className="mt-2 flex items-center gap-3">
         <button
           onClick={save}
-          disabled={!dirty || saving || value.trim().length === 0}
+          disabled={
+            !dirty || saving || (!allowEmpty && value.trim().length === 0)
+          }
           className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save"}

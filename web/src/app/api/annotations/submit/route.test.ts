@@ -223,7 +223,10 @@ describe("required edit rationale (server-side)", () => {
       }),
     );
     expect(res.status).toBe(200);
-    expect((await res.json()).editsSaved).toBe(1);
+    const body = await res.json();
+    expect(body.editsSaved).toBe(1);
+    // The id of the comparison just written, for the "Saved" strip.
+    expect("comparisonId" in body).toBe(true);
     expect(mockPrisma.outputEdit.create).toHaveBeenCalledTimes(1);
     const data = mockPrisma.outputEdit.create.mock.calls[0][0].data;
     expect(data.rationale).toBe("'chẹnyọ' needs the elision: d'ẹnyọ.");

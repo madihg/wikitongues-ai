@@ -2,7 +2,12 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PromptSection } from "./annotations-review";
+import {
+  ColdBody,
+  EditBody,
+  PairwiseBody,
+  PromptSection,
+} from "./annotations-review";
 
 /**
  * The review drawer's "Annotate this prompt": a researcher reading a judgment
@@ -97,5 +102,101 @@ describe("every event type gets the link", () => {
     expect(src).toContain("href={annotatePromptHref(prompt.promptId)}");
     // No second, hand-built copy of the URL anywhere in the file.
     expect(src).not.toContain("/annotator/annotate");
+  });
+});
+
+/**
+ * The cause of what Agnes reported on Nov 10, held as a render test. She
+ * holds the RESEARCHER role and edits in this drawer. Before: the English
+ * meaning was a paragraph, the reason was a paragraph that was not rendered
+ * at all when empty, and the written "why" was a paragraph. Now, on the
+ * reader's OWN rows (isOwn), each is a box with a Save button. On another
+ * person's row nothing changed. Invented placeholder texts.
+ */
+describe("the drawer on your own rows: meaning, reason and why are boxes", () => {
+  const base = {
+    id: "row1",
+    createdAt: "2026-10-12T08:00:00.000Z",
+    editable: true,
+    annotator: { id: "u1", name: "A Speaker", email: "a@example.org" },
+    prompt: null,
+  };
+  const cold = {
+    ...base,
+    type: "cold" as const,
+    answerText: "alpha beta",
+    englishGloss: null,
+    provenance: "speaker_authored_sourcefree",
+    consentBenchmark: true,
+    consentTraining: true,
+    verificationStatus: "single_annotator",
+  };
+  const edit = {
+    ...base,
+    type: "edit" as const,
+    model: "model-x",
+    originalText: "one two",
+    correctedText: "one TWO",
+    rationale: null,
+    provenance: null,
+    consentBenchmark: true,
+    consentTraining: true,
+    verificationStatus: "single_annotator",
+  };
+  const out = { id: "o", model: "m", text: "out", isWinner: false };
+  const pairwise = {
+    ...base,
+    type: "pairwise" as const,
+    editable: false,
+    winner: "a",
+    confidence: null,
+    explanation: "A is right.",
+    outputA: { ...out, isWinner: true },
+    outputB: out,
+    context: { rubricAxes: [], edits: [], coldAnswers: [] },
+  };
+  const boxes = (m: string) =>
+    [...m.matchAll(/<textarea[^>]*id="edit-[a-z]+-row1-(\w+)"/g)].map(
+      (x) => x[1],
+    );
+  const noop = () => {};
+
+  it("own answer: the meaning is a box even when empty", () => {
+    const own = renderToStaticMarkup(
+      <ColdBody detail={{ ...cold, isOwn: true }} onSaved={noop} />,
+    );
+    expect(boxes(own)).toEqual(["answerText", "englishGloss"]);
+    const other = renderToStaticMarkup(
+      <ColdBody detail={{ ...cold, isOwn: false }} onSaved={noop} />,
+    );
+    expect(boxes(other)).toEqual(["answerText"]);
+    expect(other).toContain("Not given - this answer predates");
+  });
+
+  it("own correction: the reason is a box even when empty (it was not shown at all)", () => {
+    const own = renderToStaticMarkup(
+      <EditBody detail={{ ...edit, isOwn: true }} onSaved={noop} />,
+    );
+    expect(boxes(own)).toEqual(["correctedText", "rationale"]);
+    expect(own).toContain("Rationale");
+    const other = renderToStaticMarkup(
+      <EditBody detail={{ ...edit, isOwn: false }} onSaved={noop} />,
+    );
+    expect(boxes(other)).toEqual(["correctedText"]);
+    expect(other).not.toContain("Rationale");
+  });
+
+  it("own comparison: the why is a box, the pick stays read-only", () => {
+    const own = renderToStaticMarkup(
+      <PairwiseBody detail={{ ...pairwise, isOwn: true }} onSaved={noop} />,
+    );
+    expect(boxes(own)).toEqual(["explanation"]);
+    expect(own).toContain("Pairwise picks are read-only");
+    expect(own).not.toMatch(/type="radio"|<select/);
+    const other = renderToStaticMarkup(
+      <PairwiseBody detail={{ ...pairwise, isOwn: false }} />,
+    );
+    expect(boxes(other)).toEqual([]);
+    expect(other).toContain("A is right.");
   });
 });

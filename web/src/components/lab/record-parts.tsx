@@ -1,6 +1,7 @@
 "use client";
 
 import { MAX_ANSWER_CHARS, type Tier } from "@/lib/speech/limits";
+import { TIER_TITLE } from "@/lib/speech/clip-choice";
 import { countdownSeconds, formatClock } from "@/lib/speech/recorder";
 
 /**
@@ -97,20 +98,24 @@ export function Countdown({ elapsedMs }: { elapsedMs: number }) {
 const TIER_CARDS: { key: Tier; title: string; body: string }[] = [
   {
     key: "community_only",
-    title: "Stays with my community",
+    title: TIER_TITLE.community_only,
     body: "Only used inside the Igala tools. Never shared.",
   },
   {
     key: "licensed",
-    title: "Licensed to AI labs",
+    title: TIER_TITLE.licensed,
     body: "Shared under a signed contract. You are paid a share. You can withdraw later.",
   },
   {
     key: "open",
-    title: "Open to everyone",
+    title: TIER_TITLE.open,
     body: "Published under CC-BY 4.0. Permanent once published.",
   },
 ];
+
+/** The question above the cards, for one clip and for all of a speaker's clips. */
+export const TIER_LEGEND_CLIP = "What happens to this clip? (choose one)";
+export const TIER_LEGEND_CLIPS = "What happens to your clips? (choose one)";
 
 /**
  * The three tier radio cards. `value` is null until the speaker picks:
@@ -123,6 +128,7 @@ export function TierChoice({
   licensedAllowed,
   disabled = false,
   name = "tier",
+  legend = TIER_LEGEND_CLIP,
 }: {
   value: Tier | null;
   onChange: (tier: Tier) => void;
@@ -130,11 +136,13 @@ export function TierChoice({
   disabled?: boolean;
   /** Radio group name: unique per clip when two choices share a page. */
   name?: string;
+  /** The question: about this clip (the default), or about all your clips. */
+  legend?: string;
 }) {
   return (
     <fieldset disabled={disabled}>
       <legend className="text-sm font-semibold text-text-primary">
-        What happens to this clip? (choose one)
+        {legend}
       </legend>
       <div className="mt-2 space-y-2">
         {TIER_CARDS.map((card) => {
@@ -184,10 +192,13 @@ export function VoiceCloningOptIn({
   checked,
   allowed,
   onChange,
+  scope = "clip",
 }: {
   checked: boolean;
   allowed: boolean;
   onChange: (checked: boolean) => void;
+  /** "clips" when the box answers for all of the speaker's clips. */
+  scope?: "clip" | "clips";
 }) {
   return (
     <label
@@ -203,7 +214,9 @@ export function VoiceCloningOptIn({
         className="mt-1 h-5 w-5 shrink-0 cursor-pointer accent-[var(--accent)]"
       />
       <span>
-        Also allow a synthetic copy of my voice to be made from this clip.
+        {scope === "clips"
+          ? "Also allow a synthetic copy of my voice to be made from my clips."
+          : "Also allow a synthetic copy of my voice to be made from this clip."}
         {!allowed && (
           <span className="block text-xs text-text-tertiary">
             Your consent answers do not allow voice cloning.

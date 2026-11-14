@@ -519,6 +519,9 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     success: true,
+    // The comparison just created (always the first write). The "Saved" strip
+    // and "Edit previous" open the edit drawer on it.
+    comparisonId: (results[0] as { id?: string } | undefined)?.id ?? null,
     editsSaved,
     coldSaved,
     salvageSaved,

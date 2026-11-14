@@ -1,46 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { orchestrate } from "@/lib/agents/orchestrator";
-
-// ─── Rate limiting (FR-16) ──────────────────────────────────
-
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX = 10;
-
-function checkRateLimit(key: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX) {
-    return false;
-  }
-
-  entry.count++;
-  return true;
-}
-
-function getRateLimitKey(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
-  return ip;
-}
+import {
+  CHAT_LIMITS,
+  canReadConversation,
+  chatBudget,
+  requireChatUser,
+} from "@/lib/chat-guard";
 
 // ─── POST /api/chat ─────────────────────────────────────────
+//
+// Signed-in accounts only. The session is checked first: a signed-out caller
+// gets a bare 401 and nothing is read, written or sent to a model. Then the
+// account's own budget (per minute and per day, counted in the database), the
+// message length, and the owner of the conversation.
 
 export async function POST(req: Request) {
-  const rateLimitKey = getRateLimitKey(req);
-  if (!checkRateLimit(rateLimitKey)) {
-    return NextResponse.json(
-      { error: "Rate limit exceeded. Max 10 messages per minute." },
-      { status: 429 },
-    );
-  }
+  const gate = await requireChatUser();
+  if (gate.error) return gate.error;
+  const user = gate.user;
 
   let body: { conversationId?: string; message?: string; language?: string };
   try {
@@ -63,21 +41,43 @@ export async function POST(req: Request) {
     );
   }
 
+  if (message.length > CHAT_LIMITS.maxMessageChars) {
+    return NextResponse.json(
+      {
+        error: `A message can be at most ${CHAT_LIMITS.maxMessageChars} characters.`,
+      },
+      { status: 400 },
+    );
+  }
+
+  const budget = await chatBudget(prisma, user.id);
+  if (!budget.ok) {
+    return NextResponse.json(
+      { error: budget.error },
+      {
+        status: 429,
+        headers: { "Retry-After": String(budget.retryAfterSeconds) },
+      },
+    );
+  }
+
   let isNewConversation = false;
 
   // Create conversation if not provided
   if (!conversationId) {
     const conversation = await prisma.conversation.create({
-      data: { language },
+      data: { language, learnerId: user.id },
     });
     conversationId = conversation.id;
     isNewConversation = true;
   } else {
-    // Verify conversation exists
+    // The conversation must exist and belong to this account. Someone
+    // else's conversation answers exactly like one that does not exist.
     const existing = await prisma.conversation.findUnique({
       where: { id: conversationId },
+      select: { learnerId: true },
     });
-    if (!existing) {
+    if (!existing || existing.learnerId !== user.id) {
       return NextResponse.json(
         { error: "Conversation not found" },
         { status: 404 },
@@ -136,6 +136,9 @@ export async function POST(req: Request) {
 // ─── GET /api/chat?conversationId=xxx ───────────────────────
 
 export async function GET(req: Request) {
+  const gate = await requireChatUser();
+  if (gate.error) return gate.error;
+
   const { searchParams } = new URL(req.url);
   const conversationId = searchParams.get("conversationId");
 
@@ -150,7 +153,7 @@ export async function GET(req: Request) {
     where: { id: conversationId },
   });
 
-  if (!conversation) {
+  if (!conversation || !canReadConversation(conversation, gate.user)) {
     return NextResponse.json(
       { error: "Conversation not found" },
       { status: 404 },

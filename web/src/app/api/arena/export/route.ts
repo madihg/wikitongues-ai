@@ -1,3 +1,4 @@
+import { attachToneLayers } from "@/lib/tone/tone-export";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
@@ -87,7 +88,12 @@ export async function GET(req: Request) {
     // The shared loader (cold gold + edits, provenance carried per row). The
     // builder excludes edit-provenance rows unless includeEdits is passed,
     // and caps them even then - the pivot's anti-post-editese default.
-    const rows = await loadSftSourceRows({ sourceEditIds: [] });
+    // Tone-mark pass 2 layers ride beside the answers that got one (the
+    // completion itself stays the pass-1 text). An answer with no second
+    // pass is exported exactly as before.
+    const rows = await attachToneLayers(
+      await loadSftSourceRows({ sourceEditIds: [] }),
+    );
     const includeEdits = url.searchParams.get("includeEdits") === "1";
 
     const examples = buildSftExamples(rows, {

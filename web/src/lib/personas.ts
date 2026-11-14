@@ -10,7 +10,11 @@
  */
 
 import { canUseLab } from "@/lib/lab-flags";
-import { researchLinks } from "@/lib/admin/routes";
+import {
+  researchLinks,
+  TONE_PASS_HREF,
+  TONE_PASS_LABEL,
+} from "@/lib/admin/routes";
 
 export const OWNER_EMAILS = ["madihalim@gmail.com"];
 
@@ -52,15 +56,21 @@ export interface NavLink {
   /** Renders as an out-link: new tab, rel-guarded, arrow-marked, never active. */
   external?: boolean;
   /**
-   * Sidebar group. "lab" links render after a divider under a "Lab" heading;
-   * "research" links are the five researcher views, under their own divider
-   * and heading; "more" is the single More entry that closes the list.
+   * Sidebar group. No group: the work links every account starts with
+   * (Dashboard, Annotate, Speech, My Work, Rubric), in that order. "research":
+   * the five researcher views, rendered after a divider under their own
+   * heading. "more": the single More entry that closes the list.
    */
-  group?: "lab" | "research" | "more";
-  /** Small monospace tag beside the label (the lab links say who may see them). */
-  tag?: string;
+  group?: "research" | "more";
   /** The one question a research view answers. Shown as the link's tooltip. */
   question?: string;
+  /** What is waiting behind this link. Absent when it is zero or not known. */
+  count?: number;
+  /**
+   * Other path prefixes this link owns, so it stays highlighted on them
+   * (Speech owns /lab/speech, where Recordings and Studio still live).
+   */
+  also?: string[];
 }
 
 /** Server-derived switches that change the nav. Passed in so navForRole stays pure. */
@@ -72,12 +82,86 @@ export interface NavOptions {
    * layer flag is unset, so an annotator's nav is unchanged until then).
    */
   lab?: boolean;
+  /** What is waiting, per kind of work. A number shows only above zero. */
+  waiting?: { annotate?: number; speech?: number };
+  /**
+   * Tone-mark pass 2: how many items wait for this person. Set only when the
+   * server says the person has been given tone items (waiting or done);
+   * otherwise absent, and the nav has no such line.
+   */
+  tone?: number | null;
+}
+
+/** The Pass 2 line. It sits right after Annotate and the Speech link. */
+export const TONE_NAV_HREF = "/annotator/tone";
+
+/**
+ * The researcher's view of the tone pass (/admin/tone). Not a sidebar line:
+ * it is linked from the Data view, on Disagreements, under this label.
+ */
+export const TONE_ADMIN_LINK: NavLink = {
+  href: TONE_PASS_HREF,
+  label: TONE_PASS_LABEL,
+};
+
+/** A link with its waiting number, or the bare link when nothing waits. */
+function withCount(link: NavLink, n: number | undefined): NavLink {
+  return typeof n === "number" && n > 0 ? { ...link, count: n } : link;
 }
 
 /**
- * Primary sidebar nav for the (app) area. Annotators get only their own work;
- * researchers (and the owner) get the same lines first, then the five
- * research views and More.
+ * The one Speech link, the same for every role that has speech on: right
+ * under Annotate, opening the Record tab. Listen, Check, Profile (and, for
+ * researchers, Recordings and Studio) are tabs inside it, not sidebar links.
+ */
+export const SPEECH_LINK: NavLink = {
+  href: "/speak",
+  label: "Speech",
+  also: ["/lab/speech"],
+};
+
+/**
+ * The work links, the first lines of every sidebar, in a fixed order:
+ * Dashboard, Annotate, Speech (only when speech is on for the account),
+ * Pass 2: tone marks (only for a person who was given tone items), My Work,
+ * Rubric. An annotator with speech off and no tone items sees exactly the
+ * four lines they have always seen.
+ */
+function workLinks(speechOn: boolean, options: NavOptions): NavLink[] {
+  const links: NavLink[] = [
+    { href: "/annotator", label: "Dashboard" },
+    withCount(
+      { href: "/annotator/annotate", label: "Annotate" },
+      options.waiting?.annotate,
+    ),
+  ];
+  if (speechOn) links.push(withCount(SPEECH_LINK, options.waiting?.speech));
+  // Tone-mark pass 2: only for a person who has been given tone items.
+  if (options.tone !== undefined && options.tone !== null) {
+    links.push(
+      withCount(
+        { href: TONE_NAV_HREF, label: "Pass 2: tone marks" },
+        options.tone,
+      ),
+    );
+  }
+  links.push(
+    { href: "/annotator/history", label: "My Work" },
+    { href: "/annotator/rubric", label: "Rubric" },
+  );
+  return links;
+}
+
+/**
+ * Primary sidebar nav for the (app) area. Every account starts with the same
+ * work links in the same order. Annotators get only those; researchers (and
+ * the owner) get the five research views and More after them, below a
+ * divider.
+ *
+ * Speech is one link for every role (2026-11-13): Agnes looked for speech
+ * next to her other work and did not find it under "Lab". The Lab group, its
+ * "researchers only" tag and the three separate Speak, Listen and Check links
+ * are gone; those are tabs inside Speech now.
  */
 export function navForRole(
   role?: string | null,
@@ -85,66 +169,32 @@ export function navForRole(
   options: NavOptions = {},
 ): NavLink[] {
   if (isResearcher(role, email)) {
-    // A researcher's own work comes first, with the labels and the order an
-    // annotator sees. The research tools sit below the sidebar's divider:
-    // five views and More (src/lib/admin/routes.ts owns that list). Prompts,
-    // Corrections, Review queue, Annotations, Speakers' Verdict, Model Arena
-    // and How it works are all still reachable, inside a view or under More.
-    const links: NavLink[] = [
-      { href: "/annotator", label: "Dashboard" },
-      { href: "/annotator/annotate", label: "Annotate" },
-      { href: "/annotator/history", label: "My Work" },
-      { href: "/annotator/rubric", label: "Rubric" },
+    // The lab ships dark: the link exists only when the server says the flag
+    // is on and the account holds the researcher role.
+    const speechOn = !!options.lab && canUseLab(role);
+    // Below the divider: five views and More (src/lib/admin/routes.ts owns
+    // that list). Prompts, Corrections, Review queue, Annotations, Speakers'
+    // Verdict, Model Arena, How it works, the speech loop and Tone agreement
+    // are all still reachable, inside a view or under More.
+    return [
+      ...workLinks(speechOn, options),
+      ...researchLinks({ speech: speechOn }),
     ];
-    // The Speech Lab ships dark (src/lib/lab-flags.ts): the link exists only
-    // when the server says the flag is on. Annotators never get it, below.
-    const speech = !!options.lab && canUseLab(role);
-    if (speech) {
-      links.push({
-        href: "/lab/speech",
-        label: "Speech",
-        tag: "researchers only",
-        group: "lab",
-      });
-      // Researchers check clips on the same screen annotators use.
-      links.push({
-        href: "/speak/check",
-        label: "Check",
-        group: "lab",
-      });
-    }
-    // The nightly loop's dashboard is now a tab of the Speech model view.
-    links.push(...researchLinks({ speech }));
-    return links;
   }
   // Pure annotator. NO Corrections tab (2026-08-28 rework, Halim's call):
   // corrections happen inside the episode, right after the A/B verdict - a
   // separate lane made "fix it" a different errand from "judge it", and the
   // errand never got run. /annotator/corrections redirects annotators into
   // the annotate flow; the API routes and researcher lane stay.
-  const annotatorLinks: NavLink[] = [
-    { href: "/annotator", label: "Dashboard" },
-    { href: "/annotator/annotate", label: "Annotate" },
-    { href: "/annotator/history", label: "My Work" },
-    { href: "/annotator/rubric", label: "Rubric" },
-  ];
-  // Speech is a normal part of an annotator's work once the layer is on:
-  // Speak, Listen and Check sit right after Annotate. Off, nothing changes.
-  if (options.lab && role === "ANNOTATOR") {
-    annotatorLinks.splice(
-      2,
-      0,
-      { href: "/speak", label: "Speak" },
-      { href: "/speak/listen", label: "Listen" },
-      { href: "/speak/check", label: "Check" },
-    );
-  }
-  return annotatorLinks;
+  // Speech sits right after Annotate once the annotator layer is on. Off,
+  // nothing changes.
+  return workLinks(!!options.lab && role === "ANNOTATOR", options);
 }
 
 /**
  * Which sidebar link owns a pathname: exact match wins, otherwise the LONGEST
- * link href that prefixes the pathname (at a path-segment boundary). The two
+ * link href (or other prefix the link owns, `also`) that prefixes the pathname
+ * (at a path-segment boundary). The two
  * role dashboards ("/annotator", "/admin") only match exactly - every one of
  * their sub-pages has, or belongs to, its own link. Longest-prefix keeps
  * nested entries honest: /admin/arena/verdict highlights Speakers' Verdict,
@@ -155,16 +205,21 @@ export function activeNavHref(
   pathname: string,
 ): string | null {
   let best: string | null = null;
-  for (const { href, external } of links) {
+  let bestLength = 0;
+  for (const { href, external, also } of links) {
     // An out-link is never the active page: the reader left the app.
     if (external) continue;
     if (pathname === href) return href;
     if (href === "/annotator" || href === "/admin") continue;
-    if (
-      pathname.startsWith(`${href}/`) &&
-      (best === null || href.length > best.length)
-    ) {
-      best = href;
+    // The link's own path, then any other prefix it owns.
+    for (const prefix of [href, ...(also ?? [])]) {
+      if (
+        (pathname === prefix || pathname.startsWith(`${prefix}/`)) &&
+        prefix.length > bestLength
+      ) {
+        best = href;
+        bestLength = prefix.length;
+      }
     }
   }
   return best;

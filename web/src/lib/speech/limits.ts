@@ -61,3 +61,21 @@ export const MAX_NOTE_CHARS = 500;
 
 /** Longest answer a researcher can write on the Record page. */
 export const MAX_ANSWER_CHARS = 2000;
+
+/**
+ * The short English translation a speaker types and then reads for the
+ * English clip: "a few words". Recording turns on at MIN; the server refuses
+ * anything over MAX.
+ */
+export const MIN_TRANSLATION_CHARS = 2;
+export const MAX_TRANSLATION_CHARS = 200;
+
+/** The typed translation as stored: NFC, single spaces, trimmed. */
+export function cleanTranslation(text: string): string {
+  return text.normalize("NFC").replace(/\s+/g, " ").trim();
+}
+
+/** True when the typed translation is long enough to record from. */
+export function translationReady(text: string): boolean {
+  return cleanTranslation(text).length >= MIN_TRANSLATION_CHARS;
+}

@@ -1,7 +1,7 @@
 import { AgreementStats } from "@/components/admin/agreement-stats";
 import Link from "next/link";
 import { ContestedItems } from "@/components/arena/contested-items";
-import { TONE_PASS_HREF } from "@/lib/admin/routes";
+import { TONE_PASS_HREF, TONE_PASS_LABEL } from "@/lib/admin/routes";
 import { requireResearcherPage } from "@/lib/admin/page-gate";
 
 /**
@@ -31,11 +31,11 @@ export default async function DisagreementsPage() {
       >
         <span>
           <span className="text-sm font-semibold text-text-primary">
-            Tone marks, pass 2
+            {TONE_PASS_LABEL}
           </span>
           <span className="ml-3 text-sm text-text-tertiary">
-            Where two speakers marked the tones of the same answer, how often
-            they agree, and the choice between them.
+            Tone marks, pass 2: where more than one person marked the tones of
+            the same answer, how far they agree, and where a decision is needed.
           </span>
         </span>
         <span className="text-sm font-medium text-accent-text">Open</span>

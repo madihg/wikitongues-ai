@@ -66,11 +66,13 @@ export const SPEECH_MODEL_HREF = "/admin/speech";
 export const PEOPLE_HREF = "/admin/people";
 
 /**
- * The tone marks pass 2 admin page. It arrives with the annotator release,
- * not with this change: the Data view links to it from Disagreements, where
- * its subject lives, and owns it in the sidebar.
+ * The tone marks pass 2 admin page (how far the markers agree, and where a
+ * decision is needed). It is not a sidebar line: the Data view links to it
+ * from Disagreements, where its subject lives, and owns it in the sidebar.
  */
 export const TONE_PASS_HREF = "/admin/tone";
+/** The name the page already has. */
+export const TONE_PASS_LABEL = "Tone agreement";
 
 export const MORE_LINK: ResearchLink = {
   href: "/admin/more",
@@ -369,7 +371,15 @@ export const OLD_ROUTES: OldRoute[] = [
     home: "More, Tools",
   },
   // The old Lab group.
-  { url: "/lab/speech", was: "Speech", now: "same", home: "My work" },
+  // One Speech link for every role since the annotator release: the old
+  // lab addresses of Record and Listen redirect to it.
+  {
+    url: "/lab/speech",
+    was: "Speech",
+    now: "redirect",
+    to: "/speak",
+    home: "My work, Speech",
+  },
   { url: "/speak/check", was: "Check", now: "same", home: "My work" },
   {
     url: "/admin/speech",
@@ -440,7 +450,13 @@ export const OLD_ROUTES: OldRoute[] = [
     home: "More, Tools",
   },
   // The speech tabs.
-  { url: "/lab/speech/listen", was: "Listen", now: "same", home: "My work" },
+  {
+    url: "/lab/speech/listen",
+    was: "Listen",
+    now: "redirect",
+    to: "/speak/listen",
+    home: "My work, Speech",
+  },
   {
     url: "/lab/speech/recordings",
     was: "Recordings",

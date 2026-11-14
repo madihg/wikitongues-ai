@@ -109,6 +109,10 @@ function forbiddenRows(): ManifestRow[] {
     }),
     openRow({ id: "testset-open", isTestSet: true }),
     licensedRow({ id: "testset-licensed", isTestSet: true }),
+    // A synthesised clip, otherwise perfect for its tier: consented, rights
+    // cleared, published, kept by a reviewer, cloning allowed.
+    openRow({ id: "derived-open", sourceType: "derived", voiceCloningOptIn: true }),
+    licensedRow({ id: "derived-licensed", sourceType: "derived", voiceCloningOptIn: true }),
     openRow({
       id: "frozen-prompt",
       prompt: { isHoldout: true, split: "test" },
@@ -152,6 +156,11 @@ describe.each(ENTRY_POINTS)("export entry point: $name", (entry) => {
           id.startsWith("frozen"),
       ),
     ).toEqual([]);
+  });
+
+  it("refuses a synthesised clip that is otherwise perfect for the tier", async () => {
+    const out = await entry.released(forbiddenRows());
+    expect(out.filter((id) => id.startsWith("derived"))).toEqual([]);
   });
 
   it("releases nothing when given only forbidden rows", async () => {
@@ -213,6 +222,20 @@ describe.each(TRAIN_ENTRY_POINTS)("training entry point: $name", (entry) => {
     expect(
       out.filter((id) => id.startsWith("testset") || id.startsWith("frozen")),
     ).toEqual([]);
+  });
+
+  it("refuses a synthesised clip that is otherwise perfect for training", async () => {
+    // Consent on record, a chosen tier, rights cleared, kept, cloning allowed.
+    const out = await entry.released(forbiddenRows());
+    expect(out.filter((id) => id.startsWith("derived"))).toEqual([]);
+    const control = [
+      openRow({ id: "person-open", voiceCloningOptIn: true }),
+      licensedRow({ id: "person-licensed", voiceCloningOptIn: true }),
+    ];
+    expect((await entry.released(control)).sort()).toEqual([
+      "person-licensed",
+      "person-open",
+    ]);
   });
 
   it("refuses demo rows and rejected reviews", async () => {
@@ -311,6 +334,23 @@ describe("a synthetic Listen clip never leaves and never trains", () => {
     synthetic("rights-cleared", { rightsStatus: "cleared", reviewStatus: "keep" }),
     synthetic("cloning-flag", { voiceCloningOptIn: true, reviewStatus: "keep" }),
     synthetic("marked-exam", { isTestSet: true, reviewStatus: "keep" }),
+    // Every flag flipped at once, as favourably as each tier allows: a consent
+    // record, rights cleared, kept by a reviewer, cloning allowed, published.
+    synthetic("all-favourable-open", {
+      tier: "open",
+      publishedOpenAt: new Date(),
+      consentId: "consent-1",
+      rightsStatus: "cleared",
+      reviewStatus: "keep",
+      voiceCloningOptIn: true,
+    }),
+    synthetic("all-favourable-licensed", {
+      tier: "licensed",
+      consentId: "consent-1",
+      rightsStatus: "cleared",
+      reviewStatus: "keep",
+      voiceCloningOptIn: true,
+    }),
   ];
 
   it.each(ENTRY_POINTS)("export $name releases none of them", async (entry) => {
@@ -332,16 +372,43 @@ describe("a synthetic Listen clip never leaves and never trains", () => {
     }
   });
 
-  it("three separate rules each block it: no consent record, community_only, rights restricted", () => {
-    const row = synthetic("as-written");
-    expect(row.consentId).toBeNull();
+  it("the rule is stated outright: derived, before consent, tier or review are read", () => {
+    for (const row of variants()) {
+      for (const scope of ["internal", "provider"] as const) {
+        for (const purpose of ["asr", "tts", "cloning"] as const) {
+          expect(canTrain(row, { scope, purpose }), `${row.id} ${scope} ${purpose}`).toEqual({
+            ok: false,
+            reason: "derived",
+          });
+        }
+      }
+      expect(neverLeaves(row), row.id).toBe(true);
+    }
+  });
+
+  it("the same favourable rows, as a person's recording, do train and do leave (the control)", () => {
+    const person = variants()
+      .filter((r) => r.id.startsWith("all-favourable"))
+      .map((r) => ({ ...r, sourceType: "contributor" as const }));
+    expect(person.length).toBe(2);
+    for (const row of person) {
+      expect(canTrain(row, { scope: "provider", purpose: "cloning" }), row.id).toEqual({ ok: true });
+      expect(neverLeaves(row), row.id).toBe(false);
+    }
+    expect(canExportOpen(person[0])).toBe(true);
+    expect(canExportLicensed(person[1], gated)).toBe(true);
+  });
+
+  it("under the outright rule, the row as written is still blocked three more ways", () => {
+    // Read the row as if it were a person's: each of these alone refuses it.
+    const row = { ...synthetic("as-written"), sourceType: "contributor" as const };
     expect(canTrain({ ...row, reviewStatus: "keep" }, { scope: "internal", purpose: "asr" })).toEqual({
       ok: false,
       reason: "no_consent",
     });
+    expect(row.tier).toBe("community_only");
     expect(neverLeaves(row)).toBe(true);
     expect(row.rightsStatus).toBe("restricted");
-    expect(row.sourceType).toBe("derived");
   });
 });
 

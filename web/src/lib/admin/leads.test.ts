@@ -169,10 +169,20 @@ describe("the People page", () => {
 });
 
 describe("the people data routes", () => {
-  const routes = [
-    ["/api/admin/time-spent (hours and its CSV)", hours],
-    ["/api/admin/activity", activity],
-  ] as const;
+  const at = (query = "") =>
+    new Request(`http://test/api/admin/time-spent${query}`);
+  const routes: Array<[string, () => Promise<Response>]> = [
+    ["/api/admin/time-spent (hours per person)", () => hours(at())],
+    [
+      "/api/admin/time-spent?format=csv (the CSV)",
+      () => hours(at("?format=csv")),
+    ],
+    [
+      "/api/admin/time-spent?userId= (one person)",
+      () => hours(at("?userId=someone&weeks=26")),
+    ],
+    ["/api/admin/activity", () => activity()],
+  ];
 
   for (const [name, GET] of routes) {
     it(`${name}: 403 for a researcher who is not a lead, nothing read`, async () => {
