@@ -1,5 +1,6 @@
 import { generateText } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { TUTOR_MAX_OUTPUT_TOKENS } from "./limits";
 import type { EvalBucket } from "@prisma/client";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -92,7 +93,7 @@ Please evaluate the translator's response and return your assessment as JSON.`;
       system: systemPrompt,
       prompt: userMessage,
       temperature: 0.3,
-      maxOutputTokens: 1024,
+      maxOutputTokens: TUTOR_MAX_OUTPUT_TOKENS,
     });
 
     const parsed = parseReviewJson(text);
