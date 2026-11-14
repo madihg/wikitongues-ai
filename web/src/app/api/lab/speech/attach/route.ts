@@ -20,7 +20,7 @@ import { labGate } from "@/lib/speech/lab-route";
  */
 
 export async function POST(req: Request) {
-  const gate = await labGate();
+  const gate = await labGate({ audience: "speaker" });
   if (gate.error) return gate.error;
 
   const body = await req.json().catch(() => null);

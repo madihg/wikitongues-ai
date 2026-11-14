@@ -1,5 +1,7 @@
 import { generateText } from "ai";
 import { resolveModel, type CandidateLike } from "./providers";
+import { chat } from "@/lib/llm/openrouter";
+import { LLM_CONFIG } from "@/lib/speech/llm-config";
 
 /**
  * LLM-as-judge — restricted to TRIAGE. A frontier model is not a reliable judge
@@ -20,6 +22,26 @@ export interface SwapJudgeResult {
   swapAgreement: boolean;
   rationale: string;
   raw: [JudgeVerdict, JudgeVerdict];
+  /** Summed over both passes, when the provider reported usage. */
+  tokensIn?: number;
+  tokensOut?: number;
+}
+
+interface JudgeOnce {
+  verdict: JudgeVerdict;
+  tokensIn?: number;
+  tokensOut?: number;
+}
+
+const OPENROUTER_PREFIX = "openrouter/";
+
+/** The OpenRouter model id to use, or null to keep the existing providers. */
+function openRouterJudgeModel(judgeModelId: string): string | null {
+  if (LLM_CONFIG.judge) return LLM_CONFIG.judge;
+  if (judgeModelId.startsWith(OPENROUTER_PREFIX)) {
+    return judgeModelId.slice(OPENROUTER_PREFIX.length);
+  }
+  return null;
 }
 
 const JUDGE_SYSTEM =
@@ -60,7 +82,23 @@ function parseVerdict(text: string): JudgeVerdict {
 async function judgeOnce(
   judgeModelId: string,
   args: { promptText: string; a: string; b: string },
-): Promise<JudgeVerdict> {
+): Promise<JudgeOnce> {
+  const userContent = `PROMPT:\n${args.promptText}\n\nRESPONSE A:\n${args.a}\n\nRESPONSE B:\n${args.b}\n\nReturn JSON only.`;
+  const orModel = openRouterJudgeModel(judgeModelId);
+  if (orModel) {
+    const res = await chat(
+      [
+        { role: "system", content: JUDGE_SYSTEM },
+        { role: "user", content: userContent },
+      ],
+      { model: orModel, maxTokens: 2048, temperature: 0, label: "judge triage" },
+    );
+    return {
+      verdict: parseVerdict(res.text),
+      tokensIn: res.tokensIn,
+      tokensOut: res.tokensOut,
+    };
+  }
   const candidate: CandidateLike = {
     provider: inferJudgeProvider(judgeModelId),
     baseModelId: judgeModelId,
@@ -71,13 +109,21 @@ async function judgeOnce(
     messages: [
       {
         role: "user",
-        content: `PROMPT:\n${args.promptText}\n\nRESPONSE A:\n${args.a}\n\nRESPONSE B:\n${args.b}\n\nReturn JSON only.`,
+        content: userContent,
       },
     ],
     temperature: 0,
     maxOutputTokens: 400,
   });
-  return parseVerdict(result.text);
+  return {
+    verdict: parseVerdict(result.text),
+    tokensIn: result.usage?.inputTokens,
+    tokensOut: result.usage?.outputTokens,
+  };
+}
+
+function sumDefined(a?: number, b?: number): number | undefined {
+  return a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
 }
 
 /** Judge x vs y twice with positions swapped; trustworthy only when swap-consistent. */
@@ -86,16 +132,19 @@ export async function judgeWithSwap(
   args: { promptText: string; x: string; y: string },
 ): Promise<SwapJudgeResult> {
   // Pass 1: x=A, y=B. Pass 2: y=A, x=B.
-  const v1 = await judgeOnce(judgeModelId, {
+  const o1 = await judgeOnce(judgeModelId, {
     promptText: args.promptText,
     a: args.x,
     b: args.y,
   });
-  const v2 = await judgeOnce(judgeModelId, {
+  const o2 = await judgeOnce(judgeModelId, {
     promptText: args.promptText,
     a: args.y,
     b: args.x,
   });
+
+  const v1 = o1.verdict;
+  const v2 = o2.verdict;
 
   // Map verdicts to x/y.
   const w1: "x" | "y" | "tie" =
@@ -109,5 +158,7 @@ export async function judgeWithSwap(
     swapAgreement,
     rationale: v1.rationale || v2.rationale,
     raw: [v1, v2],
+    tokensIn: sumDefined(o1.tokensIn, o2.tokensIn),
+    tokensOut: sumDefined(o1.tokensOut, o2.tokensOut),
   };
 }

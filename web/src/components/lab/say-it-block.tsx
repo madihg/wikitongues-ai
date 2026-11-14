@@ -7,18 +7,18 @@ import { useLabConsent } from "./use-lab-consent";
 
 /**
  * The "Say it" block: the speech layer inside the text episode, shown to
- * researchers (never annotators) right after the cold answer is locked and
- * before the pairwise step. Two optional clips: the Igala answer, and its
+ * researchers, and to annotators while SPEECH_LAYER_ANNOTATORS is on, right
+ * after the cold answer is locked and before the pairwise step. Two optional clips: the Igala answer, and its
  * English meaning (the locked englishGloss; when that is empty, the English
  * prompt text to read instead, and the block says so). Each has its own
  * record control, the same RecordClip as the Record page.
  *
- * The block never blocks the episode: "Skip for now" goes straight on to
+ * The block never blocks the episode: "Skip, no recording" goes straight on to
  * the pairwise step, and so does "Continue" once something is saved. The
  * answer is already locked and the AI outputs are still unseen, so nothing
  * recorded here can be influenced by them. The clips are created unattached
  * (the answer row does not exist until the episode is submitted); the parent
- * attaches them after submit through /api/lab/speech/attach. A researcher
+ * attaches them after submit through /api/lab/speech/attach. A speaker
  * who has not given consent is shown the consent screen here, and may skip it.
  */
 
@@ -153,10 +153,10 @@ export function SayItBlock({
               : "border border-border-strong bg-surface text-text-secondary hover:bg-surface-sunken"
           }`}
         >
-          {saved > 0 ? "Continue to the AI outputs" : "Skip for now"}
+          {saved > 0 ? "Continue to the AI outputs" : "Skip, no recording"}
         </button>
         <p className="text-xs text-text-tertiary">
-          You can also record past answers later on the Lab&apos;s Record page.
+          You can also record past answers later, from the Speak or Record page.
         </p>
       </div>
     </section>

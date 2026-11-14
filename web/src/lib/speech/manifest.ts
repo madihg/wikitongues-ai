@@ -27,11 +27,24 @@ export interface ManifestRow extends ExportableRow {
   fundingSource: string;
   /** "igala" | "english": what the speaker said (igala when not loaded). */
   language?: string;
+  /** The script line a studio clip read (PR H); its transcript when set. */
+  studioText?: string | null;
   /** The speaker's locked answer for this clip, tone-retained as written. */
   coldAuthorAnswer?: {
     answerText: string;
     /** The locked English meaning: the transcript of an English clip. */
     englishGloss?: string | null;
+  } | null;
+  /**
+   * The speaker's profile (SpeakerProfile), joined in by loadOpenRows.
+   * `dialect` fills the line's dialect when the clip carries none; ageBand
+   * and gender leave only when mayShareDemographics is true.
+   */
+  speakerProfile?: {
+    dialect: string | null;
+    ageBand: string | null;
+    gender: string | null;
+    mayShareDemographics: boolean;
   } | null;
   /** The row's prompt; `text` is the English question, read aloud when an
    * English clip had no gloss to read. */
@@ -62,6 +75,12 @@ export interface ManifestLine {
   /** Stable pseudonym; the speaker's account id never appears. */
   speaker: string;
   dialect: string | null;
+  /**
+   * The speaker's age band and gender, present ONLY when their profile says
+   * mayShareDemographics and the field is set; otherwise the keys are absent.
+   */
+  ageBand?: string;
+  gender?: string;
   tier: "open";
   consentVersion: string | null;
   fundingSource: string;
@@ -95,6 +114,18 @@ export function transcriptFor(
   return r.prompt?.text?.trim() || null;
 }
 
+/** ageBand and gender, only for a speaker who allowed sharing them. */
+function sharedDemographics(
+  r: ManifestRow,
+): { ageBand?: string; gender?: string } {
+  const p = r.speakerProfile;
+  if (!p || p.mayShareDemographics !== true) return {};
+  return {
+    ...(p.ageBand ? { ageBand: p.ageBand } : {}),
+    ...(p.gender ? { gender: p.gender } : {}),
+  };
+}
+
 /** OPEN manifest lines for exactly the rows the guard lets leave. */
 export function buildOpenManifest(rows: ManifestRow[]): ManifestLine[] {
   return rows.filter(canExportOpen).map((r) => {
@@ -110,7 +141,8 @@ export function buildOpenManifest(rows: ManifestRow[]): ManifestLine[] {
       transcriptToneStripped:
         transcript === null ? null : toneStrip(transcript),
       speaker: speakerPseudonym(r.annotatorId),
-      dialect: r.dialect,
+      dialect: r.dialect ?? r.speakerProfile?.dialect ?? null,
+      ...sharedDemographics(r),
       tier: "open" as const,
       consentVersion: r.consentVersion,
       fundingSource: r.fundingSource,

@@ -2490,3 +2490,27 @@ non-publishable.
 - Proposal doc: "Amazon Research Awards Fall 2026: Wikitongues proposal and budget (DRAFT)", Drive id 1kB1Rz9Eb_6YgJDMQ7bv2CblKmZogxWEXcOhGvM4wzsI. Due Nov 11, 11:59 PM Pacific. Daniel submits. Scope settled at two languages beyond Igala, text only, May 1 to Nov 30, 2027.
 - Halim's two blockers for Daniel were cleared by email (thread 1a1cce6798f360d5, Nov 11, 15:20 PT): a one-page AI-focused CV (source ~/wt-clones/speech-doc/build/cv/CV_Halim_Madi_AI.html, PDF beside it, rendered with headless Chrome) and the AWS credits table.
 - Credits table sent: Bedrock $5,000 requested (likely $2,500; about 250 prompts per language, 3 languages, 5 models, bare and with layer, 4 rounds, 3 judge models), SageMaker $5,500 (likely $3,000, 150 to 200 GPU hours for the auto-rater), S3 $500, other AWS $500. Total requested $11,500, likely spend about $5,800. Gemini comparisons stay outside the credits. Bedrock is workable: the arena routes by model id, so it is one adapter on top of the OpenRouter client.
+
+## Session State (2026-11-13, prompts) - v4.6 prompt bank authored, checked, NOT seeded
+
+**Task.** Size what the current model (Gemini 3.1 Pro with retrieval v4.4 and v4.5) still gets wrong, and write the next prompt bank from that.
+
+**Done, on branch `prompts/v46-gap-driven`.**
+- `tasks/model-gap-analysis-2026-11.md`: the ranked gaps, measured on production on Nov 13 (484 judged sides, 136 corrections with 352 changed spans, 1,758 train answers, the tone restoration test, 113 clips). Top five: sentence construction, tone marks, fixed formulas, spelling and word choice, word strength (not measurable today).
+- `web/src/lib/prompt-bank-v46.ts`: 320 prompts in 26 families. 200 text prompts under provenance `claude_authored_v46_2026_11_13`, 120 speech prompts under `claude_authored_v46_speech_2026_11_13`. English only, no Igala word quoted.
+- `web/src/lib/prompt-bank-v46.test.ts`: 17 tests. `web/prisma/seed-prompt-bank-v46.ts`: create-only seed with `--check` and `--only text|speech`.
+- `tasks/prompt-bank-v46-evidence-2026-11.md`: generated per-family evidence.
+- Checks run: full suite 2,873 tests pass, typecheck and lint clean, leak check 0 hits on all five files, seed `--check` passes against production (max Jaccard 0.48 train, 0.36 frozen; Scope A pass over 139 strings) and wrote nothing.
+
+**Not done, on purpose.** Nothing is seeded. No model output is generated.
+
+**Next steps, in order.**
+1. Review, then seed the text set: `npx tsx --env-file=.env.local prisma/seed-prompt-bank-v46.ts --only text`.
+2. Fill two pooled arms on it (each run capped at $15): `scripts/train-queue-fill.ts generate gemini-3-1-pro-rag-v4-5 --provenance claude_authored_v46_2026_11_13`, then the same for `gemini-3-1-pro-rag-v4-4`. Then `scripts/check-queue-servable.ts`.
+3. Seed the speech set (`--only speech`). It needs no model output to appear in the Record queue, but it sorts last there: the queue serves a speaker's own unrecorded answers first (about 310 for the one speech annotator). The queue order must put `ig_v46_sp*` first or she will not reach them.
+4. The Record page should show `v46SpeechEnglish(promptId)` as the English line to record for these prompts.
+
+**Open questions.**
+- Queue state on Nov 13 (`scripts/check-queue-servable.ts`): 299 servable prompts; remaining per active speaker 0, 3, 61, 126. The two who ran out get about 35 hours each from the 200 text prompts at the measured 10.3 to 10.6 minutes a prompt. A 70 hour contract needs a second batch or the 165 unserved long-form prompts.
+- Word strength has no tag. The ladders (family `inten`) make it countable; a "too strong or too weak" tag and a "word order" tag are proposed in the gap analysis, section 6.
+- Speech coverage figures are expected from published word forms, not heard. Recount after the clips exist.

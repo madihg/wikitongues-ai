@@ -81,6 +81,46 @@ describe("coldAnswersToSftRows", () => {
   });
 });
 
+describe("split carried from the prompt", () => {
+  const cold: ColdAnswerInput = {
+    promptId: "p1",
+    promptText: "Write the word for 'water'.",
+    answerText: "invented answer",
+    bucket: "orthography",
+    promptBucket: "orthography",
+    isHoldout: false,
+    split: "test",
+    verificationStatus: "single_annotator",
+    consentTraining: true,
+    isDemo: false,
+    provenance: "speaker_authored_sourcefree",
+  };
+
+  it("a cold answer on a test-split prompt never reaches the SFT set", () => {
+    const rows = coldAnswersToSftRows([cold]);
+    expect(rows[0].split).toBe("test");
+    expect(buildSftExamples(rows)).toHaveLength(0);
+  });
+
+  it("an edit on a test-split prompt never reaches the SFT set", () => {
+    const rows = editsToSftRows([
+      {
+        promptId: "p1",
+        promptText: "Write the word for 'water'.",
+        correctedText: "invented edit",
+        bucket: "orthography",
+        promptBucket: "orthography",
+        isHoldout: false,
+        split: "test",
+        verificationStatus: "single_annotator",
+        consentTraining: true,
+        isDemo: false,
+      },
+    ]);
+    expect(buildSftExamples(rows, { includeEdits: true })).toHaveLength(0);
+  });
+});
+
 describe("editsToSftRows", () => {
   const base: EditInput = {
     promptId: "p1",
