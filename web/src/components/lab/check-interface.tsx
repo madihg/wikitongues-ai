@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { demoFromSearch, withDemo } from "@/lib/speech/demo-url";
 import { EpisodeFooter, EpisodeHeader } from "@/components/episode-frame";
 import {
   answerWords,
@@ -313,6 +314,9 @@ type Load =
 
 export function CheckInterface() {
   const [load, setLoad] = useState<Load>({ status: "loading" });
+  // The demo session on the address (the Speech band's Demo switch puts it
+  // there). With it, a verdict is stored as demo and the clip is untouched.
+  const demoRef = useRef<string | null>(null);
   const [picked, setPicked] = useState<CheckVerdict | null>(null);
   const [sent, setSent] = useState<CheckVerdict | null>(null);
   const [wrongWord, setWrongWord] = useState<number | null>(null);
@@ -334,7 +338,11 @@ export function CheckInterface() {
     setError(null);
     setTranscript(undefined);
     try {
-      const res = await fetch("/api/lab/speech/check/next");
+      // Read here, not at render: the first load runs before any effect.
+      demoRef.current = demoFromSearch(window.location.search);
+      const res = await fetch(
+        withDemo("/api/lab/speech/check/next", demoRef.current),
+      );
       if (!res.ok) throw new Error("load");
       const j = (await res.json()) as {
         complete: boolean;
@@ -385,6 +393,7 @@ export function CheckInterface() {
             ? { wrongWordIndex: wrongWord }
             : {}),
           ...(note.trim() ? { note } : {}),
+          ...(demoRef.current ? { demoSessionId: demoRef.current } : {}),
         }),
       });
       if (!res.ok) {
@@ -412,6 +421,11 @@ export function CheckInterface() {
 
   return (
     <>
+      {demoRef.current && (
+        <p className="mb-3 rounded-md border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
+          Demo session: verdicts here are not counted.
+        </p>
+      )}
       {/* The frame's header line. The page heading already says "Check". */}
       <EpisodeHeader left={remaining} />
     <CheckView
