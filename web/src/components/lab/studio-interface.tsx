@@ -315,7 +315,7 @@ export function StudioInterface() {
           rows={3}
           value={pasted}
           onChange={(e) => setPasted(e.target.value)}
-          className="mt-1 min-h-[44px] w-full rounded-md border border-border-strong bg-surface p-3 font-mono text-sm text-text-primary focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+          className="mt-1 min-h-[44px] w-full rounded-md border border-border-strong bg-surface p-3 igala text-sm text-text-primary focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
         />
         <button
           type="button"

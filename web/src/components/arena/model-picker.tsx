@@ -55,19 +55,19 @@ function ScoreChip({
 }) {
   if (scoresState === "loading") {
     return (
-      <span className="text-[11px] text-text-tertiary" aria-hidden="true">
+      <span className="text-xs text-text-tertiary" aria-hidden="true">
         …
       </span>
     );
   }
   if (score === null) {
-    return <span className="text-[11px] text-text-tertiary">not scored</span>;
+    return <span className="text-xs text-text-tertiary">not scored</span>;
   }
   return (
     <span
       title="Community Agreement Score on the leak-free benchmark (100 = native speaker agreement)"
       className={[
-        "rounded-full border px-2 py-0.5 text-[11px] tabular-nums",
+        "rounded-full border px-2 py-0.5 text-xs tabular-nums",
         selected
           ? "border-accent text-accent-text"
           : "border-border bg-surface-sunken text-text-secondary",

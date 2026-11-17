@@ -64,7 +64,7 @@ function AxisCard({ axis }: { axis: RubricV2Axis }) {
               className="flex items-start gap-2 text-xs leading-snug"
             >
               <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded font-mono text-[11px] font-semibold ${anchorChipClass(anchor.score)}`}
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded font-mono text-xs font-semibold ${anchorChipClass(anchor.score)}`}
               >
                 {anchor.score}
               </span>

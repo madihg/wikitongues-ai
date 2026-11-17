@@ -359,7 +359,7 @@ function ColdFields({
           id={`${key}-answer`}
           ref={answerRef}
           rows={4}
-          className={`${BOX} font-mono`}
+          lang="ig" className={`${BOX} igala`}
           value={fields.answerText}
           onChange={(e) => onField("answerText", e.target.value)}
         />
@@ -436,7 +436,7 @@ function ColdFields({
           <textarea
             id={`${key}-instruction`}
             rows={2}
-            className={`${BOX} font-mono`}
+            lang="ig" className={`${BOX} igala`}
             value={fields.instructionIg}
             onChange={(e) => onField("instructionIg", e.target.value)}
           />
@@ -462,7 +462,7 @@ function ColdFields({
             {EDITOR_COPY.firstVersionHelp}
           </p>
           {showFirst && (
-            <p className="mt-2 whitespace-pre-wrap font-mono text-sm text-text-primary">
+            <p lang="ig" className="mt-2 whitespace-pre-wrap igala text-sm text-text-primary">
               {item.firstVersion.text}
             </p>
           )}

@@ -50,7 +50,7 @@ export function ColumnStatusLine({
 
   return (
     <p
-      className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-text-tertiary"
+      className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-text-tertiary"
       // Announced, but politely: a screen reader user gets the transitions
       // without having the answer text interrupted.
       aria-live="polite"

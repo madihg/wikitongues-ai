@@ -1427,7 +1427,7 @@ export function AnnotationInterface() {
 
   if (!task) return null;
 
-  const textFont = "font-mono"; // renders Igala tone diacritics cleanly
+  const textFont = "igala"; // renders Igala tone diacritics cleanly
 
   // Persistent numbered step bar. The three-state machine (prompt/pairwise/score)
   // maps onto four plain-English stages; on the pairwise screen the highlight
@@ -1461,8 +1461,8 @@ export function AnnotationInterface() {
   const authoringBoxes = (
     <>
       {goldHint && (
-        <div className="mt-3 flex items-start gap-2 rounded-md border border-accent/30 bg-accent-subtle px-3 py-2 text-xs text-accent-text">
-          <span className="shrink-0 font-semibold">For this one:</span>
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
+          <span className="shrink-0 font-semibold text-text-primary">For this one:</span>
           <span>{goldHint}</span>
         </div>
       )}
@@ -1574,7 +1574,7 @@ export function AnnotationInterface() {
               }`}
             >
               <span
-                className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
+                className={`flex h-4 w-4 items-center justify-center rounded-full text-xs font-semibold ${
                   current
                     ? "bg-accent-contrast text-accent"
                     : done
@@ -1650,7 +1650,7 @@ export function AnnotationInterface() {
                     className="flex items-start gap-2 text-xs leading-snug"
                   >
                     <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded font-mono text-[11px] font-semibold ${chip}`}
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded font-mono text-xs font-semibold ${chip}`}
                     >
                       {an.score}
                     </span>
@@ -1783,9 +1783,9 @@ export function AnnotationInterface() {
 
       {/* First screen only: plain-English framing of the whole episode. */}
       {step === "prompt" && !coldLocked && (
-        <div className="mb-6 rounded-lg border border-accent/30 bg-accent-subtle p-5">
-          <p className="text-sm leading-relaxed text-accent-text">
-            <span className="font-semibold">
+        <div className="mb-6 rounded-lg border border-border bg-surface-sunken p-5">
+          <p className="text-sm leading-relaxed text-text-secondary">
+            <span className="font-semibold text-text-primary">
               You are teaching an AI to speak Igala.
             </span>{" "}
             Each round: write how YOU would say it, pick the better of two AI
@@ -1865,7 +1865,7 @@ export function AnnotationInterface() {
                   <span className="font-medium text-text-secondary">
                     Your locked answer:
                   </span>{" "}
-                  <span className={textFont}>{coldAnswer}</span>
+                  <span lang="ig" className={textFont}>{coldAnswer}</span>
                   {englishGloss.trim() && (
                     <p className="mt-2 text-text-secondary">
                       <span className="font-medium">Means:</span> {englishGloss}
@@ -2039,7 +2039,7 @@ export function AnnotationInterface() {
               <span className="font-medium text-text-secondary">
                 Your locked answer:
               </span>{" "}
-              <span className={textFont}>{coldAnswer}</span>
+              <span lang="ig" className={textFont}>{coldAnswer}</span>
             </div>
           )}
 

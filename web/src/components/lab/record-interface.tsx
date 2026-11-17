@@ -268,7 +268,7 @@ export function RecordInterface() {
                 <p className="text-sm font-semibold text-text-primary">
                   Your answer
                 </p>
-                <p className="igala mt-1 text-base text-text-primary">
+                <p lang="ig" className="igala mt-1 text-base text-text-primary">
                   {task.ownAnswer.text}
                 </p>
               </>
@@ -277,7 +277,7 @@ export function RecordInterface() {
                 <p className="text-sm font-semibold text-text-primary">
                   Your answer (locked)
                 </p>
-                <p className="igala mt-1 text-base text-text-primary">
+                <p lang="ig" className="igala mt-1 text-base text-text-primary">
                   {lockedText}
                 </p>
               </>

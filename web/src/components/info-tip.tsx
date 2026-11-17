@@ -46,7 +46,7 @@ export function InfoTip({
         }}
         aria-label={label}
         aria-expanded={open}
-        className="inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border border-border-strong font-mono text-[10px] leading-none text-text-tertiary transition-colors hover:border-accent hover:text-accent-text"
+        className="inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border border-border-strong font-mono text-xs leading-none text-text-tertiary transition-colors hover:border-accent hover:text-accent-text"
       >
         i
       </button>

@@ -49,7 +49,7 @@ export function ChatColumnBody({ reply }: { reply: StreamingReply }) {
           flagged FIRST answer is what she is reading, and she has to be told
           that too - a silent pass would be the worst of the three. */}
       {reply.revisedFor && (
-        <p className="mb-2 text-[11px] text-text-tertiary">
+        <p className="mb-2 text-xs text-text-tertiary">
           {reply.revisionApplied ? (
             <>
               {reply.done ? "Rewrote" : "Rewriting"} its answer
@@ -96,7 +96,7 @@ export function ChatColumnBody({ reply }: { reply: StreamingReply }) {
           what it dropped or added. */}
       {reply.referenceForm && (
         <div className="mt-3 border-t border-border pt-2">
-          <p className="mb-1 text-[11px] text-text-tertiary">
+          <p className="mb-1 text-xs text-text-tertiary">
             Reference form (second pass, not judged)
           </p>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-text-secondary">
@@ -104,7 +104,7 @@ export function ChatColumnBody({ reply }: { reply: StreamingReply }) {
           </p>
           {(reply.referenceForm.report ||
             secondPassCost(reply.referenceForm)) && (
-            <p className="mt-1 text-[11px] text-text-tertiary">
+            <p className="mt-1 text-xs text-text-tertiary">
               {[
                 reply.referenceForm.report
                   ? summarizeReferenceReport(reply.referenceForm.report)

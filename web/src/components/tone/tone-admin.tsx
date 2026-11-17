@@ -38,7 +38,7 @@ export function MarkedVersion({
   differing: number[];
 }) {
   return (
-    <span className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
+    <span className="whitespace-pre-wrap igala text-sm leading-relaxed">
       {clusters(text).map((c, i) => {
         const letter = (c.base + c.marks.join("") + c.tone.join("")).normalize(
           "NFC",
@@ -322,7 +322,7 @@ export function ToneItemCard({
             rows={2}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="mt-1 w-full rounded-md border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-text-primary"
+            className="mt-1 w-full rounded-md border border-border-strong bg-surface px-3 py-2 igala text-sm text-text-primary"
           />
           <div className="mt-2 flex items-center gap-3">
             <button

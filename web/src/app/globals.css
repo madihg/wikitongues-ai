@@ -1,39 +1,19 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 @import "../styles/tokens.css";
 @import "../styles/tokens.compat.platform.css";
 
-/* ─── Wikitongues AI Design System ─────────────────────────────
-   Warm, humanist, community-first. Ochre accent on warm ink.
-   Replaces the Oulipo brutalist system. Light + dark.
-   ───────────────────────────────────────────────────────────── */
-
-[data-theme="dark"] {
-  --background: #16130f;
-  --surface: #1f1b16;
-  --surface-raised: #262019;
-  --surface-sunken: #120f0c;
-  --foreground: #f1ebe1;
-  --text-primary: #f1ebe1;
-  --text-secondary: #c8bdac;
-  --text-tertiary: #8f8472;
-  --text-muted: #5c5446;
-  --border: #2f281f;
-  --border-strong: #423a2e;
-  --accent: var(--wt-ochre-300);
-  --accent-hover: var(--wt-ochre-200);
-  --accent-text: var(--wt-ochre-200);
-  --accent-contrast: #1a1714;
-  --accent-subtle: #2a2113;
-  --success-subtle: #16271d;
-  --warning-subtle: #2c2110;
-  --danger-subtle: #2a1714;
-  --info-subtle: #161d2b;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+/* Inter, one file: Latin, Latin Extended, Latin Extended Additional and the
+   combining marks together, so an Igala letter and its tone mark are always
+   drawn by the same font. SIL Open Font License: public/fonts/Inter-LICENSE.txt */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/InterVariable-wt.woff2") format("woff2");
 }
+
+/* The design tokens live in src/styles/tokens.css. Light theme only. */
 
 /* Tailwind v4 theme bridge */
 @theme inline {
@@ -69,16 +49,17 @@
   --color-text-muted: var(--text-muted);
 
   /* Typography */
-  --font-display: "Fraunces", Georgia, serif;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: var(--wt-font-sans);
+  --font-sans: var(--wt-font-sans);
+  --font-igala: var(--wt-font-igala);
+  --font-mono: var(--wt-font-mono);
 
-  --radius-sm: 4px;
-  --radius: 8px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 16px;
+  --radius-sm: var(--wt-radius-control);
+  --radius: var(--wt-radius-control);
+  --radius-md: var(--wt-radius-control);
+  --radius-lg: var(--wt-radius-card);
+  --radius-xl: var(--wt-radius-card);
+  --radius-2xl: var(--wt-radius-card);
 
   --shadow-xs: var(--shadow-sm);
   --shadow-sm: var(--shadow-sm);
@@ -103,20 +84,30 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-family: var(--wt-font-sans);
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--text-primary);
 }
 
-/* Igala tone diacritics render in the mono slot */
+/* Igala text is set in the sans, never in a mono: the face that draws every
+   letter and tone mark. lang="ig" gets the same result with no class. The
+   size stays whatever the component sets. */
+.igala,
+[lang="ig"] {
+  font-family: var(--wt-font-igala);
+  line-height: var(--wt-lh-igala);
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
+/* Mono is for a code, a count or a timer. System fonts only. */
 code,
 kbd,
 samp,
-.font-mono,
-.igala {
-  font-family: var(--font-mono);
-  font-feature-settings: "ss01";
+.font-mono {
+  font-family: var(--wt-font-mono);
 }
 
 a {
@@ -131,14 +122,14 @@ a:hover {
 
 /* Focus management */
 *:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-  border-radius: var(--radius-sm);
+  outline: var(--wt-focus-width) solid var(--wt-focus);
+  outline-offset: var(--wt-focus-offset);
+  box-shadow: none;
 }
 
 ::selection {
-  background: var(--wt-ochre-200);
-  color: var(--wt-ink-950);
+  background: var(--wt-accent-tint);
+  color: var(--wt-ink);
 }
 
 /* Brand entrance: a gentle staggered rise, used on hero/landing surfaces. */

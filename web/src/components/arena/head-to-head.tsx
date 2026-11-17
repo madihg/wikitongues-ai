@@ -298,7 +298,7 @@ export function HeadToHead({ a, b }: { a: string; b: string }) {
                         </span>
                       )}
                     </div>
-                    <p className="font-mono text-sm whitespace-pre-wrap text-text-primary">
+                    <p className="igala text-sm whitespace-pre-wrap text-text-primary">
                       {row.outputA}
                     </p>
                   </div>
@@ -318,7 +318,7 @@ export function HeadToHead({ a, b }: { a: string; b: string }) {
                         </span>
                       )}
                     </div>
-                    <p className="font-mono text-sm whitespace-pre-wrap text-text-primary">
+                    <p className="igala text-sm whitespace-pre-wrap text-text-primary">
                       {row.outputB}
                     </p>
                   </div>

@@ -10,7 +10,11 @@ import { describe, expect, it } from "vitest";
  * The second test is the whole promise of step 1: every name the app could read
  * before still resolves to the value it had. A later step that means to change a
  * value deletes its block from the compat file and its row from TODAY in the
- * same commit.
+ * same commit. Step 3 (colour) took 21 rows out: text, edges, the accent, the
+ * state text colours, info and the focus ring. Step 4 (shape) took 7 more: the
+ * two retired radii, the four shadows and the transition. Step 5 (data) took 7:
+ * side A and B, the score colours and the three supporting hues. What is left
+ * is what these steps did not mean to change.
  */
 const TODAY: Record<string, string> = {
   "--wt-ochre-50": "#fdf6e9",
@@ -25,54 +29,19 @@ const TODAY: Record<string, string> = {
   "--wt-ink-900": "#26211c",
   "--wt-ink-800": "#3a332c",
   "--wt-ink-700": "#544a40",
-  "--wt-ink-500": "#7d7064",
-  "--wt-ink-300": "#b6aa9c",
-  "--wt-ink-200": "#d8cfc4",
-  "--wt-ink-100": "#ece6dd",
-  "--wt-ink-50": "#f7f3ec",
-  "--wt-clay-500": "#b5512f",
-  "--wt-sage-500": "#4f7a5e",
-  "--wt-indigo-500": "#3f5a8a",
   "--background": "#fbf8f2",
   "--surface": "#ffffff",
   "--surface-raised": "#ffffff",
-  "--surface-sunken": "#f7f3ec",
   "--foreground": "#26211c",
   "--text-primary": "#26211c",
   "--text-secondary": "#544a40",
-  "--text-tertiary": "#7d7064",
-  "--text-muted": "#b6aa9c",
-  "--border": "#ece6dd",
-  "--border-strong": "#d8cfc4",
-  "--accent": "#e0a21f",
-  "--accent-hover": "#c4881a",
-  "--accent-text": "#9c6a13",
-  "--accent-contrast": "#1a1714",
-  "--accent-subtle": "#fdf6e9",
-  "--success": "#2f7d54",
   "--success-subtle": "#e7f3ec",
-  "--warning": "#b5790f",
   "--warning-subtle": "#fdf2dc",
   "--danger": "#b23b32",
   "--danger-subtle": "#fbeae8",
-  "--info": "#3f5a8a",
-  "--info-subtle": "#eaeff6",
-  "--pick-a": "#3f5a8a",
-  "--pick-b": "#b5512f",
-  "--pick-tie": "#7d7064",
   "--score-lo": "#b23b32",
-  "--score-mid": "#b5790f",
-  "--score-hi": "#2f7d54",
-  "--radius-sm": "4px",
   "--radius": "8px",
   "--radius-lg": "12px",
-  "--radius-xl": "16px",
-  "--shadow-sm": "0 1px 2px rgba(26, 23, 20, 0.06)",
-  "--shadow": "0 1px 3px rgba(26, 23, 20, 0.08), 0 1px 2px rgba(26, 23, 20, 0.04)",
-  "--shadow-md": "0 4px 12px rgba(26, 23, 20, 0.08)",
-  "--shadow-lg": "0 12px 32px rgba(26, 23, 20, 0.12)",
-  "--ring": "0 0 0 3px #f2cf86",
-  "--transition-default": "0.18s cubic-bezier(0.4, 0, 0.2, 1)",
 };
 
 const SRC = join(process.cwd(), "src");

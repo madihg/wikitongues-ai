@@ -58,7 +58,7 @@ export function SuggestionPreview({
   corrected: string;
 }) {
   return (
-    <p className="whitespace-pre-wrap break-words rounded bg-surface-sunken p-3 font-mono text-sm leading-relaxed">
+    <p className="whitespace-pre-wrap break-words rounded bg-surface-sunken p-3 igala text-sm leading-relaxed">
       {wordDiff(nfc(original), nfc(corrected)).map((seg, i) =>
         seg.type === "same" ? (
           <span key={i}>{seg.value}</span>
@@ -220,7 +220,7 @@ export function SuggestingEditor({
             onChange={(e) => onValueChange(e.target.value)}
             rows={rows}
             placeholder={placeholder}
-            className="mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 font-mono text-sm text-text-primary placeholder:text-text-muted focus-visible:border-accent"
+            className="mt-2 w-full rounded-md border border-border-strong bg-surface px-3 py-2 igala text-sm text-text-primary placeholder:text-text-muted focus-visible:border-accent"
           />
           <ToneKeyboard
             targetRef={textareaRef}
