@@ -28,7 +28,7 @@ export const TIME_COPY = {
   panelTitle: "How time is counted",
   panel: [
     "The clock runs while this site is open in front of you and you are working: typing, tapping, recording or listening.",
-    "It pauses after 5 minutes with no activity. It starts again when you come back.",
+    "It pauses after a minute with no activity. It starts again when you come back.",
     "It counts every kind of work: answers, edits, clips, listening, checking, tone marks.",
     "We do not record what you type and we do not look at your screen.",
   ],

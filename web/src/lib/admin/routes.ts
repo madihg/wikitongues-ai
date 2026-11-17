@@ -189,7 +189,12 @@ export const TOOLS: MoreItem[] = [
   },
 ];
 
-/** Kept, not deleted. Each line says why it left the main list. */
+/**
+ * Kept, not deleted. Each line says why it left the main list. Since Nov 17
+ * 2026 the More page no longer lists these: the record of each, with a
+ * screenshot, is in the PRD Doc's archive section. Every address still
+ * opens, and this list is what the tests hold them to.
+ */
 export const ARCHIVE: MoreItem[] = [
   {
     href: "/annotator/review",
@@ -214,7 +219,7 @@ export const ARCHIVE: MoreItem[] = [
   },
   {
     href: "/admin/more/legacy#leaderboard",
-    label: "Leaderboard (old)",
+    label: "Old leaderboard",
     sentence:
       "It counts models we have retired. The verdict answers the question better.",
   },

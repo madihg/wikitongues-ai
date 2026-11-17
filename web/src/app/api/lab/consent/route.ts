@@ -4,6 +4,7 @@ import { labGate } from "@/lib/speech/lab-route";
 import {
   CONSENT_QUESTIONS,
   CONSENT_VERSION,
+  consentStands,
   IGALA_PLACEHOLDER,
   ORAL_SECTIONS,
   WRITTEN_SECTIONS,
@@ -53,8 +54,7 @@ export async function GET() {
   return NextResponse.json({
     currentVersion: CONSENT_VERSION,
     // A speaker whose latest grant is a withdrawal must consent again.
-    needsConsent:
-      !grant || grant.withdrawn || grant.consent.version !== CONSENT_VERSION,
+    needsConsent: !consentStands(grant),
     withdrawn: grant?.withdrawn ?? false,
     grant: grant
       ? {

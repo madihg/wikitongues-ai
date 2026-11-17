@@ -30,7 +30,8 @@ import {
  * Disagreements; activity and hours on People; the downloads on Data, Export;
  * the old leaderboard, category scores and gap closure under More, Archive.
  *
- * Every number is computed from the database per request.
+ * Every number is computed from the database per request, except the two
+ * model tiles, which are kept for a minute (src/lib/short-memo.ts).
  */
 export const dynamic = "force-dynamic";
 
@@ -114,10 +115,17 @@ export default async function TodayPage({
         <Suspense fallback={<Skeleton rows={3} tall />}>
           <ModelsBlock speech={speech} lead={who.lead} />
         </Suspense>
-        {who.lead && (
+        {who.lead ? (
           <Suspense fallback={<Skeleton rows={4} />}>
             <WeekWorkBlock work={work} speech={speech} thisWeek={thisWeek} />
           </Suspense>
+        ) : (
+          // Without this the week toggle seems to do nothing: the table it
+          // changes most is the one this account is not shown.
+          <p className="text-sm text-text-tertiary">
+            The week&apos;s work, person by person, is shown to research
+            leads.
+          </p>
         )}
         <Suspense fallback={<Skeleton rows={1} tall />}>
           <HoldingsBlock work={work} thisWeek={thisWeek} />

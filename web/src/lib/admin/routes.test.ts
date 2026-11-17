@@ -237,7 +237,7 @@ describe("the archive", () => {
       "Corrections",
       "Fine-tune jobs",
       "Trajectory",
-      "Leaderboard (old)",
+      "Old leaderboard",
       "Rubric scores by category",
       "Gap closure",
       "Learner tutor",

@@ -128,6 +128,7 @@ export async function loadHours(args: {
             minute: true,
             activeSeconds: true,
             isDemo: true,
+            surface: true,
           },
         }),
       [],

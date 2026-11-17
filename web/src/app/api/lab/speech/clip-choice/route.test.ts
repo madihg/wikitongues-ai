@@ -101,7 +101,6 @@ describe("GET /api/lab/speech/clip-choice", () => {
     for (const g of [
       grant({ grantedAt: new Date("2026-11-20T00:00:00Z") }),
       grant({ withdrawn: true }),
-      grant({ consent: { version: "2026-01-01-v0" } }),
       null,
     ]) {
       mockPrisma.consentGrant.findFirst.mockResolvedValue(g);
@@ -165,12 +164,8 @@ describe("PUT /api/lab/speech/clip-choice", () => {
     expect(mockPrisma.speakerProfile.upsert).not.toHaveBeenCalled();
   });
 
-  it("428 with no consent for the current version, or after a withdrawal", async () => {
-    for (const g of [
-      null,
-      grant({ withdrawn: true }),
-      grant({ consent: { version: "2026-01-01-v0" } }),
-    ]) {
+  it("428 with no consent, or after a withdrawal", async () => {
+    for (const g of [null, grant({ withdrawn: true })]) {
       mockPrisma.consentGrant.findFirst.mockResolvedValue(g);
       const res = await put({ tier: "open" });
       expect(res.status).toBe(428);

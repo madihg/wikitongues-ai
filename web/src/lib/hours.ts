@@ -94,6 +94,8 @@ export interface HoursPing {
   minute: Date;
   activeSeconds: number;
   isDemo: boolean;
+  /** The kind of work; researcher pages count at a quarter. */
+  surface?: string | null;
 }
 
 export interface HoursNote {

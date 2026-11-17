@@ -23,7 +23,7 @@ export const HOURS_COPY = {
   title: "Time on Platform",
   lead: "Who worked, and for how many hours. One row per person for the week shown.",
   active:
-    "Time with the platform open and in use. It stops after 5 minutes without typing, clicking, recording or listening.",
+    "Time with the platform open and in use. It stops after a minute without typing, clicking, recording or listening. Time on researcher pages counts at a quarter.",
   recounted:
     "The same rule as the old estimate, with clips, listening, checking and saved edits added back.",
   old: "The figure shown before the clock was added. It only counted text submissions made less than 30 minutes apart. It is kept as it was.",

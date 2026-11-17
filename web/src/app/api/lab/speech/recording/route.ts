@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sanitizeDialect } from "@/lib/dialects";
 import { labGate } from "@/lib/speech/lab-route";
-import { CONSENT_VERSION } from "@/lib/speech/consent-text";
+import { consentStands } from "@/lib/speech/consent-text";
 import { FrozenPromptError, assertRecordable } from "@/lib/speech/guard";
 import {
   LANGUAGES,
@@ -251,7 +251,8 @@ export async function POST(req: Request) {
     throw e;
   }
 
-  // Consent for the CURRENT version, and what its answers allow.
+  // Consent that still stands (any version, not withdrawn), and what its
+  // answers allow.
   const grant = await prisma.consentGrant.findFirst({
     where: { userId: annotatorId },
     orderBy: { grantedAt: "desc" },
@@ -259,10 +260,11 @@ export async function POST(req: Request) {
       commercialLicensing: true,
       voiceCloning: true,
       speakerId: true,
+      withdrawn: true,
       consent: { select: { id: true, version: true, method: true } },
     },
   });
-  if (!grant || grant.consent.version !== CONSENT_VERSION) {
+  if (!grant || !consentStands(grant)) {
     return NextResponse.json(
       {
         error: "Consent is required before recording.",

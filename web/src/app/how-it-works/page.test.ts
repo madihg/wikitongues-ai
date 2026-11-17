@@ -17,7 +17,7 @@ const { default: AdminRoute } = await import("../(app)/admin/how-it-works/page")
 
 describe("the platform's how-it-works routes", () => {
   it("redirect to the marketing site's page, the same URL the nav links to", () => {
-    expect(PUBLIC_HOW_IT_WORKS_URL).toMatch(/^https:\/\/.+\/how-it-works\/?$/);
+    expect(PUBLIC_HOW_IT_WORKS_URL).toMatch(/^https:\/\/[^/]+\/$/);
     expect(() => PublicRoute()).toThrow(`REDIRECT:${PUBLIC_HOW_IT_WORKS_URL}`);
     expect(() => AdminRoute()).toThrow(`REDIRECT:${PUBLIC_HOW_IT_WORKS_URL}`);
     expect(redirect).toHaveBeenCalledTimes(2);

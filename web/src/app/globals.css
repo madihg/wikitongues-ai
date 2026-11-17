@@ -110,14 +110,32 @@ samp,
   font-family: var(--wt-font-mono);
 }
 
-a {
-  color: inherit;
-  transition:
-    color var(--transition-default),
-    opacity var(--transition-default);
+/* In the base layer on purpose. Unlayered, `a:hover` beat every Tailwind
+   hover utility, so a link styled as a tab or a button turned accent on
+   hover whatever its own classes said (purple text on the ink Speech band,
+   accent text on an accent button). */
+@layer base {
+  a {
+    color: inherit;
+    transition:
+      color var(--transition-default),
+      opacity var(--transition-default);
+  }
+  a:hover {
+    color: var(--accent-text);
+  }
 }
-a:hover {
-  color: var(--accent-text);
+
+/* One select everywhere: our own chevron, set in from the edge. The native
+   arrow sat against the border. Unlayered so the room for the chevron holds
+   against a px-* utility on the element. */
+select:not([multiple]) {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b6b70' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.5rem;
 }
 
 /* Focus management */

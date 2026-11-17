@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireResearcherPage } from "@/lib/admin/page-gate";
-import { ARCHIVE, TOOLS } from "@/lib/admin/routes";
+import { TOOLS } from "@/lib/admin/routes";
 import { PERSONAS, PUBLIC_HOW_IT_WORKS_URL } from "@/lib/personas";
 
 /**
@@ -56,11 +56,11 @@ export default async function MorePage() {
               className={row}
             >
               <span className="w-44 shrink-0 text-sm font-medium text-accent-text">
-                How it works
+                Public site
                 <span className="sr-only"> (opens in a new tab)</span>
               </span>
               <span className="text-sm text-text-secondary">
-                The public page that explains the project. It opens the site.
+                The one page that explains the project to everyone else.
               </span>
             </a>
           </li>
@@ -88,32 +88,6 @@ export default async function MorePage() {
               </div>
             </li>
           )}
-        </ul>
-      </section>
-
-      <section aria-labelledby="more-archive" className="mt-10">
-        <h2
-          id="more-archive"
-          className="font-mono text-xs uppercase tracking-widest text-text-muted"
-        >
-          Archive
-        </h2>
-        <p className="mt-2 text-sm text-text-tertiary">
-          Nothing was deleted. Each page opens as it was.
-        </p>
-        <ul className="mt-3 divide-y divide-border rounded-lg border border-border bg-surface">
-          {ARCHIVE.map((a) => (
-            <li key={a.href}>
-              <Link href={a.href} className={row}>
-                <span className="w-44 shrink-0 text-sm font-medium text-accent-text">
-                  {a.label}
-                </span>
-                <span className="text-sm text-text-secondary">
-                  {a.sentence}
-                </span>
-              </Link>
-            </li>
-          ))}
         </ul>
       </section>
     </div>

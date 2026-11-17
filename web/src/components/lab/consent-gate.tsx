@@ -3,8 +3,8 @@
 import { useState } from "react";
 
 /**
- * The consent screen, shown before the first recording and again whenever the
- * consent text version changes. Withdrawal is explained first. Nothing is
+ * The consent screen, shown once, before the first recording (and again only
+ * after a withdrawal). Withdrawal is explained first. Nothing is
  * pre-checked: the four questions are separate, each starts unchecked, and
  * the agree box starts unchecked too. The text comes from
  * GET /api/lab/consent (server-owned and versioned), not from this file.

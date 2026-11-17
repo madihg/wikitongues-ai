@@ -56,14 +56,15 @@ describe("currentClipChoice: when the speaker is asked", () => {
     ).toBeNull();
   });
 
-  it("no consent, a withdrawal or an older consent text: asked again", () => {
+  it("no consent or a withdrawal: asked again; an older consent text still stands", () => {
     expect(currentClipChoice(stored(), null, V)).toBeNull();
     expect(
       currentClipChoice(stored(), grant({ withdrawn: true }), V),
     ).toBeNull();
+    // Consent is given once: a wording change does not ask again.
     expect(
       currentClipChoice(stored(), grant({ version: "2026-01-01-v0" }), V),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 
   it("a new consent grant (new text version, or consenting again after withdrawing) asks again", () => {

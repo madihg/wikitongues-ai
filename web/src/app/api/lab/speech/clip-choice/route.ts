@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
-import { CONSENT_VERSION } from "@/lib/speech/consent-text";
+import { CONSENT_VERSION, consentStands } from "@/lib/speech/consent-text";
 import { currentClipChoice, parseClipChoice } from "@/lib/speech/clip-choice";
 
 /**
@@ -77,7 +77,7 @@ export async function PUT(req: Request) {
 
   const body = await req.json().catch(() => null);
   const grant = await latestGrant(gate.userId);
-  if (!grant || grant.withdrawn || grant.version !== CONSENT_VERSION) {
+  if (!grant || !consentStands(grant)) {
     return NextResponse.json(
       {
         error: "Consent is required before choosing.",
