@@ -1461,8 +1461,8 @@ export function AnnotationInterface() {
   const authoringBoxes = (
     <>
       {goldHint && (
-        <div className="mt-3 flex items-start gap-2 rounded-md border border-accent/30 bg-accent-subtle px-3 py-2 text-xs text-accent-text">
-          <span className="shrink-0 font-semibold">For this one:</span>
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
+          <span className="shrink-0 font-semibold text-text-primary">For this one:</span>
           <span>{goldHint}</span>
         </div>
       )}
@@ -1783,9 +1783,9 @@ export function AnnotationInterface() {
 
       {/* First screen only: plain-English framing of the whole episode. */}
       {step === "prompt" && !coldLocked && (
-        <div className="mb-6 rounded-lg border border-accent/30 bg-accent-subtle p-5">
-          <p className="text-sm leading-relaxed text-accent-text">
-            <span className="font-semibold">
+        <div className="mb-6 rounded-lg border border-border bg-surface-sunken p-5">
+          <p className="text-sm leading-relaxed text-text-secondary">
+            <span className="font-semibold text-text-primary">
               You are teaching an AI to speak Igala.
             </span>{" "}
             Each round: write how YOU would say it, pick the better of two AI
