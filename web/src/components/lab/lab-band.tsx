@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { getSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import {
   browserStore,
   ensureDemoSession,
+  demoStartsOn,
   readDemoPreference,
   shouldAutoApplyDemo,
   writeDemoPreference,
@@ -98,16 +100,29 @@ function Band({
   useEffect(() => {
     const urlDemo = demoFromSearch(window.location.search);
     setDemo(urlDemo);
+    if (!researcher || urlDemo) return;
+    let cancelled = false;
     // A researcher who left the switch on lands in demo on every Speech page.
-    if (
-      shouldAutoApplyDemo({
-        researcher,
-        urlDemo,
-        preferenceOn: readDemoPreference(browserStore()),
-      })
-    ) {
-      void turnOn(true);
-    }
+    // With no stored choice it is off, except for the owner (demoStartsOn),
+    // so the signed-in email is read before deciding.
+    void getSession().then((session) => {
+      if (cancelled) return;
+      if (
+        shouldAutoApplyDemo({
+          researcher,
+          urlDemo,
+          preferenceOn: readDemoPreference(
+            browserStore(),
+            demoStartsOn(session?.user?.email),
+          ),
+        })
+      ) {
+        void turnOn(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
     // Runs once per page load: the address is read, never watched.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
