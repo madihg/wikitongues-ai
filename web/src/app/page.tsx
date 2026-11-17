@@ -3,20 +3,17 @@
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { getRedirectForRole } from "@/lib/roles";
 
 function LoginCard({
   title,
   description,
-  registerHref,
   onSubmit,
   error,
   loading,
 }: {
   title: string;
   description: string;
-  registerHref: string;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   error: string;
   loading: boolean;
@@ -79,13 +76,7 @@ function LoginCard({
         </button>
 
         <p className="text-center text-sm text-text-tertiary">
-          Don&apos;t have an account?{" "}
-          <Link
-            href={registerHref}
-            className="text-accent-text hover:underline"
-          >
-            Register
-          </Link>
+          Accounts are by invitation.
         </p>
       </form>
     </div>
@@ -155,7 +146,6 @@ export default function Home() {
         <LoginCard
           title="Learner"
           description="Practice and learn languages"
-          registerHref="/register?role=learner"
           onSubmit={(e) => handleLogin(e, setLearnerError, setLearnerLoading)}
           error={learnerError}
           loading={learnerLoading}
@@ -163,7 +153,6 @@ export default function Home() {
         <LoginCard
           title="Annotator / Researcher"
           description="Evaluate and annotate model outputs"
-          registerHref="/register"
           onSubmit={(e) =>
             handleLogin(e, setAnnotatorError, setAnnotatorLoading)
           }

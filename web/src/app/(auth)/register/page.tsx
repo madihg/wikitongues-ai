@@ -9,6 +9,7 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const roleParam = searchParams.get("role");
   const isLearner = roleParam === "learner";
+  const invite = searchParams.get("invite");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -27,6 +28,7 @@ function RegisterForm() {
         name: formData.get("name"),
         password: formData.get("password"),
         role: isLearner ? "LEARNER" : "ANNOTATOR",
+        invite,
       }),
     });
 
@@ -37,6 +39,28 @@ function RegisterForm() {
     } else {
       router.push(isLearner ? "/login?role=learner" : "/login");
     }
+  }
+
+  if (!invite) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-6 text-center shadow-sm">
+          <h1 className="text-xl font-semibold text-text-primary">
+            Accounts are by invitation
+          </h1>
+          <p className="mt-2 text-sm text-text-secondary">
+            Ask the Wikitongues team for a link. If you already have an
+            account, sign in.
+          </p>
+          <Link
+            href="/login"
+            className="mt-4 inline-flex min-h-[44px] items-center text-sm font-medium text-accent-text hover:underline"
+          >
+            Sign in
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
