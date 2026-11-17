@@ -55,7 +55,7 @@ const VERIFICATION_LABELS: Record<string, string> = {
 };
 
 function annotatorName(a: AnnotatorLite): string {
-  return a.name ?? a.email;
+  return a.name ?? (a.email || "Annotator");
 }
 
 function formatDateTime(iso: string): string {
@@ -667,7 +667,11 @@ function DetailBody({
         <p className="mt-1 text-sm font-medium text-text-primary">
           {annotatorName(detail.annotator)}
         </p>
-        <p className="text-xs text-text-tertiary">{detail.annotator.email}</p>
+        {detail.annotator.email && (
+          <p className="text-xs text-text-tertiary">
+            {detail.annotator.email}
+          </p>
+        )}
       </section>
 
       {detail.prompt && <PromptSection prompt={detail.prompt} />}
