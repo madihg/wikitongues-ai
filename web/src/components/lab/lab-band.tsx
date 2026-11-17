@@ -13,6 +13,7 @@ import {
   writeDemoPreference,
 } from "@/lib/demo-switch";
 import { demoFromSearch, withDemo } from "@/lib/speech/demo-url";
+import { useNavWaiting } from "@/components/use-nav-waiting";
 
 /**
  * The Speech tabs every speaker sees, in order. Record is the first tab and
@@ -73,6 +74,14 @@ function Band({
   // no address to read). Every tab link carries it, so demo survives moving
   // between Record, Listen and Check.
   const [demo, setDemo] = useState<string | null>(null);
+  const waiting = useNavWaiting(true);
+  const tabWaiting: Record<string, number> = waiting
+    ? {
+        "/speak": waiting.record,
+        "/speak/listen": waiting.listen,
+        "/speak/check": waiting.check,
+      }
+    : {};
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -133,7 +142,7 @@ function Band({
   };
 
   return (
-    <header className="flex h-14 items-center justify-between gap-3 bg-foreground px-4 text-background sm:px-8">
+    <header className="flex h-14 items-center justify-between gap-3 bg-inverse px-4 text-on-inverse sm:px-8">
       <span className="shrink-0 font-mono text-xs tracking-widest">SPEECH</span>
       <nav
         aria-label="Speech"
@@ -146,11 +155,22 @@ function Band({
             aria-current={active === tab.href ? "page" : undefined}
             className={`inline-flex min-h-[44px] shrink-0 cursor-pointer items-center rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] ${
               active === tab.href
-                ? "bg-background/15 text-background"
-                : "text-background/70 hover:bg-background/10 hover:text-background"
+                ? "bg-on-inverse/15 text-on-inverse"
+                : "text-on-inverse-2 hover:bg-on-inverse/10 hover:text-on-inverse"
             }`}
           >
             {tab.label}
+            {/* What waits behind this tab. Nothing at zero, and nothing for
+                a research lead (the server sends a lead no counts). */}
+            {(tabWaiting[tab.href] ?? 0) > 0 && (
+              <span
+                data-testid="tab-count"
+                className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-on-inverse px-2 py-0.5 text-xs font-semibold tabular-nums text-inverse"
+              >
+                {tabWaiting[tab.href]}
+                <span className="sr-only"> waiting</span>
+              </span>
+            )}
           </Link>
         ))}
         {researcher && (
@@ -169,8 +189,8 @@ function Band({
             }
             className={`ml-2 inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] disabled:opacity-60 ${
               demo
-                ? "border-background bg-background text-foreground"
-                : "border-background/40 text-background/80 hover:bg-background/10"
+                ? "border-on-inverse bg-on-inverse text-inverse"
+                : "border-on-inverse/40 text-on-inverse-2 hover:bg-on-inverse/10"
             }`}
           >
             {failed ? "Demo failed" : demo ? "Demo on" : "Demo"}

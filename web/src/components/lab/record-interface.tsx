@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnswerEditorDrawer } from "@/components/answer-editor";
 import { ConsentGate } from "./consent-gate";
 import { ClipChoiceCard } from "./tier-default";
 import { GoodClipGuide } from "./good-clip-guide";
@@ -80,6 +81,7 @@ export function RecordInterface() {
   const demoRef = useRef<string | null>(null);
 
   const [draft, setDraft] = useState("");
+  const [editingAnswer, setEditingAnswer] = useState(false);
   const [lockedText, setLockedText] = useState<string | null>(null);
   // The answer row the first clip created (when the answer was written here),
   // so the second clip attaches to it instead of making another.
@@ -265,12 +267,38 @@ export function RecordInterface() {
           <div className="mt-4 border-t border-border pt-4">
             {task.ownAnswer ? (
               <>
-                <p className="text-sm font-semibold text-text-primary">
-                  Your answer
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-text-primary">
+                    Your answer
+                  </p>
+                  {/* Fix a spelling or a wrong sentence here, before reading
+                      it aloud, instead of hunting for it in My Work. Not in
+                      demo: the editor changes the real answer. */}
+                  {!demoRef.current && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingAnswer(true)}
+                      className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-3 text-sm font-medium text-text-secondary hover:bg-surface-sunken focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                    >
+                      Edit answer
+                    </button>
+                  )}
+                </div>
                 <p lang="ig" className="igala mt-1 text-base text-text-primary">
                   {task.ownAnswer.text}
                 </p>
+                {editingAnswer && (
+                  <AnswerEditorDrawer
+                    target={{ type: "cold", id: task.ownAnswer.id }}
+                    onClose={() => setEditingAnswer(false)}
+                    onSaved={() => {
+                      // Read the corrected text back from the server, so the
+                      // clip is recorded against what was actually saved.
+                      setEditingAnswer(false);
+                      void loadNext();
+                    }}
+                  />
+                )}
               </>
             ) : lockedText !== null ? (
               <>

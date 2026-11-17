@@ -46,7 +46,7 @@ const scored = (
   person: Record<string, number | "na">,
   modelSide: "a" | "b" = "a",
 ) => ({
-  version: "provisional-1",
+  version: "lydia-1",
   scores: modelSide === "a" ? { a: model, b: person } : { a: person, b: model },
 });
 
@@ -200,7 +200,7 @@ describe("axisTable: the score lines for both clips", () => {
   it("averages each line per clip and takes the gap inside the round", () => {
     const rows = many(30).map((r, i) => ({
       ...r,
-      axes: scored({ tone: 2, pace: 4 }, { tone: i % 2 ? 5 : 4, pace: 4 }),
+      axes: scored({ tone: 2, flow: 4 }, { tone: i % 2 ? 5 : 4, flow: 4 }),
     }));
     const t = axisTable(roundsAgainstHuman(rows, MODEL));
     const tone = t.lines.find((l) => l.key === "tone")!;
@@ -209,11 +209,11 @@ describe("axisTable: the score lines for both clips", () => {
     expect(tone.person).toBe(4.5);
     expect(tone.gap!.mean).toBeCloseTo(-2.5, 6);
     expect(tone.gap!.distinguishable).toBe(true);
-    const pace = t.lines.find((l) => l.key === "pace")!;
+    const pace = t.lines.find((l) => l.key === "flow")!;
     expect(pace.gap!.mean).toBe(0);
     expect(pace.gap!.distinguishable).toBe(false);
     // A line nobody rated is present, empty.
-    expect(t.lines.find((l) => l.key === "naturalness")).toMatchObject({
+    expect(t.lines.find((l) => l.key === "prosody")).toMatchObject({
       rated: 0,
       model: null,
       person: null,
@@ -254,18 +254,18 @@ describe("axisTable: the score lines for both clips", () => {
   it("leaves N/A out of its own line only", () => {
     const rows = many(2).map((r) => ({
       ...r,
-      axes: scored({ tone: "na", pace: 3 }, { tone: 4, pace: 3 }),
+      axes: scored({ tone: "na", flow: 3 }, { tone: 4, flow: 3 }),
     }));
     const t = axisTable(roundsAgainstHuman(rows, MODEL));
     expect(t.lines.find((l) => l.key === "tone")!.rated).toBe(0);
-    expect(t.lines.find((l) => l.key === "pace")!.rated).toBe(2);
+    expect(t.lines.find((l) => l.key === "flow")!.rated).toBe(2);
   });
 
   it("leaves out rows stored when only the winner was scored, and counts them", () => {
     const rows = [
       {
         ...row(),
-        axes: { version: "provisional-1", target: "a", scores: { tone: 5 } },
+        axes: { version: "lydia-1", target: "a", scores: { tone: 5 } },
       },
       { ...row(), axes: scored({ tone: 2 }, { tone: 4 }) },
     ];
@@ -279,17 +279,17 @@ describe("axisTable: the score lines for both clips", () => {
       {
         ...row(),
         axes: {
-          version: "lydia-1",
-          scores: { a: { slot: 5 }, b: { slot: 1 } },
+          version: "provisional-1",
+          scores: { a: { naturalness: 5 }, b: { naturalness: 1 } },
         },
       },
       { ...row(), axes: scored({ tone: 2 }, { tone: 4 }) },
     ];
     const t = axisTable(roundsAgainstHuman(rows, MODEL));
-    expect(t.version).toBe("provisional-1");
+    expect(t.version).toBe("lydia-1");
     expect(t.otherVersionExcluded).toBe(1);
     expect(t.lines.every((l) => l.rated <= 1)).toBe(true);
-    expect(t.lines.map((l) => l.key)).not.toContain("slot");
+    expect(t.lines.map((l) => l.key)).not.toContain("naturalness");
   });
 });
 

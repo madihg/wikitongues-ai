@@ -19,6 +19,9 @@ vi.mock("@/components/lab/use-speech-layer", () => ({
   useSpeechWaiting: () => 4,
 }));
 vi.mock("@/components/tone/use-tone-count", () => ({ useToneCount: () => 3 }));
+vi.mock("@/components/use-nav-waiting", () => ({
+  useNavWaiting: () => ({ annotate: 0, speech: 4, record: 4, listen: 0, check: 0, fix: 0 }),
+}));
 
 import { Sidebar, drawerKeyStep } from "./sidebar";
 

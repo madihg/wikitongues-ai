@@ -28,6 +28,12 @@ vi.mock("@/components/lab/use-speech-layer", () => ({
 }));
 
 // Tone-mark pass 2: null until the server says this person was given items.
+vi.mock("@/components/use-nav-waiting", () => ({
+  useNavWaiting: () =>
+    state.lab && typeof state.waiting === "number"
+      ? { annotate: 0, speech: state.waiting, record: state.waiting, listen: 0, check: 0, fix: 0 }
+      : null,
+}));
 vi.mock("@/components/tone/use-tone-count", () => ({
   useToneCount: () => state.tone,
 }));

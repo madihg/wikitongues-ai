@@ -15,22 +15,23 @@ import {
 } from "./speech-axes";
 
 describe("speech axes config", () => {
-  it("lists exactly the five provisional axes, in order", () => {
+  it("lists exactly Lydia's six axes, in order", () => {
     expect(SPEECH_AXES.map((a) => a.key)).toEqual([
       "intelligibility",
       "pronunciation",
+      "loanwords",
       "tone",
-      "naturalness",
-      "pace",
+      "prosody",
+      "flow",
     ]);
     for (const a of SPEECH_AXES) {
       expect(a.label.length).toBeGreaterThan(0);
       expect(a.hint).not.toMatch(/\u2014|\u2013/);
     }
   });
-  it("labels the block as provisional", () => {
+  it("labels the block as the speech rubric", () => {
     expect(AXES_BLOCK_LABEL).toBe(
-      "Provisional speech axes, Lydia's rubric layer replaces these",
+      "Speech rubric",
     );
   });
 });
@@ -54,7 +55,7 @@ describe("sanitizeAxes", () => {
   });
   it("keeps both sides, 0 to 5 and na, whatever the verdict", () => {
     const raw = {
-      a: { tone: 0, pace: 5, naturalness: "na" },
+      a: { tone: 0, flow: 5, prosody: "na" },
       b: { tone: 2, intelligibility: 4 },
     };
     for (const winner of ["a", "b", "tie"]) {
@@ -69,13 +70,13 @@ describe("sanitizeAxes", () => {
     expect(out).not.toHaveProperty("target");
   });
   it("accepts one side only, filling the other with an empty set", () => {
-    expect(sanitizeAxes({ b: { pace: 1 } }, "a")).toEqual({
+    expect(sanitizeAxes({ b: { flow: 1 } }, "a")).toEqual({
       version: AXES_VERSION,
-      scores: { a: {}, b: { pace: 1 } },
+      scores: { a: {}, b: { flow: 1 } },
     });
-    expect(sanitizeAxes({ a: { pace: "na" }, b: {} }, "b")).toEqual({
+    expect(sanitizeAxes({ a: { flow: "na" }, b: {} }, "b")).toEqual({
       version: AXES_VERSION,
-      scores: { a: { pace: "na" }, b: {} },
+      scores: { a: { flow: "na" }, b: {} },
     });
   });
   it("is invalid for a malformed value or key on either side", () => {
@@ -106,11 +107,11 @@ describe("sanitizeAxes", () => {
   });
   it("refuses the flat legacy shape now that the screen sends both sides", () => {
     expect(sanitizeAxes({ tone: 3 }, "a")).toBe("invalid");
-    expect(sanitizeAxes({ tone: 3, pace: "na" }, "tie")).toBe("invalid");
+    expect(sanitizeAxes({ tone: 3, flow: "na" }, "tie")).toBe("invalid");
   });
   it("a both-unusable verdict takes no axes", () => {
     expect(sanitizeAxes({ a: { tone: 3 } }, "both_unusable")).toBe("invalid");
-    expect(sanitizeAxes({ b: { pace: "na" } }, "both_unusable")).toBe(
+    expect(sanitizeAxes({ b: { flow: "na" } }, "both_unusable")).toBe(
       "invalid",
     );
     expect(sanitizeAxes(undefined, "both_unusable")).toBeNull();
@@ -154,10 +155,10 @@ describe("readStoredAxes", () => {
 });
 
 describe("the axes version mechanism", () => {
-  it("keeps the provisional set active while the Lydia rubric is not ready", () => {
-    expect(LYDIA_RUBRIC_READY).toBe(false);
-    expect(AXES_VERSION).toBe("provisional-1");
-    expect(SPEECH_AXES).toBe(PROVISIONAL_AXES.axes);
+  it("scores new judgments under Lydia's rubric since Nov 17 2026", () => {
+    expect(LYDIA_RUBRIC_READY).toBe(true);
+    expect(AXES_VERSION).toBe("lydia-1");
+    expect(SPEECH_AXES).toBe(LYDIA_AXES.axes);
   });
   it("switches the active set on the guard constant alone", () => {
     expect(activeAxesSet(false)).toBe(PROVISIONAL_AXES);
@@ -176,15 +177,15 @@ describe("the axes version mechanism", () => {
       sanitizeAxes({ a: { tone: 4 } }, "a", "provisional-1"),
     ).toMatchObject({ version: "provisional-1" });
     expect(
-      sanitizeAxes({ a: { rubric_slot: 2 }, b: {} }, "a", "lydia-1"),
+      sanitizeAxes({ a: { loanwords: 2 }, b: {} }, "a", "lydia-1"),
     ).toEqual({
       version: "lydia-1",
-      scores: { a: { rubric_slot: 2 }, b: {} },
+      scores: { a: { loanwords: 2 }, b: {} },
     });
     // a key from one set is not valid in the other, on either side
-    expect(sanitizeAxes({ a: { tone: 4 } }, "a", "lydia-1")).toBe("invalid");
-    expect(sanitizeAxes({ b: { tone: 4 } }, "a", "lydia-1")).toBe("invalid");
-    expect(sanitizeAxes({ a: { rubric_slot: 2 } }, "a", "provisional-1")).toBe(
+    expect(sanitizeAxes({ a: { naturalness: 4 } }, "a", "lydia-1")).toBe("invalid");
+    expect(sanitizeAxes({ b: { naturalness: 4 } }, "a", "lydia-1")).toBe("invalid");
+    expect(sanitizeAxes({ a: { loanwords: 2 } }, "a", "provisional-1")).toBe(
       "invalid",
     );
     expect(sanitizeAxes({ a: { tone: 4 } }, "a", "nope")).toBe("invalid");
@@ -195,11 +196,12 @@ describe("the axes version mechanism", () => {
     });
   });
   it("reads a stored row against the rubric it was scored under", () => {
-    const row = { version: "lydia-1", scores: { a: { rubric_slot: 1 }, b: {} } };
+    const row = { version: "lydia-1", scores: { a: { loanwords: 1 }, b: {} } };
     expect(readStoredAxes(row)).toEqual(row);
-    // provisional keys are not lydia-1 keys, and an unknown version is unreadable
+    // a key only the stand-in set had is not a lydia-1 key, and an unknown
+    // version is unreadable
     expect(
-      readStoredAxes({ version: "lydia-1", scores: { a: { tone: 1 }, b: {} } }),
+      readStoredAxes({ version: "lydia-1", scores: { a: { naturalness: 1 }, b: {} } }),
     ).toBeNull();
     expect(
       readStoredAxes({ version: "lydia-2", scores: { a: {}, b: {} } }),

@@ -136,7 +136,7 @@ export function SpeechCandidates({ rows }: { rows: CandidateRow[] }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="promote-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
         >
           <div className="w-full max-w-md rounded-lg border border-border bg-surface p-6 shadow-lg">
             <h3 id="promote-title" className="text-base font-semibold text-text-primary">

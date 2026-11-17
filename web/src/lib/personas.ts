@@ -84,7 +84,7 @@ export interface NavOptions {
    */
   lab?: boolean;
   /** What is waiting, per kind of work. A number shows only above zero. */
-  waiting?: { annotate?: number; speech?: number };
+  waiting?: { annotate?: number; speech?: number; fix?: number };
   /**
    * Tone-mark pass 2: how many items wait for this person. Set only when the
    * server says the person has been given tone items (waiting or done);
@@ -147,7 +147,11 @@ function workLinks(speechOn: boolean, options: NavOptions): NavLink[] {
     );
   }
   links.push(
-    { href: "/annotator/history", label: "My Work" },
+    // Answers of their own that need a fix.
+    withCount(
+      { href: "/annotator/history", label: "My Work" },
+      options.waiting?.fix,
+    ),
     { href: "/annotator/rubric", label: "Rubric" },
   );
   return links;
