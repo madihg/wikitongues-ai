@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
+import { sessionIsLead } from "@/lib/admin/lead-route";
+import { annotatorForViewer } from "@/lib/admin/annotator-label";
 import { bucketLabel, rubricV2Label } from "@/lib/buckets";
 import { failureTagLabel } from "@/lib/failure-tags";
 import { dialectLabel } from "@/lib/dialects";
@@ -47,14 +49,16 @@ export async function GET(
 
   // isOwn: the reader wrote this row. The drawer then opens the meaning, the
   // reason and the written "why" for editing (own rows only, decision 4).
-  if (type === "pairwise") return pairwiseDetail(id, userId);
-  if (type === "cold") return coldDetail(id, userId);
-  return editDetail(id, userId);
+  // Names are for research leads. Everyone else sees a stable code.
+  const lead = await sessionIsLead();
+  if (type === "pairwise") return pairwiseDetail(id, userId, lead);
+  if (type === "cold") return coldDetail(id, userId, lead);
+  return editDetail(id, userId, lead);
 }
 
 // ─── pairwise (read-only) ────────────────────────────────────────────────────
 
-async function pairwiseDetail(id: string, viewerId: string | null) {
+async function pairwiseDetail(id: string, viewerId: string | null, lead: boolean) {
   const c = await prisma.pairwiseComparison.findUnique({
     where: { id },
     include: {
@@ -145,7 +149,7 @@ async function pairwiseDetail(id: string, viewerId: string | null) {
     createdAt: c.createdAt.toISOString(),
     editable: false,
     isOwn: c.annotator.id === viewerId,
-    annotator: c.annotator,
+    annotator: annotatorForViewer(c.annotator, { lead, userId: viewerId }),
     prompt: prompt
       ? {
           promptId: prompt.promptId,
@@ -205,7 +209,7 @@ async function pairwiseDetail(id: string, viewerId: string | null) {
 
 // ─── cold (editable: answerText, verificationStatus) ─────────────────────────
 
-async function coldDetail(id: string, viewerId: string | null) {
+async function coldDetail(id: string, viewerId: string | null, lead: boolean) {
   // Explicit select (not include) - prod may lag the client on newly added
   // nullable columns (e.g. instructionIg), and an unscoped include RETURNS
   // all scalars, which 500s. List exactly what the response below consumes.
@@ -237,7 +241,7 @@ async function coldDetail(id: string, viewerId: string | null) {
     createdAt: a.createdAt.toISOString(),
     editable: true,
     isOwn: a.annotator.id === viewerId,
-    annotator: a.annotator,
+    annotator: annotatorForViewer(a.annotator, { lead, userId: viewerId }),
     prompt: a.prompt
       ? {
           promptId: a.prompt.promptId,
@@ -258,7 +262,7 @@ async function coldDetail(id: string, viewerId: string | null) {
 
 // ─── edit (editable: correctedText, verificationStatus) ──────────────────────
 
-async function editDetail(id: string, viewerId: string | null) {
+async function editDetail(id: string, viewerId: string | null, lead: boolean) {
   const e = await prisma.outputEdit.findUnique({
     where: { id },
     include: {
@@ -283,7 +287,7 @@ async function editDetail(id: string, viewerId: string | null) {
     createdAt: e.createdAt.toISOString(),
     editable: true,
     isOwn: e.annotator.id === viewerId,
-    annotator: e.annotator,
+    annotator: annotatorForViewer(e.annotator, { lead, userId: viewerId }),
     prompt: p
       ? {
           promptId: p.promptId,

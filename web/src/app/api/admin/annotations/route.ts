@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireResearcher } from "@/lib/api-auth";
+import { sessionIsLead } from "@/lib/admin/lead-route";
+import { annotatorForViewer } from "@/lib/admin/annotator-label";
 import { bucketLabel } from "@/lib/buckets";
 import {
   parseAnnotationsQuery,
@@ -69,8 +71,10 @@ interface EventRow {
 }
 
 export async function GET(req: Request) {
-  const { error } = await requireResearcher();
+  const { error, userId } = await requireResearcher();
   if (error) return error;
+  // Names are for research leads. Everyone else sees a stable code.
+  const viewer = { lead: await sessionIsLead(), userId };
 
   const query = parseAnnotationsQuery(new URL(req.url).searchParams);
   const { annotatorId, type, bucket, includeDemo, limit, offset } = query;
@@ -289,14 +293,17 @@ export async function GET(req: Request) {
   });
 
   return NextResponse.json({
-    events: page,
+    events: page.map((e) => ({
+      ...e,
+      annotator: annotatorForViewer(e.annotator, viewer),
+    })),
     total,
     limit,
     offset,
     // total (not events.length) is the true count, since events is bounded to
     // fetchCap per type rather than the full matching set.
     hasMore: offset + page.length < total,
-    annotators,
+    annotators: annotators.map((u) => annotatorForViewer(u, viewer)),
   });
 }
 

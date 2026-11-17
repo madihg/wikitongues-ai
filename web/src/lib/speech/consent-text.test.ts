@@ -11,7 +11,7 @@ import {
 
 describe("consent text", () => {
   it("has the agreed version string", () => {
-    expect(CONSENT_VERSION).toBe("2026-10-19-v1");
+    expect(CONSENT_VERSION).toBe("2026-11-16-v2");
   });
 
   it("explains withdrawal FIRST, in both the written text and the oral script", () => {

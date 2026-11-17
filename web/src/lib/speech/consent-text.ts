@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
  * text they were given, and speakers are asked again for the new version.
  */
 
-export const CONSENT_VERSION = "2026-10-19-v1";
+export const CONSENT_VERSION = "2026-11-16-v2";
 
 /** Shown wherever Igala text will go. Never filled in by code. */
 export const IGALA_PLACEHOLDER =
@@ -50,9 +50,9 @@ export const WRITTEN_SECTIONS: ConsentSection[] = [
   },
   {
     id: "choice",
-    heading: "You choose what happens to each clip",
+    heading: "You choose what happens to your clips",
     body:
-      "After each recording you pick one of three choices. " +
+      "You pick one of three choices, once, for all your clips. You can change it later, and a change applies to clips you record after it. " +
       "Stays with my community: the clip is only used inside the Igala tools and is never shared. " +
       "Licensed to AI labs: the clip may be shared with AI companies under a signed contract. " +
       "Open to everyone: the clip is published under the CC-BY 4.0 licence, so anyone may use it, including companies, if they credit the project. " +
@@ -99,11 +99,11 @@ export const ORAL_SECTIONS: ConsentSection[] = [
   },
   {
     id: "choice",
-    heading: "What happens to each recording",
+    heading: "What happens to your recordings",
     body:
-      "After each one, you choose. One: it stays with your community and is never shared. " +
-      "Two: it may be licensed to AI companies under a contract, and you are paid a share. " +
-      "Three: it is open to everyone, with credit to the project. Open is permanent. We cannot make it private later.",
+      "You choose once, for all your recordings, and you can change it later. One: they stay with your community and are never shared. " +
+      "Two: they may be licensed to AI companies under a contract, and you are paid a share. " +
+      "Three: they are open to everyone, with credit to the project. Open is permanent. We cannot make a published recording private later.",
   },
   {
     id: "questions",
