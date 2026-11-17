@@ -7,7 +7,9 @@ import { isViewTabActive, type ViewTab } from "@/lib/admin/routes";
 /**
  * The tab bar inside a research view. Same treatment everywhere (accent
  * underline, accent text), so Data, Text model and Speech model read as one
- * family. Scrolls sideways on a narrow screen instead of wrapping.
+ * family. A label starts where the page title starts (no side padding; the
+ * gap does the spacing), so the bar lines up with the heading under it.
+ * Scrolls sideways on a narrow screen instead of wrapping.
  */
 export function ViewTabs({
   tabs,
@@ -23,7 +25,7 @@ export function ViewTabs({
     <div className="mb-6 border-b border-border">
       <nav
         aria-label={label}
-        className="-mb-px flex items-stretch gap-1 overflow-x-auto"
+        className="-mb-px flex items-stretch gap-6 overflow-x-auto"
       >
         {tabs.map((tab) => {
           const active = isViewTabActive(pathname, tab);
@@ -33,7 +35,7 @@ export function ViewTabs({
               href={tab.href}
               title={tab.hint}
               aria-current={active ? "page" : undefined}
-              className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+              className={`whitespace-nowrap border-b-2 px-0 py-2.5 text-sm font-medium transition-colors ${
                 active
                   ? "border-accent text-accent-text"
                   : "border-transparent text-text-tertiary hover:border-border-strong hover:text-text-secondary"

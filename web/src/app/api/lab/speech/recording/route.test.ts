@@ -200,17 +200,22 @@ describe("POST /api/lab/speech/recording: refusals", () => {
     expect(created()).toBe(0);
   });
 
-  it("428 when there is no consent grant, or only one for an older version", async () => {
+  it("428 when there is no consent grant or it was withdrawn; an older version still records", async () => {
     mockPrisma.consentGrant.findFirst.mockResolvedValue(null);
     const none = await post(valid);
     expect(none.status).toBe(428);
     expect((await none.json()).code).toBe("consent_required");
     mockPrisma.consentGrant.findFirst.mockResolvedValue({
       ...GRANT,
-      consent: { ...GRANT.consent, version: "2026-01-01-v0" },
+      withdrawn: true,
     });
     expect((await post(valid)).status).toBe(428);
     expect(created()).toBe(0);
+    mockPrisma.consentGrant.findFirst.mockResolvedValue({
+      ...GRANT,
+      consent: { ...GRANT.consent, version: "2026-01-01-v0" },
+    });
+    expect((await post(valid)).status).not.toBe(428);
   });
 
   it("400 when the tier or an opt-in goes beyond the speaker's consent answers", async () => {

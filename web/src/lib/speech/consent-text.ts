@@ -163,3 +163,16 @@ export function consentTextFor(method: ConsentTextMethod): string {
 export function consentTextHash(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
+
+/**
+ * Whether a speaker's consent stands. Consent is given once (Halim, Nov 17
+ * 2026): a grant made under an earlier text still stands when the wording
+ * changes, because the terms are agreed with each speaker outside the app as
+ * well. Only a withdrawal ends it. Each recording still stores the version
+ * its speaker actually read.
+ */
+export function consentStands(
+  grant: { withdrawn?: boolean | null } | null | undefined,
+): boolean {
+  return !!grant && grant.withdrawn !== true;
+}

@@ -76,7 +76,7 @@ export class ActivityTracker {
       lastInputAt: this.lastInputAt,
     });
     if (span) addSpan(this.ledger, span[0], span[1], this.surface, this.demo);
-    // Recording or playing keeps the 5 minute window open until it stops.
+    // Recording or playing keeps the idle window open until it stops.
     if (this.busy.size > 0 && this.visible) this.lastInputAt = now;
     this.lastTickAt = now;
     this.visible = this.env.visible();

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { shortMemo } from "@/lib/short-memo";
 import { computeAnnotationInsights } from "@/lib/annotation-insights";
 import { computeMethodMetrics } from "@/lib/method-metrics";
 import { loadSpeechMeasure } from "@/lib/admin/measure/data";
@@ -32,6 +33,11 @@ export async function NeedsYouBlock({ work }: { work: Promise<TodayWork> }) {
  * The models. One call to computeAnnotationInsights, one to
  * computeMethodMetrics, and the speech measures when speech is on.
  */
+// Both read the whole corpus and neither depends on the week, so they are
+// kept for a minute: pressing "Last week" no longer recomputes them.
+const insightsNow = shortMemo(60_000, () => computeAnnotationInsights(prisma));
+const metricsNow = shortMemo(60_000, () => computeMethodMetrics(prisma));
+
 export async function ModelsBlock({
   speech,
   lead,
@@ -41,8 +47,8 @@ export async function ModelsBlock({
   lead: boolean;
 }) {
   const [insights, metrics, measure] = await Promise.all([
-    computeAnnotationInsights(prisma),
-    computeMethodMetrics(prisma),
+    insightsNow(),
+    metricsNow(),
     speech ? loadSpeechMeasure(prisma, { human: lead }) : null,
   ]);
   return (

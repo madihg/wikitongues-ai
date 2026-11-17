@@ -47,8 +47,9 @@ export function isResearcher(
  * (/how-it-works and /admin/how-it-works) are redirects to it and nothing else.
  * One constant so nav, in-page CTAs, the redirects and tests cannot drift apart.
  */
-export const PUBLIC_HOW_IT_WORKS_URL =
-  "https://wikitongues-ai-site.vercel.app/how-it-works/";
+// Since Nov 17 2026 the site is one page: the old /how-it-works/ page is
+// gone, so this points at the page itself.
+export const PUBLIC_HOW_IT_WORKS_URL = "https://wikitongues-ai-site.vercel.app/";
 
 export interface NavLink {
   href: string;

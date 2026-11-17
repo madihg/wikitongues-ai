@@ -81,20 +81,20 @@ describe("ActivityTracker", () => {
     expect(serverSeconds()).toBe(3 * 60);
   });
 
-  it("six minutes in front with no input counts 5; input after the pause restarts the clock", async () => {
+  it("six minutes in front with no input counts 1; input after the pause restarts the clock", async () => {
     const { tracker, serverSeconds } = setup();
     await run(tracker, 6 * MINUTE_MS);
-    expect(serverSeconds()).toBe(5 * 60);
+    expect(serverSeconds()).toBe(60);
     await run(tracker, 20 * MINUTE_MS);
-    expect(serverSeconds()).toBe(5 * 60);
+    expect(serverSeconds()).toBe(60);
     tracker.input();
     await run(tracker, 1 * MINUTE_MS, () => tracker.input());
-    expect(serverSeconds()).toBe(6 * 60);
+    expect(serverSeconds()).toBe(2 * 60);
   });
 
   it("a 20 second recording after a long pause counts 20 seconds, with no key press", async () => {
     const { tracker, serverSeconds } = setup();
-    await run(tracker, 10 * MINUTE_MS); // 5 counted, then paused
+    await run(tracker, 10 * MINUTE_MS); // 1 counted, then paused
     const before = serverSeconds();
     tracker.setBusy("recording", true);
     vi.advanceTimersByTime(20 * SEC);

@@ -185,7 +185,7 @@ describe("GET /api/lab/consent", () => {
     });
   });
 
-  it("needsConsent again when the stored grant is for an older version", async () => {
+  it("a grant for an older version still stands: consent is given once", async () => {
     mockPrisma.consentGrant.findFirst.mockResolvedValue({
       id: "g0",
       grantedAt: new Date("2026-01-01T00:00:00Z"),
@@ -195,7 +195,7 @@ describe("GET /api/lab/consent", () => {
       speakerId: true,
       consent: { version: "2026-01-01-v0", method: "written" },
     });
-    expect((await (await GET()).json()).needsConsent).toBe(true);
+    expect((await (await GET()).json()).needsConsent).toBe(false);
   });
 });
 

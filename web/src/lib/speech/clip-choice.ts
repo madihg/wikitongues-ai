@@ -53,7 +53,9 @@ export function currentClipChoice(
   currentVersion: string,
 ): ClipChoice | null {
   if (!stored || !grant) return null;
-  if (grant.withdrawn || grant.version !== currentVersion) return null;
+  // Any version: consent is given once (see consentStands).
+  void currentVersion;
+  if (grant.withdrawn) return null;
   if (!isTier(stored.defaultTier) || stored.tierChosenAt === null) return null;
   if (time(stored.tierChosenAt) < time(grant.grantedAt)) return null;
   if (stored.defaultTier === "licensed" && !grant.commercialLicensing) {

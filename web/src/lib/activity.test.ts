@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   IDLE_LIMIT_MS,
+  RESEARCH_PAY_SHARE,
   LATE_LIMIT_MS,
   MINUTE_MS,
   activeSpan,
@@ -63,13 +64,13 @@ describe("the rules of section 10.6", () => {
     expect(seconds(ledger)).toBe(0);
   });
 
-  it("six minutes with the tab in front and no input: 5", () => {
+  it("six minutes with the tab in front and no input: 1 (a pause is not paid)", () => {
     const ledger = walk(6 * MINUTE_MS, () => ({
       visible: true,
       busy: false,
       lastInputAt: T0, // the click that opened the page, then nothing
     }));
-    expect(seconds(ledger)).toBe(5 * 60);
+    expect(seconds(ledger)).toBe(60);
   });
 
   it("a 20 second recording counts as 20 active seconds with no key press", () => {
@@ -317,3 +318,26 @@ describe("the kind of work on every screen of the Nov 13 release", () => {
   });
 });
 
+
+describe("researcher pages count at a quarter", () => {
+  const at = (m: number, activeSeconds: number, surface?: string) => ({
+    minute: new Date(Date.UTC(2026, 10, 17, 9, m)),
+    activeSeconds,
+    surface,
+  });
+
+  it("a minute on a researcher page is 15 paid seconds", () => {
+    expect(RESEARCH_PAY_SHARE).toBe(0.25);
+    expect(sumActiveSeconds([at(0, 60, "research")])).toBe(15);
+    expect(sumActiveSeconds([at(0, 60, "annotate")])).toBe(60);
+  });
+
+  it("mixed minutes add up, still capped at 60 per minute", () => {
+    expect(
+      sumActiveSeconds([at(0, 40, "annotate"), at(0, 20, "research")]),
+    ).toBe(45);
+    expect(
+      sumActiveSeconds([at(0, 60, "annotate"), at(0, 60, "research")]),
+    ).toBe(60);
+  });
+});

@@ -20,8 +20,18 @@
 export const MINUTE_MS = 60_000;
 /** The browser sends a beat this often while there is something to send. */
 export const BEAT_INTERVAL_MS = 30_000;
-/** The clock pauses after this long with no input, recording or playback. */
-export const IDLE_LIMIT_MS = 5 * MINUTE_MS;
+/**
+ * The clock pauses after this long with no input, recording or playback.
+ * One minute, not five: pauses are not paid time (Halim, Nov 17 2026). A
+ * minute is kept so reading a long answer between key presses still counts.
+ */
+export const IDLE_LIMIT_MS = MINUTE_MS;
+/**
+ * Time on researcher pages counts at a quarter (Halim, Nov 17 2026): it is
+ * looking at the data, not adding to it. Applied when hours are read, so the
+ * stored seconds stay what the browser measured.
+ */
+export const RESEARCH_PAY_SHARE = 0.25;
 export const MAX_SECONDS_PER_MINUTE = 60;
 /** Beats older than this are refused (a browser that was offline for days). */
 export const LATE_LIMIT_MS = 24 * 60 * MINUTE_MS;
@@ -122,8 +132,8 @@ export interface ActivityFacts {
 
 /**
  * The part of [from, to] that counts as active, or null when none does.
- * Hidden tab: nothing. Recording or playing: all of it. Otherwise: up to 5
- * minutes after the last input.
+ * Hidden tab: nothing. Recording or playing: all of it. Otherwise: up to one
+ * minute after the last input.
  */
 export function activeSpan(
   from: number,
@@ -334,6 +344,8 @@ export function planWrites(
 export interface PingLite {
   minute: Date;
   activeSeconds: number;
+  /** The kind of work. Only "research" changes the sum (RESEARCH_PAY_SHARE). */
+  surface?: string | null;
 }
 
 /**
@@ -345,13 +357,17 @@ export function sumActiveSeconds(pings: PingLite[]): number {
   const perMinute = new Map<number, number>();
   for (const p of pings) {
     const k = p.minute.getTime();
-    perMinute.set(k, (perMinute.get(k) ?? 0) + Math.max(0, p.activeSeconds));
+    const share = p.surface === "research" ? RESEARCH_PAY_SHARE : 1;
+    perMinute.set(
+      k,
+      (perMinute.get(k) ?? 0) + Math.max(0, p.activeSeconds) * share,
+    );
   }
   let total = 0;
   for (const s of perMinute.values()) {
     total += Math.min(MAX_SECONDS_PER_MINUTE, s);
   }
-  return total;
+  return Math.round(total);
 }
 
 /** Sittings: runs of active minutes with no hole longer than `gapMinutes`. */
