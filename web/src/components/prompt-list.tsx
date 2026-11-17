@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { EvalBucket } from "@prisma/client";
-import { BUCKETS, bucketLabel } from "@/lib/buckets";
+import { BUCKETS, bucketFromSearch, bucketLabel } from "@/lib/buckets";
 import { PromptForm } from "./prompt-form";
 
 interface Prompt {
@@ -46,7 +46,12 @@ export function PromptList() {
   const [loading, setLoading] = useState(true);
 
   // Filters
-  const [bucketFilter, setBucketFilter] = useState("");
+  // A link can open the catalog on one category (?bucket=cultural_values).
+  const [bucketFilter, setBucketFilter] = useState(() =>
+    typeof window === "undefined"
+      ? ""
+      : bucketFromSearch(window.location.search),
+  );
   const [languageFilter, setLanguageFilter] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState("");
   const [search, setSearch] = useState("");

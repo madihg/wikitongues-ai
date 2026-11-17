@@ -490,3 +490,13 @@ export const RUBRIC_KEYS = RUBRIC_AXES.map((a) => a.key);
 export function isBucket(value: unknown): value is EvalBucket {
   return typeof value === "string" && BUCKET_KEYS.includes(value as EvalBucket);
 }
+
+/**
+ * The category a catalog link asks for: `?bucket=cultural_values` opens the
+ * prompt catalog on that category. Anything that is not a real category key
+ * is ignored, so a mistyped link shows the whole catalog.
+ */
+export function bucketFromSearch(search: string): string {
+  const key = new URLSearchParams(search).get("bucket") ?? "";
+  return BUCKETS.some((b) => b.key === key) ? key : "";
+}
