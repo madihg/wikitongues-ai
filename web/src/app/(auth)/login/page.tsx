@@ -3,7 +3,6 @@
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { getRedirectForRole } from "@/lib/roles";
 
 export default function LoginPage() {
@@ -104,10 +103,7 @@ export default function LoginPage() {
           </button>
 
           <p className="text-center text-sm text-text-tertiary">
-            Don&apos;t have an account?{" "}
-            <Link href="/register" className="text-accent-text hover:underline">
-              Register
-            </Link>
+            Accounts are by invitation.
           </p>
         </form>
       </div>
