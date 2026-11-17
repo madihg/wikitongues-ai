@@ -233,19 +233,19 @@ describe("POST /api/lab/speech/listen/submit", () => {
     expect(created()).toBe(0);
   });
 
-  it("stores the provisional axes on both clips, tagged with its version", async () => {
+  it("stores the rubric scores on both clips, tagged with its version", async () => {
     const axes = {
-      a: { intelligibility: 4, tone: "na", pace: 0 },
+      a: { intelligibility: 4, tone: "na", flow: 0 },
       b: { intelligibility: 2, tone: 1 },
     };
     expect((await post({ ...valid, axes })).status).toBe(201);
     expect(
       mockPrisma.speechComparison.create.mock.calls[0][0].data.axes,
-    ).toEqual({ version: "provisional-1", scores: axes });
+    ).toEqual({ version: "lydia-1", scores: axes });
   });
 
   it("scores both clips on b and on a tie, and takes no axes on both_unusable", async () => {
-    const axes = { a: { naturalness: 3 }, b: { naturalness: 1 } };
+    const axes = { a: { prosody: 3 }, b: { prosody: 1 } };
     await post({ ...valid, winner: "b", axes });
     await post({ ...valid, winner: "tie", axes });
     for (const call of mockPrisma.speechComparison.create.mock.calls) {

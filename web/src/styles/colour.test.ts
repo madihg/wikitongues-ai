@@ -65,6 +65,48 @@ const PAIRS: [string, string, number][] = [
   ["--accent", "--background", 3],
 ];
 
+/** The dark theme: the light values, with the dark block's roles laid over. */
+function darkVars(): Map<string, string> {
+  const block = css("styles/tokens.css").match(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/);
+  if (!block) throw new Error("no dark theme block in tokens.css");
+  const out = new Map(vars);
+  for (const d of block[1].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) out.set(d[1], d[2].trim());
+  return out;
+}
+
+describe("the dark theme", () => {
+  it("meets the same contrast floors as the light theme, pair for pair", () => {
+    const light = new Map(vars);
+    const dark = darkVars();
+    try {
+      vars.clear();
+      for (const [k, v] of dark) vars.set(k, v);
+      const failing = [
+        ...PAIRS,
+        ["--wt-ink-on-inverse", "--wt-inverse", 4.5] as [string, string, number],
+        ["--wt-ink-on-inverse-2", "--wt-inverse", 4.5] as [string, string, number],
+      ]
+        .map(([fg, bg, least]) => ({ fg, bg, least, got: ratio(fg, bg) }))
+        .filter((p) => p.got < p.least)
+        .map((p) => `${p.fg} on ${p.bg}: ${p.got.toFixed(2)}, needs ${p.least}`);
+      expect(failing).toEqual([]);
+      // A dark page, light text: the block really is a dark theme.
+      expect(luminance(hex("--background"))).toBeLessThan(0.02);
+      expect(luminance(hex("--text-primary"))).toBeGreaterThan(0.7);
+    } finally {
+      vars.clear();
+      for (const [k, v] of light) vars.set(k, v);
+    }
+  });
+
+  it("changes colour roles only, so no component needs to know the theme", () => {
+    const block = css("styles/tokens.css").match(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/)![1];
+    const names = [...block.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]);
+    expect(names.length).toBeGreaterThan(20);
+    expect(names.filter((n) => !n.startsWith("--wt-"))).toEqual([]);
+  });
+});
+
 describe("design tokens, step 3: colour", () => {
   it("every text colour, control edge and focus ring meets its contrast floor", () => {
     const failing = PAIRS.map(([fg, bg, least]) => ({ fg, bg, least, got: ratio(fg, bg) }))

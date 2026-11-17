@@ -8,6 +8,8 @@ import {
 import { staleRecordingIds } from "@/lib/answer-edit";
 import { needsFix } from "@/lib/answer-revisions";
 import { toneCount } from "@/lib/tone/tone-pass";
+import { computeQueueState } from "@/lib/pairing";
+import { loadQueueInputs } from "@/lib/queue-input";
 
 /**
  * "Waiting for you" on the annotator Dashboard (annotator experience spec,
@@ -375,4 +377,63 @@ export function nothingWaiting(counts: WaitingCounts): boolean {
       counts.fix ===
     0
   );
+}
+
+/**
+ * How many prompts Annotate would still serve this person: the same loader
+ * and the same pure function as /api/annotations/next and the Dashboard's
+ * summary, so the three can never show different numbers.
+ */
+export async function countAnnotateWaiting(annotatorId: string): Promise<number> {
+  const [{ queuePrompts }, doneRows, skipRows] = await Promise.all([
+    loadQueueInputs(),
+    prisma.pairwiseComparison.findMany({
+      where: { annotatorId, isDemo: false },
+      select: { promptId: true },
+    }),
+    prisma.promptFlag.findMany({
+      where: { annotatorId },
+      select: { prompt: { select: { promptId: true } } },
+    }),
+  ]);
+  return computeQueueState(
+    queuePrompts,
+    new Set(doneRows.map((r) => r.promptId)),
+    new Set(skipRows.map((r) => r.prompt.promptId)),
+  ).remaining.length;
+}
+
+/** The sidebar and the Speech tabs: one number per place a person works. */
+export interface NavWaiting {
+  annotate: number;
+  /** Record + Listen + Check: what the Speech link opens onto. */
+  speech: number;
+  record: number;
+  listen: number;
+  check: number;
+  /** Answers to fix, on My Work. */
+  fix: number;
+}
+
+/**
+ * What the navigation shows as waiting. Nothing for a research lead: a lead
+ * reads the work, they are not handed a queue, so a count would be noise
+ * (Halim, Nov 17 2026). Pure, so the rule is held by a test.
+ */
+export function navWaiting(
+  counts: Pick<WaitingCounts, "annotate" | "record" | "listen" | "check" | "fixTotal">,
+  who: { lead: boolean; speech: boolean },
+): NavWaiting | null {
+  if (who.lead) return null;
+  const record = who.speech ? counts.record : 0;
+  const listen = who.speech ? counts.listen : 0;
+  const check = who.speech ? counts.check : 0;
+  return {
+    annotate: counts.annotate,
+    speech: record + listen + check,
+    record,
+    listen,
+    check,
+    fix: counts.fixTotal,
+  };
 }

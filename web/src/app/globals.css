@@ -13,7 +13,8 @@
   src: url("/fonts/InterVariable-wt.woff2") format("woff2");
 }
 
-/* The design tokens live in src/styles/tokens.css. Light theme only. */
+/* The design tokens live in src/styles/tokens.css: light, and an opt-in dark
+   theme (section 6 there, switched by data-theme on <html>). */
 
 /* Tailwind v4 theme bridge */
 @theme inline {
@@ -22,6 +23,9 @@
   --color-surface-raised: var(--surface-raised);
   --color-surface-sunken: var(--surface-sunken);
   --color-foreground: var(--foreground);
+  --color-inverse: var(--inverse);
+  --color-on-inverse: var(--on-inverse);
+  --color-on-inverse-2: var(--on-inverse-2);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-accent: var(--accent);
@@ -131,7 +135,7 @@ samp,
    against a px-* utility on the element. */
 select:not([multiple]) {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b6b70' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2384848c' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   background-size: 1rem 1rem;

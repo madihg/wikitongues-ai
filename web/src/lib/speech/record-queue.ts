@@ -62,6 +62,8 @@ export interface WaitingAnswer {
   englishTranslation: string | null;
   dialect: string | null;
   createdAt: Date;
+  /** How the answer came to be; decides a tie (see spokenAnswerWins). */
+  provenance?: string | null;
   prompt: { id: string; promptId: string; text: string; bucket: string };
 }
 
@@ -85,15 +87,41 @@ const ANSWER_SELECT = {
   englishTranslation: true,
   dialect: true,
   createdAt: true,
+  provenance: true,
   prompt: {
     select: { id: true, promptId: true, text: true, bucket: true },
   },
 } as const;
 
-/** One row per prompt (a later answer wins), oldest answer first. */
-function latestPerPrompt(answers: WaitingAnswer[]): WaitingAnswer[] {
+/**
+ * Which of two answers to the same prompt the speaker reads aloud. A later
+ * answer wins. When both were saved in the same instant they come from one
+ * episode: the speaker's own answer and the fix written when both model
+ * answers were unusable. Then the speaker's own answer wins.
+ *
+ * Why: in July and August 2026 seven such fixes were saved carrying the
+ * PREVIOUS prompt's text (found Nov 17, when Agnes was shown a sentence that
+ * answered another question). The own answer of the same episode is always
+ * about this prompt.
+ */
+export function spokenAnswerWins(
+  challenger: Pick<WaitingAnswer, "createdAt" | "provenance">,
+  holder: Pick<WaitingAnswer, "createdAt" | "provenance">,
+): boolean {
+  const dt = challenger.createdAt.getTime() - holder.createdAt.getTime();
+  if (dt !== 0) return dt > 0;
+  const own = (a: { provenance?: string | null }) =>
+    (a.provenance ?? "").startsWith("speaker_authored");
+  return own(challenger) && !own(holder);
+}
+
+/** One row per prompt (see spokenAnswerWins), oldest answer first. */
+export function latestPerPrompt(answers: WaitingAnswer[]): WaitingAnswer[] {
   const latest = new Map<string, WaitingAnswer>();
-  for (const a of answers) latest.set(a.promptId, a); // later wins
+  for (const a of answers) {
+    const held = latest.get(a.promptId);
+    if (!held || spokenAnswerWins(a, held)) latest.set(a.promptId, a);
+  }
   return [...latest.values()].sort(
     (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
   );

@@ -1,12 +1,13 @@
 "use client";
 
+import { useNavWaiting } from "@/components/use-nav-waiting";
+import { ThemeToggle } from "@/components/theme-toggle";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import {
   useSpeechLayer,
-  useSpeechWaiting,
 } from "@/components/lab/use-speech-layer";
 import { useToneCount } from "@/components/tone/use-tone-count";
 import { canProbeSpeech } from "@/lib/lab-flags";
@@ -68,7 +69,7 @@ function SidebarLink({ link, active }: { link: NavLink; active: boolean }) {
       {link.count !== undefined && (
         <span
           data-testid="nav-count"
-          className="font-mono text-xs font-normal tabular-nums text-text-tertiary"
+          className="inline-flex min-w-6 items-center justify-center rounded-full bg-accent px-2 py-0.5 text-xs font-semibold tabular-nums text-accent-contrast"
         >
           {link.count}
           <span className="sr-only"> waiting</span>
@@ -141,7 +142,7 @@ function NavDrawer({
         data-testid="nav-scrim"
         aria-hidden="true"
         onClick={onClose}
-        className="absolute inset-0 bg-foreground/40"
+        className="absolute inset-0 bg-black/50"
       />
       <div
         ref={panel}
@@ -179,7 +180,9 @@ export function Sidebar({
   const labOn = useSpeechLayer(canProbeSpeech(session?.user?.role));
   // How many of the account's own answers still wait for a clip. Asked only
   // once speech is on, so an account without speech makes no such request.
-  const speechWaiting = useSpeechWaiting(labOn);
+  // What waits for this person, link by link. The server answers a research
+  // lead with nothing, so a lead's sidebar carries no counts.
+  const navWaiting = useNavWaiting(true);
   // Tone-mark pass 2: the line shows only for a person who was given items.
   const tone = useToneCount(canProbeSpeech(session?.user?.role));
 
@@ -209,7 +212,13 @@ export function Sidebar({
   const { role, email } = session.user;
   const links = navForRole(role, email, {
     lab: labOn,
-    waiting: { speech: speechWaiting },
+    waiting: navWaiting
+      ? {
+          annotate: navWaiting.annotate,
+          speech: navWaiting.speech,
+          fix: navWaiting.fix,
+        }
+      : undefined,
     tone,
   });
   // The work links every account shares come first; the researcher tools
@@ -301,6 +310,7 @@ export function Sidebar({
           {session.user.name || session.user.email}
         </div>
         <div className="text-xs text-text-tertiary">{roleLabel}</div>
+        <ThemeToggle />
         <button
           onClick={() => signOut({ callbackUrl: "/" })}
           className="mt-3 cursor-pointer text-sm text-text-tertiary transition-colors hover:text-text-primary max-[899px]:min-h-11"

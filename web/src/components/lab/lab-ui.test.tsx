@@ -632,8 +632,8 @@ describe("LabBand", () => {
     const html = renderToStaticMarkup(<LabBand />);
     const [header] = tagsOf(html, "header");
     expect(classOf(header)).toMatch(/\bh-14\b/);
-    expect(classOf(header)).toContain("bg-foreground");
-    expect(classOf(header)).toContain("text-background");
+    expect(classOf(header)).toContain("bg-inverse");
+    expect(classOf(header)).toContain("text-on-inverse");
     // One name for one thing (2026-11-13): the band reads SPEECH. "LAB" and
     // "Add your voice" are gone.
     expect(html).toContain(">SPEECH<");
@@ -1037,13 +1037,13 @@ describe("Listen: language and the provisional speech axes", () => {
     );
   });
 
-  it("after a verdict, offers the five axes under the exact provisional label", () => {
+  it("after a verdict, offers the six axes under the rubric label", () => {
     const html = listen({ winner: "a", reasons: ["robotic"] });
     expect(html).toContain('data-testid="speech-axes"');
     // The label is the config's text, with the apostrophe escaped by React.
     expect(html).toContain(AXES_BLOCK_LABEL.replace("'", "&#x27;"));
     expect(AXES_BLOCK_LABEL).toBe(
-      "Provisional speech axes, Lydia's rubric layer replaces these",
+      "Speech rubric",
     );
     for (const axis of SPEECH_AXES) {
       expect(html).toContain(`data-axis="${axis.key}"`);
@@ -1056,7 +1056,7 @@ describe("Listen: language and the provisional speech axes", () => {
       <SpeechAxesRow winner="b" scores={{ a: {}, b: {} }} onScore={noop} />,
     );
     const radios = tagsOf(html, "button");
-    expect(radios).toHaveLength(5 * 2 * 7);
+    expect(radios).toHaveLength(6 * 2 * 7);
     for (const r of radios) {
       expect(r).toContain('role="radio"');
       expect(r).toContain('aria-checked="false"');
@@ -1067,8 +1067,8 @@ describe("Listen: language and the provisional speech axes", () => {
       expect(html).toContain(`aria-label="${axis.label}, Clip A"`);
       expect(html).toContain(`aria-label="${axis.label}, Clip B"`);
     }
-    expect(html.match(/>Clip A</g)).toHaveLength(5);
-    expect(html.match(/>Clip B</g)).toHaveLength(5);
+    expect(html.match(/>Clip A</g)).toHaveLength(6);
+    expect(html.match(/>Clip B</g)).toHaveLength(6);
     // Side by side from sm up, stacked at phone width.
     expect(html).toContain("sm:grid-cols-2");
   });
@@ -1087,7 +1087,7 @@ describe("Listen: language and the provisional speech axes", () => {
     const html = renderToStaticMarkup(
       <SpeechAxesRow
         winner="tie"
-        scores={{ a: { tone: 3 }, b: { tone: 1, pace: "na" } }}
+        scores={{ a: { tone: 3 }, b: { tone: 1, flow: "na" } }}
         onScore={noop}
       />,
     );
@@ -1095,7 +1095,7 @@ describe("Listen: language and the provisional speech axes", () => {
     expect(html).toMatch(/aria-checked="true" aria-label="Tone, Clip A 3"/);
     expect(html).toMatch(/aria-checked="true" aria-label="Tone, Clip B 1"/);
     expect(html).toMatch(
-      /aria-checked="true" aria-label="Pace, Clip B not applicable"/,
+      /aria-checked="true" aria-label="Pace and flow, Clip B not applicable"/,
     );
   });
 

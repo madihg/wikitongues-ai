@@ -4,8 +4,8 @@
  * place: the route and the screen both read this and nothing else.
  * Client-safe (no server imports).
  *
- * PROVISIONAL: the five axes of provisional-1 are a stand-in until the
- * linguist's rubric lands. Every judgment stores the `version` it was scored
+ * The five axes of provisional-1 were a stand-in until the linguist's rubric
+ * landed (lydia-1, Nov 17 2026). The 9 judgments made before then keep them. Every judgment stores the `version` it was scored
  * under (SpeechComparison.axes.version), so rows scored under one set are
  * never read as another. A new rubric is a new entry in AXES_SETS and a flip
  * of LYDIA_RUBRIC_READY; old rows keep their version.
@@ -56,25 +56,65 @@ export const PROVISIONAL_AXES: AxesSet = {
 };
 
 /**
- * PLACEHOLDER for Lydia's rubric (PRD US-027). One slot axis so the mechanism
- * is testable end to end; her real axes replace `axes` here, in this file
- * only, and nothing else changes. Never shown while LYDIA_RUBRIC_READY is
- * false.
+ * Lydia's speech rubric, version 1 ("Speech layer rubric categories", shared
+ * Nov 17 2026), in the listener's words rather than the field's.
+ *
+ * Her five categories, and what each became here:
+ *   Phonemic and orthographic accuracy  -> Sounds
+ *   Loanword adaptation                 -> Borrowed words
+ *   Tone and pitch                      -> Tone
+ *   Prosody (intonation, stress, emphasis) -> Stress and meaning
+ *   Temporal features (rate, pauses, word length, smoothness) -> Pace and flow
+ *
+ * Against the provisional five, so nothing is asked twice: Pronunciation is
+ * her Sounds and Tone is her Tone (same keys, so their history lines up);
+ * Pace is inside Pace and flow; Naturalness is dropped, because what it
+ * asked is now asked exactly by Stress and meaning and by Pace and flow.
+ * "Clear" stays from the old set: whether the words can be made out at all
+ * is not in her list and is the first thing a listener knows.
+ *
+ * Six axes is the ceiling. A listener scores both clips on each, so every
+ * axis added is two more answers per pair.
  */
 export const LYDIA_AXES: AxesSet = {
   version: "lydia-1",
   blockLabel: "Speech rubric",
   axes: [
     {
-      key: "rubric_slot",
-      label: "Rubric slot",
-      hint: "Replaced when the rubric is entered",
+      key: "intelligibility",
+      label: "Clear",
+      hint: "Can you make out every word?",
+    },
+    {
+      key: "pronunciation",
+      label: "Sounds",
+      hint: "Does each letter sound right, also where two sounds meet?",
+    },
+    {
+      key: "loanwords",
+      label: "Borrowed words",
+      hint: "Is a word from English said the Igala way? Choose N/A if there is none.",
+    },
+    {
+      key: "tone",
+      label: "Tone",
+      hint: "Do the tones follow the marks, and does the voice rise and fall in the right places?",
+    },
+    {
+      key: "prosody",
+      label: "Stress and meaning",
+      hint: "Is the right word stressed? Does a question sound like a question?",
+    },
+    {
+      key: "flow",
+      label: "Pace and flow",
+      hint: "Right speed, pauses in the right places, no word stretched or cut short?",
     },
   ],
 };
 
-/** Flip to true, once LYDIA_AXES holds her axes, to score new judgments under lydia-1. */
-export const LYDIA_RUBRIC_READY = false;
+/** New judgments are scored under lydia-1 since Nov 17 2026. */
+export const LYDIA_RUBRIC_READY = true;
 
 /** Every rubric a stored judgment may carry; old judgments keep the version they were scored under. */
 export const AXES_SETS: Readonly<Record<string, AxesSet>> = {
