@@ -20,6 +20,9 @@ export const NEXT_TASK_PATH = "/api/annotations/next";
 export interface AnnotateParams {
   demo: string | null;
   prompt: string | null;
+  /** Demo only: the public code of the question to move past. Demo ignores
+   *  history, so without this every load serves the same first question. */
+  after?: string | null;
 }
 
 /** The two parameters of a page query string. An empty value is no value. */
@@ -28,6 +31,7 @@ export function readAnnotateParams(search: string): AnnotateParams {
   return {
     demo: params.get("demo") || null,
     prompt: params.get("prompt")?.trim() || null,
+    after: params.get("after")?.trim() || null,
   };
 }
 
@@ -36,10 +40,13 @@ export function readAnnotateParams(search: string): AnnotateParams {
  * this is character for character the URL the page built before the pin
  * existed, so nothing changes for anyone who is not pinning a prompt.
  */
-export function nextTaskUrl({ demo, prompt }: AnnotateParams): string {
+export function nextTaskUrl({ demo, prompt, after }: AnnotateParams): string {
   const query: string[] = [];
   if (demo) query.push(`demo=${encodeURIComponent(demo)}`);
   if (prompt) query.push(`prompt=${encodeURIComponent(prompt)}`);
+  // Only demo moves past a question this way; a counted queue moves by
+  // judging or skipping, and the server ignores `after` outside demo.
+  if (demo && after && !prompt) query.push(`after=${encodeURIComponent(after)}`);
   return query.length > 0
     ? `${NEXT_TASK_PATH}?${query.join("&")}`
     : NEXT_TASK_PATH;
@@ -61,7 +68,7 @@ export function annotateSearchWith(
   changes: Partial<AnnotateParams>,
 ): string {
   const params = new URLSearchParams(search);
-  for (const key of ["demo", "prompt"] as const) {
+  for (const key of ["demo", "prompt", "after"] as const) {
     if (!(key in changes)) continue;
     const value = changes[key];
     if (value) params.set(key, value);
@@ -149,4 +156,23 @@ export function pinnedNoticeFor(kind: PinnedNoticeKind): PinnedNotice {
         offerDemo: false,
       };
   }
+}
+
+// ─── Demo: a new question ────────────────────────────────────────────────────
+
+/**
+ * The queue with everything up to and including `afterPromptId` moved to the
+ * end. Demo ignores history, so this is how "New prompt" reaches the next
+ * question: nothing is stored, the order just starts one further on, and it
+ * wraps so the last question leads back to the first. An unknown or missing
+ * id leaves the order alone.
+ */
+export function startAfter<T extends { promptId: string }>(
+  remaining: readonly T[],
+  afterPromptId: string | null | undefined,
+): T[] {
+  if (!afterPromptId) return [...remaining];
+  const at = remaining.findIndex((c) => c.promptId === afterPromptId);
+  if (at < 0) return [...remaining];
+  return [...remaining.slice(at + 1), ...remaining.slice(0, at + 1)];
 }

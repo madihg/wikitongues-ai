@@ -2,6 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { getSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import {
+  browserStore,
+  ensureDemoSession,
+  demoStartsOn,
+  readDemoPreference,
+  shouldAutoApplyDemo,
+  writeDemoPreference,
+} from "@/lib/demo-switch";
+import { demoFromSearch, withDemo } from "@/lib/speech/demo-url";
 
 /**
  * The Speech tabs every speaker sees, in order. Record is the first tab and
@@ -52,10 +63,75 @@ export const activeSpeakTab = activeSpeechTab;
 function Band({
   tabs,
   active,
+  researcher,
 }: {
   tabs: readonly { href: string; label: string }[];
   active: string | null;
+  researcher: boolean;
 }) {
+  // The demo session on the address, read after mount (the server render has
+  // no address to read). Every tab link carries it, so demo survives moving
+  // between Record, Listen and Check.
+  const [demo, setDemo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const turnOn = async (replace: boolean) => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const store = browserStore();
+      const id = await ensureDemoSession({
+        store,
+        fetcher: (input, init) => fetch(input, init),
+        today: new Date(),
+      });
+      writeDemoPreference(store, true);
+      const next = withDemo(window.location.pathname, id);
+      if (replace) window.location.replace(next);
+      else window.location.assign(next);
+    } catch {
+      // An unconfirmed demo is not demo: stay counted and say so.
+      setFailed(true);
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    const urlDemo = demoFromSearch(window.location.search);
+    setDemo(urlDemo);
+    if (!researcher || urlDemo) return;
+    let cancelled = false;
+    // A researcher who left the switch on lands in demo on every Speech page.
+    // With no stored choice it is off, except for the owner (demoStartsOn),
+    // so the signed-in email is read before deciding.
+    void getSession().then((session) => {
+      if (cancelled) return;
+      if (
+        shouldAutoApplyDemo({
+          researcher,
+          urlDemo,
+          preferenceOn: readDemoPreference(
+            browserStore(),
+            demoStartsOn(session?.user?.email),
+          ),
+        })
+      ) {
+        void turnOn(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Runs once per page load: the address is read, never watched.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const turnOff = () => {
+    writeDemoPreference(browserStore(), false);
+    window.location.assign(window.location.pathname);
+  };
+
   return (
     <header className="flex h-14 items-center justify-between gap-3 bg-foreground px-4 text-background sm:px-8">
       <span className="shrink-0 font-mono text-xs tracking-widest">SPEECH</span>
@@ -66,7 +142,7 @@ function Band({
         {tabs.map((tab) => (
           <Link
             key={tab.href}
-            href={tab.href}
+            href={withDemo(tab.href, demo)}
             aria-current={active === tab.href ? "page" : undefined}
             className={`inline-flex min-h-[44px] shrink-0 cursor-pointer items-center rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] ${
               active === tab.href
@@ -77,6 +153,29 @@ function Band({
             {tab.label}
           </Link>
         ))}
+        {researcher && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={demo !== null}
+            disabled={busy}
+            onClick={() => (demo ? turnOff() : void turnOn(false))}
+            title={
+              failed
+                ? "Demo could not be started. You are still in counted mode."
+                : demo
+                  ? "Demo is on: nothing you record, rate or check here is counted."
+                  : "Turn Demo on to show the pages without adding data."
+            }
+            className={`ml-2 inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] disabled:opacity-60 ${
+              demo
+                ? "border-background bg-background text-foreground"
+                : "border-background/40 text-background/80 hover:bg-background/10"
+            }`}
+          >
+            {failed ? "Demo failed" : demo ? "Demo on" : "Demo"}
+          </button>
+        )}
       </nav>
     </header>
   );
@@ -88,7 +187,13 @@ function Band({
  */
 export function SpeechBand({ researcher = false }: { researcher?: boolean }) {
   const active = activeSpeechTab(usePathname());
-  return <Band tabs={researcher ? LAB_TABS : SPEECH_TABS} active={active} />;
+  return (
+    <Band
+      tabs={researcher ? LAB_TABS : SPEECH_TABS}
+      active={active}
+      researcher={researcher}
+    />
+  );
 }
 
 /** The band on the researcher-only pages (Recordings, Studio, Rights). */

@@ -345,7 +345,7 @@ describe("the Demo switch, wired (source)", () => {
   it("on load, settles demo for a researcher BEFORE the first task is asked for", () => {
     const effect = src.slice(
       src.indexOf("const urlDemo = readAnnotateParams(window.location.search).demo;"),
-      src.indexOf("}, [fetchNext, researcher, startDemoSession]);"),
+      src.indexOf("}, [fetchNext, researcher, ownerEmail, startDemoSession]);"),
     );
     expect(effect).toContain("if (researcher && urlDemo) {");
     expect(effect).toContain("shouldAutoApplyDemo({");

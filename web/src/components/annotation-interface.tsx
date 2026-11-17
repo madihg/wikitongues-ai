@@ -60,6 +60,7 @@ import {
   DEMO_SKIP_NOT_SAVED,
   browserStore,
   canUseDemoSwitch,
+  demoStartsOn,
   ensureDemoSession,
   episodeHasUnsavedInput,
   readDemoPreference,
@@ -240,6 +241,7 @@ export function AnnotationInterface() {
   // server decides everything else again for itself.
   const { data: session } = useSession();
   const researcher = canUseDemoSwitch(session?.user?.role);
+  const ownerEmail = session?.user?.email ?? null;
   // The speech layer: researchers while the Lab flag is on, and annotators
   // only while SPEECH_LAYER_ANNOTATORS is also on. The server decides; with
   // the layer flag unset an annotator is told false and the episode renders
@@ -632,7 +634,7 @@ export function AnnotationInterface() {
         shouldAutoApplyDemo({
           researcher,
           urlDemo,
-          preferenceOn: readDemoPreference(store),
+          preferenceOn: readDemoPreference(store, demoStartsOn(ownerEmail)),
         })
       ) {
         try {
@@ -656,7 +658,7 @@ export function AnnotationInterface() {
     return () => {
       cancelled = true;
     };
-  }, [fetchNext, researcher, startDemoSession]);
+  }, [fetchNext, researcher, ownerEmail, startDemoSession]);
 
   // Autosave the episode draft so navigation or a dropped connection never
   // loses in-progress work.
@@ -1088,6 +1090,8 @@ export function AnnotationInterface() {
           promptText: task.prompt.text,
         });
       }
+      // Demo ignores history: move past the finished question by hand.
+      if (demoSessionId) replaceAnnotateSearch({ after: task.prompt.promptId });
       clearDraft();
       releasePin();
       await fetchNext();
@@ -1129,13 +1133,26 @@ export function AnnotationInterface() {
     }
   }
 
+  // Demo ignores history, so a reload or a finished episode lands on the
+  // same first question. "New prompt" moves past the one on screen: the
+  // code goes on the URL (so a reload stays put) and the server starts the
+  // demo queue after it. Nothing is stored.
+  async function newDemoPrompt() {
+    if (!demoSessionId || !task) return;
+    clearDraft();
+    replaceAnnotateSearch({ after: task.prompt.promptId, prompt: null });
+    await fetchNext();
+  }
+
   // Skip this prompt entirely (no judgement recorded). Contract with the
   // in-parallel endpoint: POST /api/annotations/skip { promptId } -> 200.
   async function skipPrompt() {
     if (!task || skipping || submitting) return;
     if (!skipAndFlagAreSent(!!demoSessionId)) {
-      // Demo stores nothing, a skip included (see skipAndFlagAreSent).
+      // Demo stores nothing, a skip included (see skipAndFlagAreSent); it
+      // still moves on, which is what the person pressing Skip wants.
       showToast(DEMO_SKIP_NOT_SAVED, "success");
+      await newDemoPrompt();
       return;
     }
     setSkipping(true);
@@ -1698,6 +1715,16 @@ export function AnnotationInterface() {
             Nothing here is saved to training data or the benchmark - it&apos;s
             a walkthrough.
           </span>
+          {task && (
+            <button
+              type="button"
+              onClick={newDemoPrompt}
+              disabled={loading}
+              className="ml-auto shrink-0 rounded-md border border-border bg-surface px-3 py-1 text-sm font-medium text-text-primary hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+            >
+              New prompt
+            </button>
+          )}
         </div>
       )}
 

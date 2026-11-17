@@ -18,19 +18,19 @@ import {
 
 describe("readAnnotateParams", () => {
   it("reads both parameters from a page query string", () => {
-    expect(readAnnotateParams("?demo=d1&prompt=ig_test_002")).toEqual({
+    expect(readAnnotateParams("?demo=d1&prompt=ig_test_002")).toMatchObject({
       demo: "d1",
       prompt: "ig_test_002",
     });
   });
 
   it("an absent or empty parameter is null", () => {
-    expect(readAnnotateParams("")).toEqual({ demo: null, prompt: null });
-    expect(readAnnotateParams("?demo=&prompt=")).toEqual({
+    expect(readAnnotateParams("")).toMatchObject({ demo: null, prompt: null });
+    expect(readAnnotateParams("?demo=&prompt=")).toMatchObject({
       demo: null,
       prompt: null,
     });
-    expect(readAnnotateParams("?prompt=%20%20")).toEqual({
+    expect(readAnnotateParams("?prompt=%20%20")).toMatchObject({
       demo: null,
       prompt: null,
     });

@@ -19,6 +19,8 @@
  *     in a new tab lands in demo for a researcher who works in demo.
  */
 
+import { isOwner } from "@/lib/personas";
+
 export const DEMO_SESSION_KEY = "wt-demo-session";
 export const DEMO_PREFERENCE_KEY = "wt-demo-on";
 export const DEMO_SESSIONS_PATH = "/api/arena/demo-sessions";
@@ -53,12 +55,29 @@ export function browserStore(): KeyValueStore {
 
 // ─── What this browser remembers ─────────────────────────────────────────────
 
-export function readDemoPreference(store: KeyValueStore): boolean {
+/**
+ * Whether this browser works in demo. A stored choice always wins. With
+ * nothing stored the answer is `whenUnset`: false for everyone, except the
+ * owner, whose pages start in demo so a walkthrough never adds to the data
+ * (see demoStartsOn).
+ */
+export function readDemoPreference(
+  store: KeyValueStore,
+  whenUnset = false,
+): boolean {
   try {
-    return store?.getItem(DEMO_PREFERENCE_KEY) === "1";
+    const stored = store?.getItem(DEMO_PREFERENCE_KEY);
+    if (stored === "1") return true;
+    if (stored === "0") return false;
+    return whenUnset;
   } catch {
-    return false;
+    return whenUnset;
   }
+}
+
+/** Demo is off until someone turns it on, for everyone but the owner. */
+export function demoStartsOn(email?: string | null): boolean {
+  return isOwner(email);
 }
 
 export function writeDemoPreference(store: KeyValueStore, on: boolean): void {
@@ -97,7 +116,7 @@ export function skipAndFlagAreSent(demoOn: boolean): boolean {
 }
 
 export const DEMO_SKIP_NOT_SAVED =
-  "Demo: nothing was saved. The question stays in your queue.";
+  "Demo: nothing was saved. Here is another question.";
 export const DEMO_FLAG_NOT_SAVED =
   "Demo: nothing was saved. The question was not flagged.";
 

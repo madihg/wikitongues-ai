@@ -19,7 +19,7 @@ import {
   type QueuePrompt,
 } from "@/lib/pairing";
 import { loadQueueInputs, type QueuePromptDetail } from "@/lib/queue-input";
-import type { PinnedStatus } from "@/lib/annotate-url";
+import { startAfter, type PinnedStatus } from "@/lib/annotate-url";
 
 /**
  * Serve the next annotation task. The response carries everything the
@@ -287,7 +287,11 @@ export async function GET(req: Request) {
     });
   }
 
-  for (const candidate of remaining) {
+  // Demo only: "New prompt" asks for the question after the one on screen
+  // (its public code, the id the queue is keyed by).
+  const afterId = isDemo ? (params.get("after") ?? "").trim() : "";
+
+  for (const candidate of startAfter(remaining, afterId)) {
     const prompt = byPromptId.get(candidate.promptId)!;
     const task = await buildTask(annotatorId, prompt, candidate);
     // Nothing to serve for this prompt (see buildTask); try the next one.
