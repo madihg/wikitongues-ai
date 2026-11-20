@@ -69,6 +69,6 @@ describe("Speech walkthrough", () => {
 
   it("never uses an em dash", () => {
     const all = JSON.stringify(WALKTHROUGH_STEPS);
-    expect(all).not.toContain("—");
+    expect(all).not.toContain("\u2014");
   });
 });
