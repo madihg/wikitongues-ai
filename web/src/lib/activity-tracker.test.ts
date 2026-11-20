@@ -81,15 +81,15 @@ describe("ActivityTracker", () => {
     expect(serverSeconds()).toBe(3 * 60);
   });
 
-  it("six minutes in front with no input counts 1; input after the pause restarts the clock", async () => {
+  it("eight minutes in front with no input counts 5; input after the pause restarts the clock", async () => {
     const { tracker, serverSeconds } = setup();
-    await run(tracker, 6 * MINUTE_MS);
-    expect(serverSeconds()).toBe(60);
+    await run(tracker, 8 * MINUTE_MS);
+    expect(serverSeconds()).toBe(5 * 60);
     await run(tracker, 20 * MINUTE_MS);
-    expect(serverSeconds()).toBe(60);
+    expect(serverSeconds()).toBe(5 * 60);
     tracker.input();
     await run(tracker, 1 * MINUTE_MS, () => tracker.input());
-    expect(serverSeconds()).toBe(2 * 60);
+    expect(serverSeconds()).toBe(6 * 60);
   });
 
   it("a 20 second recording after a long pause counts 20 seconds, with no key press", async () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { WeekRow } from "@/lib/hours";
-import { HOURS_COPY, HoursTable, weekLabel } from "./time-spent";
+import { HOURS_COPY, HoursTable, TotalsTable, weekLabel } from "./time-spent";
 
 const row = (over: Partial<WeekRow> = {}): WeekRow => ({
   weekStart: "2026-11-09",
@@ -90,5 +90,43 @@ describe("HoursTable (the weekly researcher table)", () => {
 
   it("labels a week by its Monday", () => {
     expect(weekLabel("2026-11-09")).toBe("Mon 9 Nov");
+  });
+});
+
+describe("TotalsTable (running total per person)", () => {
+  it("adds up measured weeks, keeps estimated weeks apart, edits included", () => {
+    const html = renderToStaticMarkup(
+      <TotalsTable
+        data={data([
+          row({ weekStart: "2026-11-16", activeSeconds: 3 * 3600, edits: 4 }),
+          row({ weekStart: "2026-11-09", activeSeconds: 2 * 3600, edits: 6 }),
+          row({
+            weekStart: "2026-11-02",
+            basis: "estimate",
+            activeSeconds: null,
+            recountedMinutes: 90,
+            edits: 1,
+          }),
+          row({
+            userId: "ajuma",
+            name: "Ajuma Test",
+            role: "ANNOTATOR",
+            activeSeconds: 3600,
+            edits: 0,
+          }),
+        ])}
+      />,
+    );
+    expect(html).toContain("over the last 26 weeks, edits and revisions included");
+    expect(html).toContain(">5.0<"); // 3 h + 2 h measured
+    expect(html).toContain("1.5 (1 wk)"); // the unmeasured week, apart
+    expect(html).toContain(">11<"); // edits over the three weeks
+    // Agnes (more hours) is listed before Ajuma.
+    expect(html.indexOf("Agnes Test")).toBeLessThan(html.indexOf("Ajuma Test"));
+  });
+
+  it("says so when nobody worked", () => {
+    const html = renderToStaticMarkup(<TotalsTable data={data([])} />);
+    expect(html).toContain(HOURS_COPY.totalEmpty);
   });
 });

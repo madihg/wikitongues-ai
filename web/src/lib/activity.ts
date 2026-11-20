@@ -22,16 +22,17 @@ export const MINUTE_MS = 60_000;
 export const BEAT_INTERVAL_MS = 30_000;
 /**
  * The clock pauses after this long with no input, recording or playback.
- * One minute, not five: pauses are not paid time (Halim, Nov 17 2026). A
- * minute is kept so reading a long answer between key presses still counts.
+ * Five minutes: a pause of up to five minutes is paid time, because this
+ * work can mean several minutes of reading or thinking with no key press
+ * (Daniel and Halim, "Rules for the time counter", Nov 19 2026). This
+ * replaces the one minute rule of Nov 17.
+ *
+ * Time on researcher pages counts in full, like every other kind of work:
+ * reviewing the people working under her is part of the local lead's job
+ * (same thread). The quarter share of Nov 17 is gone. It was applied only
+ * when hours were read, so past weeks read in full again with no rewrite.
  */
-export const IDLE_LIMIT_MS = MINUTE_MS;
-/**
- * Time on researcher pages counts at a quarter (Halim, Nov 17 2026): it is
- * looking at the data, not adding to it. Applied when hours are read, so the
- * stored seconds stay what the browser measured.
- */
-export const RESEARCH_PAY_SHARE = 0.25;
+export const IDLE_LIMIT_MS = 5 * MINUTE_MS;
 export const MAX_SECONDS_PER_MINUTE = 60;
 /** Beats older than this are refused (a browser that was offline for days). */
 export const LATE_LIMIT_MS = 24 * 60 * MINUTE_MS;
@@ -132,8 +133,8 @@ export interface ActivityFacts {
 
 /**
  * The part of [from, to] that counts as active, or null when none does.
- * Hidden tab: nothing. Recording or playing: all of it. Otherwise: up to one
- * minute after the last input.
+ * Hidden tab: nothing. Recording or playing: all of it. Otherwise: up to five
+ * minutes after the last input.
  */
 export function activeSpan(
   from: number,
@@ -344,7 +345,7 @@ export function planWrites(
 export interface PingLite {
   minute: Date;
   activeSeconds: number;
-  /** The kind of work. Only "research" changes the sum (RESEARCH_PAY_SHARE). */
+  /** The kind of work. Every kind counts the same. */
   surface?: string | null;
 }
 
@@ -357,11 +358,7 @@ export function sumActiveSeconds(pings: PingLite[]): number {
   const perMinute = new Map<number, number>();
   for (const p of pings) {
     const k = p.minute.getTime();
-    const share = p.surface === "research" ? RESEARCH_PAY_SHARE : 1;
-    perMinute.set(
-      k,
-      (perMinute.get(k) ?? 0) + Math.max(0, p.activeSeconds) * share,
-    );
+    perMinute.set(k, (perMinute.get(k) ?? 0) + Math.max(0, p.activeSeconds));
   }
   let total = 0;
   for (const s of perMinute.values()) {
