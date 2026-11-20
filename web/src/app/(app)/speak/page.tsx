@@ -1,5 +1,6 @@
 import { requireSpeakPage } from "@/lib/speech/page-gate";
 import { RecordInterface } from "@/components/lab/record-interface";
+import { SpeechWalkthrough } from "@/components/lab/speech-walkthrough";
 
 /** The Record tab: the first Speech tab, for every role. */
 export default async function SpeakPage() {
@@ -11,6 +12,9 @@ export default async function SpeakPage() {
         Say a prompt out loud, then choose what happens to the clip. Nothing is
         shared until you choose.
       </p>
+      <div className="mt-4">
+        <SpeechWalkthrough />
+      </div>
       <div className="mt-6">
         <RecordInterface />
       </div>
