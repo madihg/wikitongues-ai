@@ -78,6 +78,7 @@ export {
   GRAMMAR_CHUNK_TYPE_V4_5_TONE,
   V4_5_ONLY_CHUNK_TYPES,
 } from "@/lib/arena/grammar-chunk-types";
+import { usableColdAnswer } from "@/lib/excluded-answers";
 
 /**
  * The chunkTypes a label's grammar block reads. Every label but rag-v4-5
@@ -296,7 +297,7 @@ export async function buildGrammarBlock(
       where: { promptId: prompt.promptId },
       select: {
         coldAuthorAnswers: {
-          where: { consentBenchmark: true, isDemo: false },
+          where: { consentBenchmark: true, isDemo: false, ...usableColdAnswer },
           select: { answerText: true },
         },
       },

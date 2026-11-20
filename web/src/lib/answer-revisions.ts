@@ -160,6 +160,21 @@ export interface RevisionLite {
   after: string | null;
   createdAt: Date | string;
   id?: string;
+  /** One value per save. A fix made in Check names its clip (checkFixSaveId). */
+  saveId?: string | null;
+}
+
+/**
+ * The save id of a fix a research lead makes in Check while listening to one
+ * clip: "check-<recordingId>-<random>". The lead heard the clip and wrote down
+ * what it says, so the text after that fix is the clip's text.
+ */
+export function checkFixSaveId(recordingId: string, rand: string): string {
+  return `check-${recordingId}-${rand}`;
+}
+
+function isCheckFixFor(r: RevisionLite, clipId: string): boolean {
+  return !!r.saveId && r.saveId.startsWith(`check-${clipId}-`);
 }
 
 function at(r: RevisionLite): number {
@@ -297,6 +312,15 @@ export function staleClipIds(
     if (!c.coldAuthorAnswerId) continue;
     const list = byField.get(`${c.coldAuthorAnswerId}|${clipTextField(c)}`);
     if (!list) continue;
+    // A lead fixed the text in Check while listening to this clip: from that
+    // fix on, the clip says the fixed text, whatever it said before.
+    const fix = [...list].reverse().find((r) => isCheckFixFor(r, c.id));
+    if (fix) {
+      if (storedText(fix.after) !== storedText(list[list.length - 1].after)) {
+        out.add(c.id);
+      }
+      continue;
+    }
     const recordedAt =
       typeof c.createdAt === "string"
         ? Date.parse(c.createdAt)

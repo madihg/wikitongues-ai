@@ -13,6 +13,7 @@ import {
   clipTextField,
   spokenTextMatches,
   staleClipIds,
+  checkFixSaveId,
   storedText,
 } from "./answer-revisions";
 
@@ -381,5 +382,47 @@ describe("the AnswerRevision migration", () => {
     );
     expect(down).toContain('DROP TABLE IF EXISTS "AnswerRevision"');
     expect(down.match(/DROP TABLE/g)).toHaveLength(1);
+  });
+});
+
+describe("a lead's fix in Check (Nov 20 rule)", () => {
+  const clip = (id: string, ms: number) => ({
+    id,
+    coldAuthorAnswerId: "c1",
+    language: "igala",
+    createdAt: new Date(ms),
+  });
+  const rev = (ms: number, before: string, after: string, saveId?: string) => ({
+    targetId: "c1",
+    field: "answerText",
+    before,
+    after,
+    createdAt: new Date(ms),
+    saveId,
+  });
+
+  it("the clip the lead listened to matches the fixed text", () => {
+    const stale = staleClipIds(
+      [clip("heard", 1000), clip("other", 1000)],
+      [rev(2000, "a", "b", checkFixSaveId("heard", "r1234567"))],
+    );
+    // The clip the fix was made for is fine; another old clip still is not.
+    expect([...stale]).toEqual(["other"]);
+  });
+
+  it("a later change after the fix makes that clip stale again", () => {
+    const stale = staleClipIds(
+      [clip("heard", 1000)],
+      [
+        rev(2000, "a", "b", checkFixSaveId("heard", "r1234567")),
+        rev(3000, "b", "c"),
+      ],
+    );
+    expect([...stale]).toEqual(["heard"]);
+  });
+
+  it("the save id names the clip and passes the save id rule", () => {
+    const id = checkFixSaveId("cmt8ju5a40005kw04s9wi1b6n", "abcd1234");
+    expect(cleanSaveId(id)).toBe(id);
   });
 });

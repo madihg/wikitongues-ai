@@ -113,6 +113,120 @@ export interface CheckViewProps {
   onSend: () => void;
   onChange: () => void;
   onNext: () => void;
+  /** Research leads only: may fix the written text after "Does not match". */
+  canFix?: boolean;
+  /** The fix was saved; the clip now matches the new text. */
+  onFixed?: (text: string) => void;
+}
+
+export const FIX_COPY = {
+  open: "Fix the written text",
+  label: "What the clip says",
+  help: "Write what you hear. The speaker's text is kept in the edit log, and this clip is marked as matching.",
+  save: "Save fix",
+  cancel: "Cancel",
+  same: "The text is the same as before.",
+  failed: "The fix could not be saved.",
+} as const;
+
+/**
+ * A research lead's fix of someone else's written text, from Check
+ * (POST /api/lab/speech/check/fix). Shown only to leads (Halim, Nov 20 2026).
+ */
+export function LeadFix({
+  recordingId,
+  text,
+  onFixed,
+}: {
+  recordingId: string;
+  text: string;
+  onFixed: (text: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(text);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        data-testid="check-fix-open"
+        onClick={() => setOpen(true)}
+        className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-5 text-sm font-medium text-text-secondary hover:bg-surface-sunken focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+      >
+        {FIX_COPY.open}
+      </button>
+    );
+  }
+
+  const save = async () => {
+    if (value.trim() === text.trim()) {
+      setError(FIX_COPY.same);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/lab/speech/check/fix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordingId, answerText: value }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(j?.error ?? FIX_COPY.failed);
+      }
+      onFixed(value.trim());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : FIX_COPY.failed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div data-testid="check-fix" className="space-y-2">
+      <label htmlFor="check-fix-text" className="block text-sm font-semibold text-text-primary">
+        {FIX_COPY.label}
+      </label>
+      <textarea
+        id="check-fix-text"
+        value={value}
+        rows={3}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-base text-text-primary focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+      />
+      <p className="text-xs text-text-tertiary">{FIX_COPY.help}</p>
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          data-testid="check-fix-save"
+          disabled={busy || !value.trim()}
+          onClick={() => void save()}
+          className="min-h-[44px] cursor-pointer rounded-md bg-accent px-5 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {FIX_COPY.save}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setValue(text);
+            setError(null);
+          }}
+          className="min-h-[44px] cursor-pointer rounded-md border border-border-strong bg-surface px-5 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
+        >
+          {FIX_COPY.cancel}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function CheckView(p: CheckViewProps) {
@@ -276,6 +390,13 @@ export function CheckView(p: CheckViewProps) {
               transcript={p.transcript}
             />
           )}
+          {p.canFix && sent === "does_not_match" && p.onFixed && (
+            <LeadFix
+              recordingId={task.recording.id}
+              text={task.answer.text}
+              onFixed={p.onFixed}
+            />
+          )}
           {/* The shared footer bar. "Change my verdict" is this screen's
               "Edit previous": it sits in the left place. */}
           <EpisodeFooter
@@ -327,6 +448,19 @@ export function CheckInterface() {
   const [transcript, setTranscript] = useState<string | null | undefined>(undefined);
   // How many clips are still waiting, for the header line. Null until known.
   const [remaining, setRemaining] = useState<number | null>(null);
+  // Research leads may fix the written text (GET /api/admin/lead). Anyone
+  // else gets a 403 there, which reads as "not a lead".
+  const [isLead, setIsLead] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/admin/lead")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { lead?: boolean } | null) => live && setIsLead(j?.lead === true))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const fetchNext = useCallback(async () => {
     setLoad({ status: "loading" });
@@ -451,6 +585,18 @@ export function CheckInterface() {
       onSend={() => void send()}
       onChange={() => setPicked(sent)}
       onNext={() => void fetchNext()}
+      canFix={isLead && !demoRef.current}
+      onFixed={(text) => {
+        setLoad({
+          status: "task",
+          task: {
+            ...task,
+            answer: { text, words: answerWords(text) },
+          },
+        });
+        setSent("matches");
+        setPicked(null);
+      }}
     />
     </>
   );

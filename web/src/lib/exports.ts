@@ -5,6 +5,7 @@ import {
   annotatorLabel,
   type CsvColumn,
 } from "@/lib/export-csv";
+import { usableColdAnswer } from "@/lib/excluded-answers";
 
 /**
  * The downloadable research exports, kept out of the route file so they can be
@@ -67,7 +68,7 @@ export async function exportPrompts(): Promise<string> {
 /** The Igala corpus itself: cold-authored gold, with its metadata. */
 export async function exportGold(): Promise<string> {
   const rows = await prisma.coldAuthorAnswer.findMany({
-    where: { isDemo: false },
+    where: { isDemo: false, ...usableColdAnswer },
     include: {
       prompt: {
         select: {
