@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   IDLE_LIMIT_MS,
-  RESEARCH_PAY_SHARE,
   LATE_LIMIT_MS,
   MINUTE_MS,
   activeSpan,
@@ -64,13 +63,13 @@ describe("the rules of section 10.6", () => {
     expect(seconds(ledger)).toBe(0);
   });
 
-  it("six minutes with the tab in front and no input: 1 (a pause is not paid)", () => {
-    const ledger = walk(6 * MINUTE_MS, () => ({
+  it("eight minutes with the tab in front and no input: 5 (a pause up to five minutes is paid)", () => {
+    const ledger = walk(8 * MINUTE_MS, () => ({
       visible: true,
       busy: false,
       lastInputAt: T0, // the click that opened the page, then nothing
     }));
-    expect(seconds(ledger)).toBe(60);
+    expect(seconds(ledger)).toBe(5 * 60);
   });
 
   it("a 20 second recording counts as 20 active seconds with no key press", () => {
@@ -319,25 +318,53 @@ describe("the kind of work on every screen of the Nov 13 release", () => {
 });
 
 
-describe("researcher pages count at a quarter", () => {
+describe("researcher pages count in full (Nov 19 rule)", () => {
   const at = (m: number, activeSeconds: number, surface?: string) => ({
     minute: new Date(Date.UTC(2026, 10, 17, 9, m)),
     activeSeconds,
     surface,
   });
 
-  it("a minute on a researcher page is 15 paid seconds", () => {
-    expect(RESEARCH_PAY_SHARE).toBe(0.25);
-    expect(sumActiveSeconds([at(0, 60, "research")])).toBe(15);
+  it("a minute on a researcher page is 60 paid seconds", () => {
+    expect(sumActiveSeconds([at(0, 60, "research")])).toBe(60);
     expect(sumActiveSeconds([at(0, 60, "annotate")])).toBe(60);
   });
 
   it("mixed minutes add up, still capped at 60 per minute", () => {
     expect(
       sumActiveSeconds([at(0, 40, "annotate"), at(0, 20, "research")]),
-    ).toBe(45);
+    ).toBe(60);
+    expect(
+      sumActiveSeconds([at(0, 30, "annotate"), at(1, 20, "research")]),
+    ).toBe(50);
     expect(
       sumActiveSeconds([at(0, 60, "annotate"), at(0, 60, "research")]),
     ).toBe(60);
+  });
+});
+
+describe("pauses of up to five minutes are paid (Nov 19 rule)", () => {
+  it("the idle limit is five minutes", () => {
+    expect(IDLE_LIMIT_MS).toBe(5 * MINUTE_MS);
+  });
+
+  it("a four minute pause to read counts in full", () => {
+    expect(
+      activeSpan(T0, T0 + 4 * MINUTE_MS, {
+        visible: true,
+        busy: false,
+        lastInputAt: T0,
+      }),
+    ).toEqual([T0, T0 + 4 * MINUTE_MS]);
+  });
+
+  it("a ten minute pause counts its first five minutes only", () => {
+    expect(
+      activeSpan(T0, T0 + 10 * MINUTE_MS, {
+        visible: true,
+        busy: false,
+        lastInputAt: T0,
+      }),
+    ).toEqual([T0, T0 + 5 * MINUTE_MS]);
   });
 });

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { InfoTip } from "@/components/info-tip";
-import { hours1, type WeekRow } from "@/lib/hours";
+import { hours1, personTotals, type WeekRow } from "@/lib/hours";
 
 /**
  * Hours per person per week (annotator experience spec 10.4, dashboard spec
@@ -23,7 +23,7 @@ export const HOURS_COPY = {
   title: "Time on Platform",
   lead: "Who worked, and for how many hours. One row per person for the week shown.",
   active:
-    "Time with the platform open and in use. It stops after a minute without typing, clicking, recording or listening. Time on researcher pages counts at a quarter.",
+    "Time with the platform open and in use, researcher pages included. Pauses of up to five minutes count. It stops after five minutes without typing, clicking, recording or listening.",
   recounted:
     "The same rule as the old estimate, with clips, listening, checking and saved edits added back.",
   old: "The figure shown before the clock was added. It only counted text submissions made less than 30 minutes apart. It is kept as it was.",
@@ -35,6 +35,15 @@ export const HOURS_COPY = {
   footerOld:
     "The old estimate missed edits, recordings, and anything longer than 30 minutes between two submissions.",
   download: "Download CSV",
+  modeWeek: "Week",
+  modeTotal: "Running total",
+  totalLead:
+    "Each person's hours over the last 26 weeks, edits and revisions included. Click a name for their weeks.",
+  totalActive:
+    "Measured time added up over every week the clock ran for this person.",
+  totalEstimate:
+    "Weeks before the clock ran for this person, from the recounted estimate. Kept apart from measured time.",
+  totalEmpty: "No work recorded in the last 26 weeks.",
 } as const;
 
 /** "Mon 9 Nov" from a Lagos date string "2026-11-09". */
@@ -216,15 +225,123 @@ export function HoursTable({ data }: { data: HoursResponse }) {
   );
 }
 
+/** One row per person over many weeks, each opening onto that person's weeks. */
+export function TotalsTable({ data }: { data: HoursResponse }) {
+  const people = personTotals(data.rows);
+  const [open, setOpen] = useState<string | null>(null);
+  const num = "py-3 pr-4 text-right tabular-nums text-text-secondary";
+  if (people.length === 0) {
+    return (
+      <p className="mt-4 text-sm text-text-tertiary">{HOURS_COPY.totalEmpty}</p>
+    );
+  }
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <p className="mb-3 text-sm text-text-tertiary">{HOURS_COPY.totalLead}</p>
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-border text-xs font-medium uppercase tracking-wider text-text-tertiary">
+            <Th right={false}>Person</Th>
+            <Th help={HOURS_COPY.totalActive}>Active hours</Th>
+            <Th>Weeks measured</Th>
+            <Th help={HOURS_COPY.totalEstimate}>Estimated, earlier weeks</Th>
+            <Th>Submissions</Th>
+            <Th help={HOURS_COPY.edits}>Edits</Th>
+            <Th>Recordings</Th>
+            <Th>Listen and Check</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {people.map((p) => (
+            <Fragment key={p.userId}>
+              <tr className="border-b border-border align-top">
+                <td className="py-3 pr-4 font-medium text-text-primary">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-left hover:underline"
+                    aria-expanded={open === p.userId}
+                    onClick={() =>
+                      setOpen(open === p.userId ? null : p.userId)
+                    }
+                  >
+                    <span>{p.name}</span>
+                    {p.role !== "ANNOTATOR" && (
+                      <span className="inline-block rounded-full bg-surface-sunken px-2 py-0.5 text-xs font-medium text-text-tertiary">
+                        {roleLabel(p.role)}
+                      </span>
+                    )}
+                  </button>
+                </td>
+                <td className={num}>
+                  {p.weeksMeasured > 0 ? (
+                    <span className="font-medium text-text-primary">
+                      {hours1(p.activeSeconds / 60)}
+                    </span>
+                  ) : (
+                    <span className="text-text-tertiary">
+                      {HOURS_COPY.notMeasured}
+                    </span>
+                  )}
+                </td>
+                <td className={num}>{p.weeksMeasured}</td>
+                <td className={num}>
+                  {p.weeksEstimated > 0
+                    ? `${hours1(p.estimatedMinutes)} (${p.weeksEstimated} wk)`
+                    : "0.0"}
+                </td>
+                <td className={num}>{p.submissions}</td>
+                <td className={num}>{p.edits}</td>
+                <td className={num}>{p.recordings}</td>
+                <td className={num}>{p.listenAndCheck}</td>
+              </tr>
+              {open === p.userId &&
+                p.weeks.map((w) => (
+                  <tr
+                    key={`${p.userId}-${w.weekStart}`}
+                    className="border-b border-border bg-surface-sunken/50 text-xs"
+                  >
+                    <td className="py-2 pl-4 pr-4 text-text-secondary">
+                      Week of {weekLabel(w.weekStart)}
+                    </td>
+                    <td className={num}>
+                      {w.activeSeconds === null
+                        ? HOURS_COPY.notMeasured
+                        : hours1(w.activeSeconds / 60)}
+                    </td>
+                    <td className={num} />
+                    <td className={num}>
+                      {w.activeSeconds === null
+                        ? hours1(w.recountedMinutes)
+                        : ""}
+                    </td>
+                    <td className={num}>{w.submissions}</td>
+                    <td className={num}>{w.edits}</td>
+                    <td className={num}>{w.recordings}</td>
+                    <td className={num}>{w.listenRounds + w.checkVerdicts}</td>
+                  </tr>
+                ))}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function TimeSpent() {
   // null: this week. Otherwise the Lagos date of the Monday shown.
   const [week, setWeek] = useState<string | null>(null);
+  const [mode, setMode] = useState<"week" | "total">("week");
   const [data, setData] = useState<HoursResponse | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let live = true;
-    fetch(`/api/admin/time-spent${week ? `?week=${week}` : ""}`)
+    const q = new URLSearchParams();
+    if (week) q.set("week", week);
+    if (mode === "total") q.set("weeks", "26");
+    const qs = q.toString();
+    fetch(`/api/admin/time-spent${qs ? `?${qs}` : ""}`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -238,7 +355,7 @@ export function TimeSpent() {
     return () => {
       live = false;
     };
-  }, [week]);
+  }, [week, mode]);
 
   const shown = data?.week.start ?? week;
   const btn =
@@ -256,9 +373,31 @@ export function TimeSpent() {
           </h2>
           <p className="mt-1 text-sm text-text-tertiary">{HOURS_COPY.lead}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="View" className="flex">
+            {(["week", "total"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={mode === m}
+                className={`${btn} ${mode === m ? "bg-surface-sunken font-medium text-text-primary" : ""}`}
+                onClick={() => {
+                  if (m === mode) return;
+                  // The rows on screen belong to the other view: clear them.
+                  setData(null);
+                  setMode(m);
+                }}
+              >
+                {m === "week" ? HOURS_COPY.modeWeek : HOURS_COPY.modeTotal}
+              </button>
+            ))}
+          </div>
           <span className="text-sm text-text-secondary">
-            {shown ? `Week of ${weekLabel(shown)}` : "This week"}
+            {mode === "total"
+              ? `26 weeks to ${shown ? weekLabel(shown) : "this week"}`
+              : shown
+                ? `Week of ${weekLabel(shown)}`
+                : "This week"}
           </span>
           <button
             type="button"
@@ -299,6 +438,8 @@ export function TimeSpent() {
         </p>
       ) : !data ? (
         <p className="mt-4 text-sm text-text-muted">Loading hours...</p>
+      ) : mode === "total" ? (
+        <TotalsTable data={data} />
       ) : (
         <HoursTable data={data} />
       )}

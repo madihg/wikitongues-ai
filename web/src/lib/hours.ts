@@ -94,7 +94,7 @@ export interface HoursPing {
   minute: Date;
   activeSeconds: number;
   isDemo: boolean;
-  /** The kind of work; researcher pages count at a quarter. */
+  /** The kind of work. Every kind counts in full. */
   surface?: string | null;
 }
 
@@ -277,4 +277,79 @@ export function weekFigure(row: WeekRow | undefined): {
 /** Hours with one decimal, for tables and the CSV. */
 export function hours1(minutes: number): string {
   return (minutes / 60).toFixed(1);
+}
+
+/**
+ * One person's running total over the weeks given (the per-annotator view a
+ * team lead reads, not only the week on screen). Measured weeks add their
+ * measured time; weeks the clock did not run add their recounted estimate,
+ * kept apart so an estimate is never read as a measurement. Revision time is
+ * in the measured figure by construction: the clock runs on every page,
+ * the edit drawer and researcher pages included.
+ */
+export interface PersonTotal {
+  userId: string;
+  name: string;
+  role: string;
+  activeSeconds: number;
+  weeksMeasured: number;
+  estimatedMinutes: number;
+  weeksEstimated: number;
+  submissions: number;
+  edits: number;
+  recordings: number;
+  listenAndCheck: number;
+  lastActive: string | null;
+  /** The person's weeks, newest first. */
+  weeks: WeekRow[];
+}
+
+export function personTotals(rows: WeekRow[]): PersonTotal[] {
+  const byUser = new Map<string, PersonTotal>();
+  for (const r of rows) {
+    let t = byUser.get(r.userId);
+    if (!t) {
+      t = {
+        userId: r.userId,
+        name: r.name,
+        role: r.role,
+        activeSeconds: 0,
+        weeksMeasured: 0,
+        estimatedMinutes: 0,
+        weeksEstimated: 0,
+        submissions: 0,
+        edits: 0,
+        recordings: 0,
+        listenAndCheck: 0,
+        lastActive: null,
+        weeks: [],
+      };
+      byUser.set(r.userId, t);
+    }
+    if (r.activeSeconds !== null) {
+      t.activeSeconds += r.activeSeconds;
+      t.weeksMeasured++;
+    } else if (r.recountedMinutes > 0) {
+      t.estimatedMinutes += r.recountedMinutes;
+      t.weeksEstimated++;
+    }
+    t.submissions += r.submissions;
+    t.edits += r.edits;
+    t.recordings += r.recordings;
+    t.listenAndCheck += r.listenRounds + r.checkVerdicts;
+    if (r.lastActive && (!t.lastActive || r.lastActive > t.lastActive)) {
+      t.lastActive = r.lastActive;
+    }
+    t.weeks.push(r);
+  }
+  const out = [...byUser.values()];
+  for (const t of out) {
+    t.weeks.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+  }
+  return out.sort(
+    (a, b) =>
+      b.activeSeconds - a.activeSeconds ||
+      b.estimatedMinutes - a.estimatedMinutes ||
+      a.name.localeCompare(b.name),
+  );
 }
