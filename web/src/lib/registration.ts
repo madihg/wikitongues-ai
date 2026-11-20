@@ -25,8 +25,9 @@ export function isValidInvite(
   code: unknown,
   codes: string[] = inviteCodes(),
 ): boolean {
-  // TODO(human): decide what makes an invite valid, and return true for it.
-  // Until this is written every invite is refused, so registration is closed.
+  // Registration stays closed on purpose (Halim, Nov 20 2026): only Halim
+  // creates accounts, so no invite is valid. To open it later, accept an
+  // exact match against `codes` here.
   void code;
   void codes;
   return false;

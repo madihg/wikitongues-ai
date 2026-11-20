@@ -78,6 +78,7 @@ export async function changedTextClipIds(
     after: string | null;
     createdAt: Date;
     id: string;
+    saveId: string | null;
   }[];
   try {
     revisions = await db.answerRevision.findMany({
@@ -93,6 +94,7 @@ export async function changedTextClipIds(
         before: true,
         after: true,
         createdAt: true,
+        saveId: true,
       },
     });
   } catch (e) {

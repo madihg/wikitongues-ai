@@ -61,6 +61,7 @@ import {
   turnDeadlineFrom,
   TURN_CUTOFF_NOTICE,
 } from "@/lib/arena/turn-budget";
+import { usableColdAnswer } from "@/lib/excluded-answers";
 
 /**
  * POST /api/arena/chat - talk to several registered candidates at once.
@@ -123,7 +124,7 @@ const RAG_K = 4;
 /** Cached across models within one request - the pool is identical for each. */
 async function loadGoldPool(): Promise<GoldPoolEntry[]> {
   const rows = await prisma.coldAuthorAnswer.findMany({
-    where: { isDemo: false, consentTraining: true },
+    where: { isDemo: false, consentTraining: true, ...usableColdAnswer },
     select: {
       id: true,
       promptId: true,

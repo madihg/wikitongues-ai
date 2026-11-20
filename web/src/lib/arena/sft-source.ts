@@ -1,6 +1,7 @@
 import type { EvalBucket, VerificationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { SftSourceRow } from "./training-export";
+import { usableColdAnswer } from "@/lib/excluded-answers";
 
 /**
  * SFT source loader.
@@ -130,7 +131,7 @@ export async function loadSftSourceRows(job: {
   sourceEditIds: string[];
 }): Promise<SftSourceRow[]> {
   const cold = await prisma.coldAuthorAnswer.findMany({
-    where: { isDemo: false },
+    where: { isDemo: false, ...usableColdAnswer },
     include: {
       prompt: { select: { text: true, isHoldout: true, split: true, bucket: true } },
     },

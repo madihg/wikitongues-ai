@@ -54,6 +54,7 @@ import {
   type AutoraterValidation,
 } from "./autorater";
 import { scoreAgainstReferences } from "./reference";
+import { usableColdAnswer } from "@/lib/excluded-answers";
 
 export interface EvalBundle {
   report: EvalReport;
@@ -92,7 +93,7 @@ export async function collectEvalBundle(
   // Consent is enforced in the QUERY, not downstream, so no code path in this
   // module can accidentally reach a non-consented answer.
   const allGold = await prisma.coldAuthorAnswer.findMany({
-    where: { isDemo: false, consentBenchmark: true },
+    where: { isDemo: false, consentBenchmark: true, ...usableColdAnswer },
     select: { promptId: true, answerText: true, englishGloss: true },
   });
   const goldExcludedNoBenchmarkConsent = await prisma.coldAuthorAnswer.count({

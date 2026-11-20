@@ -648,6 +648,7 @@ export async function loadEditEpisode(args: {
           before: true,
           after: true,
           createdAt: true,
+          saveId: true,
         },
       });
     } catch (e) {
@@ -777,6 +778,7 @@ export async function staleRecordingIds(
         before: true,
         after: true,
         createdAt: true,
+        saveId: true,
       },
     });
     return staleClipIds(clips, revisions);

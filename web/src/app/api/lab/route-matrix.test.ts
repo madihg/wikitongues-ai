@@ -177,6 +177,15 @@ const ROUTES: Route[] = [
       ),
   },
   {
+    name: "POST speech/check/fix",
+    file: "speech/check/fix/route.ts",
+    audience: "researcher",
+    call: async () => () =>
+      load<{ POST: (r: Request) => Promise<Response> }>("./speech/check/fix/route").then((m) =>
+        m.POST(json("POST", "speech/check/fix")),
+      ),
+  },
+  {
     name: "GET speech/check/transcript",
     file: "speech/check/transcript/route.ts",
     audience: "speaker",

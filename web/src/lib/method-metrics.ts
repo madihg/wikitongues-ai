@@ -17,6 +17,7 @@ import {
   type LeakHit,
 } from "@/lib/eval/leak-guard";
 import { correctionReason } from "@/lib/arena/retrieval-v4";
+import { usableColdAnswer } from "@/lib/excluded-answers";
 
 /**
  * Live metrics for the "How it works" page.
@@ -550,6 +551,7 @@ export async function computeMethodMetrics(
         isDemo: false,
         consentBenchmark: true,
         ...REAL_CONTRIBUTOR,
+        ...usableColdAnswer,
       },
       select: {
         promptId: true,

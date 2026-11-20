@@ -12,6 +12,7 @@ import {
 } from "@/lib/eval/leak-guard";
 import { fullFold } from "@/lib/eval/normalize";
 import { toOrthography } from "@/lib/lexicon-parse";
+import { usableColdAnswer } from "@/lib/excluded-answers";
 
 /**
  * SERVING PATH V2 - retrieval assembled the way the ablation literature says
@@ -503,7 +504,7 @@ const goldPoolCache = new WeakMap<
 
 async function loadGoldPool(prisma: PrismaClient): Promise<GoldPoolEntry[]> {
   const goldRows = await prisma.coldAuthorAnswer.findMany({
-    where: { isDemo: false, consentTraining: true },
+    where: { isDemo: false, consentTraining: true, ...usableColdAnswer },
     select: {
       id: true,
       promptId: true,
@@ -591,7 +592,7 @@ export async function buildRetrievalV2(
     select: {
       id: true,
       coldAuthorAnswers: {
-        where: { consentBenchmark: true, isDemo: false },
+        where: { consentBenchmark: true, isDemo: false, ...usableColdAnswer },
         select: { answerText: true },
       },
     },
