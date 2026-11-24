@@ -215,6 +215,22 @@ describe("sanitizeQuality", () => {
     syllablesPerSecond: 2.4,
     retakes: 2,
   };
+  it("keeps a long take's durations as measured, up to the five minute stop", () => {
+    const base = sanitizeQuality({ durationMs: 1, speechShare: 0.5, rmsDbfs: -20, peakDbfs: -3 })!;
+    expect(base.durationMs).toBe(1);
+    const long = sanitizeQuality({
+      durationMs: 95_000,
+      leadingSilenceMs: 400,
+      trailingSilenceMs: 61_000,
+      speechShare: 0.5,
+      rmsDbfs: -20,
+      peakDbfs: -3,
+    })!;
+    expect(long.durationMs).toBe(95_000);
+    expect(long.trailingSilenceMs).toBe(61_000);
+    expect(sanitizeQuality({ ...long, durationMs: 400_000 })!.durationMs).toBe(300_000);
+  });
+
   it("keeps the known metrics and drops everything else", () => {
     const q = sanitizeQuality({ ...ok, extra: "x", nested: { a: 1 } })!;
     expect(q).toMatchObject(ok);

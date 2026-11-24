@@ -23,7 +23,11 @@ import {
  */
 
 export interface CheckTask {
-  recording: { id: string; url: string };
+  /**
+   * endsAtStop: the clip ran into a recorder stop (every take before
+   * 2026-11-24 stopped at 30 s), so its audio may end before the answer.
+   */
+  recording: { id: string; url: string; endsAtStop?: boolean };
   prompt: { promptId: string; text: string };
   answer: { text: string; words: string[] };
 }
@@ -245,6 +249,17 @@ export function CheckView(p: CheckViewProps) {
         data-testid="check-audio"
         className="w-full"
       />
+      {task.recording.endsAtStop ? (
+        <p
+          data-testid="check-ends-at-stop"
+          className="rounded-md border border-warning bg-warning-subtle px-3 py-2 text-sm text-text-primary"
+        >
+          The recorder stopped this clip, not the speaker (until November 24
+          every clip stopped at 30 seconds), so it may end before the answer
+          does. Listen to the end. If words are missing, choose Does not match,
+          then Words missing or added.
+        </p>
+      ) : null}
       <div className="rounded-lg border border-border bg-surface p-4">
         <div className="mb-2 font-mono text-xs uppercase tracking-widest text-text-muted">
           What they wrote

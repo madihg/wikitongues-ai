@@ -114,18 +114,27 @@ describe("POST /api/lab/speech/recording: refusals", () => {
     expect((await post({ ...valid, tier: null })).status).toBe(400);
   });
 
-  it("400 for a clip over 30 seconds, and none at exactly 30", async () => {
-    expect((await post({ ...valid, durationMs: 30_001 })).status).toBe(400);
-    expect((await post({ ...valid, durationMs: 30_000 })).status).toBe(201);
+  it("takes a whole answer: 400 only past the five minute safety stop", async () => {
+    // The old 30 second stop is gone (2026-11-24): a long answer is kept whole.
+    expect((await post({ ...valid, durationMs: 30_001 })).status).toBe(201);
+    expect((await post({ ...valid, durationMs: 95_000 })).status).toBe(201);
+    expect((await post({ ...valid, durationMs: 300_000 })).status).toBe(201);
+    const over = await post({ ...valid, durationMs: 300_001 });
+    expect(over.status).toBe(400);
+    expect((await over.json()).error).toBe("A clip can be at most 5 minutes");
   });
 
-  it("400 for a declared size over 4 MB, and none at exactly 4 MB", async () => {
-    expect(
-      (await post({ ...valid, sizeBytes: 4 * 1024 * 1024 + 1 })).status,
-    ).toBe(400);
-    expect((await post({ ...valid, sizeBytes: 4 * 1024 * 1024 })).status).toBe(
+  it("400 for a declared size over 20 MB, and none at exactly 20 MB", async () => {
+    // Over 4 MB is fine now: such a clip goes up in parts.
+    expect((await post({ ...valid, sizeBytes: 9 * 1024 * 1024 })).status).toBe(
       201,
     );
+    expect(
+      (await post({ ...valid, sizeBytes: 20 * 1024 * 1024 + 1 })).status,
+    ).toBe(400);
+    expect(
+      (await post({ ...valid, sizeBytes: 20 * 1024 * 1024 })).status,
+    ).toBe(201);
   });
 
   it("400 for an unknown language; igala is the default; english is accepted", async () => {
@@ -304,8 +313,9 @@ describe("POST /api/lab/speech/recording: happy path", () => {
     expect(body.audioUrl).toBe(`/api/lab/speech/recording/${data.id}/audio`);
     expect(body).not.toHaveProperty("upload");
     expect(body.limits).toEqual({
-      maxBytes: 4 * 1024 * 1024,
-      maxDurationMs: 30000,
+      maxBytes: 20 * 1024 * 1024,
+      partBytes: 4 * 1024 * 1024,
+      maxDurationMs: 300_000,
     });
     // The row carries no audio yet: bytes come with the PUT, which also sets
     // uploadedAt.

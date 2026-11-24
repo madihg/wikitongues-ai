@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { canTrain, type TrainRefusal } from "./can-train";
+import { VOICE_TRAIN_MAX_MS } from "./limits";
 import {
   buildTrainingManifest,
   type LoopRow,
@@ -17,6 +18,10 @@ import {
  * prompt). On top of that it narrows, never widens:
  *
  *  - Igala clips only, and one voice only (a VITS model has one speaker);
+ *  - clips longer than VOICE_TRAIN_MAX_MS (25 s) are left out and counted:
+ *    the trainer would drop them without a word. Since 2026-11-24 a take can
+ *    run five minutes, so a long answer is kept whole and waits to be cut
+ *    into pieces;
  *  - clips on a HELD tier are left out. The default holds "open": the clips
  *    marked Open during the November test count as not yet chosen until the
  *    speaker answers (orchestrator decision 8 of Nov 13);
@@ -47,6 +52,11 @@ export interface FirstModelPlan {
     notIgala: number;
     /** Passed the guard, then left out: another speaker's voice. */
     otherVoice: number;
+    /**
+     * Passed the guard, then left out: longer than the trainer takes
+     * (VOICE_TRAIN_MAX_MS). Kept whole; waits to be cut into pieces.
+     */
+    tooLong: number;
   };
 }
 
@@ -75,16 +85,17 @@ export function buildFirstModelPlan(
   const passed = buildTrainingManifest(rows, { ...ctx, signedUrl: opts.signedUrl }).lines;
   const chosenTier = passed.filter((l) => !held.includes(l.tier));
   const igala = chosenTier.filter((l) => l.language === "igala");
+  const fits = igala.filter((l) => l.durationMs <= VOICE_TRAIN_MAX_MS);
 
   const seconds = new Map<string, number>();
-  for (const l of igala) {
+  for (const l of fits) {
     seconds.set(l.speakerPseudonym, (seconds.get(l.speakerPseudonym) ?? 0) + l.durationMs);
   }
   const voice =
     opts.voice ??
     [...seconds.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ??
     null;
-  const mine = igala.filter((l) => l.speakerPseudonym === voice);
+  const mine = fits.filter((l) => l.speakerPseudonym === voice);
 
   const keys = [...new Set(mine.map(sentenceKey))].sort();
   const share = opts.holdOutShare ?? 1 / 3;
@@ -105,7 +116,8 @@ export function buildFirstModelPlan(
       refused,
       heldTier: passed.length - chosenTier.length,
       notIgala: chosenTier.length - igala.length,
-      otherVoice: igala.length - mine.length,
+      tooLong: igala.length - fits.length,
+      otherVoice: fits.length - mine.length,
     },
   };
 }

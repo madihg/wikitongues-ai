@@ -29,8 +29,9 @@ export function pickRecorderMime(
 }
 
 /**
- * Whole seconds left once the countdown starts (the last five seconds of the
- * 30), else null. 25.0 s elapsed reads 5; 29.01 s reads 1; at the cap, 0.
+ * Whole seconds left once the countdown starts (the last ten seconds before
+ * the safety stop), else null. Ten seconds before the stop reads 10; one
+ * hundredth of a second before it reads 1; at the stop, 0.
  */
 export function countdownSeconds(elapsedMs: number): number | null {
   if (elapsedMs < COUNTDOWN_FROM_MS) return null;

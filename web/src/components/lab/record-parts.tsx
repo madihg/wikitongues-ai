@@ -78,7 +78,8 @@ export function Timer({
 }
 
 /**
- * The countdown for the last five seconds of the 30. The live region is
+ * The countdown for the last ten seconds before the five minute safety stop
+ * (until 2026-11-24: the last five of a 30 second hard stop). The live region is
  * always present (so screen readers announce changes) and empty until the
  * countdown starts.
  */

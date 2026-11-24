@@ -49,6 +49,19 @@ describe("Check screen", () => {
     expect(html).not.toContain('data-testid="check-change"');
   });
 
+  it("a clip the recorder stopped carries a note to listen to the end; others do not", () => {
+    expect(view()).not.toContain('data-testid="check-ends-at-stop"');
+    const html = view({
+      task: { ...task, recording: { ...task.recording, endsAtStop: true } },
+    });
+    expect(html).toContain('data-testid="check-ends-at-stop"');
+    expect(html).toContain("Listen to the end");
+    expect(html).toContain("Words missing or added");
+    // The note sits right under the player, before the written answer.
+    expect(html.indexOf("check-ends-at-stop")).toBeGreaterThan(html.indexOf("check-audio"));
+    expect(html.indexOf("check-ends-at-stop")).toBeLessThan(html.indexOf("What they wrote"));
+  });
+
   it("Send stays disabled until a verdict is picked", () => {
     expect(view()).toMatch(/<button[^>]*data-testid="check-send"[^>]*\sdisabled=""/);
     expect(view({ picked: "matches" })).not.toMatch(

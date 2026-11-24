@@ -228,12 +228,22 @@ describe("scripts/speech/publish-listen-candidates.ts (planPublish)", () => {
     expect(none.clips).toEqual([]);
   });
 
-  it("leaves out a human clip that ran into the 30 second cap", () => {
+  it("leaves out a human clip that ran into the old 30 second stop or the five minute one", () => {
     const hs = humans();
     hs[0] = human(0, { durationMs: 30000 });
+    hs[1] = human(1, { durationMs: 300000 });
     const plan = planPublish(manifest(), hs, ["r1"]);
-    expect(plan.skipped).toEqual({ human_clip_cut_at_the_cap: 1 });
+    expect(plan.skipped).toEqual({ human_clip_cut_at_the_cap: 2 });
     expect(plan.clips.map((c) => c.promptId)).not.toContain("p-0");
+    expect(plan.clips.map((c) => c.promptId)).not.toContain("p-1");
+  });
+
+  it("keeps a long human clip that the speaker finished", () => {
+    const hs = humans();
+    hs[0] = human(0, { durationMs: 95000 });
+    const plan = planPublish(manifest(), hs, ["r1"]);
+    expect(plan.skipped).toEqual({});
+    expect(plan.clips.map((c) => c.promptId)).toContain("p-0");
   });
 });
 

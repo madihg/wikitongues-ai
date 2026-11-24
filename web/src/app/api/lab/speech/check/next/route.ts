@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labGate } from "@/lib/speech/lab-route";
 import { answerWords } from "@/lib/speech/check";
+import { ranIntoCap } from "@/lib/speech/limits";
 import { audioUrl } from "@/lib/speech/storage";
 
 /**
@@ -20,6 +21,11 @@ import { audioUrl } from "@/lib/speech/storage";
  * oldest. The response is blind: an id, the audio endpoint URL, the prompt
  * and the written answer. No speaker, tier, or machine transcript: the
  * transcript is only available after a verdict, from the transcript route.
+ *
+ * `endsAtStop` is true for a clip that ran into a recorder stop (before
+ * 2026-11-24, every take stopped at 30 seconds): its audio may end before
+ * the written answer does, and the screen says so, so a checker listens to
+ * the end before choosing.
  */
 
 const MAX_CANDIDATES = 500;
@@ -60,6 +66,7 @@ export async function GET(req: Request) {
       coldAuthorAnswerId: true,
       language: true,
       createdAt: true,
+      durationMs: true,
       prompt: { select: { promptId: true, text: true } },
       coldAuthorAnswer: { select: { answerText: true } },
     },
@@ -106,7 +113,11 @@ export async function GET(req: Request) {
     demo: isDemo,
     progress,
     task: {
-      recording: { id: next.id, url: audioUrl(next.id) },
+      recording: {
+        id: next.id,
+        url: audioUrl(next.id),
+        endsAtStop: ranIntoCap(next.durationMs),
+      },
       prompt: { promptId: next.prompt.promptId, text: next.prompt.text },
       answer: { text: answer, words: answerWords(answer) },
       dialect: next.dialect,

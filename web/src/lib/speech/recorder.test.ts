@@ -43,21 +43,24 @@ describe("pickRecorderMime", () => {
 });
 
 describe("countdownSeconds", () => {
-  it("is null before 25 seconds", () => {
+  // Since 2026-11-24 the recorder stops itself only at five minutes (the
+  // safety stop); the countdown warns for the last ten seconds of it.
+  it("is null before four minutes fifty", () => {
     expect(countdownSeconds(0)).toBeNull();
-    expect(countdownSeconds(24_999)).toBeNull();
+    expect(countdownSeconds(30_000)).toBeNull();
+    expect(countdownSeconds(289_999)).toBeNull();
   });
 
-  it("counts 5 down to 0 over the last five seconds", () => {
-    expect(countdownSeconds(25_000)).toBe(5);
-    expect(countdownSeconds(25_500)).toBe(5);
-    expect(countdownSeconds(26_000)).toBe(4);
-    expect(countdownSeconds(29_001)).toBe(1);
-    expect(countdownSeconds(30_000)).toBe(0);
+  it("counts 10 down to 0 over the last ten seconds", () => {
+    expect(countdownSeconds(290_000)).toBe(10);
+    expect(countdownSeconds(290_500)).toBe(10);
+    expect(countdownSeconds(291_000)).toBe(9);
+    expect(countdownSeconds(299_001)).toBe(1);
+    expect(countdownSeconds(300_000)).toBe(0);
   });
 
-  it("never goes negative past the cap", () => {
-    expect(countdownSeconds(31_000)).toBe(0);
+  it("never goes negative past the safety stop", () => {
+    expect(countdownSeconds(301_000)).toBe(0);
   });
 });
 
@@ -66,10 +69,12 @@ describe("formatClock", () => {
     expect(formatClock(0)).toBe("0:00.0");
     expect(formatClock(7_400)).toBe("0:07.4");
     expect(formatClock(30_000)).toBe("0:30.0");
+    expect(formatClock(95_300)).toBe("1:35.3");
+    expect(formatClock(300_000)).toBe("5:00.0");
   });
 
-  it("clamps to the 30 second cap and below zero", () => {
-    expect(formatClock(45_000)).toBe("0:30.0");
+  it("clamps to the five minute safety stop and below zero", () => {
+    expect(formatClock(450_000)).toBe("5:00.0");
     expect(formatClock(-5)).toBe("0:00.0");
   });
 });
@@ -190,7 +195,9 @@ describe("capture settings (decided 2026-11-13: raw, behind a switch until Halim
     expect(src).toContain("audio: captureConstraints(mode),");
     expect(src).toContain("stream.getAudioTracks()[0]?.getSettings()");
     expect(src).toContain("const capture = appliedCapture(");
-    expect(src).toContain("mime: type, capture });");
+    expect(src).toContain("mime: type,");
+    expect(src).toContain("capture,");
+    expect(src).toContain("stoppedAtLimit: stoppedAtLimitRef.current,");
     // No constraint is written by hand any more.
     expect(src).not.toMatch(/echoCancellation:|noiseSuppression:|autoGainControl:/);
   });

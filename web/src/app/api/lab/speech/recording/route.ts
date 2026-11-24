@@ -9,6 +9,7 @@ import {
   LANGUAGES,
   MAX_ANSWER_CHARS,
   MAX_BYTES,
+  MAX_CLIP_BYTES,
   MAX_DURATION_MS,
   MAX_TRANSLATION_CHARS,
   MIN_TRANSLATION_CHARS,
@@ -34,7 +35,9 @@ import {
  * preselects nothing. Refusals, in order:
  *   400  malformed body, missing or unknown tier, an unknown language
  *        (igala or english; igala when omitted), bad mime, bad duration,
- *        a declared size over 4 MB, or a duration over 30 s
+ *        a declared size over 20 MB, or a duration over five minutes (the
+ *        recorder's safety stop; it was 30 s until 2026-11-24). A clip over
+ *        4 MB goes up in parts: see the audio route.
  *   404  unknown prompt
  *   403  frozen prompt (isHoldout or split test), no detail, per FR-3
  *   428  no consent grant for the CURRENT consent version
@@ -125,7 +128,7 @@ export async function POST(req: Request) {
     return bad("durationMs must be a positive integer");
   }
   if (b.durationMs > MAX_DURATION_MS) {
-    return bad("A clip can be at most 30 seconds");
+    return bad("A clip can be at most 5 minutes");
   }
   if (b.sizeBytes !== undefined) {
     if (
@@ -135,7 +138,7 @@ export async function POST(req: Request) {
     ) {
       return bad("sizeBytes must be a positive integer");
     }
-    if (b.sizeBytes > MAX_BYTES) return bad("A clip can be at most 4 MB");
+    if (b.sizeBytes > MAX_CLIP_BYTES) return bad("A clip can be at most 20 MB");
   }
 
   let sampleRate = 48000;
@@ -389,7 +392,11 @@ export async function POST(req: Request) {
       id: row.id,
       coldAuthorAnswerId: answerId,
       audioUrl: audioUrl(row.id),
-      limits: { maxBytes: MAX_BYTES, maxDurationMs: MAX_DURATION_MS },
+      limits: {
+        maxBytes: MAX_CLIP_BYTES,
+        partBytes: MAX_BYTES,
+        maxDurationMs: MAX_DURATION_MS,
+      },
     },
     { status: 201 },
   );

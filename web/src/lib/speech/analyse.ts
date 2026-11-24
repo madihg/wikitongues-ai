@@ -10,6 +10,7 @@
  * honest and checkable. Client-safe (no server imports).
  */
 
+import { MAX_DURATION_MS } from "./limits";
 import { METER, RECORD_LEVELS, sanitizeRoom, type RoomReading } from "./record-levels";
 import { sanitizeCapture, type CaptureSettings } from "./recorder";
 
@@ -399,10 +400,12 @@ export function hasWarning(m: QualityMetrics): boolean {
 
 // ---- Server-side sanitising -----------------------------------------------
 
+// Durations are bounded by the longest take (five minutes since 2026-11-24),
+// so a long take's metrics are stored as measured, not clamped to a minute.
 const NUMERIC_FIELDS: [keyof QualityMetrics, number, number][] = [
-  ["durationMs", 0, 60_000],
-  ["leadingSilenceMs", 0, 60_000],
-  ["trailingSilenceMs", 0, 60_000],
+  ["durationMs", 0, MAX_DURATION_MS],
+  ["leadingSilenceMs", 0, MAX_DURATION_MS],
+  ["trailingSilenceMs", 0, MAX_DURATION_MS],
   ["speechShare", 0, 1],
   ["rmsDbfs", -120, 6],
   ["peakDbfs", -120, 6],

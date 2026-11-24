@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
+import { VOICE_TRAIN_MAX_MS } from "./limits";
 import { licensedRow, openRow } from "./fixtures";
 import { buildFirstModelPlan, FIRST_MODEL_GUARD } from "./first-model-plan";
 import type { LoopRow } from "./training-manifest";
@@ -86,6 +89,32 @@ describe("buildFirstModelPlan", () => {
     expect(plan.counts.otherVoice).toBe(1);
     expect(plan.counts.notIgala).toBe(1);
     expect(plan.train.length + plan.heldOut.length).toBe(6);
+  });
+
+  it("leaves out a clip longer than the trainer takes, counts it, and does not let it pick the voice", () => {
+    const rows = [
+      ...six(),
+      cleared("edge", { durationMs: VOICE_TRAIN_MAX_MS }),
+      // A second speaker with one long answer: more audio, none of it usable.
+      cleared("long-1", { annotatorId: "speaker-b", durationMs: 95_000 }),
+      cleared("long-2", { durationMs: VOICE_TRAIN_MAX_MS + 1 }),
+    ];
+    const plan = buildFirstModelPlan(rows, { signedUrl });
+    const ids = [...plan.train, ...plan.heldOut].map((l) => l.id);
+    expect(ids).toContain("edge");
+    expect(ids).not.toContain("long-1");
+    expect(ids).not.toContain("long-2");
+    expect(plan.counts.tooLong).toBe(2);
+    expect(plan.counts.otherVoice).toBe(0);
+    expect(ids.length).toBe(7);
+  });
+
+  it("the limit is the trainer's own (worker/first_model.py)", () => {
+    const worker = readFileSync(
+      join(__dirname, "..", "..", "..", "..", "worker", "first_model.py"),
+      "utf8",
+    );
+    expect(worker).toContain(`"max_duration_in_seconds": ${VOICE_TRAIN_MAX_MS / 1000},`);
   });
 
   it("holds out a third of the sentences, and a sentence never sits on both sides", () => {
