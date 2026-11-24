@@ -187,6 +187,14 @@ export const TOOLS: MoreItem[] = [
     label: "Demo session",
     sentence: "Show the real flow to an audience. Nothing from a demo is kept.",
   },
+  {
+    // The work on these pages is a tab of Annotate since 2026-11-24; the
+    // researcher tools (Recordings, Studio, the Listen extras) stay here.
+    href: "/lab/speech/recordings",
+    label: "Speech tools",
+    sentence:
+      "Recordings, Studio sittings, the rights register and the Listen extras. Speech work itself is in Annotate.",
+  },
 ];
 
 /**

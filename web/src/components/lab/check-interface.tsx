@@ -1,5 +1,6 @@
 "use client";
 
+import { useOnEmpty } from "@/components/work/use-on-empty";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { demoFromSearch, withDemo } from "@/lib/speech/demo-url";
 import { EpisodeFooter, EpisodeHeader } from "@/components/episode-frame";
@@ -448,8 +449,10 @@ type Load =
   | { status: "done" }
   | { status: "task"; task: CheckTask };
 
-export function CheckInterface() {
+export function CheckInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
+  // Inside the one Annotate flow: say when there is nothing left to check.
+  useOnEmpty(load.status === "done", onEmpty);
   // The demo session on the address (the Speech band's Demo switch puts it
   // there). With it, a verdict is stored as demo and the clip is untouched.
   const demoRef = useRef<string | null>(null);

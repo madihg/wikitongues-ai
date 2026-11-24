@@ -1,5 +1,6 @@
 "use client";
 
+import { useOnEmpty } from "@/components/work/use-on-empty";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   EpisodeFooter,
@@ -303,8 +304,10 @@ type Load =
   | { status: "done" }
   | { status: "task"; task: ToneTask; reopened: boolean };
 
-export function ToneInterface() {
+export function ToneInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
+  // Inside the one Annotate flow: say when there is nothing left to mark.
+  useOnEmpty(load.status === "done", onEmpty);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [text, setText] = useState("");
   const [unsure, setUnsure] = useState<number[]>([]);

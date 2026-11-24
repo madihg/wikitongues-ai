@@ -1,5 +1,6 @@
 "use client";
 
+import { useOnEmpty } from "@/components/work/use-on-empty";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import type { EvalBucket } from "@prisma/client";
@@ -236,7 +237,12 @@ function replaceAnnotateSearch(changes: Partial<AnnotateParams>) {
   );
 }
 
-export function AnnotationInterface() {
+export function AnnotationInterface({
+  onEmpty,
+}: {
+  /** Inside the one Annotate flow: called when no prompt is left. */
+  onEmpty?: () => void;
+} = {}) {
   // The role decides one thing here: whether the Demo switch is offered. The
   // server decides everything else again for itself.
   const { data: session } = useSession();
@@ -256,6 +262,7 @@ export function AnnotationInterface() {
   const [task, setTask] = useState<TaskData | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  useOnEmpty(isComplete, onEmpty);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

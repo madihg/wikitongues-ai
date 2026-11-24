@@ -62,9 +62,7 @@ describe("the phone shell", () => {
     expect(drawerLinks(html)).toEqual(sidebarLinks(html));
     expect(drawerLinks(html)).toEqual([
       "Dashboard",
-      "Annotate",
-      "Speech 4 waiting",
-      "Pass 2: tone marks 3 waiting",
+      "Annotate 7 waiting",
       "My Work",
       "Rubric",
     ]);
@@ -76,7 +74,7 @@ describe("the phone shell", () => {
     const html = renderToStaticMarkup(<Sidebar initialMenuOpen />);
     const links = drawerLinks(html);
     expect(links).toEqual(sidebarLinks(html));
-    for (const label of ["Dashboard", "Annotate", "My Work", "Today", "Data", "Text model", "Speech model", "More"]) {
+    for (const label of ["Dashboard", "Annotate 7 waiting", "My Work", "Today", "Data", "Text model", "Speech model", "More"]) {
       expect(links).toContain(label);
     }
     expect(links.indexOf("Today")).toBeGreaterThan(links.indexOf("My Work"));

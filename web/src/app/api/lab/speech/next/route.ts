@@ -67,7 +67,12 @@ export async function GET(req: Request) {
     englishMissing,
   } = await loadRecordQueue(annotatorId, { isDemo, exclude });
 
-  const progress = { recorded: recordedIds.length };
+  // `waiting`: own answers that still need a clip, the Record header's
+  // "N left" (the same loader as the sidebar count).
+  const progress = {
+    recorded: recordedIds.length,
+    waiting: withAnswer.length + englishMissing.length,
+  };
 
   // The clips the pool holds and the speaker's dialect, for the coverage
   // ranking. Real, confirmed, unfrozen clips only; ids and dialects, never

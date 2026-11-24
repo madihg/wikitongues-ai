@@ -70,18 +70,18 @@ describe("Sidebar", () => {
     expect(html).not.toContain('data-testid="nav-count"');
   });
 
-  it("with speech on, Speech is the third line with what is waiting beside it", () => {
+  it("with speech on there is still no Speech line: Annotate holds it and carries what is waiting", () => {
     Object.assign(state, { lab: true, waiting: 310 });
     const html = renderToStaticMarkup(<Sidebar />);
     expect(labels(html)).toEqual([
       "Dashboard",
       "Annotate",
-      "Speech",
       "My Work",
       "Rubric",
     ]);
+    expect(html).not.toContain('href="/speak"');
     expect(html).toMatch(
-      /href="\/speak"[^>]*>Speech<span data-testid="nav-count"[^>]*>310</,
+      /href="\/annotator\/annotate"[^>]*>Annotate<span data-testid="nav-count"[^>]*>310</,
     );
     expect(html.match(/data-testid="nav-count"/g)).toHaveLength(1);
   });
@@ -103,10 +103,9 @@ describe("Sidebar", () => {
       waiting: 4,
     });
     const html = renderToStaticMarkup(<Sidebar />);
-    expect(labels(html).slice(0, 5)).toEqual([
+    expect(labels(html).slice(0, 4)).toEqual([
       "Dashboard",
       "Annotate",
-      "Speech",
       "My Work",
       "Rubric",
     ]);
@@ -114,7 +113,7 @@ describe("Sidebar", () => {
     expect(divider).toBeGreaterThan(html.indexOf(">Rubric<"));
     // Below the divider: the views, then More. Nothing else. People is for
     // research leads, and this researcher is not one.
-    expect(labels(html).slice(5)).toEqual([
+    expect(labels(html).slice(4)).toEqual([
       "Today",
       "Data",
       "Text model",
@@ -144,22 +143,18 @@ describe("Sidebar", () => {
     expect(html).not.toContain("researchers only");
   });
 
-  it("Speech stays highlighted on its tabs and on the researcher pages", () => {
+  it("Annotate stays highlighted on the Speech pages and the old Pass 2 address", () => {
     Object.assign(state, {
-      role: "RESEARCHER",
-      email: "r@example.com",
+      role: "ANNOTATOR",
+      email: "a@example.com",
       lab: true,
     });
-    for (const pathname of [
-      "/speak",
-      "/speak/check",
-      "/lab/speech/recordings",
-    ]) {
+    for (const pathname of ["/speak", "/speak/check", "/annotator/tone"]) {
       state.pathname = pathname;
       const html = renderToStaticMarkup(<Sidebar />);
       const active = [...html.matchAll(/<a\b[^>]*bg-accent-subtle[^>]*>/g)];
       expect(active, pathname).toHaveLength(1);
-      expect(active[0][0], pathname).toContain('href="/speak"');
+      expect(active[0][0], pathname).toContain('href="/annotator/annotate"');
     }
   });
 
@@ -177,7 +172,7 @@ describe("Sidebar", () => {
     }
   });
 
-  it("a person who was given tone items gets the line after Speech, with what is waiting", () => {
+  it("a person who was given tone items gets no extra line: their number joins Annotate's", () => {
     Object.assign(state, {
       role: "ANNOTATOR",
       lab: true,
@@ -188,18 +183,16 @@ describe("Sidebar", () => {
     expect(labels(html)).toEqual([
       "Dashboard",
       "Annotate",
-      "Speech",
-      "Pass 2: tone marks",
       "My Work",
       "Rubric",
     ]);
     expect(html).toMatch(
-      /href="\/annotator\/tone"[^>]*>Pass 2: tone marks<span data-testid="nav-count"[^>]*>30</,
+      /href="\/annotator\/annotate"[^>]*>Annotate<span data-testid="nav-count"[^>]*>37</,
     );
-    // Every item marked: the line stays, without a number.
+    // Every item marked and nothing else waiting: no number.
     Object.assign(state, { tone: 0, waiting: undefined });
     const done = renderToStaticMarkup(<Sidebar />);
-    expect(labels(done)).toContain("Pass 2: tone marks");
+    expect(labels(done)).not.toContain("Pass 2: tone marks");
     expect(done).not.toContain('data-testid="nav-count"');
   });
 

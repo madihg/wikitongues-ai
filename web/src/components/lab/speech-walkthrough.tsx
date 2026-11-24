@@ -26,6 +26,7 @@ export function WalkthroughView({
   onNext,
   onBack,
   onClose,
+  onCheck,
 }: {
   index: number;
   tapped: number | null;
@@ -33,6 +34,11 @@ export function WalkthroughView({
   onNext: () => void;
   onBack: () => void;
   onClose: () => void;
+  /**
+   * Inside the one Annotate flow the last step opens the Check tab of the
+   * same page; on the Speech pages it is a link to /speak/check.
+   */
+  onCheck?: () => void;
 }) {
   const step: WalkthroughStep = WALKTHROUGH_STEPS[index];
   const last = index === WALKTHROUGH_STEPS.length - 1;
@@ -146,13 +152,26 @@ export function WalkthroughView({
         ) : null}
         {last ? (
           <>
-            <Link
-              href="/speak/check"
-              onClick={onClose}
-              className="inline-flex min-h-[44px] items-center rounded-md bg-accent px-6 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
-            >
-              {step.next}
-            </Link>
+            {onCheck ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onCheck();
+                }}
+                className="inline-flex min-h-[44px] cursor-pointer items-center rounded-md bg-accent px-6 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+              >
+                {step.next}
+              </button>
+            ) : (
+              <Link
+                href="/speak/check"
+                onClick={onClose}
+                className="inline-flex min-h-[44px] items-center rounded-md bg-accent px-6 py-2 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+              >
+                {step.next}
+              </Link>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -191,7 +210,12 @@ function readSeen(): boolean {
 }
 
 /** The Record tab's walkthrough: open on a first visit, reopenable from its button. */
-export function SpeechWalkthrough() {
+export function SpeechWalkthrough({
+  onCheck,
+}: {
+  /** Inside the one Annotate flow: open its Check tab (see WalkthroughView). */
+  onCheck?: () => void;
+} = {}) {
   // Read once from storage on the client; the server render counts as seen,
   // so the first paint is the button and the card opens after hydration.
   const seen = useSyncExternalStore(noopSubscribe, readSeen, () => true);
@@ -235,6 +259,7 @@ export function SpeechWalkthrough() {
       onNext={() => go(Math.min(index + 1, WALKTHROUGH_STEPS.length - 1))}
       onBack={() => go(Math.max(index - 1, 0))}
       onClose={close}
+      onCheck={onCheck}
     />
   );
 }
