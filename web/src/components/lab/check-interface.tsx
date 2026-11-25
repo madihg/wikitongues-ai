@@ -1,6 +1,6 @@
 "use client";
 
-import { useOnEmpty } from "@/components/work/use-on-empty";
+import { useOnEmpty, type WorkScreenProps } from "@/components/work/use-on-empty";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { demoFromSearch, withDemo } from "@/lib/speech/demo-url";
 import { EpisodeFooter, EpisodeHeader } from "@/components/episode-frame";
@@ -449,7 +449,7 @@ type Load =
   | { status: "done" }
   | { status: "task"; task: CheckTask };
 
-export function CheckInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
+export function CheckInterface({ onEmpty, onDone }: WorkScreenProps = {}) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
   // Inside the one Annotate flow: say when there is nothing left to check.
   useOnEmpty(load.status === "done", onEmpty);
@@ -602,7 +602,11 @@ export function CheckInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
       onNote={setNote}
       onSend={() => void send()}
       onChange={() => setPicked(sent)}
-      onNext={() => void fetchNext()}
+      onNext={() => {
+        // The verdict is saved ("Next clip" shows only then): one check done.
+        onDone?.();
+        void fetchNext();
+      }}
       canFix={isLead && !demoRef.current}
       onFixed={(text) => {
         setLoad({

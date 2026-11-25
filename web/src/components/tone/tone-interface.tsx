@@ -1,6 +1,6 @@
 "use client";
 
-import { useOnEmpty } from "@/components/work/use-on-empty";
+import { useOnEmpty, type WorkScreenProps } from "@/components/work/use-on-empty";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   EpisodeFooter,
@@ -304,7 +304,11 @@ type Load =
   | { status: "done" }
   | { status: "task"; task: ToneTask; reopened: boolean };
 
-export function ToneInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
+export function ToneInterface({
+  onEmpty,
+  onDone,
+  active = true,
+}: WorkScreenProps = {}) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
   // Inside the one Annotate flow: say when there is nothing left to mark.
   useOnEmpty(load.status === "done", onEmpty);
@@ -320,6 +324,7 @@ export function ToneInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
   // Seconds this item was on screen with the tab in view, for honest time.
   const visibleSince = useRef<number | null>(null);
   const seconds = useRef(0);
+  const activeRef = useRef(active);
 
   const fetchTask = useCallback(async (reopen?: string) => {
     setLoad({ status: "loading" });
@@ -350,7 +355,9 @@ export function ToneInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
       setNote(j.task.mine?.note ?? "");
       seconds.current = 0;
       visibleSince.current =
-        document.visibilityState === "visible" ? Date.now() : null;
+        document.visibilityState === "visible" && activeRef.current
+          ? Date.now()
+          : null;
       setLoad({ status: "task", task: j.task, reopened: !!reopen });
     } catch {
       setLoad({ status: "error" });
@@ -369,10 +376,21 @@ export function ToneInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
     void fetchTask();
   }, [fetchTask]);
 
-  // Count only the time the tab is in view.
+  // Count only the time the tab is in view and, inside the Annotate flow,
+  // this screen is the one shown (a hidden screen's item is not being worked).
+  useEffect(() => {
+    activeRef.current = active;
+    const inView = active && document.visibilityState === "visible";
+    if (inView && visibleSince.current === null) {
+      visibleSince.current = Date.now();
+    } else if (!inView && visibleSince.current !== null) {
+      seconds.current += (Date.now() - visibleSince.current) / 1000;
+      visibleSince.current = null;
+    }
+  }, [active]);
   useEffect(() => {
     const onVisibility = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && activeRef.current) {
         visibleSince.current = Date.now();
       } else if (visibleSince.current !== null) {
         seconds.current += (Date.now() - visibleSince.current) / 1000;
@@ -417,7 +435,7 @@ export function ToneInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
       </>
     );
   }
-  const { task } = load;
+  const { task, reopened } = load;
 
   const send = async (keepAsCorrection: boolean) => {
     setBusy(true);
@@ -455,6 +473,8 @@ export function ToneInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
       } catch {
         // Shown for this page view only.
       }
+      // A new item marked (not a saved one reopened to change it).
+      if (!reopened) onDone?.();
       await fetchTask();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save.");

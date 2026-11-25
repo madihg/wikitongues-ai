@@ -1,7 +1,7 @@
-# One Annotate flow: text, speech and tone marks in one tab
+# One Annotate flow: text, speech and tone marks in one place
 
-Decided on the Wikitongues call of 2026-11-24. Written for the review on
-2026-11-25 and for whoever changes this next.
+Decided on the Wikitongues call of 2026-11-24. Reshaped after the review of
+2026-11-25. For whoever changes this next.
 
 ## What was asked
 
@@ -26,33 +26,64 @@ prompt, the answer and both clips at once, with no steps.
 four lines annotators had before speech existed). Annotate's number is
 everything waiting inside it.
 
-**Annotate** (`components/work/work-flow.tsx`) holds every kind of work as a
-tab inside the page:
+**Annotate** (`components/work/work-flow.tsx`) hands out one task at a time.
 
-| Tab | Screen (unchanged component) | Shown when |
+- **All (the default) is a mixed stream.** It serves a run of each kind in
+  the leads' order, then moves to the next kind with work waiting, round and
+  round. By default that's 10 recordings, then 5 clips to check, then 3 text
+  prompts, then 5 listening pairs, then 10 answers to mark. The kind only
+  changes between tasks, when a screen says one is saved, never in the
+  middle of one. A line over the work says what comes next ("This recording
+  and 2 more, then Check."), and a screen reader hears "Now: Check." when the
+  kind changes.
+- **Why a mix, not a strict order:** each annotator has 134 to 565 past
+  answers with no clip, so Record almost never runs out. A strict order would
+  starve Check (the gate to training), Write and Tone marks for weeks
+  (review of 2026-11-25).
+- **The filter above the work:** All, then one button per kind the person
+  has, with what waits in it. Picking a kind stays on it. When it runs out, a
+  line offers the next kind in one tap. Dashboard cards open one kind
+  (`?work=record`). An address with its own text episode (`?prompt=` from the
+  review drawer, `?demo=` from the arena demo launcher) opens Write.
+
+| Kind | Screen (same component as its old page) | The person has it when |
 | --- | --- | --- |
-| Record | `RecordInterface`, now in steps | speech is on for the person |
+| Record | `RecordInterface`, now in steps | speech is on for them |
 | Check | `CheckInterface` | speech is on |
-| Tone marks | `ToneInterface` | tone items were given to the person |
 | Write & compare | `AnnotationInterface` | always |
 | Listen | `ListenInterface` | speech is on |
+| Tone marks | `ToneInterface` | tone items were given to them |
 
-- It opens on the kind the address asks for (`?work=record`, used by the
-  Dashboard cards), otherwise on the first kind in the leads' order with
-  something waiting.
-- When a kind runs out, a line under the tabs offers the next kind in one
-  tap. It never switches by itself, so nobody loses their place.
-- Order: `lib/work-flow.ts`, `DEFAULT_WORK_ORDER` = record, check, tone,
-  write, listen. The leads can change it without code through the Vercel
-  variable `ANNOTATE_ORDER` (for example `tone,write`); a kind left out keeps
-  its default place, and a typo can never hide a kind.
-- Honest time: while a tab is open the flow names its kind of work
-  (`openSurface`), so recording inside Annotate still counts as recording on
-  the time sheet, exactly as on the old Record page.
+**Plan:** `lib/work-flow.ts`.
+- `DEFAULT_WORK_ORDER` is record, check, write, listen, tone. Tone marks come
+  last until the tone call with Salem and Agnes.
+- `DEFAULT_WORK_RUN` holds the run lengths.
+- The leads can change both without code through the Vercel variable
+  `ANNOTATE_ORDER`, for example `check:8,record:4,write`.
+  - A kind left out keeps its default place and run.
+  - A run must be 1 to 50.
+  - A typo can never hide a kind.
+
+**Nothing is lost by moving away.** Every screen once shown stays mounted,
+hidden while another kind is on screen. That keeps a take, a verdict picked
+but not sent, and a tone edit.
+- A hidden screen is quiet: its audio is paused, the text screen's 1 to 4
+  keys are off, and Tone marks' time counter stops.
+- While Record has the microphone on or a clip uploading, the other kinds
+  wait.
+- A screen that found nothing left counts as zero until new work comes in for
+  it. Shown again, it starts afresh and asks its queue again.
+
+**Numbers** come from `GET /api/annotator/work`, from the same loaders the
+queues use. They refresh after every finished task and every saved clip.
+
+**Honest time:** while a kind is on screen the flow names it (`openSurface`),
+so recording inside Annotate still counts as recording, exactly as on the old
+Record page.
 
 **Record, in steps** (`components/lab/record-interface.tsx`), in the shared
-episode frame (header with what is left, step bar, footer with Back, Skip
-this prompt and the main button):
+episode frame (a header with what is left, a step bar, and a footer with
+Back, Skip this prompt and the main button):
 
 1. Your answer: read it once, fix a word or a tone mark with Edit answer
    (the editor has the tone keyboard), or write and lock one.
@@ -60,37 +91,45 @@ this prompt and the main button):
 3. Say it in English: a short translation, then say it.
 
 The main button moves on only when the step is done. Steps 2 and 3 stay
-mounted while hidden, so stepping back never drops a take; Back is off while
-a clip uploads. A prompt that comes back for its English clip opens on step
-3.
+mounted while hidden, so stepping back never drops a take. Back is off while
+a clip uploads.
+- Editing the answer after a take first says the take will be thrown away
+  (it read the old words), then does throw it away.
+- A prompt that comes back for its English clip opens on step 3.
 
-**Old addresses:** `/annotator/tone` redirects to the Tone marks tab. The
-Speech pages (`/speak/...`) still open, and Annotate stays lit on them. The
-researcher tools on them (Recordings, Studio, the Listen extras: minimal pair
-marker, decision cards) are reached from More, "Speech tools".
+**Tone marks and clips** (`lib/answer-revisions.ts`, `clipStillSays`): an
+Igala answer that only gains tone marks after its clip was recorded keeps the
+clip. The clip's transcript is always the answer as it stands, so it gains
+the marks too.
+- Any of these still retires the clip until it is recorded again: a tone mark
+  changed or taken off, a dot below, or any other letter or word.
+- The same rule applies to Check, the dataset builder and the manifests.
+
+**Old addresses:** `/annotator/tone` redirects to `?work=tone`. The Speech
+pages (`/speak/...`) still open, and Annotate stays lit on them. The
+researcher tools there (Recordings, Studio, and the Listen extras: minimal
+pair marker, decision cards) are reached from More, "Speech tools".
 
 ## Adding a kind of work (conversational recordings, for example)
 
-1. Add it to `WORK_KINDS`, `DEFAULT_WORK_ORDER`, `WORK_LABEL`, `WORK_LINE`
-   and `WORK_SURFACE` in `lib/work-flow.ts` (and a surface in
-   `lib/activity.ts` if it is a new kind of time).
+1. In `lib/work-flow.ts`, add it to `WORK_KINDS`, `DEFAULT_WORK_ORDER`,
+   `DEFAULT_WORK_RUN`, `WORK_LABEL`, `WORK_LINE`, `WORK_UNIT` and
+   `WORK_SURFACE`. If it is a new kind of time, also add a surface in
+   `lib/activity.ts`.
 2. Give it a count in `GET /api/annotator/work`, from the same loader its
    queue uses.
-3. Render its screen in `work-flow.tsx` with `onEmpty`.
+3. Render its screen in `work-flow.tsx`. The screen takes `WorkScreenProps`:
+   `onEmpty` when its queue is empty, `onDone` once a task is saved, and
+   `active` if it has keys or timers.
 
 No sidebar change, no new page.
 
-## Open questions for the review
+## Still open
 
-- The order is a Vercel variable, not an admin screen. An admin setting needs
-  one small table (a migration on production, so it waits for Halim's yes).
-- Speech researchers (Agnes, Salem hold the researcher role) lose the Speech
-  sidebar line too. Recordings and Studio move to More. Is that right for
-  them?
-- Listen's researcher extras (minimal pair marker, decision cards) stay on
-  `/speak/listen` only.
-- Switching tabs drops an unsaved take on Record (text drafts are kept, as
-  before). Worth a warning?
-- Should Check sit before or after Record? It is the gate to training (only a
-  clip another speaker checked and kept trains), so it may deserve the first
-  place once Record queues are short.
+- The order and runs are a Vercel variable, not an admin screen (the review
+  agreed: no table yet).
+- Agnes should hear before release that the Speech sidebar line goes away.
+  Recordings and Studio move to More.
+- Listen's researcher extras stay on `/speak/listen` only.
+- A dropped connection restarts a whole long upload (from the #120 review).
+- Nobody has tried a real two minute take in a browser yet.

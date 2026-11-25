@@ -14,7 +14,7 @@ vi.mock("@/lib/waiting", () => mockWaiting);
 vi.mock("@/lib/tone/tone-pass", () => mockTone);
 
 import { GET } from "./route";
-import { DEFAULT_WORK_ORDER } from "@/lib/work-flow";
+import { DEFAULT_WORK_ORDER, DEFAULT_WORK_RUN } from "@/lib/work-flow";
 
 const env = { ...process.env };
 const as = (role: string) =>
@@ -47,9 +47,10 @@ describe("GET /api/annotator/work", () => {
     expect((await GET()).status).toBe(401);
   });
 
-  it("speech off: write and tone only, in the default order", async () => {
+  it("speech off: write and tone only, in the default order and runs", async () => {
     const j = await (await GET()).json();
     expect(j.order).toEqual(DEFAULT_WORK_ORDER);
+    expect(j.runs).toEqual(DEFAULT_WORK_RUN);
     expect(j.counts).toEqual({ write: 30, tone: 45 });
     expect(mockWaiting.loadWaiting).toHaveBeenCalledWith("u1", {
       speech: false,
@@ -79,9 +80,10 @@ describe("GET /api/annotator/work", () => {
     expect((await (await GET()).json()).counts.tone).toBe(0);
   });
 
-  it("the leads' order comes from ANNOTATE_ORDER, never hiding a kind", async () => {
-    process.env.ANNOTATE_ORDER = "tone,write";
+  it("the leads' plan comes from ANNOTATE_ORDER, never hiding a kind", async () => {
+    process.env.ANNOTATE_ORDER = "tone:4,write";
     const j = await (await GET()).json();
     expect(j.order).toEqual(["tone", "write", "record", "check", "listen"]);
+    expect(j.runs).toEqual({ ...DEFAULT_WORK_RUN, tone: 4 });
   });
 });

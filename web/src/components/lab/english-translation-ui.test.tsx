@@ -226,7 +226,7 @@ describe("the Record page", () => {
     // The main button on the last step is Next prompt, and it is off until
     // both clips are saved and nothing is uploading.
     expect(src).toMatch(
-      /label: "Next prompt",\s*disabled: !promptDone \|\| anyBusy,\s*onClick: nextPrompt,/,
+      /label: "Next prompt",\s*disabled: !promptDone \|\| anyBusy,\s*onClick: \(\) => \{[^}]*nextPrompt\(\);\s*\},/,
     );
     // The Igala step moves on only once its clip is saved.
     expect(src).toMatch(/label: "Next: the English",\s*disabled: !savedIgala \|\| anyBusy,/);

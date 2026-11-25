@@ -1,6 +1,6 @@
 "use client";
 
-import { useOnEmpty } from "@/components/work/use-on-empty";
+import { useOnEmpty, type WorkScreenProps } from "@/components/work/use-on-empty";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnswerEditorDrawer } from "@/components/answer-editor";
 import { ConsentGate } from "./consent-gate";
@@ -40,7 +40,8 @@ import { cleanTranslation, translationReady } from "@/lib/speech/limits";
  * the clip saved); "Next prompt" shows once both clips are saved. A prompt
  * whose Igala clip is already saved comes back on step 3. Steps 2 and 3 stay
  * mounted while hidden, so stepping back never drops a take, and Back is off
- * while a clip is uploading.
+ * while a clip is uploading. Editing the answer after a take says first that
+ * it throws the take away (the take read the old words), and does.
  * Recording is disabled until the consent for the current text version is on
  * record. Everything inside a clip (feedback, Keep, tier, save) is
  * record-clip.tsx; the Episode's "Say it" block uses the same component.
@@ -73,7 +74,14 @@ type QueueState =
   | { status: "complete" }
   | { status: "task"; task: QueueTask };
 
-export function RecordInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
+export function RecordInterface({
+  onEmpty,
+  onDone,
+  onLiveChange,
+}: WorkScreenProps & {
+  /** Inside the Annotate flow: the microphone is on or a clip is uploading. */
+  onLiveChange?: (live: boolean) => void;
+} = {}) {
   const {
     consent,
     busy: consentBusy,
@@ -105,7 +113,10 @@ export function RecordInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
   // holding a take (the words must not change under a take).
   const [translation, setTranslation] = useState("");
   const [englishHasTake, setEnglishHasTake] = useState(false);
+  // The Igala clip holds a take: editing the answer now throws it away.
+  const [igalaHasTake, setIgalaHasTake] = useState(false);
   const [busy, setBusy] = useState({ igala: false, english: false });
+  const [recording, setRecording] = useState({ igala: false, english: false });
   // Bumped to remount the clips for the next prompt.
   const [round, setRound] = useState(0);
   // The step on screen; null means the prompt's first step.
@@ -222,6 +233,16 @@ export function RecordInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
   };
 
   const anyBusy = busy.igala || busy.english;
+  // Tell the Annotate flow while the microphone is on or a clip is on its
+  // way, so it does not move this screen out of sight.
+  const live = anyBusy || recording.igala || recording.english;
+  const onLiveRef = useRef(onLiveChange);
+  useEffect(() => {
+    onLiveRef.current = onLiveChange;
+  });
+  useEffect(() => {
+    onLiveRef.current?.(live);
+  }, [live]);
 
   // The step on screen. A prompt that comes back for its English clip opens
   // on the English step: its Igala clip is saved already.
@@ -255,7 +276,11 @@ export function RecordInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
         : {
             label: "Next prompt",
             disabled: !promptDone || anyBusy,
-            onClick: nextPrompt,
+            onClick: () => {
+              // Both clips are saved: one prompt done.
+              onDone?.();
+              nextPrompt();
+            },
           };
 
   return (
@@ -354,8 +379,9 @@ export function RecordInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
                   </p>
                   {!igalaDone && (
                     <p className="mt-2 text-xs text-text-tertiary">
-                      Read it once. If a word or a tone mark is wrong, fix it
-                      with Edit answer before you record.
+                      {igalaHasTake
+                        ? "You have a take of this answer. Editing the answer throws the take away, because it read the old words."
+                        : "Read it once. If a word or a tone mark is wrong, fix it with Edit answer before you record."}
                     </p>
                   )}
                   {editingAnswer && (
@@ -364,8 +390,10 @@ export function RecordInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
                       onClose={() => setEditingAnswer(false)}
                       onSaved={() => {
                         // Read the corrected text back from the server, so the
-                        // clip is recorded against what was actually saved.
+                        // clip is recorded against what was actually saved. A
+                        // take of the old words is thrown away (new clips).
                         setEditingAnswer(false);
+                        setRound((r) => r + 1);
                         void loadNext();
                       }}
                     />
@@ -429,6 +457,10 @@ export function RecordInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
                   onRememberChoice={saveClipChoice}
                   rememberError={choiceError}
                   blocked={busy.english}
+                  onTakeChange={setIgalaHasTake}
+                  onRecordingChange={(r) =>
+                    setRecording((s) => (s.igala === r ? s : { ...s, igala: r }))
+                  }
                   onBusyChange={(b) => setBusy((s) => (s.igala === b ? s : { ...s, igala: b }))}
                   onConsentRequired={needAgain}
                   onSaved={(c) => {
@@ -479,6 +511,9 @@ export function RecordInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
                 onRememberChoice={saveClipChoice}
                 rememberError={choiceError}
                 blocked={busy.igala}
+                onRecordingChange={(r) =>
+                  setRecording((s) => (s.english === r ? s : { ...s, english: r }))
+                }
                 onBusyChange={(b) => setBusy((s) => (s.english === b ? s : { ...s, english: b }))}
                 onConsentRequired={needAgain}
                 onSaved={(c) => {

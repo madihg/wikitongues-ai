@@ -1,6 +1,6 @@
 "use client";
 
-import { useOnEmpty } from "@/components/work/use-on-empty";
+import { useOnEmpty, type WorkScreenProps } from "@/components/work/use-on-empty";
 import {
   useCallback,
   useEffect,
@@ -507,7 +507,7 @@ const EMPTY_AXES: PairScores = { a: {}, b: {} };
 const hasAxes = (p: PairScores) =>
   Object.keys(p.a).length > 0 || Object.keys(p.b).length > 0;
 
-export function ListenInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
+export function ListenInterface({ onEmpty, onDone }: WorkScreenProps = {}) {
   const [queue, setQueue] = useState<QueueState>({ status: "loading" });
   // Inside the one Annotate flow: say when there is nothing left to hear.
   useOnEmpty(queue.status === "complete", onEmpty);
@@ -639,6 +639,7 @@ export function ListenInterface({ onEmpty }: { onEmpty?: () => void } = {}) {
         }
       }
       setBusy(false);
+      onDone?.();
       await loadNext();
     } catch (e) {
       setError(

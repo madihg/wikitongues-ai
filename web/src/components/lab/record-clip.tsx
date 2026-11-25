@@ -81,6 +81,8 @@ export interface RecordClipProps {
   englishTranslation?: string | null;
   /** A take exists (recorded or saving): the words being read must not change. */
   onTakeChange?: (hasTake: boolean) => void;
+  /** The microphone is recording right now (the Annotate flow holds its tabs). */
+  onRecordingChange?: (recording: boolean) => void;
   /** Shown above the words (for example "Your answer" or the no-meaning note). */
   textLabel: string;
   /** Igala text renders in the Igala face. */
@@ -250,6 +252,7 @@ export function RecordClip(props: RecordClipProps) {
     before,
     englishTranslation,
     onTakeChange,
+    onRecordingChange,
     answer,
     dialect,
     demoSessionId,
@@ -322,6 +325,14 @@ export function RecordClip(props: RecordClipProps) {
   useEffect(() => {
     onTakeChangeRef.current?.(holdsTake);
   }, [holdsTake]);
+  const onRecordingChangeRef = useRef(onRecordingChange);
+  useEffect(() => {
+    onRecordingChangeRef.current = onRecordingChange;
+  });
+  const recordingNow = recorder.state === "recording";
+  useEffect(() => {
+    onRecordingChangeRef.current?.(recordingNow);
+  }, [recordingNow]);
   useEffect(() => {
     if (!take) return;
     let live = true;

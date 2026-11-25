@@ -1,4 +1,5 @@
 import { nfc } from "@/lib/edit-segments";
+import { onlyAddsTone } from "@/lib/tone/tone";
 
 /**
  * THE EDIT LOG'S PURE CORE (annotator experience spec, section 6).
@@ -285,13 +286,32 @@ export function clipTextField(clip: {
 }
 
 /**
+ * Whether a clip still says the text now on the answer, both in stored shape.
+ * The same text does. So does an Igala answer that only gained tone marks
+ * since the clip was recorded: the speaker said the tones whether or not
+ * they were written, and the clip's transcript (always the answer as it
+ * stands) is the better for them. A tone mark changed or taken off, a dot
+ * below, a letter or a word changed: the clip no longer says the text.
+ */
+export function clipStillSays(
+  field: string,
+  spoken: string | null,
+  now: string | null,
+): boolean {
+  if (spoken === now) return true;
+  if (field !== "answerText" || spoken === null || now === null) return false;
+  return onlyAddsTone(spoken, now);
+}
+
+/**
  * Which clips read words that are no longer the words on the answer. A clip
  * is used only while its spoken text still matches the current text: the
  * text as it stood when the clip was recorded (the `before` of the first
  * change made after the clip) is compared, in stored shape (NFC, trimmed),
  * with the text as it stands now (the `after` of the last change). So a
  * change that was later put back, or one that differs only by Unicode form,
- * leaves the clip usable. No clip is ever deleted or altered: Check, the
+ * leaves the clip usable, and so does an Igala answer that only gained tone
+ * marks (clipStillSays). No clip is ever deleted or altered: Check, the
  * dataset builder and the manifests leave these out until a newer clip
  * exists. `revisions` are cold-row revisions keyed by targetId.
  */
@@ -310,15 +330,15 @@ export function staleClipIds(
   const out = new Set<string>();
   for (const c of clips) {
     if (!c.coldAuthorAnswerId) continue;
-    const list = byField.get(`${c.coldAuthorAnswerId}|${clipTextField(c)}`);
+    const field = clipTextField(c);
+    const list = byField.get(`${c.coldAuthorAnswerId}|${field}`);
     if (!list) continue;
+    const now = storedText(list[list.length - 1].after);
     // A lead fixed the text in Check while listening to this clip: from that
     // fix on, the clip says the fixed text, whatever it said before.
     const fix = [...list].reverse().find((r) => isCheckFixFor(r, c.id));
     if (fix) {
-      if (storedText(fix.after) !== storedText(list[list.length - 1].after)) {
-        out.add(c.id);
-      }
+      if (!clipStillSays(field, storedText(fix.after), now)) out.add(c.id);
       continue;
     }
     const recordedAt =
@@ -328,8 +348,7 @@ export function staleClipIds(
     const firstAfter = list.find((r) => at(r) > recordedAt);
     if (!firstAfter) continue;
     const spoken = storedText(firstAfter.before);
-    const now = storedText(list[list.length - 1].after);
-    if (spoken !== now) out.add(c.id);
+    if (!clipStillSays(field, spoken, now)) out.add(c.id);
   }
   return out;
 }
