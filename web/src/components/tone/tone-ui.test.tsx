@@ -12,6 +12,7 @@ import {
 import { MarkedVersion, ToneItemCard, ToneSummaryTables } from "./tone-admin";
 import { probeToneCount } from "./use-tone-count";
 import TonePassPage from "@/app/(app)/annotator/tone/page";
+import { WORK_LINE } from "@/lib/work-flow";
 import { navForRole } from "@/lib/personas";
 import { summarise } from "@/lib/tone/agreement";
 
@@ -68,10 +69,17 @@ function place(markup: string, name: "left" | "middle" | "right"): string {
 }
 
 describe("the Pass 2 screen", () => {
-  it("the page carries the instruction, word for word", () => {
-    const m = renderToStaticMarkup(<TonePassPage />);
-    expect(m).toContain("Pass 2: tone marks");
-    expect(m).toContain(
+  it("the old page opens the Tone marks tab of Annotate, which carries the instruction word for word", () => {
+    // Pass 2 moved into the one Annotate flow on 2026-11-24.
+    expect(() => TonePassPage()).toThrow(/NEXT_REDIRECT/);
+    try {
+      TonePassPage();
+    } catch (e) {
+      expect(String((e as { digest?: string }).digest)).toContain(
+        "/annotator/annotate?work=tone",
+      );
+    }
+    expect(WORK_LINE.tone).toBe(
       "Pass 2: add tone marks. This is a second pass over answers that are already done. Some are yours, some are from other people. Add tone marks only. The first version stays saved.",
     );
   });
@@ -227,36 +235,27 @@ describe("the sidebar line", () => {
     }
   });
 
-  it("sits right after Annotate, with its number", () => {
+  it("is never its own line: tone items given to a person count on Annotate, where the Tone marks tab is", () => {
+    // Pass 2 moved into the one Annotate flow on 2026-11-24.
     const annotator = labels(navForRole("ANNOTATOR", null, { tone: 30 }));
-    expect(annotator.slice(0, 4)).toEqual([
-      "Dashboard",
-      "Annotate",
-      "Pass 2: tone marks (30)",
-      "My Work",
-    ]);
-    // Every item marked: the line stays, with no number (spec 4.1, "No number
-    // when it is zero", the rule every waiting number follows).
-    const researcher = labels(navForRole("RESEARCHER", null, { tone: 0 }));
-    expect(researcher[researcher.indexOf("Annotate") + 1]).toBe(
-      "Pass 2: tone marks",
-    );
-  });
-
-  it("comes after the one Speech link when the person has speech", () => {
+    expect(annotator).toEqual(["Dashboard", "Annotate (30)", "My Work", "Rubric"]);
     for (const role of ["ANNOTATOR", "RESEARCHER"]) {
       const withSpeech = labels(
-        navForRole(role, null, { lab: true, tone: 4, waiting: { speech: 7 } }),
+        navForRole(role, null, {
+          lab: true,
+          tone: 4,
+          waiting: { annotate: 2, speech: 7 },
+        }),
       );
-      expect(withSpeech.slice(0, 6), role).toEqual([
+      expect(withSpeech.slice(0, 4), role).toEqual([
         "Dashboard",
-        "Annotate",
-        "Speech (7)",
-        "Pass 2: tone marks (4)",
+        "Annotate (13)",
         "My Work",
         "Rubric",
       ]);
     }
+    // Every item marked: no number from tone.
+    expect(labels(navForRole("RESEARCHER", null, { tone: 0 }))).toContain("Annotate");
   });
 
   it("the count is what waits; nothing given yet, or any failure, shows no line", async () => {

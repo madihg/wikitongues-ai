@@ -111,9 +111,10 @@ function withCount(link: NavLink, n: number | undefined): NavLink {
 }
 
 /**
- * The one Speech link, the same for every role that has speech on: right
- * under Annotate, opening the Record tab. Listen, Check, Profile (and, for
- * researchers, Recordings and Studio) are tabs inside it, not sidebar links.
+ * The Speech pages (Record, Listen, Check, Profile, and for researchers
+ * Recordings and Studio). Not a sidebar line since 2026-11-24: the work on
+ * them is a tab of Annotate now. The pages still open; researchers reach the
+ * tools from More (Speech tools).
  */
 export const SPEECH_LINK: NavLink = {
   href: "/speak",
@@ -123,39 +124,42 @@ export const SPEECH_LINK: NavLink = {
 
 /**
  * The work links, the first lines of every sidebar, in a fixed order:
- * Dashboard, Annotate, Speech (only when speech is on for the account),
- * Pass 2: tone marks (only for a person who was given tone items), My Work,
- * Rubric. An annotator with speech off and no tone items sees exactly the
- * four lines they have always seen.
+ * Dashboard, Annotate, My Work, Rubric. Since 2026-11-24 every kind of work
+ * lives inside Annotate as a tab (components/work/work-flow.tsx): recording,
+ * checking clips, tone marks, writing and comparing, listening. Halim, on
+ * the call that day: "the task itself can change, but I don't want them to
+ * go to different tabs on the left-hand side". So the Speech and "Pass 2:
+ * tone marks" lines are gone, and Annotate's number is everything waiting
+ * in it: prompts to answer, plus clips to record, check and hear when speech
+ * is on, plus tone items given to the person.
  */
 function workLinks(speechOn: boolean, options: NavOptions): NavLink[] {
-  const links: NavLink[] = [
+  const w = options.waiting;
+  // The parts that are known; no number at all when none is.
+  const known = [w?.annotate, speechOn ? w?.speech : undefined, options.tone]
+    .filter((n): n is number => typeof n === "number");
+  const inAnnotate = known.length
+    ? known.reduce((sum, n) => sum + n, 0)
+    : undefined;
+  return [
     { href: "/annotator", label: "Dashboard" },
-    withCount(
-      { href: "/annotator/annotate", label: "Annotate" },
-      options.waiting?.annotate,
-    ),
-  ];
-  if (speechOn) links.push(withCount(SPEECH_LINK, options.waiting?.speech));
-  // Tone-mark pass 2: only for a person who has been given tone items.
-  if (options.tone !== undefined && options.tone !== null) {
-    links.push(
-      withCount(
-        { href: TONE_NAV_HREF, label: "Pass 2: tone marks" },
-        options.tone,
-      ),
-    );
-  }
-  links.push(
+    withCount(ANNOTATE_LINK, inAnnotate),
     // Answers of their own that need a fix.
-    withCount(
-      { href: "/annotator/history", label: "My Work" },
-      options.waiting?.fix,
-    ),
+    withCount({ href: "/annotator/history", label: "My Work" }, w?.fix),
     { href: "/annotator/rubric", label: "Rubric" },
-  );
-  return links;
+  ];
 }
+
+/**
+ * The one work link. It owns the old addresses of the work that moved into
+ * it, so it stays lit there: the Pass 2 page (a redirect now) and the Speech
+ * pages, which still open for anyone who has them bookmarked.
+ */
+export const ANNOTATE_LINK: NavLink = {
+  href: "/annotator/annotate",
+  label: "Annotate",
+  also: [TONE_NAV_HREF, "/speak", "/lab/speech"],
+};
 
 /**
  * Primary sidebar nav for the (app) area. Every account starts with the same

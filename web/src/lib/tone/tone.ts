@@ -157,6 +157,24 @@ export function isToneOnlyChange(pass1: string, pass2: string): boolean {
   return stripTone(pass1).trim() === stripTone(pass2).trim();
 }
 
+/**
+ * True when the second text is the first with tone marks ADDED and nothing
+ * else changed: the same letters (dot below included), every tone mark the
+ * first text had still there on the same letter, and at least the same
+ * marks. A mark changed or taken off is not an addition: in a tonal
+ * language it can name another word. Used to keep a clip whose answer only
+ * gained its tone marks after it was recorded (review of 2026-11-25).
+ */
+export function onlyAddsTone(before: string, after: string): boolean {
+  if (!isToneOnlyChange(before, after)) return false;
+  const a = clusters(before.normalize("NFC").trim());
+  const b = clusters(after.normalize("NFC").trim());
+  if (a.length !== b.length) return false;
+  return a.every(
+    (c, i) => c.tone.length === 0 || c.tone.join("") === b[i].tone.join(""),
+  );
+}
+
 const tokens = (s: string) => s.split(/(\s+)/).filter((t) => t.length > 0);
 
 /**

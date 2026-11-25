@@ -359,7 +359,7 @@ describe("each count equals the length of the queue its card opens", () => {
     const counts = await loadWaiting(ME, { speech: false, editing: false });
     expect(counts.tone).toBe(queue.waiting);
     const card = waitingCards({ annotate: 0, ...counts }).find((c) => c.key === "tone")!;
-    expect(card).toMatchObject({ title: "Pass 2: tone marks", value: 2, href: "/annotator/tone" });
+    expect(card).toMatchObject({ title: "Pass 2: tone marks", value: 2, href: "/annotator/annotate?work=tone" });
     expect(wheres(mockPrisma.tonePassAssignment.findMany)[0]).toEqual({
       annotatorId: ME,
       skippedAt: null,
@@ -478,14 +478,14 @@ describe("the cards", () => {
     ]);
   });
 
-  it("each card opens its queue: Record and Listen are tabs of the one Speech link, for every role", () => {
+  it("each card opens its queue: every kind of work is a tab of the one Annotate flow, for every role", () => {
     const counts = { ...zero, annotate: 1, record: 1, listen: 1, check: 1, tone: 1, fix: 1, fixTotal: 1 };
     expect(Object.fromEntries(waitingCards(counts).map((c) => [c.key, c.href]))).toEqual({
-      annotate: "/annotator/annotate",
-      record: "/speak",
-      listen: "/speak/listen",
-      check: "/speak/check",
-      tone: "/annotator/tone",
+      annotate: "/annotator/annotate?work=write",
+      record: "/annotator/annotate?work=record",
+      listen: "/annotator/annotate?work=listen",
+      check: "/annotator/annotate?work=check",
+      tone: "/annotator/annotate?work=tone",
       fix: "/annotator/history?filter=fix",
     });
   });

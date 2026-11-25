@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   clusters,
   isToneOnlyChange,
+  onlyAddsTone,
   projectToneOnto,
   stripTone,
   storedTone,
@@ -185,5 +186,21 @@ describe("undo the other changes", () => {
 describe("words", () => {
   it("splits on whitespace, NFC", () => {
     expect(wordsOf(`  ba${ACUTE}be   du `)).toEqual(["b\u00E1be", "du"]);
+  });
+});
+
+describe("onlyAddsTone (a clip keeps its answer's added tone marks)", () => {
+  it("marks added to unmarked letters, everything else the same", () => {
+    expect(onlyAddsTone("ẹka bẹta", "ẹ́kà bẹ́ta")).toBe(true);
+    expect(onlyAddsTone("áma", "ámà")).toBe(true);
+    // Unicode form and outer spaces never matter.
+    expect(onlyAddsTone(" áma ", "ámà")).toBe(true);
+  });
+
+  it("a mark changed or removed, or a letter changed, is not an addition", () => {
+    expect(onlyAddsTone("áma", "àma")).toBe(false);
+    expect(onlyAddsTone("áma", "ama")).toBe(false);
+    expect(onlyAddsTone("eka", "ẹka")).toBe(false);
+    expect(onlyAddsTone("ama", "amí")).toBe(false);
   });
 });

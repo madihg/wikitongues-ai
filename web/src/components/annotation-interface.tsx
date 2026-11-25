@@ -1,5 +1,6 @@
 "use client";
 
+import { useOnEmpty, type WorkScreenProps } from "@/components/work/use-on-empty";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import type { EvalBucket } from "@prisma/client";
@@ -236,7 +237,11 @@ function replaceAnnotateSearch(changes: Partial<AnnotateParams>) {
   );
 }
 
-export function AnnotationInterface() {
+export function AnnotationInterface({
+  onEmpty,
+  onDone,
+  active = true,
+}: WorkScreenProps = {}) {
   // The role decides one thing here: whether the Demo switch is offered. The
   // server decides everything else again for itself.
   const { data: session } = useSession();
@@ -256,6 +261,7 @@ export function AnnotationInterface() {
   const [task, setTask] = useState<TaskData | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  useOnEmpty(isComplete, onEmpty);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -753,9 +759,10 @@ export function AnnotationInterface() {
     if (pinnedPromptId) replaceAnnotateSearch({ prompt: null });
   }, [pinnedPromptId]);
 
-  // Keyboard winner selection on the pairwise step.
+  // Keyboard winner selection on the pairwise step, only while this screen is
+  // the one shown (the Annotate flow keeps hidden screens mounted).
   useEffect(() => {
-    if (step !== "pairwise" || !task) return;
+    if (!active || step !== "pairwise" || !task) return;
     function handleKey(e: KeyboardEvent) {
       if (
         e.target instanceof HTMLTextAreaElement ||
@@ -769,7 +776,7 @@ export function AnnotationInterface() {
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [step, task]);
+  }, [active, step, task]);
 
   const winnerOutput =
     !task || winner === null
@@ -1094,6 +1101,7 @@ export function AnnotationInterface() {
       if (demoSessionId) replaceAnnotateSearch({ after: task.prompt.promptId });
       clearDraft();
       releasePin();
+      onDone?.();
       await fetchNext();
     } catch (err) {
       showToast(

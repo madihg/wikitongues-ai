@@ -37,14 +37,14 @@ describe("what the navigation shows as waiting", () => {
     expect(parseNavWaiting({ waiting: ok })).toEqual(ok);
   });
 
-  it("the sidebar puts a count on Annotate, Speech and My Work, above zero only", () => {
+  it("the sidebar puts a count on Annotate (everything in it) and My Work, above zero only", () => {
     const links = navForRole("ANNOTATOR", "a@example.com", {
       lab: true,
       waiting: { annotate: 12, speech: 10, fix: 0 },
     });
     const count = (label: string) => links.find((l) => l.label === label)?.count;
-    expect(count("Annotate")).toBe(12);
-    expect(count("Speech")).toBe(10);
+    expect(count("Annotate")).toBe(22);
+    expect(links.find((l) => l.label === "Speech")).toBeUndefined();
     expect(count("My Work")).toBeUndefined();
   });
 });

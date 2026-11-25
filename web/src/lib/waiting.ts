@@ -10,6 +10,7 @@ import { needsFix } from "@/lib/answer-revisions";
 import { toneCount } from "@/lib/tone/tone-pass";
 import { computeQueueState } from "@/lib/pairing";
 import { loadQueueInputs } from "@/lib/queue-input";
+import { workHref } from "@/lib/work-flow";
 
 /**
  * "Waiting for you" on the annotator Dashboard (annotator experience spec,
@@ -311,46 +312,46 @@ export const WAITING_COPY = {
 /**
  * The cards, in the order of the spec. A card shows only when its number is
  * above zero, except Annotate, which always shows so the page is never
- * empty. Record and Listen open the tabs of the one Speech link (/speak),
- * for researchers and annotators alike; the old Lab paths redirect there.
+ * empty. Since 2026-11-24 every card except the fix card opens its tab of
+ * the one Annotate flow (lib/work-flow.ts), for researchers and annotators
+ * alike.
  */
 export function waitingCards(counts: WaitingCounts): WaitingCard[] {
-  const speak = { record: "/speak", listen: "/speak/listen" };
   const all: WaitingCard[] = [
     {
       key: "annotate",
       title: "Annotate",
       value: counts.annotate,
       line: "Prompts to answer and compare",
-      href: "/annotator/annotate",
+      href: workHref("write"),
     },
     {
       key: "record",
       title: "Record your answers",
       value: counts.record,
       line: "Answers you wrote that have no clip",
-      href: speak.record,
+      href: workHref("record"),
     },
     {
       key: "listen",
       title: "Listen",
       value: counts.listen,
       line: "Pairs of clips to compare",
-      href: speak.listen,
+      href: workHref("listen"),
     },
     {
       key: "check",
       title: "Check",
       value: counts.check,
       line: "Clips from other speakers to check",
-      href: "/speak/check",
+      href: workHref("check"),
     },
     {
       key: "tone",
       title: "Pass 2: tone marks",
       value: counts.tone,
       line: "Answers that need tone marks",
-      href: "/annotator/tone",
+      href: workHref("tone"),
     },
     {
       key: "fix",

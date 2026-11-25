@@ -223,12 +223,18 @@ describe("the Record page", () => {
   it("Next prompt needs both clips; with only the Igala clip saved it does not show", () => {
     expect(src).toContain("const igalaDone = task?.igalaDone === true || savedIgala;");
     expect(src).toContain("const promptDone = igalaDone && savedEnglish;");
-    expect(src).toMatch(/\{promptDone && !anyBusy && \(\s*<button type="button" onClick=\{nextPrompt\}/);
+    // The main button on the last step is Next prompt, and it is off until
+    // both clips are saved and nothing is uploading.
+    expect(src).toMatch(
+      /label: "Next prompt",\s*disabled: !promptDone \|\| anyBusy,\s*onClick: \(\) => \{[^}]*nextPrompt\(\);\s*\},/,
+    );
+    // The Igala step moves on only once its clip is saved.
+    expect(src).toMatch(/label: "Next: the English",\s*disabled: !savedIgala \|\| anyBusy,/);
     expect(src).not.toContain("{savedIgala && !anyBusy && (");
   });
 
   it("Skip this prompt stays until the prompt is done", () => {
-    expect(src).toContain("{task && !promptDone && !anyBusy && (");
+    expect(src).toMatch(/!promptDone && !anyBusy \? \(\s*<button type="button" onClick=\{skip\}/);
     expect(src).toContain("Skip this prompt");
   });
 

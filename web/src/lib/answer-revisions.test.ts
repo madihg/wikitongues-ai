@@ -13,6 +13,7 @@ import {
   clipTextField,
   spokenTextMatches,
   staleClipIds,
+  clipStillSays,
   checkFixSaveId,
   storedText,
 } from "./answer-revisions";
@@ -255,6 +256,50 @@ describe("a clip is used only while its spoken text matches the current text", (
       ],
     );
     expect(stale.size).toBe(0);
+  });
+
+  it("an Igala answer that only gained tone marks keeps its clip (2026-11-25 review)", () => {
+    // ẹ (dot below) is a letter; the acute and grave are tone.
+    const stale = staleClipIds(
+      [clip("ig", "igala", 1000)],
+      [rev("answerText", "ẹka bẹta", "ẹ\u0301ka\u0300 bẹ\u0301ta", 2000)],
+    );
+    expect(stale.size).toBe(0);
+  });
+
+  it("a tone mark changed or taken off, or a dot below changed, still retires the clip", () => {
+    const changed = staleClipIds(
+      [clip("ig", "igala", 1000)],
+      [rev("answerText", "a\u0301ma", "a\u0300ma", 2000)],
+    );
+    expect([...changed]).toEqual(["ig"]);
+    const removed = staleClipIds(
+      [clip("ig", "igala", 1000)],
+      [rev("answerText", "a\u0301ma", "ama", 2000)],
+    );
+    expect([...removed]).toEqual(["ig"]);
+    const dot = staleClipIds(
+      [clip("ig", "igala", 1000)],
+      [rev("answerText", "eka", "ẹ\u0301ka", 2000)],
+    );
+    expect([...dot]).toEqual(["ig"]);
+  });
+
+  it("tone marks added after a lead's fix in Check keep the clip too", () => {
+    const stale = staleClipIds(
+      [clip("ig", "igala", 1000)],
+      [
+        { ...rev("answerText", "old", "ama", 2000), saveId: "check-ig-r1" },
+        rev("answerText", "ama", "a\u0301ma\u0300", 3000),
+      ],
+    );
+    expect(stale.size).toBe(0);
+  });
+
+  it("an English clip gets no tone allowance: any change to its words retires it", () => {
+    expect(clipStillSays("englishTranslation", "Go home.", "Gó home.")).toBe(false);
+    expect(clipStillSays("answerText", "ama", "a\u0301ma")).toBe(true);
+    expect(clipStillSays("answerText", null, "a\u0301ma")).toBe(false);
   });
 
   it("edits made before the clip do not count; the clip read the text as it stood", () => {

@@ -22,8 +22,10 @@ describe("WaitingBlock", () => {
     expect(html).toContain("Prompts to answer and compare");
     expect(html).toContain("Record your answers");
     expect(html).toContain("310");
-    expect(html).toContain('href="/speak"');
-    expect(html).toContain('href="/speak/listen"');
+    // Each card opens its tab of the one Annotate flow (2026-11-24).
+    expect(html).toContain('href="/annotator/annotate?work=record"');
+    expect(html).toContain('href="/annotator/annotate?work=listen"');
+    expect(html).toContain('href="/annotator/annotate?work=write"');
     expect(html).not.toContain("Clips from other speakers to check");
     expect(html).not.toContain("Pass 2: tone marks");
     expect(html).not.toContain("Your answers to fix");
@@ -33,8 +35,8 @@ describe("WaitingBlock", () => {
   it("an annotator with speech off sees the Annotate card and no speech card", () => {
     const html = render({ ...zero, annotate: 5 });
     expect(html.match(/<a /g)).toHaveLength(1);
-    expect(html).toContain('href="/annotator/annotate"');
-    expect(html).not.toMatch(/speak|lab\/speech/);
+    expect(html).toContain('href="/annotator/annotate?work=write"');
+    expect(html).not.toMatch(/speak|lab\/speech|work=record/);
   });
 
   it("with every queue at zero the empty line shows and Annotate shows 0", () => {

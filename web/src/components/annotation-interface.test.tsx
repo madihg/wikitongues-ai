@@ -387,7 +387,12 @@ describe("a question opened from review, wired (source)", () => {
   });
 
   it("lets go of the pin after a submit, a skip and a flag, before the next fetch", () => {
-    const releases = [...src.matchAll(/clearDraft\(\);\n\s+releasePin\(\);\n\s+await fetchNext\(\);/g)];
+    // A submit also tells the Annotate flow one task is done (onDone).
+    const releases = [
+      ...src.matchAll(
+        /clearDraft\(\);\n\s+releasePin\(\);\n\s+(?:onDone\?\.\(\);\n\s+)?await fetchNext\(\);/g,
+      ),
+    ];
     expect(releases).toHaveLength(3);
     expect(src).toContain(
       "if (pinnedPromptId) replaceAnnotateSearch({ prompt: null });",

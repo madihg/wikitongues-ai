@@ -19,6 +19,7 @@ import {
   PRACTICE_EXAMPLE,
 } from "@/lib/corrections-onboarding";
 import { SuggestingEditor } from "@/components/suggesting-editor";
+import { workHref } from "@/lib/work-flow";
 
 /**
  * The Corrections lane (the editing ground, tasks/editing-ground-spec.md):
@@ -468,7 +469,7 @@ export function CorrectionsInterface() {
             can send new ones here.
           </p>
           <a
-            href="/annotator/annotate"
+            href={workHref("write")}
             className="mt-4 inline-flex min-h-[44px] items-center rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
           >
             Go to Annotate &rarr;
