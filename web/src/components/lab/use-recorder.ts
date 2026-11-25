@@ -21,6 +21,12 @@ export interface Take {
   mime: string;
   /** What was asked of the microphone and what the browser applied. */
   capture: CaptureSettings;
+  /**
+   * True when the recorder stopped the take itself at the safety stop
+   * (MAX_DURATION_MS), not the speaker: the end of what they said may be
+   * missing, and the screen says so.
+   */
+  stoppedAtLimit: boolean;
 }
 
 export type RecorderState = "idle" | "recording" | "recorded";
@@ -28,8 +34,11 @@ export type RecorderState = "idle" | "recording" | "recorded";
 /**
  * MediaRecorder behind a small state machine: idle -> recording -> recorded.
  * Mime fallback comes from pickRecorderMime (webm opus, then mp4 on iOS
- * Safari). Capture asks for 48 kHz mono. The recorder hard-stops at 30
- * seconds (MAX_DURATION_MS) by itself, whatever the screen does. The
+ * Safari). Capture asks for 48 kHz mono. The speaker stops the take; the
+ * recorder only stops itself at the five minute safety stop
+ * (MAX_DURATION_MS), whatever the screen does, and marks the take
+ * stoppedAtLimit. (Until 2026-11-24 that stop was at 30 seconds and cut long
+ * answers off: see lib/speech/limits.ts.) The
  * microphone is opened as captureMode() says: as it always was (echo
  * cancelling and noise suppression on) until NEXT_PUBLIC_SPEECH_CAPTURE is
  * set to "raw", which turns the browser's echo cancelling, noise suppression
@@ -58,6 +67,8 @@ export function useRecorder(opts: { raw?: boolean } = {}) {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAtRef = useRef(0);
+  // Set when the safety stop, not the speaker, ended the take.
+  const stoppedAtLimitRef = useRef(false);
   const urlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -125,10 +136,19 @@ export function useRecorder(opts: { raw?: boolean } = {}) {
         const url = URL.createObjectURL(blob);
         urlRef.current = url;
         setElapsedMs(durationMs);
-        setTake({ blob, url, durationMs, sampleRate, mime: type, capture });
+        setTake({
+          blob,
+          url,
+          durationMs,
+          sampleRate,
+          mime: type,
+          capture,
+          stoppedAtLimit: stoppedAtLimitRef.current,
+        });
         setState("recorded");
       };
       recorderRef.current = rec;
+      stoppedAtLimitRef.current = false;
       startedAtRef.current = performance.now();
       rec.start();
       signalBusy("recording", true); // honest time: recording counts as work
@@ -136,8 +156,11 @@ export function useRecorder(opts: { raw?: boolean } = {}) {
       timerRef.current = setInterval(() => {
         const e = performance.now() - startedAtRef.current;
         setElapsedMs(Math.min(e, MAX_DURATION_MS));
-        // The hard stop: the recorder ends itself at 30 s.
-        if (e >= MAX_DURATION_MS) stop();
+        // The safety stop: the recorder ends itself at five minutes.
+        if (e >= MAX_DURATION_MS) {
+          stoppedAtLimitRef.current = true;
+          stop();
+        }
       }, 100);
     } catch (e) {
       release();

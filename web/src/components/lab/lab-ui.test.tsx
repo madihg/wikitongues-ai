@@ -345,19 +345,23 @@ describe("Record: the save control", () => {
 });
 
 describe("Record: the countdown and the timer", () => {
-  it("shows nothing before 25 seconds", () => {
-    const html = renderToStaticMarkup(<Countdown elapsedMs={10_000} />);
-    expect(html).not.toContain("left");
+  it("shows nothing before the last ten seconds of the safety stop", () => {
+    // 30 seconds was the old hard stop: no warning there any more.
+    for (const ms of [10_000, 30_000, 289_000]) {
+      expect(renderToStaticMarkup(<Countdown elapsedMs={ms} />)).not.toContain(
+        "left",
+      );
+    }
   });
 
-  it("appears for the last five seconds and counts down", () => {
-    expect(renderToStaticMarkup(<Countdown elapsedMs={25_000} />)).toContain(
-      "5 s left",
+  it("appears for the last ten seconds and counts down", () => {
+    expect(renderToStaticMarkup(<Countdown elapsedMs={290_000} />)).toContain(
+      "10 s left",
     );
-    expect(renderToStaticMarkup(<Countdown elapsedMs={26_200} />)).toContain(
-      "4 s left",
+    expect(renderToStaticMarkup(<Countdown elapsedMs={291_200} />)).toContain(
+      "9 s left",
     );
-    expect(renderToStaticMarkup(<Countdown elapsedMs={29_900} />)).toContain(
+    expect(renderToStaticMarkup(<Countdown elapsedMs={299_900} />)).toContain(
       "1 s left",
     );
   });
@@ -376,13 +380,14 @@ describe("Record: the countdown and the timer", () => {
     expect(html).toContain("bg-danger");
   });
 
-  it("the container wires the 30 second cap and the countdown", () => {
+  it("the container wires the five minute safety stop and the countdown", () => {
     expect(sourceOf("record-clip.tsx")).toContain(
       "<Countdown elapsedMs={recorder.elapsedMs}",
     );
     expect(sourceOf("use-recorder.ts")).toContain("MAX_DURATION_MS");
+    // The recorder stops itself only at the safety stop, and says it did.
     expect(sourceOf("use-recorder.ts")).toMatch(
-      /if \(e >= MAX_DURATION_MS\) stop\(\)/,
+      /if \(e >= MAX_DURATION_MS\) \{\s*stoppedAtLimitRef\.current = true;\s*stop\(\);/,
     );
   });
 

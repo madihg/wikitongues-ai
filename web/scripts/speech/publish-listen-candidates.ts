@@ -9,7 +9,7 @@ import {
   type SystemRoundTrip,
 } from "../../src/lib/speech/listen-rounds";
 import {
-  MAX_DURATION_MS,
+  ranIntoCap,
   REJECTED_REVIEW_STATUSES,
 } from "../../src/lib/speech/limits";
 import { isAllowedAudioMime, recordingPath } from "../../src/lib/speech/storage";
@@ -147,7 +147,9 @@ export function planPublish(
       else if (h.sourceType === "derived") skip("human_clip_is_synthetic");
       else if (h.isDemo) skip("human_clip_is_demo");
       else if (h.uploadedAt === null) skip("human_clip_not_uploaded");
-      else if (h.durationMs >= MAX_DURATION_MS) skip("human_clip_cut_at_the_cap");
+      // Cut off by a recorder stop (the old 30 s one or the 5 min safety
+      // stop): the speaker's answer is not all there.
+      else if (ranIntoCap(h.durationMs)) skip("human_clip_cut_at_the_cap");
       else if (h.reviewStatus && REJECTED_REVIEW_STATUSES.includes(h.reviewStatus)) {
         skip("human_clip_rejected_or_withdrawn");
       } else if (h.prompt.isHoldout || h.prompt.split === "test") skip("frozen_prompt");

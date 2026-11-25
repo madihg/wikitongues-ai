@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   LANGUAGE_LABEL,
   MAX_BYTES,
+  MAX_CLIP_BYTES,
   type SpeechLanguage,
   type Tier,
 } from "@/lib/speech/limits";
+import { uploadInParts, type PartAnswer } from "@/lib/speech/upload-parts";
 import { STUDIO_TIER } from "@/lib/speech/studio";
 import { analyseBlob } from "@/lib/speech/analyse-client";
 import type { QualityMetrics } from "@/lib/speech/analyse";
@@ -130,8 +132,83 @@ type UploadState =
   | { status: "saved" }
   | { status: "error"; message: string };
 
-/** PUT the audio as the request body, with progress. */
+/**
+ * PUT the audio, with progress: as one request body when it fits (4 MB, as
+ * every clip did before 2026-11-24), else in parts (lib/speech/upload-parts.ts).
+ */
 function putAudio(
+  url: string,
+  blob: Blob,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  if (blob.size > MAX_BYTES) {
+    return uploadInParts(
+      blob,
+      (part, offset, total, onLoaded) =>
+        putAudioPart(url, part, blob.type, offset, total, onLoaded),
+      onProgress,
+    );
+  }
+  return putWhole(url, blob, onProgress);
+}
+
+/** Read the error a refusal carries, or a plain one with the status. */
+function refusal(xhr: XMLHttpRequest): Error {
+  let message = `Upload failed (${xhr.status}).`;
+  try {
+    const j = JSON.parse(xhr.responseText) as { error?: string };
+    if (j.error) message = j.error;
+  } catch {
+    /* keep the generic message */
+  }
+  return new Error(message);
+}
+
+/** One part of a take sent in parts; the server answers what it holds. */
+function putAudioPart(
+  url: string,
+  part: Blob,
+  type: string,
+  offset: number,
+  total: number,
+  onLoaded: (loaded: number) => void,
+): Promise<PartAnswer> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const sep = url.includes("?") ? "&" : "?";
+    xhr.open("PUT", `${url}${sep}offset=${offset}&total=${total}`);
+    xhr.setRequestHeader("Content-Type", baseMime(type));
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onLoaded(e.loaded);
+    };
+    xhr.onload = () => {
+      // 409: an earlier attempt already stored the whole clip. Done.
+      if (xhr.status === 409) {
+        resolve({ received: total, complete: true });
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const j = JSON.parse(xhr.responseText) as Partial<PartAnswer>;
+          resolve({
+            received: typeof j.received === "number" ? j.received : offset,
+            complete: j.complete === true,
+          });
+        } catch {
+          resolve({ received: offset, complete: false });
+        }
+        return;
+      }
+      reject(refusal(xhr));
+    };
+    xhr.onerror = () =>
+      reject(new Error("Upload failed. Check your connection."));
+    xhr.send(part);
+  });
+}
+
+/** PUT the whole take as one request body, with progress. */
+function putWhole(
   url: string,
   blob: Blob,
   onProgress: (pct: number) => void,
@@ -149,14 +226,7 @@ function putAudio(
         resolve();
         return;
       }
-      let message = `Upload failed (${xhr.status}).`;
-      try {
-        const j = JSON.parse(xhr.responseText) as { error?: string };
-        if (j.error) message = j.error;
-      } catch {
-        /* keep the generic message */
-      }
-      reject(new Error(message));
+      reject(refusal(xhr));
     };
     xhr.onerror = () =>
       reject(new Error("Upload failed. Check your connection."));
@@ -286,10 +356,10 @@ export function RecordClip(props: RecordClipProps) {
 
   const save = async () => {
     if (!take || tier === null) return;
-    if (take.blob.size > MAX_BYTES) {
+    if (take.blob.size > MAX_CLIP_BYTES) {
       setUpload({
         status: "error",
-        message: "This clip is over 4 MB. Record a shorter one.",
+        message: "This clip is over 20 MB. Record it in two shorter takes.",
       });
       return;
     }
@@ -453,6 +523,16 @@ export function RecordClip(props: RecordClipProps) {
             className="w-full"
             aria-label={`Your ${label} recording`}
           />
+          {take.stoppedAtLimit && (
+            <p
+              role="status"
+              data-testid="stopped-at-limit"
+              className="rounded-md border border-warning bg-warning-subtle px-3 py-2 text-sm text-text-primary"
+            >
+              The recording stopped at 5 minutes, the longest one take can
+              be. If you had not finished, record it again a little faster.
+            </p>
+          )}
           <TakeFeedback metrics={metrics} status={analysis} />
 
           {!kept && (

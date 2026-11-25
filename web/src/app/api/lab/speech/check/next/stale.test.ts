@@ -98,3 +98,31 @@ describe("Check leaves out a clip whose words changed since", () => {
     expect((await res.json()).progress.remaining).toBe(2);
   });
 });
+
+describe("Check marks a clip the recorder stopped", () => {
+  it("a clip of exactly 30,000 ms (the old stop) is served with endsAtStop", async () => {
+    mockPrisma.speechRecording.findMany.mockResolvedValue([
+      { ...clip("cut", "ans1", "2026-11-10T09:00:00Z"), durationMs: 30_000 },
+    ]);
+    const body = await (await get()).json();
+    expect(body.task.recording.endsAtStop).toBe(true);
+  });
+
+  it("a clip the speaker stopped is not, however long", async () => {
+    for (const durationMs of [4_200, 29_999, 95_000]) {
+      mockPrisma.speechRecording.findMany.mockResolvedValue([
+        { ...clip("whole", "ans1", "2026-11-10T09:00:00Z"), durationMs },
+      ]);
+      const body = await (await get()).json();
+      expect(body.task.recording.endsAtStop, String(durationMs)).toBe(false);
+    }
+  });
+
+  it("the queue reads the duration and still no speaker or tier", async () => {
+    await get();
+    const select = mockPrisma.speechRecording.findMany.mock.calls[0][0].select;
+    expect(select.durationMs).toBe(true);
+    expect(select.annotatorId).toBeUndefined();
+    expect(select.tier).toBeUndefined();
+  });
+});
