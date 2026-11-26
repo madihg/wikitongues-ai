@@ -46,6 +46,7 @@ import {
   pairDraftKey,
   planDraftRestore,
   type ColdDraft,
+  type SayItClip,
 } from "@/lib/episode-draft";
 import {
   annotateSearchWith,
@@ -72,6 +73,15 @@ import {
 
 type Winner = "a" | "b" | "tie" | "both_inadequate";
 type Step = "prompt" | "pairwise" | "score";
+
+/** The stages of one prompt for a speaker who also records: text, then speech. */
+export const SPOKEN_STAGES = [
+  "Your answer",
+  "Say it",
+  "Compare",
+  "Why & fix",
+  "Score",
+] as const;
 /** Per-axis rubric value: 0-5 score, "na" = not applicable, null = unanswered. */
 type AxisVal = number | "na" | null;
 
@@ -173,6 +183,9 @@ interface EpisodeDraft {
   englishGloss: string;
   instructionIg: string;
   coldLocked: boolean;
+  /** Laid over from the cold part on restore (lib/episode-draft.ts). */
+  sayIt?: true;
+  clips?: SayItClip[];
   winner: Winner | null;
   explanation: string;
   failureTagsA: string[];
@@ -241,7 +254,14 @@ export function AnnotationInterface({
   onEmpty,
   onDone,
   active = true,
-}: WorkScreenProps = {}) {
+  onLiveChange,
+}: WorkScreenProps & {
+  /**
+   * Inside the Annotate flow: the "Say it" step has the microphone on or a
+   * clip uploading, so the flow must not move this screen out of sight.
+   */
+  onLiveChange?: (live: boolean) => void;
+} = {}) {
   // The role decides one thing here: whether the Demo switch is offered. The
   // server decides everything else again for itself.
   const { data: session } = useSession();
@@ -252,11 +272,16 @@ export function AnnotationInterface({
   // the layer flag unset an annotator is told false and the episode renders
   // exactly as it always has, with no /api/lab/speech request.
   const speechLayer = useSpeechLayer(canProbeSpeech(session?.user?.role));
-  // True between locking the answer and continuing to the AI outputs, while
-  // the optional "Say it" block is open. Never persisted: a reload skips it.
+  // ONE PROMPT, TEXT THEN SPEECH (Halim, 2026-11-26). True between locking
+  // the answer and continuing to the AI outputs, while the "Say it" step is
+  // open. Kept with the episode's cold draft, so a reload comes back to the
+  // step instead of skipping the recording.
   const [sayIt, setSayIt] = useState(false);
-  // Clips recorded in the block, attached to the answer after submit.
-  const speechClipIds = useRef<string[]>([]);
+  // Clips saved in the step, attached to the answer after submit. Kept with
+  // the cold draft too: a reload must not leave a saved clip unattached.
+  const [speechClips, setSpeechClips] = useState<SayItClip[]>([]);
+  // The clips a reload brought back: the step shows them as saved already.
+  const sayItRestored = useRef<SayItClip[]>([]);
 
   const [task, setTask] = useState<TaskData | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -450,7 +475,8 @@ export function AnnotationInterface({
 
   const resetEpisode = useCallback(() => {
     setSayIt(false);
-    speechClipIds.current = [];
+    setSpeechClips([]);
+    sayItRestored.current = [];
     setStep("prompt");
     setColdAnswer("");
     setEnglishGloss("");
@@ -493,6 +519,9 @@ export function AnnotationInterface({
     setInstructionIg(d.instructionIg ?? "");
     setInstructionOpen(Boolean(d.instructionIg?.trim()));
     setColdLocked(d.coldLocked);
+    setSayIt(d.sayIt === true);
+    setSpeechClips(d.clips ?? []);
+    sayItRestored.current = d.clips ?? [];
     setWinner(d.winner);
     setExplanation(d.explanation);
     setFailureTagsA(d.failureTagsA ?? []);
@@ -526,6 +555,9 @@ export function AnnotationInterface({
     setInstructionIg(c.instructionIg);
     setInstructionOpen(Boolean(c.instructionIg.trim()));
     setColdLocked(c.coldLocked);
+    setSayIt(c.sayIt === true);
+    setSpeechClips(c.clips ?? []);
+    sayItRestored.current = c.clips ?? [];
   }, []);
 
   const fetchNext = useCallback(async () => {
@@ -704,6 +736,8 @@ export function AnnotationInterface({
       englishGloss,
       instructionIg,
       coldLocked,
+      ...(sayIt ? { sayIt: true as const } : {}),
+      ...(speechClips.length ? { clips: speechClips } : {}),
     };
     try {
       sessionStorage.setItem(draftKeyFor(task), JSON.stringify(draft));
@@ -718,6 +752,8 @@ export function AnnotationInterface({
     englishGloss,
     instructionIg,
     coldLocked,
+    sayIt,
+    speechClips,
     winner,
     explanation,
     failureTagsA,
@@ -805,9 +841,10 @@ export function AnnotationInterface({
 
   function revealModels() {
     setColdLocked(true);
-    // A speaker with the speech layer on and an answer written gets the
-    // optional "Say it" block first; everyone else goes straight to the
-    // outputs. The block never blocks: Skip continues.
+    // A speaker with the speech layer on and an answer written says it
+    // next, on the same prompt: the "Say it" step. Everyone else goes
+    // straight to the outputs. The step never blocks: Skip continues, and
+    // the answer then waits in Record.
     if (speechLayer && coldAnswer.trim()) {
       setSayIt(true);
       return;
@@ -932,14 +969,16 @@ export function AnnotationInterface({
     return markupRationaleOk; // both_inadequate: a made markup needs its why
   };
 
-  // Link the clips recorded in the "Say it" block to the answer the episode
-  // just saved. Fire and forget: the episode is already saved, and a clip left
-  // unattached is only a clip without a transcript (the Lab shows it so).
-  function attachSpeechClips(promptCode: string) {
-    const ids = speechClipIds.current;
-    speechClipIds.current = [];
+  // Link the clips saved in the "Say it" step to the answer the episode
+  // just saved. Waited for (briefly, and never failing the episode, which is
+  // already saved), so the numbers the flow asks for next no longer count
+  // this answer as waiting for a recording. A clip left unattached is only a
+  // clip without a transcript (the Lab shows it so).
+  async function attachSpeechClips(promptCode: string) {
+    const ids = speechClips.map((c) => c.id);
+    setSpeechClips([]);
     if (ids.length === 0) return;
-    void fetch("/api/lab/speech/attach", {
+    await fetch("/api/lab/speech/attach", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ promptId: promptCode, recordingIds: ids }),
@@ -1089,7 +1128,7 @@ export function AnnotationInterface({
           "success",
         );
       }
-      attachSpeechClips(task.prompt.promptId);
+      await attachSpeechClips(task.prompt.promptId);
       if (typeof data.comparisonId === "string") {
         rememberSaved({
           type: "pairwise",
@@ -1458,9 +1497,20 @@ export function AnnotationInterface({
   // maps onto four plain-English stages; on the pairwise screen the highlight
   // advances from "Compare" to "Why & fix" once a winner is picked - tagging
   // the loser and correcting the chosen output now happen right there.
-  const STAGES = ["Your answer", "Compare", "Why & fix", "Score"] as const;
+  // With the speech layer on, the prompt has a stage of its own for saying
+  // the answer, between writing it and seeing the outputs.
+  const STAGES: readonly string[] = speechLayer
+    ? SPOKEN_STAGES
+    : ["Your answer", "Compare", "Why & fix", "Score"];
+  const afterAnswer = speechLayer ? 2 : 1;
   const activeStage =
-    step === "prompt" ? 0 : step === "pairwise" ? (winner ? 2 : 1) : 3;
+    step === "prompt"
+      ? sayIt && speechLayer && coldAnswer.trim()
+        ? 1
+        : 0
+      : step === "pairwise"
+        ? afterAnswer + (winner ? 1 : 0)
+        : afterAnswer + 2;
 
   const goldHint = bucketGoldHint(task.prompt.bucket);
 
@@ -1926,7 +1976,7 @@ export function AnnotationInterface({
                   source-free, so it&apos;s no longer offered here.
                 </p>
               )}
-              {sayIt && coldAnswer.trim() ? (
+              {sayIt && speechLayer && coldAnswer.trim() ? (
                 <SayItBlock
                   promptCode={task.prompt.promptId}
                   promptText={task.prompt.text}
@@ -1934,8 +1984,13 @@ export function AnnotationInterface({
                   glossText={englishGloss}
                   dialect={dialect || null}
                   demoSessionId={demoSessionId}
-                  onClipSaved={(id) => {
-                    speechClipIds.current = [...speechClipIds.current, id];
+                  savedClips={sayItRestored.current}
+                  onLiveChange={onLiveChange}
+                  onClipSaved={(clip) => {
+                    setSpeechClips((all) => [
+                      ...all.filter((c) => c.language !== clip.language),
+                      clip,
+                    ]);
                   }}
                   onDone={() => {
                     setSayIt(false);

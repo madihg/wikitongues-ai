@@ -1,7 +1,8 @@
 # One Annotate flow: text, speech and tone marks in one place
 
 Decided on the Wikitongues call of 2026-11-24. Reshaped after the review of
-2026-11-25. For whoever changes this next.
+2026-11-25, and again on 2026-11-26 (one prompt, text then speech). For
+whoever changes this next.
 
 ## What was asked
 
@@ -30,12 +31,37 @@ everything waiting inside it.
 
 - **All (the default) is a mixed stream.** It serves a run of each kind in
   the leads' order, then moves to the next kind with work waiting, round and
-  round. By default that's 10 recordings, then 5 clips to check, then 3 text
-  prompts, then 5 listening pairs, then 10 answers to mark. The kind only
+  round. By default that's 3 new prompts (each written, then said), then 10
+  earlier answers to record, then 5 clips to check, then 5 listening pairs,
+  then 10 answers to mark. The kind only
   changes between tasks, when a screen says one is saved, never in the
   middle of one. A line over the work says what comes next ("This recording
   and 2 more, then Check."), and a screen reader hears "Now: Check." when the
   kind changes.
+- **One prompt, text then speech** (Halim, 2026-11-26: "they annotate text
+  for one prompt and then record speech for that prompt... that would be
+  more efficient"). A new prompt is one task with both halves. In Write the
+  stages are Your answer, Say it, Compare, Why & fix, Score: the speaker
+  writes and locks the answer, says it straight away in Igala and in a short
+  English translation, then sees the AI answers.
+  - Say it is a stage of the prompt, not an optional extra. "Skip, no
+    recording" is still there (no microphone, a noisy room), and a skipped
+    answer waits in Record.
+  - The answer is locked before Say it and cannot be edited there, so a clip
+    never reads words that change afterwards.
+  - The open step and its saved clips are kept with the episode's draft
+    (`lib/episode-draft.ts`). A reload comes back to Say it with what was
+    saved, and the clips still attach to the answer at submit. Before, a
+    reload skipped the step and left a saved clip unattached.
+  - The clips are attached before the flow is told the prompt is done, so
+    the answer just said is not counted as waiting in Record.
+  - While the step has the microphone on or a clip uploading, the other
+    kinds wait, as they do for Record.
+- **Record is the catch-up.** It holds the answers written before recording
+  existed (134 to 565 per annotator, 1,526 answers and 2 clips on
+  2026-11-26), any answer whose Say it was skipped, and an answer still
+  missing its English clip. It keeps its place in the mix until that backlog
+  is gone.
 - **Why a mix, not a strict order:** each annotator has 134 to 565 past
   answers with no clip, so Record almost never runs out. A strict order would
   starve Check (the gate to training), Write and Tone marks for weeks
@@ -55,8 +81,9 @@ everything waiting inside it.
 | Tone marks | `ToneInterface` | tone items were given to them |
 
 **Plan:** `lib/work-flow.ts`.
-- `DEFAULT_WORK_ORDER` is record, check, write, listen, tone. Tone marks come
-  last until the tone call with Salem and Agnes.
+- `DEFAULT_WORK_ORDER` is write, record, check, listen, tone: a new prompt
+  first (it ends in a clip too), then the catch-up recordings. Tone marks
+  come last until the tone call with Salem and Agnes.
 - `DEFAULT_WORK_RUN` holds the run lengths.
 - The leads can change both without code through the Vercel variable
   `ANNOTATE_ORDER`, for example `check:8,record:4,write`.
@@ -69,8 +96,8 @@ hidden while another kind is on screen. That keeps a take, a verdict picked
 but not sent, and a tone edit.
 - A hidden screen is quiet: its audio is paused, the text screen's 1 to 4
   keys are off, and Tone marks' time counter stops.
-- While Record has the microphone on or a clip uploading, the other kinds
-  wait.
+- While Record, or Write's Say it step, has the microphone on or a clip
+  uploading, the other kinds wait.
 - A screen that found nothing left counts as zero until new work comes in for
   it. Shown again, it starts afresh and asks its queue again.
 
@@ -133,3 +160,10 @@ No sidebar change, no new page.
 - Listen's researcher extras stay on `/speak/listen` only.
 - A dropped connection restarts a whole long upload (from the #120 review).
 - Nobody has tried a real two minute take in a browser yet.
+- Say it inside Write has not been tried by an annotator yet: none has
+  written an answer since the speech layer went live for them.
+- Record also hands out prompts with no answer, to write and record with no
+  compare step. Whether those should go through Write instead is undecided.
+- Tone marks are not chained to a prompt (40 of the 45 tone items' authors
+  have no clip of that answer, so "mark the tones, then say it" is
+  possible). Waiting for the tone call.

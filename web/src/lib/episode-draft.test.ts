@@ -7,6 +7,7 @@ import {
   parseLastSaved,
   savedStripText,
   planDraftRestore,
+  sayItClipsOf,
   type ColdDraft,
   type DraftStep,
 } from "./episode-draft";
@@ -66,6 +67,71 @@ describe("coldPartOf", () => {
       instructionIg: "",
       coldLocked: true,
     });
+  });
+});
+
+describe("the Say it step in the cold draft (one prompt, text then speech)", () => {
+  const said = {
+    coldAnswer: "Ùkọ́lọ̀",
+    englishGloss: "work",
+    instructionIg: "",
+    coldLocked: true,
+    sayIt: true,
+    clips: [{ id: "c1", language: "igala" }],
+  };
+
+  it("keeps the open step and the saved clips beside a locked answer", () => {
+    expect(coldPartOf(said)).toEqual(said);
+  });
+
+  it("drops them without a locked answer: a clip never sits beside words that can still change", () => {
+    const c = coldPartOf({ ...said, coldLocked: false });
+    expect(c?.sayIt).toBeUndefined();
+    expect(c?.clips).toBeUndefined();
+    expect(coldPartOf({ ...said, coldAnswer: "  " })?.clips).toBeUndefined();
+  });
+
+  it("damaged clips are dropped, and each language is kept once", () => {
+    expect(
+      sayItClipsOf([
+        { id: "c1", language: "igala" },
+        { id: "c2", language: "igala" },
+        { id: "", language: "english" },
+        { id: "c3", language: "french" },
+        null,
+        { id: "c4", language: "english" },
+      ]),
+    ).toEqual([
+      { id: "c1", language: "igala" },
+      { id: "c4", language: "english" },
+    ]);
+    expect(sayItClipsOf("x")).toEqual([]);
+  });
+
+  it("a reload comes back to the step, with the clips, instead of skipping the recording", () => {
+    // Same pair.
+    const same = planDraftRestore(full({ step: "prompt" }), said);
+    expect(same).toMatchObject({
+      kind: "full",
+      draft: { step: "prompt", sayIt: true, clips: [{ id: "c1", language: "igala" }] },
+    });
+    // Pair changed.
+    expect(planDraftRestore(null, said)).toMatchObject({
+      kind: "cold",
+      step: "prompt",
+      cold: { sayIt: true },
+    });
+  });
+
+  it("once the speaker went on, the clips still come back so they attach at submit", () => {
+    const { sayIt: _gone, ...wentOn } = said;
+    void _gone;
+    const plan = planDraftRestore(full({ step: "pairwise" }), wentOn);
+    expect(plan).toMatchObject({
+      kind: "full",
+      draft: { step: "pairwise", clips: [{ id: "c1", language: "igala" }] },
+    });
+    expect(planDraftRestore(null, wentOn)).toMatchObject({ kind: "cold", step: "pairwise" });
   });
 });
 

@@ -18,23 +18,37 @@ import { TONE_INSTRUCTION } from "@/lib/tone/tone-copy";
  * so Check (the gate to training) would not come up for weeks. A person can
  * still stick to one kind with the filter above the work (`?work=`).
  *
+ * ONE PROMPT, TEXT THEN SPEECH (Halim, 2026-11-26: "they annotate text for
+ * one prompt and then record speech for that prompt... that would be more
+ * efficient"). A new prompt is one task with both halves: in Write, the
+ * speaker writes the answer, says it straight away (the "Say it" step, the
+ * speech layer on), then compares the AI answers. So Write comes first in
+ * the stream, and Record is the catch-up: the answers written before
+ * recording existed (134 to 565 per annotator) and any answer whose "Say
+ * it" was skipped. Record still needs its place in the mix until that
+ * backlog is gone.
+ *
  * The order and the run lengths are the leads' choice, not the code's: they
  * are read from ANNOTATE_ORDER, a comma separated list of the kinds below,
  * each with an optional run length ("record:10,check:5,write"), and fall
- * back to DEFAULT_WORK_ORDER and DEFAULT_WORK_RUN. Speech comes first while
- * the speech data is the priority (the 2026-11-24 call), and the separate
- * tone mark pass comes last until the tone call with Salem and Agnes.
+ * back to DEFAULT_WORK_ORDER and DEFAULT_WORK_RUN. Speech stays the
+ * priority (the 2026-11-24 call): the first two kinds both end in a clip.
+ * The separate tone mark pass comes last until the tone call with Salem and
+ * Agnes.
  * Client-safe and pure: no server imports.
  */
 
 export const WORK_KINDS = ["record", "check", "tone", "write", "listen"] as const;
 export type WorkKind = (typeof WORK_KINDS)[number];
 
-/** Speech first (record, then check), then text and listening, tone marks last. */
+/**
+ * A new prompt first (written, then said), then the catch-up recordings,
+ * then checking and listening, tone marks last.
+ */
 export const DEFAULT_WORK_ORDER: readonly WorkKind[] = [
+  "write",
   "record",
   "check",
-  "write",
   "listen",
   "tone",
 ];
@@ -67,13 +81,13 @@ export const WORK_LABEL: Record<WorkKind, string> = {
 /** One line under the tabs: what this kind of work is. */
 export const WORK_LINE: Record<WorkKind, string> = {
   record:
-    "Read your own answer out loud, then its English meaning. Nothing is shared until you choose.",
+    "Answers you wrote earlier that have no recording yet. Read each one out loud, then its English meaning. Nothing is shared until you choose.",
   check:
     "Listen to someone else's clip and read what they wrote. Does the recording match the text?",
   // Halim's wording, word for word (it was the Pass 2 page's instruction).
   tone: TONE_INSTRUCTION,
   write:
-    "Write how you would say it, then compare two AI answers, say why the loser fails and fix the one you chose.",
+    "Write how you would say it and say it out loud, then compare two AI answers, say why the loser fails and fix the one you chose.",
   listen:
     "Two voices say the same prompt. Pick the one that sounds better, and say why.",
 };

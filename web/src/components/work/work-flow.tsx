@@ -49,7 +49,10 @@ import {
  * screen, so moving away never loses a take, a verdict picked but not sent,
  * or a tone edit. A hidden screen is quiet: its audio is paused, its keys
  * are off and its timers stop. While the Record screen has the microphone on
- * or a clip uploading, the other kinds wait.
+ * or a clip uploading, the other kinds wait. The same holds for Write while
+ * its "Say it" step is recording: a new prompt is written and then said in
+ * one task (lib/work-flow.ts, ONE PROMPT, TEXT THEN SPEECH), and Record is
+ * the catch-up for earlier answers with no clip.
  *
  * Each screen is the same component its old page used, so a fix to one is a
  * fix everywhere. While a kind is on screen the flow names it for honest
@@ -254,8 +257,17 @@ export function WorkFlow() {
   const [emptied, setEmptied] = useState<Emptied>({});
   const [fresh, setFresh] = useState<Partial<Record<WorkKind, number>>>({});
   const [ranOut, setRanOut] = useState<WorkKind | null>(null);
-  // The Record screen has the microphone on or a clip uploading.
-  const [recordLive, setRecordLive] = useState(false);
+  // The kinds whose screen has the microphone on or a clip uploading: Record,
+  // and Write while its "Say it" step is recording.
+  const [liveKinds, setLiveKinds] = useState<WorkKind[]>([]);
+  const setLive = (k: WorkKind, l: boolean) => {
+    setLiveKinds((all) =>
+      all.includes(k) === l ? all : l ? [...all, k] : all.filter((x) => x !== k),
+    );
+    if (!l) setHeld(false);
+  };
+  // The screen in view is recording: it must not be moved out of sight.
+  const liveNow = kind !== null && liveKinds.includes(kind);
   const [held, setHeld] = useState(false);
   // Said to a screen reader when the stream moves to another kind.
   const [announce, setAnnounce] = useState("");
@@ -342,7 +354,7 @@ export function WorkFlow() {
 
   // The filter: one kind, until All is pressed.
   const pick = (k: WorkKind) => {
-    if (recordLive && kind === "record" && k !== "record") {
+    if (liveNow && k !== kind) {
       setHeld(true);
       return;
     }
@@ -358,7 +370,7 @@ export function WorkFlow() {
     setRanOut(null);
     setHeld(false);
     setWorkOnAddress(null);
-    if (kind && (counts[kind] ?? 0) === 0 && !(kind === "record" && recordLive)) {
+    if (kind && (counts[kind] ?? 0) === 0 && !liveNow) {
       const next = nextWork(plan.order, counts, kind);
       if (next) reopen(next);
     }
@@ -436,10 +448,7 @@ export function WorkFlow() {
             <RecordInterface
               onEmpty={onEmpty}
               onDone={onDone}
-              onLiveChange={(l) => {
-                setRecordLive(l);
-                if (!l) setHeld(false);
-              }}
+              onLiveChange={(l) => setLive("record", l)}
             />
             <p className="text-sm text-text-tertiary">
               Your dialect and the details that help the voice model are on{" "}
@@ -458,7 +467,14 @@ export function WorkFlow() {
       case "tone":
         return <ToneInterface onEmpty={onEmpty} onDone={onDone} active={on} />;
       case "write":
-        return <AnnotationInterface onEmpty={onEmpty} onDone={onDone} active={on} />;
+        return (
+          <AnnotationInterface
+            onEmpty={onEmpty}
+            onDone={onDone}
+            active={on}
+            onLiveChange={(l) => setLive("write", l)}
+          />
+        );
       case "listen":
         return <ListenInterface onEmpty={onEmpty} onDone={onDone} />;
     }
@@ -477,7 +493,7 @@ export function WorkFlow() {
           counts={counts}
           active={kind}
           mixed={mixed}
-          locked={recordLive && kind === "record"}
+          locked={liveNow}
           onAll={all}
           onPick={pick}
         />
