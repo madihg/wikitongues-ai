@@ -24,8 +24,11 @@ import {
 } from "./work-flow";
 
 describe("the one Annotate flow: kinds of work", () => {
-  it("speech comes first by default: record, check, then text and listen, tone marks last", () => {
-    expect(DEFAULT_WORK_ORDER).toEqual(["record", "check", "write", "listen", "tone"]);
+  it("a new prompt comes first by default (written, then said), then the catch-up recordings; tone marks last", () => {
+    expect(DEFAULT_WORK_ORDER).toEqual(["write", "record", "check", "listen", "tone"]);
+    // One prompt, text then speech: Write says so, and Record is the catch-up.
+    expect(WORK_LINE.write).toContain("say it out loud");
+    expect(WORK_LINE.record).toContain("earlier");
     expect([...DEFAULT_WORK_ORDER].sort()).toEqual([...WORK_KINDS].sort());
   });
 
@@ -69,7 +72,7 @@ describe("parseWorkOrder (ANNOTATE_ORDER)", () => {
 
   it("a typo or a repeat can never hide a kind of work", () => {
     const o = parseWorkOrder("recrod,tone,tone,speech");
-    expect(o).toEqual(["tone", "record", "check", "write", "listen"]);
+    expect(o).toEqual(["tone", "write", "record", "check", "listen"]);
     expect(o).toHaveLength(WORK_KINDS.length);
   });
 
@@ -83,6 +86,23 @@ describe("parseWorkOrder (ANNOTATE_ORDER)", () => {
       order: [...DEFAULT_WORK_ORDER],
       runs: { ...DEFAULT_WORK_RUN },
     });
+  });
+});
+
+describe("the default stream: new prompts, then the catch-up recordings, round and round", () => {
+  const plan = parseWorkPlan(undefined);
+  const counts = { write: 30, record: 400, check: 6, listen: 0 };
+
+  it("a run of prompts, then a run of earlier answers to record, then checks, then prompts again", () => {
+    expect(streamNext(plan, counts, "write", DEFAULT_WORK_RUN.write - 1)).toBe("write");
+    expect(streamNext(plan, counts, "write", DEFAULT_WORK_RUN.write)).toBe("record");
+    expect(streamNext(plan, counts, "record", DEFAULT_WORK_RUN.record)).toBe("check");
+    expect(streamNext(plan, counts, "check", DEFAULT_WORK_RUN.check)).toBe("write");
+    expect(streamLine(plan, counts, "write", 0)).toBe("This prompt and 2 more, then Record.");
+  });
+
+  it("no new prompt left: the backlog of recordings still has its place", () => {
+    expect(streamNext(plan, { ...counts, write: 0 }, "check", DEFAULT_WORK_RUN.check)).toBe("record");
   });
 });
 
@@ -134,7 +154,8 @@ describe("the mixed stream", () => {
 });
 
 describe("which tabs and which one opens", () => {
-  const order = [...DEFAULT_WORK_ORDER];
+  // A leads' order with the catch-up recordings first.
+  const order = parseWorkOrder("record,check,write,listen,tone");
 
   it("write is always a tab; another kind only when the person has it", () => {
     expect(workTabs(order, {})).toEqual(["write"]);
@@ -153,6 +174,9 @@ describe("which tabs and which one opens", () => {
     expect(pickWork(order, { record: 0, check: 0, tone: 4, write: 9 })).toBe("write");
     expect(pickWork(order, { record: 0, check: 0, tone: 4, write: 0 })).toBe("tone");
     expect(pickWork(parseWorkOrder("write"), { record: 5, write: 9 })).toBe("write");
+    // The default: a new prompt first, the catch-up recordings when none waits.
+    expect(pickWork(DEFAULT_WORK_ORDER, { record: 5, check: 2, write: 9 })).toBe("write");
+    expect(pickWork(DEFAULT_WORK_ORDER, { record: 5, check: 2, write: 0 })).toBe("record");
   });
 
   it("nothing waiting anywhere: Write, which always has a screen", () => {

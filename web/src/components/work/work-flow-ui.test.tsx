@@ -140,12 +140,14 @@ describe("the flow is one page holding the same screens", () => {
     for (const piece of [
       "<CheckInterface onEmpty={onEmpty} onDone={onDone} />",
       "<ToneInterface onEmpty={onEmpty} onDone={onDone} active={on} />",
-      "<AnnotationInterface onEmpty={onEmpty} onDone={onDone} active={on} />",
       "<ListenInterface onEmpty={onEmpty} onDone={onDone} />",
     ]) {
       expect(flow, piece).toContain(piece);
     }
     expect(flow).toMatch(/<RecordInterface\s+onEmpty=\{onEmpty\}\s+onDone=\{onDone\}/);
+    expect(flow).toMatch(
+      /<AnnotationInterface\s+onEmpty=\{onEmpty\}\s+onDone=\{onDone\}\s+active=\{on\}/,
+    );
     for (const [file, flag] of [
       ["lab/record-interface.tsx", 'useOnEmpty(queue.status === "complete", onEmpty);'],
       ["lab/check-interface.tsx", 'useOnEmpty(load.status === "done", onEmpty);'],
@@ -190,11 +192,30 @@ describe("the flow is one page holding the same screens", () => {
   });
 
   it("while Record has the microphone on or a clip uploading, the other kinds wait", () => {
-    expect(flow).toContain('if (recordLive && kind === "record" && k !== "record") {');
+    expect(flow).toContain("const liveNow = kind !== null && liveKinds.includes(kind);");
+    expect(flow).toContain("if (liveNow && k !== kind) {");
+    expect(flow).toContain("locked={liveNow}");
+    expect(flow).toContain('onLiveChange={(l) => setLive("record", l)}');
     expect(flow).toContain("Finish this recording first");
     const rec = src("lab/record-interface.tsx");
     expect(rec).toContain("const live = anyBusy || recording.igala || recording.english;");
     expect(src("lab/record-clip.tsx")).toContain('const recordingNow = recorder.state === "recording";');
+  });
+
+  it("one prompt, text then speech: Write holds the flow too while its Say it step records", () => {
+    expect(flow).toContain('onLiveChange={(l) => setLive("write", l)}');
+    const say = src("lab/say-it-block.tsx");
+    expect(say).toContain("const live = anyBusy || recording.igala || recording.english;");
+    // A step that goes away says it is quiet again, so the flow is never left held.
+    expect(say).toContain("useEffect(() => () => onLiveRef.current?.(false), []);");
+    const text = src("annotation-interface.tsx");
+    expect(text).toContain("onLiveChange={onLiveChange}");
+    // The clips are attached before the flow is told the task is done, so
+    // the answer just said is not counted as waiting for a recording.
+    expect(text).toMatch(/await attachSpeechClips\(task\.prompt\.promptId\);/);
+    expect(text.indexOf("await attachSpeechClips(task.prompt.promptId)")).toBeLessThan(
+      text.indexOf("onDone?.();\n      await fetchNext();"),
+    );
   });
 
   it("the stream moves on only between tasks, and says so to a screen reader", () => {

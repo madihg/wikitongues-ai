@@ -965,12 +965,49 @@ describe("the episode's Say it block", () => {
       />,
     );
 
-  it("has two clips, one per language, and is optional", () => {
+  it("has two clips, one per language, and asks for the answer to be said now", () => {
     const html = block("what it means");
     expect(html).toContain('data-testid="say-it-block"');
     expect(html).toContain('data-testid="clip-igala"');
     expect(html).toContain('data-testid="clip-english"');
-    expect(html).toContain("Optional");
+    // One prompt, text then speech (2026-11-26): a step of the prompt, no
+    // longer billed as an optional extra. Skip is still there (next test).
+    expect(html).toContain("Now say the answer you just wrote");
+    expect(html).not.toContain("Optional");
+    expect(html).toContain("waits for you in Record");
+  });
+
+  it("after a reload, a language already saved shows as saved and is not asked again", () => {
+    const html = renderToStaticMarkup(
+      <SayItBlock
+        promptCode="code_001"
+        igalaText="a stand-in answer"
+        glossText=""
+        savedClips={[{ id: "clip_1", language: "igala" }]}
+        onClipSaved={noop}
+        onDone={noop}
+      />,
+    );
+    expect(html).toContain('data-testid="say-it-igala-saved"');
+    expect(html).not.toContain('data-testid="clip-igala"');
+    expect(html).toContain('data-testid="clip-english"');
+    // Something is saved, so the button goes on instead of skipping.
+    expect(html).toContain(">Continue to the AI outputs<");
+  });
+
+  it("is a stage of the prompt, kept with the draft, and the answer cannot change under a clip", () => {
+    const src = readFileSync(join(dir, "..", "annotation-interface.tsx"), "utf8");
+    expect(src).toContain('"Say it",');
+    // The step and its saved clips are written with the cold draft.
+    expect(src).toContain("...(sayIt ? { sayIt: true as const } : {}),");
+    expect(src).toContain("...(speechClips.length ? { clips: speechClips } : {}),");
+    // The block only renders in the locked branch of the first step: the
+    // authoring boxes are gone, so no clip can read words that later change.
+    const locked = src.indexOf("{coldLocked ? (", src.indexOf('{/* STEP: prompt / cold-authoring'));
+    const unlocked = src.indexOf(") : task.goldFirst ? (", locked);
+    const blockAt = src.indexOf("<SayItBlock");
+    expect(blockAt).toBeGreaterThan(locked);
+    expect(blockAt).toBeLessThan(unlocked);
   });
 
   it("never blocks: Skip, no recording is there before anything is recorded", () => {

@@ -15,11 +15,43 @@
 
 export type DraftStep = "prompt" | "pairwise" | "score";
 
+/** A clip saved in the episode's "Say it" step, not yet attached. */
+export interface SayItClip {
+  id: string;
+  language: "igala" | "english";
+}
+
 export interface ColdDraft {
   coldAnswer: string;
   englishGloss: string;
   instructionIg: string;
   coldLocked: boolean;
+  /**
+   * The "Say it" step is open: the answer is locked and the speaker has not
+   * gone on to the AI outputs yet. Present only when true, so a reload comes
+   * back to the step instead of silently skipping the recording.
+   */
+  sayIt?: true;
+  /**
+   * Clips saved in the step for this locked answer, kept so a reload still
+   * attaches them at submit. Only ever beside a locked answer: the words a
+   * clip read can no longer change. Present only when there are some.
+   */
+  clips?: SayItClip[];
+}
+
+/** The saved clips of a stored draft, sanitized: at most one per language. */
+export function sayItClipsOf(raw: unknown): SayItClip[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SayItClip[] = [];
+  for (const c of raw) {
+    const o = c as { id?: unknown; language?: unknown } | null;
+    if (!o || typeof o.id !== "string" || !o.id) continue;
+    if (o.language !== "igala" && o.language !== "english") continue;
+    if (out.some((x) => x.language === o.language)) continue;
+    out.push({ id: o.id, language: o.language });
+  }
+  return out;
 }
 
 /** The full draft's key: unchanged from before the split, so drafts saved
@@ -46,6 +78,12 @@ export function coldPartOf(raw: unknown): ColdDraft | null {
     instructionIg: str(o.instructionIg),
     coldLocked: o.coldLocked === true,
   };
+  // The step and its clips mean something only beside a locked answer.
+  if (cold.coldLocked && cold.coldAnswer.trim()) {
+    if (o.sayIt === true) cold.sayIt = true;
+    const clips = sayItClipsOf(o.clips);
+    if (clips.length) cold.clips = clips;
+  }
   const empty =
     !cold.coldLocked &&
     !cold.coldAnswer.trim() &&
@@ -63,12 +101,14 @@ export type DraftRestore<D> =
  * What to restore when a task loads.
  *   - The same pair came back: the full draft, with the cold part laid over
  *     it (the cold part is written with every save, so it is never older),
- *     moved to the pairwise step if only the cold part was locked.
+ *     moved to the pairwise step if only the cold part was locked. A cold
+ *     part still on its "Say it" step comes back on that step (the first
+ *     stage, locked), whatever the full draft says.
  *   - The pair changed: the cold part alone. A locked answer resumes at the
  *     pairwise step with the answer kept: it was written before any output
  *     was shown, so it is still source-free, while the authoring boxes must
- *     not reopen once outputs have been seen. An unlocked one resumes where
- *     it was being written.
+ *     not reopen once outputs have been seen; one still on its "Say it" step
+ *     resumes there. An unlocked one resumes where it was being written.
  *   - Neither: nothing.
  */
 export function planDraftRestore<D extends ColdDraft & { step: DraftStep }>(
@@ -82,15 +122,20 @@ export function planDraftRestore<D extends ColdDraft & { step: DraftStep }>(
     // boxes after outputs were seen.
     if (!cold || (full.coldLocked && !cold.coldLocked))
       return { kind: "full", draft: full };
-    const step: DraftStep =
-      cold.coldLocked && !full.coldLocked ? "pairwise" : full.step;
+    const step: DraftStep = cold.sayIt
+      ? "prompt"
+      : cold.coldLocked && !full.coldLocked
+        ? "pairwise"
+        : full.step;
+    // The step and its clips live in the cold part only, so they come back
+    // through this spread and never from the full draft.
     return { kind: "full", draft: { ...full, ...cold, step } };
   }
   if (cold) {
     return {
       kind: "cold",
       cold,
-      step: cold.coldLocked ? "pairwise" : "prompt",
+      step: cold.coldLocked && !cold.sayIt ? "pairwise" : "prompt",
     };
   }
   return null;
