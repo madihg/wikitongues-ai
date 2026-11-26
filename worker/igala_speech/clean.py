@@ -4,6 +4,9 @@ One clip in, at its recorded rate, mono:
 
 1. Denoise with DeepFilterNet3 (discriminative, MIT or Apache-2.0). No
    generative restoration: it is language dependent and can change words.
+   A second denoiser, Inworld Voice Isolator v1 (Apache-2.0, also a mask, no
+   restoration), exists for the comparison in denoiser_ab.py only: the
+   derivative the models train on is still made with DeepFilterNet3.
 2. Pitch check (f0.py): the F0 track before and after, on frames voiced in
    both. If the correlation is low or the median shift is large, the clip
    keeps its RAW audio for the next steps, and the log says why.
@@ -29,6 +32,8 @@ from .quality_gates import GATES, GATES_VERSION, gate_verdict, loudness_gain_db
 
 CLEAN_VERSION = "clean-v1"
 DENOISER = "DeepFilterNet3"
+INWORLD_DENOISER = "InworldVoiceIsolatorV1"
+INWORLD_REPO = "inworld/voice-isolator"
 
 Denoise = Callable[[np.ndarray, int], np.ndarray]
 Vad = Callable[[np.ndarray, int], np.ndarray]
@@ -95,6 +100,7 @@ def make_derivative(
     *,
     denoiser_version: str = "unknown",
     denoiser_params: dict | None = None,
+    denoiser_name: str = DENOISER,
     vad: Vad | None = None,
     vad_name: str = "energy-v1",
 ) -> dict:
@@ -102,6 +108,8 @@ def make_derivative(
 
     `denoise` maps (samples, rate) to samples of the same length and rate; None
     skips the denoiser (the log says so), which leaves loudness and resampling.
+    `denoiser_name` is what the log calls the tool; the default is the one the
+    pipeline uses.
     """
     raw = np.asarray(raw, dtype=np.float32)
     c = GATES["clean"]
@@ -110,7 +118,7 @@ def make_derivative(
         "cleanVersion": CLEAN_VERSION,
         "gatesVersion": GATES_VERSION,
         "denoiser": {
-            "tool": DENOISER if denoise else None,
+            "tool": denoiser_name if denoise else None,
             "version": denoiser_version if denoise else None,
             "params": (denoiser_params or {}) if denoise else None,
         },
@@ -177,3 +185,31 @@ def deepfilternet() -> tuple[Denoise, str, dict]:
         return resample(out.squeeze(0).cpu().numpy(), df_rate, rate)
 
     return run, getattr(df, "__version__", "unknown"), params
+
+
+def inworld_voice_isolator(device: str | None = None) -> tuple[Denoise, str, dict]:
+    """Inworld Voice Isolator v1 (offline checkpoint) as (function, version,
+    parameters), the same shape as deepfilternet().
+
+    Imports the package lazily: it exists only in the Modal comparison image
+    (it needs torch 2.1 or later, DeepFilterNet 0.5.6 needs torch 2.0). The
+    model works at 48 kHz and resamples other rates in and back out itself; it
+    returns the voice at the input rate and length.
+    """
+    from inworld import voice_isolation
+
+    isolator = voice_isolation.VoiceIsolator(INWORLD_REPO, device=device)
+    params = {
+        "model": INWORLD_DENOISER,
+        "repo": INWORLD_REPO,
+        "mode": "offline",
+        "device": str(isolator.device),
+        "precision": isolator.precision,
+        "rate": isolator.sample_rate,
+    }
+
+    def run(x: np.ndarray, rate: int) -> np.ndarray:
+        out = isolator.isolate(np.asarray(x, dtype=np.float32), rate)
+        return np.asarray(out, dtype=np.float32).reshape(-1)
+
+    return run, getattr(voice_isolation, "__version__", "unknown"), params

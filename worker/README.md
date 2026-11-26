@@ -129,6 +129,8 @@ a researcher put on the checkpoints volume, and writes only to
 | --- | --- | --- |
 | `prepare` | Measures every clip (`igala_speech/quality.py`) and makes its cleaning derivative (`clean.py`): DeepFilterNet3, the pitch check (`f0.py`), -23 LUFS under a -1 dBFS true peak, copies at 24 and 16 kHz. The raw clip is never changed. | none |
 | `asr` | One Omnilingual ASR model card on a list of clips, with `igl_Latn`. Clips over 38 s are cut at a quiet point first. | A10G |
+| `denoiser-ab` | A comparison only: the same cleaning step with Inworld Voice Isolator v1 (Apache-2.0) in DeepFilterNet3's place, on the same clips. Writes `derived-ab/` and `results/denoiser-ab*.json`; nothing a model trains on changes. Run `prepare` first. | none |
+| `denoiser-ab-asr` | The recogniser on the raw, DeepFilterNet3 and Inworld copies of each clip, then the character error per arm (`igala_speech/denoiser_ab.py`). | A10G |
 | `asr-fetch` | Downloads a model card's checkpoint on a CPU container, with retries. | none |
 | `tts-anchor` | `facebook/mms-tts-yor` as published, reading Igala text through `tts_text.py`. No training. | A10G |
 | `tts-finetune` | The `finetune-hf-vits` recipe. It refuses a plan that did not come through the app's training guard: build one with `web/scripts/speech/first-model-plan.ts`. | A10G |
@@ -146,4 +148,5 @@ Rules that are code, not convention:
 Versions that ran green on 2026-11-13: `omnilingual-asr==0.2.0` (torch 2.8.0,
 pyarrow 20.0.0), `deepfilternet==0.5.6` (torch 2.0.1, CPU),
 `transformers==4.36.2` with `datasets==2.16.1`, `pandas==2.1.4`,
-`pyarrow==15.0.2`.
+`pyarrow==15.0.2`. The `denoiser-ab` image (`inworld-voice-isolation==1.0.0`,
+torch 2.5.1, CPU) has not been run yet.
