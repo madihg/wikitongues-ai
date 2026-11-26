@@ -4,6 +4,8 @@
     modal run worker/first_model.py --stage tts-anchor --plan P.json    # unadapted mms-tts-yor
     modal run worker/first_model.py --stage tts-finetune --plan P.json  # prepared; needs a guarded plan
     modal run worker/first_model.py --stage asr --card C --name N --items I.json  # also the round trip
+    modal run worker/first_model.py --stage denoiser-ab        # Inworld Voice Isolator beside DeepFilterNet3
+    modal run worker/first_model.py --stage denoiser-ab-asr --card C  # what the recogniser hears, per denoiser
 
 It reads /checkpoints/<BATCH>/manifest.json and /checkpoints/<BATCH>/clips/<id>.webm
 (put there with `modal volume put`; the worker holds no database credentials)
@@ -60,6 +62,17 @@ clean_image = _with_package(
     .pip_install(
         "numpy<2", "scipy", "soundfile", "jiwer", "pydantic", "httpx",
         "deepfilternet==0.5.6", "silero-vad==5.1.2", "onnxruntime",
+    )
+)
+# Inworld Voice Isolator needs torch 2.1 or later, so it cannot share clean_image.
+# Used by the denoiser-ab stage only. Not run yet: pin from the first green run.
+isolator_image = _with_package(
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("libsndfile1", "ffmpeg")
+    .pip_install("torch==2.5.1", "torchaudio==2.5.1", index_url="https://download.pytorch.org/whl/cpu")
+    .pip_install(
+        "numpy<2", "scipy", "soundfile", "jiwer", "pydantic", "httpx",
+        "inworld-voice-isolation==1.0.0", "silero-vad==5.1.2", "onnxruntime",
     )
 )
 asr_image = _with_package(
@@ -188,6 +201,137 @@ def prepare(limit: int = 0) -> dict:
     checkpoints_volume.commit()
     kept_raw = sum(1 for v in out.values() if not v["usedDenoised"])
     return {"clips": len(out), "keptRaw": kept_raw, **_ledger("prepare", None, time.monotonic() - start)}
+
+
+# -------------------------------------------------------- stage: denoiser-ab
+
+AB_RESULTS = "results/denoiser-ab.json"
+AB_ARMS = {  # arm name -> the 16 kHz file the recogniser hears, under the batch folder
+    "raw": "derived/{id}/raw-16k.flac",
+    "deepfilternet3": "derived/{id}/clean-v1-16k.flac",
+    "inworld": "derived-ab/{id}/inworld-v1-16k.flac",
+}
+
+
+def _silero_vad():
+    """Silero VAD as the (samples, rate) -> one boolean per frame the measures take."""
+    import numpy as np
+    import torch
+    from silero_vad import get_speech_timestamps, load_silero_vad
+
+    from igala_speech.clean import resample
+    from igala_speech.quality import FRAME_MS
+
+    vad_model = load_silero_vad()
+
+    def silero(x: np.ndarray, rate: int) -> np.ndarray:
+        frame = max(1, round(rate * FRAME_MS / 1000))
+        n = -(-len(x) // frame)
+        mask = np.zeros(n, dtype=bool)
+        y = torch.from_numpy(resample(x, rate, 16000))
+        for seg in get_speech_timestamps(y, vad_model, sampling_rate=16000):
+            lo = int(seg["start"] / 16000 * 1000 / FRAME_MS)
+            hi = int(np.ceil(seg["end"] / 16000 * 1000 / FRAME_MS))
+            mask[lo:hi] = True
+        return mask
+
+    return silero
+
+
+def _decode(src: Path):
+    """A clip as mono float32 at 48 kHz."""
+    import subprocess
+    import tempfile
+
+    import soundfile as sf
+
+    with tempfile.TemporaryDirectory() as d:
+        wav = Path(d) / "raw.wav"
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-ac", "1", "-ar", "48000",
+             "-c:a", "pcm_f32le", str(wav)],
+            check=True,
+        )
+        return sf.read(str(wav), dtype="float32")
+
+
+@app.function(image=isolator_image, volumes=volumes, cpu=8, memory=16384, timeout=2 * 3600)
+def denoiser_ab(limit: int = 0) -> dict:
+    """The same cleaning step with Inworld Voice Isolator v1 in the denoiser's
+    place, beside what `prepare` made with DeepFilterNet3.
+
+    Writes only derived-ab/ and results/denoiser-ab*.json. It does not touch
+    derived/, results/quality.json or anything a model trains on.
+    """
+    import json
+    import time
+
+    import soundfile as sf
+
+    from igala_speech.clean import (
+        INWORLD_DENOISER,
+        inworld_voice_isolator,
+        make_derivative,
+    )
+    from igala_speech.denoiser_ab import compare
+
+    start = time.monotonic()
+    silero = _silero_vad()
+    denoise, version, params = inworld_voice_isolator()
+    rows = _manifest()
+    if limit:
+        rows = rows[:limit]
+    out: dict[str, dict] = {}
+    for i, r in enumerate(rows):
+        raw, rate = _decode(Path(f"{ROOT}/clips/{r['id']}.webm"))
+        result = make_derivative(
+            raw, rate, denoise, denoiser_version=version, denoiser_params=params,
+            denoiser_name=INWORLD_DENOISER, vad=silero, vad_name="silero-vad-5.1.2",
+        )
+        folder = Path(f"{ROOT}/derived-ab/{r['id']}")
+        folder.mkdir(parents=True, exist_ok=True)
+        sf.write(str(folder / "inworld-v1-16k.flac"), result["copies"][16000], 16000, format="FLAC")
+        out[r["id"]] = result["log"]
+        if i % 20 == 0:
+            print(f"denoiser-ab {i + 1}/{len(rows)}")
+    _write_json(f"{ROOT}/{AB_RESULTS}", out)
+    summary: dict = {"clips": len(out), "note": "run --stage prepare first to compare"}
+    baseline = Path(f"{ROOT}/results/quality.json")
+    if baseline.exists():
+        summary = compare(json.loads(baseline.read_text(encoding="utf-8")), out)
+    _write_json(f"{ROOT}/results/denoiser-ab-summary.json", summary)
+    checkpoints_volume.commit()
+    return {**summary, **_ledger("denoiser-ab", None, time.monotonic() - start)}
+
+
+@app.function(image=asr_image, volumes=volumes, timeout=600)
+def denoiser_ab_items() -> dict:
+    """For each arm, the clips that have a file for every arm, as asr items."""
+    import json
+
+    checkpoints_volume.reload()
+    ids = sorted(json.loads(Path(f"{ROOT}/{AB_RESULTS}").read_text(encoding="utf-8")))
+    ids = [i for i in ids if all(Path(f"{ROOT}/{p.format(id=i)}").exists() for p in AB_ARMS.values())]
+    return {arm: [{"key": i, "path": p.format(id=i)} for i in ids] for arm, p in AB_ARMS.items()}
+
+
+@app.function(image=asr_image, volumes=volumes, timeout=600)
+def denoiser_ab_score() -> dict:
+    """Character error per arm against the speakers' transcripts."""
+    import json
+
+    from igala_speech.denoiser_ab import score_arms
+
+    checkpoints_volume.reload()
+    refs = {r["id"]: r.get("transcript") or "" for r in _manifest()}
+    arms = {
+        arm: json.loads(Path(f"{ROOT}/results/asr-ab-{arm}.json").read_text(encoding="utf-8"))["transcripts"]
+        for arm in AB_ARMS
+    }
+    scores = score_arms(refs, arms)
+    _write_json(f"{ROOT}/results/denoiser-ab-asr.json", scores)
+    checkpoints_volume.commit()
+    return scores
 
 
 # ---------------------------------------------------------------- stage: asr
@@ -605,6 +749,12 @@ def main(stage: str, card: str = "", name: str = "", plan: str = "", items: str 
 
     if stage == "prepare":
         print(prepare.remote(limit))
+    elif stage == "denoiser-ab":
+        print(denoiser_ab.remote(limit))
+    elif stage == "denoiser-ab-asr":
+        for arm, arm_items in denoiser_ab_items.remote().items():
+            print(asr.remote(card, f"ab-{arm}", arm_items))
+        print(denoiser_ab_score.remote())
     elif stage == "cards":
         print(asr_cards.remote())
     elif stage == "asr-fetch":

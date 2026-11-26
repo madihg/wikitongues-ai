@@ -95,3 +95,46 @@ def test_every_copy_stays_under_the_ceiling():
     got = make_derivative(x, RATE, None)
     for rate, copy in got["copies"].items():
         assert true_peak_dbfs(copy) <= -0.99, rate
+
+
+def test_the_log_names_the_denoiser_it_was_given():
+    got = make_derivative(voice(0.05), RATE, lambda x, r: x.copy(), denoiser_name="Other")
+    assert got["log"]["denoiser"]["tool"] == "Other"
+
+
+def test_inworld_adapter_has_the_denoiser_shape(monkeypatch):
+    """The package is not installed here: a stand-in with its documented calls."""
+    import sys
+    import types
+
+    from igala_speech.clean import INWORLD_DENOISER, inworld_voice_isolator
+
+    seen = {}
+
+    class VoiceIsolator:
+        device, precision, sample_rate = "cpu", "fp32", 48000
+
+        def __init__(self, repo, device=None):
+            seen["repo"] = repo
+
+        def isolate(self, audio, sample_rate):
+            seen["rate"] = sample_rate
+            return audio * 0.5
+
+    inworld = types.ModuleType("inworld")
+    inworld.voice_isolation = types.SimpleNamespace(
+        VoiceIsolator=VoiceIsolator, __version__="9.9"
+    )
+    monkeypatch.setitem(sys.modules, "inworld", inworld)
+    run, version, params = inworld_voice_isolator()
+    x = voice(0.2)
+    out = run(x, RATE)
+    assert seen == {"repo": "inworld/voice-isolator", "rate": RATE}
+    assert out.dtype == np.float32 and out.shape == x.shape
+    assert version == "9.9" and params["model"] == INWORLD_DENOISER
+    got = make_derivative(
+        x, RATE, run, denoiser_version=version, denoiser_params=params,
+        denoiser_name=INWORLD_DENOISER,
+    )
+    assert got["log"]["denoiser"]["tool"] == "InworldVoiceIsolatorV1"
+    assert got["log"]["usedDenoised"] is True
